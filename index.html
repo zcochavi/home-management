@@ -435,6 +435,10 @@
             <select id="newEventPerson" style="flex:1"></select>
             <button class="btn-sm" id="addEventBtn" onclick="addEvent()"></button>
           </div>
+          <label id="gcalSyncRow" style="display:none;align-items:center;gap:7px;font-size:13px;font-weight:700;color:#4a5568;cursor:pointer;margin-top:4px">
+            <input type="checkbox" id="gcalSyncCheck" style="width:16px;height:16px;accent-color:#4285f4">
+            <span id="gcalSyncLabel"></span>
+          </label>
         </div>
       </div>
     </div>
@@ -513,6 +517,7 @@ const STRINGS = {
     dows:['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'],
     months:['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'],
     gcalSource:'· Google Calendar',
+    gcalSyncOption:'📅 גם ב-Google Calendar',
     noKids:'אין ילדים במשפחה',
   },
   en: {
@@ -553,6 +558,7 @@ const STRINGS = {
     dows:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
     months:['January','February','March','April','May','June','July','August','September','October','November','December'],
     gcalSource:'· Google Calendar',
+    gcalSyncOption:'📅 Also add to Google Calendar',
     noKids:'No kids in this family',
   },
 };
@@ -888,6 +894,13 @@ function renderGCalBar() {
     st.textContent=t('gcalSync');
     bt.innerHTML=`<button class="gcal-btn gcal-btn-connect" onclick="connectGCal()">${t('gcalConnect')}</button>`;
   }
+  // Show GCal sync toggle in add-event form only when connected and user is a parent
+  const syncRow=el('gcalSyncRow');
+  if(syncRow){
+    const show=gcalConnected()&&isParent();
+    syncRow.style.display=show?'flex':'none';
+    const lbl=el('gcalSyncLabel');if(lbl)lbl.textContent=t('gcalSyncOption');
+  }
 }
 async function gcalCreateEvent(ev) {
   if (!gcalConnected()||!isParent()) return null;
@@ -982,6 +995,7 @@ function renderStatic() {
   el('addHwBtn').textContent     = t('add');
   el('addEventBtn').textContent  = t('add');
   el('groceryClearBtn').textContent = t('clearChecked');
+  const lbl=el('gcalSyncLabel');if(lbl)lbl.textContent=t('gcalSyncOption');
   el('newChorePriority').innerHTML = `
     <option value="high">🔴 ${t('high')}</option>
     <option value="medium">🟡 ${t('medium')}</option>
@@ -1003,7 +1017,6 @@ function applyRoleUI() {
   el('addChoreCard').style.display    = isParent()?'':'none';
   el('groceryAddForm').style.display  = isParent()?'':'none';
   el('groceryClearBtn').style.display = isParent()?'':'none';
-  el('addEventCard').style.display    = isParent()?'':'none';
 }
 
 // ════════════════════════════════════════
@@ -1243,14 +1256,14 @@ function renderDayPanel(events){
 }
 function calShift(d){S.calMonth+=d;if(S.calMonth>11){S.calMonth=0;S.calYear++;}if(S.calMonth<0){S.calMonth=11;S.calYear--;}renderCalendar();}
 async function addEvent(){
-  if(!isParent())return;
   const title=el('newEventTitle').value.trim(),date=el('newEventDate').value;
   if(!title||!date)return;
   const ev={id:Date.now(),title,date,time:el('newEventTime').value,person:el('newEventPerson').value};
-  if(gcalConnected()){const gcalId=await gcalCreateEvent(ev);if(gcalId)ev.gcalId=gcalId;}
+  const syncGcal=gcalConnected()&&isParent()&&el('gcalSyncCheck').checked;
+  if(syncGcal){const gcalId=await gcalCreateEvent(ev);if(gcalId)ev.gcalId=gcalId;}
   S.events.push(ev);el('newEventTitle').value='';el('newEventTime').value='';
   S.calSelected=date;const d2=new Date(date+'T00:00:00');S.calYear=d2.getFullYear();S.calMonth=d2.getMonth();
-  save();if(gcalConnected())await fetchGCalEvents();else renderCalendar();
+  save();if(syncGcal)await fetchGCalEvents();else renderCalendar();
 }
 async function deleteEvent(id,gcalId){
   if(!isParent())return;
