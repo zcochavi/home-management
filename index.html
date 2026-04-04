@@ -86,6 +86,40 @@
     .photo-remove-btn { padding:7px 8px;border:none;border-radius:10px;background:none;color:#e53e3e;font-size:14px;cursor:pointer;opacity:0.5;flex-shrink:0;line-height:1; }
     .photo-remove-btn:hover { opacity:1; }
     .photo-modal-wrap { position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px; }
+    /* Management screen */
+    #mgmtScreen { position:fixed;inset:0;background:#f0f4ff;z-index:900;overflow-y:auto; }
+    #mgmtScreen.hidden { display:none; }
+    .mgmt-header { position:sticky;top:0;background:linear-gradient(135deg,#6a11cb 0%,#f093fb 55%,#f5576c 100%);padding:14px 16px;display:flex;align-items:center;gap:10px;z-index:10; }
+    .mgmt-back-btn { background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.45);border-radius:50%;width:34px;height:34px;color:white;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1; }
+    .mgmt-header-title { font-size:18px;font-weight:900;color:white; }
+    .mgmt-content { padding:14px; }
+    .mgmt-section-hint { font-size:12px;color:#a0aec0;font-weight:600;margin-bottom:10px; }
+    /* Member rows */
+    .mgmt-member-row { display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f3f6ff; }
+    .mgmt-member-row:last-of-type { border-bottom:none; }
+    .mgmt-avatar { width:40px;height:40px;border-radius:50%;background:#f0f4ff;display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;flex-shrink:0; }
+    .mgmt-member-info { flex:1;min-width:0; }
+    .mgmt-member-name { font-size:14px;font-weight:800;color:#1a202c; }
+    .mgmt-member-role { font-size:11px;color:#718096;font-weight:700; }
+    .mgmt-icon-btn { background:none;border:none;cursor:pointer;opacity:0.45;padding:4px 5px;line-height:1;font-size:15px;transition:opacity 0.15s;flex-shrink:0; }
+    .mgmt-icon-btn:hover { opacity:1; }
+    .mgmt-icon-btn.red { color:#e53e3e; }
+    .mgmt-icon-btn.purple { color:#6a11cb; }
+    /* Inline edit accordion */
+    .mgmt-edit-panel { background:#f8faff;border-radius:14px;padding:14px;margin:4px 0 10px;display:none; }
+    .mgmt-edit-panel.open { display:block; }
+    .mgmt-edit-label { font-size:12px;font-weight:800;color:#718096;margin-bottom:6px;display:block; }
+    /* Generic list rows (cats / subjects) */
+    .mgmt-item-row { display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #f3f6ff; }
+    .mgmt-item-row:last-of-type { border-bottom:none; }
+    .mgmt-item-label { flex:1;font-size:14px;font-weight:700;color:#2d3748; }
+    /* Add forms */
+    .mgmt-add-form { display:flex;gap:8px;margin-top:12px;align-items:center; }
+    .mgmt-input { flex:1;padding:9px 12px;border:2px solid #e8edf5;border-radius:10px;font-family:inherit;font-size:13px;font-weight:700;outline:none;color:#1a202c;background:white; }
+    .mgmt-input:focus { border-color:#6a11cb; }
+    .mgmt-emoji-input { width:52px;flex:none;text-align:center;font-size:20px;padding:9px 4px; }
+    .mgmt-add-btn { padding:9px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#6a11cb,#f093fb);color:white;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0;transition:opacity 0.15s; }
+    .mgmt-add-btn:hover { opacity:0.9; }
     /* Invite code card */
     .invite-code-display { font-size:28px;font-weight:900;letter-spacing:5px;color:#6a11cb;text-align:center;padding:14px;background:#f0f4ff;border-radius:14px;margin:10px 0;direction:ltr; }
     .invite-hint { font-size:12px;color:#718096;font-weight:700;text-align:center;margin-bottom:10px; }
@@ -367,6 +401,63 @@
   <div class="login-sub" id="loginSub">מי אתה?</div>
   <div class="login-grid" id="loginGrid"></div>
   <button class="login-signout" onclick="authSignOut()">← יציאה מהחשבון</button>
+</div>
+
+<!-- MANAGEMENT SCREEN -->
+<div id="mgmtScreen" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeMgmt()">‹</button>
+    <div class="mgmt-header-title">⚙️ ניהול המשפחה</div>
+  </div>
+  <div class="mgmt-content">
+
+    <!-- ── Family Members ── -->
+    <div class="card">
+      <div class="card-title">👨‍👩‍👧 בני המשפחה</div>
+      <div id="mgmtMemberList"></div>
+      <div style="margin-top:12px">
+        <button class="mgmt-add-btn" style="width:100%;padding:10px" onclick="toggleMgmtAddMember()">+ הוסף בן/בת משפחה</button>
+        <div id="mgmtAddMemberForm" class="mgmt-edit-panel" style="margin-top:8px">
+          <span class="mgmt-edit-label">אימוג'י</span>
+          <div class="emoji-row" id="mgmtNewEmojiRow"></div>
+          <span class="mgmt-edit-label">שם</span>
+          <input class="auth-input" id="mgmtNewMemberName" type="text" placeholder="שם"
+            onkeydown="if(event.key==='Enter')mgmtAddMember()">
+          <div class="mb-role-toggle" style="margin-bottom:12px;width:fit-content">
+            <button class="mb-role-btn active" id="mgmtNewRoleParent" onclick="setMgmtNewRole('parent')">הורה</button>
+            <button class="mb-role-btn"        id="mgmtNewRoleKid"    onclick="setMgmtNewRole('kid')">ילד</button>
+          </div>
+          <button class="auth-btn-main" style="padding:9px 18px;width:auto" onclick="mgmtAddMember()">✓ הוסף</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Grocery Categories ── -->
+    <div class="card">
+      <div class="card-title">🛒 קטגוריות קניות</div>
+      <div class="mgmt-section-hint">קטגוריות משמשות לארגון פריטי הקניות</div>
+      <div id="mgmtCatList"></div>
+      <div class="mgmt-add-form">
+        <input class="mgmt-input mgmt-emoji-input" id="mgmtNewCatEmoji" type="text" placeholder="🛒" maxlength="4">
+        <input class="mgmt-input" id="mgmtNewCatName" type="text" placeholder="שם קטגוריה"
+          onkeydown="if(event.key==='Enter')mgmtAddCat()">
+        <button class="mgmt-add-btn" onclick="mgmtAddCat()">+</button>
+      </div>
+    </div>
+
+    <!-- ── Homework Subjects ── -->
+    <div class="card">
+      <div class="card-title">📚 נושאי שיעורי בית</div>
+      <div class="mgmt-section-hint">נושאים משמשים לסיווג שיעורי בית</div>
+      <div id="mgmtSubjectList"></div>
+      <div class="mgmt-add-form">
+        <input class="mgmt-input" id="mgmtNewSubjectName" type="text" placeholder="שם הנושא"
+          onkeydown="if(event.key==='Enter')mgmtAddSubject()">
+        <button class="mgmt-add-btn" onclick="mgmtAddSubject()">+</button>
+      </div>
+    </div>
+
+  </div>
 </div>
 
 <!-- PHOTO MANAGER MODAL -->
@@ -686,8 +777,42 @@ function getKidGradient(name) {
 // ════════════════════════════════════════
 //  CONSTANTS
 // ════════════════════════════════════════
-const CATS   = ['Fruit & Veg','Dairy & Eggs','Pantry','Meat & Fish'];
-const CAT_EM = { 'Fruit & Veg':'🥦','Dairy & Eggs':'🥛','Pantry':'🥫','Meat & Fish':'🥩' };
+const DEFAULT_GROCERY_CATS = [
+  { name:'Fruit & Veg', emoji:'🥦' },
+  { name:'Dairy & Eggs', emoji:'🥛' },
+  { name:'Pantry', emoji:'🥫' },
+  { name:'Meat & Fish', emoji:'🥩' },
+];
+const DEFAULT_SUBJECTS = [
+  { name:'Maths',   bg:'#ebf4ff', color:'#2b6cb0' },
+  { name:'English', bg:'#f0fff4', color:'#276749' },
+  { name:'Science', bg:'#faf5ff', color:'#6b46c1' },
+  { name:'History', bg:'#fffaf0', color:'#c05621' },
+  { name:'Art',     bg:'#fff5f7', color:'#b83280' },
+];
+const SUBJECT_COLOR_POOL = [
+  { bg:'#fef3c7', color:'#92400e' },{ bg:'#e0f2fe', color:'#0369a1' },
+  { bg:'#d1fae5', color:'#065f46' },{ bg:'#fce7f3', color:'#9d174d' },
+  { bg:'#ede9fe', color:'#5b21b6' },{ bg:'#fee2e2', color:'#991b1b' },
+];
+
+function getGroceryCats() {
+  return (familyData?.groceryCategories?.length) ? familyData.groceryCategories : DEFAULT_GROCERY_CATS;
+}
+function getCatEmoji(name) {
+  return getGroceryCats().find(c => c.name === name)?.emoji || '🛒';
+}
+function getSubjects() {
+  return (familyData?.subjects?.length) ? familyData.subjects : DEFAULT_SUBJECTS;
+}
+function subjectBadgeStyle(name) {
+  const s = getSubjects().find(s => s.name === name);
+  if (s) return `background:${s.bg};color:${s.color}`;
+  return 'background:#f0f4ff;color:#718096';
+}
+function subjectLabel(name) {
+  return t('subjects')[name] || name;
+}
 
 const _now     = new Date();
 const today    = _now.toISOString().slice(0,10);
@@ -1164,6 +1289,229 @@ function renderAll() {
 }
 
 // ════════════════════════════════════════
+//  MANAGEMENT SCREEN
+// ════════════════════════════════════════
+let _mgmtNewRole  = 'parent';
+let _mgmtNewEmoji = EMOJI_OPTIONS[0];
+let _mgmtEditEmoji = {}; // keyed by memberIndex
+
+function openMgmt() { renderMgmt(); el('mgmtScreen').classList.remove('hidden'); }
+function closeMgmt() { el('mgmtScreen').classList.add('hidden'); }
+
+function renderMgmt() {
+  renderMgmtMembers();
+  renderMgmtCats();
+  renderMgmtSubjects();
+}
+
+// ── Members ──────────────────────────────
+function renderMgmtMembers() {
+  const members = getMembers();
+  _mgmtEditEmoji = {};
+  members.forEach((m, i) => { _mgmtEditEmoji[i] = m.emoji; });
+
+  el('mgmtMemberList').innerHTML = members.map((m, i) => {
+    const canDel = members.length > 1 && m.name !== S.user &&
+                   !(m.role==='parent' && getParents().length===1);
+    return `
+    <div class="mgmt-member-row">
+      <div class="mgmt-avatar">${getAvatar(m.name)}</div>
+      <div class="mgmt-member-info">
+        <div class="mgmt-member-name">${esc(m.name)}</div>
+        <div class="mgmt-member-role">${m.role==='parent'?'הורה':'ילד/ה'}</div>
+      </div>
+      <button class="mgmt-icon-btn purple" onclick="toggleMgmtEdit(${i})" title="ערוך">✏️</button>
+      ${canDel ? `<button class="mgmt-icon-btn red" onclick="mgmtRemoveMember('${esc(m.name)}')" title="הסר">🗑</button>` : '<span style="width:26px"></span>'}
+    </div>
+    <div class="mgmt-edit-panel" id="mgmtEditPanel_${i}" data-role="${m.role}" data-emoji="${m.emoji}">
+      <span class="mgmt-edit-label">אימוג'י</span>
+      <div class="emoji-row" id="mgmtEditEmojiRow_${i}"></div>
+      <span class="mgmt-edit-label">שם</span>
+      <input class="auth-input" id="mgmtEditName_${i}" value="${esc(m.name)}" style="margin-bottom:10px">
+      <div class="mb-role-toggle" style="margin-bottom:12px;width:fit-content">
+        <button class="mb-role-btn ${m.role==='parent'?'active':''}" id="mgmtEditRoleParent_${i}" onclick="setMgmtEditRole(${i},'parent')">הורה</button>
+        <button class="mb-role-btn ${m.role==='kid'?'active':''}"    id="mgmtEditRoleKid_${i}"    onclick="setMgmtEditRole(${i},'kid')">ילד</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="auth-btn-main" style="padding:8px 16px;width:auto" onclick="saveMgmtEdit(${i},'${esc(m.name)}')">✓ שמור</button>
+        <button class="auth-btn-back" onclick="toggleMgmtEdit(${i})">ביטול</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Populate emoji rows for each edit panel
+  members.forEach((m, i) => {
+    const row = el(`mgmtEditEmojiRow_${i}`);
+    if (!row) return;
+    row.innerHTML = EMOJI_OPTIONS.map(e =>
+      `<span class="emoji-opt ${e===_mgmtEditEmoji[i]?'selected':''}" onclick="selectMgmtEditEmoji(${i},'${e}',this)">${e}</span>`
+    ).join('');
+  });
+
+  // Init add-member emoji row
+  const newRow = el('mgmtNewEmojiRow');
+  if (newRow) {
+    newRow.innerHTML = EMOJI_OPTIONS.map(e =>
+      `<span class="emoji-opt ${e===_mgmtNewEmoji?'selected':''}" onclick="selectMgmtNewEmoji('${e}',this)">${e}</span>`
+    ).join('');
+  }
+}
+
+function toggleMgmtEdit(i) {
+  const panel = el(`mgmtEditPanel_${i}`);
+  const open = panel.classList.toggle('open');
+  if (open) {
+    el(`mgmtAddMemberForm`).classList.remove('open'); // close add form if open
+  }
+}
+function toggleMgmtAddMember() {
+  const form = el('mgmtAddMemberForm');
+  const open = form.classList.toggle('open');
+  if (open) {
+    // close all edit panels
+    getMembers().forEach((_,i) => el(`mgmtEditPanel_${i}`)?.classList.remove('open'));
+    el('mgmtNewMemberName').focus();
+  }
+}
+
+function selectMgmtNewEmoji(emoji, target) {
+  _mgmtNewEmoji = emoji;
+  el('mgmtNewEmojiRow').querySelectorAll('.emoji-opt').forEach(e => e.classList.remove('selected'));
+  target.classList.add('selected');
+}
+function selectMgmtEditEmoji(i, emoji, target) {
+  _mgmtEditEmoji[i] = emoji;
+  el(`mgmtEditEmojiRow_${i}`).querySelectorAll('.emoji-opt').forEach(e => e.classList.remove('selected'));
+  target.classList.add('selected');
+  el(`mgmtEditPanel_${i}`).dataset.emoji = emoji;
+}
+function setMgmtNewRole(role) {
+  _mgmtNewRole = role;
+  el('mgmtNewRoleParent').classList.toggle('active', role==='parent');
+  el('mgmtNewRoleKid').classList.toggle('active',    role==='kid');
+}
+function setMgmtEditRole(i, role) {
+  el(`mgmtEditPanel_${i}`).dataset.role = role;
+  el(`mgmtEditRoleParent_${i}`).classList.toggle('active', role==='parent');
+  el(`mgmtEditRoleKid_${i}`).classList.toggle('active',    role==='kid');
+}
+
+async function mgmtAddMember() {
+  const name = el('mgmtNewMemberName').value.trim();
+  if (!name) { el('mgmtNewMemberName').focus(); return; }
+  if (getMembers().find(m => m.name === name)) { el('mgmtNewMemberName').select(); return; }
+  const members = [...getMembers(), { name, emoji: _mgmtNewEmoji, role: _mgmtNewRole }];
+  if (familyData) familyData.members = members;
+  await fbDb.collection('families').doc(S.uid).update({ members });
+  el('mgmtNewMemberName').value = '';
+  _mgmtNewEmoji = EMOJI_OPTIONS[0]; _mgmtNewRole = 'parent';
+  el('mgmtAddMemberForm').classList.remove('open');
+  renderMgmtMembers();
+}
+
+async function saveMgmtEdit(i, originalName) {
+  const panel = el(`mgmtEditPanel_${i}`);
+  const newName  = el(`mgmtEditName_${i}`).value.trim();
+  const newRole  = panel.dataset.role;
+  const newEmoji = panel.dataset.emoji;
+  if (!newName) return;
+  let members = getMembers().map(m => {
+    if (m.name !== originalName) return m;
+    return { ...m, name: newName, emoji: newEmoji, role: newRole };
+  });
+  // Rename in existing data if member name changed
+  if (newName !== originalName) {
+    S.chores   = S.chores.map(c   => c.assignee===originalName ? {...c,assignee:newName} : c);
+    S.homework = S.homework.map(h => h.child===originalName    ? {...h,child:newName}    : h);
+    S.stars    = Object.fromEntries(Object.entries(S.stars).map(([k,v]) => [k===originalName?newName:k, v]));
+    if (S.user   === originalName) S.user   = newName;
+    if (S.filter === originalName) S.filter = newName;
+    if (S.child  === originalName) S.child  = newName;
+    localStorage.setItem('familyhub_member_' + S.uid, S.user);
+  }
+  if (familyData) familyData.members = members;
+  await fbDb.collection('families').doc(S.uid).update({
+    members, chores:S.chores, homework:S.homework, stars:S.stars,
+  });
+  panel.classList.remove('open');
+  renderMgmtMembers();
+  renderAll();
+}
+
+async function mgmtRemoveMember(name) {
+  if (!confirm(`הסר את ${name}?`)) return;
+  const members = getMembers().filter(m => m.name !== name);
+  S.chores   = S.chores.filter(c   => c.assignee !== name);
+  S.homework = S.homework.filter(h => h.child    !== name);
+  const stars = { ...S.stars }; delete stars[name];
+  S.stars = stars;
+  if (familyData) familyData.members = members;
+  await fbDb.collection('families').doc(S.uid).update({ members, chores:S.chores, homework:S.homework, stars:S.stars });
+  renderMgmtMembers();
+  renderAll();
+}
+
+// ── Grocery Categories ───────────────────
+function renderMgmtCats() {
+  const cats = getGroceryCats();
+  el('mgmtCatList').innerHTML = cats.length ? cats.map(c => `
+    <div class="mgmt-item-row">
+      <span style="font-size:22px;width:28px;text-align:center;flex-shrink:0">${esc(c.emoji)}</span>
+      <div class="mgmt-item-label">${esc(c.name)}</div>
+      <button class="mgmt-icon-btn red" onclick="mgmtRemoveCat('${esc(c.name)}')">🗑</button>
+    </div>`).join('') : '<div class="empty" style="padding:8px 0">אין קטגוריות</div>';
+}
+
+async function mgmtAddCat() {
+  const name  = el('mgmtNewCatName').value.trim();
+  const emoji = el('mgmtNewCatEmoji').value.trim() || '🛒';
+  if (!name) { el('mgmtNewCatName').focus(); return; }
+  const cats = [...getGroceryCats(), { name, emoji }];
+  if (familyData) familyData.groceryCategories = cats;
+  await fbDb.collection('families').doc(S.uid).update({ groceryCategories: cats });
+  el('mgmtNewCatName').value = ''; el('mgmtNewCatEmoji').value = '';
+  renderMgmtCats(); renderStatic();
+}
+
+async function mgmtRemoveCat(name) {
+  const cats = getGroceryCats().filter(c => c.name !== name);
+  if (familyData) familyData.groceryCategories = cats;
+  await fbDb.collection('families').doc(S.uid).update({ groceryCategories: cats });
+  renderMgmtCats(); renderStatic(); renderGrocery();
+}
+
+// ── Homework Subjects ────────────────────
+function renderMgmtSubjects() {
+  const subs = getSubjects();
+  el('mgmtSubjectList').innerHTML = subs.length ? subs.map(s => `
+    <div class="mgmt-item-row">
+      <span class="badge" style="${subjectBadgeStyle(s.name)};flex-shrink:0">${esc(subjectLabel(s.name))}</span>
+      ${s.name !== subjectLabel(s.name) ? `<span style="font-size:12px;color:#a0aec0;font-weight:600">${esc(s.name)}</span>` : ''}
+      <div class="mgmt-item-label"></div>
+      <button class="mgmt-icon-btn red" onclick="mgmtRemoveSubject('${esc(s.name)}')">🗑</button>
+    </div>`).join('') : '<div class="empty" style="padding:8px 0">אין נושאים</div>';
+}
+
+async function mgmtAddSubject() {
+  const name = el('mgmtNewSubjectName').value.trim();
+  if (!name) { el('mgmtNewSubjectName').focus(); return; }
+  const subs = getSubjects();
+  const { bg, color } = SUBJECT_COLOR_POOL[subs.length % SUBJECT_COLOR_POOL.length];
+  const updated = [...subs, { name, bg, color }];
+  if (familyData) familyData.subjects = updated;
+  await fbDb.collection('families').doc(S.uid).update({ subjects: updated });
+  el('mgmtNewSubjectName').value = '';
+  renderMgmtSubjects(); renderStatic();
+}
+
+async function mgmtRemoveSubject(name) {
+  const updated = getSubjects().filter(s => s.name !== name);
+  if (familyData) familyData.subjects = updated;
+  await fbDb.collection('families').doc(S.uid).update({ subjects: updated });
+  renderMgmtSubjects(); renderStatic();
+}
+
+// ════════════════════════════════════════
 //  PHOTO MANAGEMENT
 // ════════════════════════════════════════
 let _photoTarget = null;
@@ -1243,7 +1591,13 @@ function openMenu() {
   _menuOpen = true;
   const lang = getLang();
   const isHe = lang === 'he';
-  el('menuDropdown').innerHTML = `
+  const parentItems = isParent() ? `
+    <div class="menu-item" onclick="closeMenu();openMgmt()">
+      <span class="menu-item-icon">⚙️</span>
+      <span>${isHe ? 'ניהול המשפחה' : 'Family management'}</span>
+    </div>
+    <div class="menu-sep"></div>` : '';
+  el('menuDropdown').innerHTML = parentItems + `
     <div class="menu-item" onclick="closeMenu();openPhotoModal()">
       <span class="menu-item-icon">📷</span>
       <span>${isHe ? 'תמונות משפחה' : 'Family photos'}</span>
@@ -1294,10 +1648,10 @@ function renderStatic() {
     <option value="high">🔴 ${t('high')}</option>
     <option value="medium">🟡 ${t('medium')}</option>
     <option value="low">🟢 ${t('low')}</option>`;
-  el('groceryCat').innerHTML = CATS.map(c =>
-    `<option value="${c}">${CAT_EM[c]} ${t('cats')[c]}</option>`).join('');
-  el('hwSubject').innerHTML = Object.entries(t('subjects')).map(([k,v]) =>
-    `<option value="${k}">${v}</option>`).join('');
+  el('groceryCat').innerHTML = getGroceryCats().map(c =>
+    `<option value="${esc(c.name)}">${c.emoji} ${esc(c.name)}</option>`).join('');
+  el('hwSubject').innerHTML = getSubjects().map(s =>
+    `<option value="${esc(s.name)}">${esc(subjectLabel(s.name))}</option>`).join('');
   // Dynamic member dropdowns
   el('newChoreAssignee').innerHTML = getAllMemberNames().map(n =>
     `<option value="${esc(n)}">${getEmoji(n)} ${esc(n)}</option>`).join('');
@@ -1378,7 +1732,7 @@ function renderHome() {
     ? hw.slice(0,5).map(h => `<div class="task-row">
         ${isParent()?`<div class="mini-avatar">${getAvatar(h.child)}</div>`:''}
         <div class="task-text">${esc(h.desc)}</div>
-        <span class="badge b-${esc(h.subject)}">${t('subjects')[h.subject]||h.subject}</span></div>`).join('')
+        <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span></div>`).join('')
     : t('noPendingHw');
 }
 
@@ -1447,9 +1801,9 @@ function addChore(){
 // ════════════════════════════════════════
 function renderGrocery(){
   const ed=isParent();let html='';
-  CATS.forEach(cat=>{
-    const items=S.grocery.filter(g=>g.category===cat);if(!items.length)return;
-    html+=`<div class="cat-title">${CAT_EM[cat]} ${t('cats')[cat]}</div>`;
+  getGroceryCats().forEach(cat=>{
+    const items=S.grocery.filter(g=>g.category===cat.name);if(!items.length)return;
+    html+=`<div class="cat-title">${cat.emoji} ${esc(cat.name)}</div>`;
     html+=items.map(g=>`<div class="g-item">
       <div class="check-box ${g.checked?'done':''} ${ed?'':'readonly'}" ${ed?`onclick="toggleGrocery(${g.id})"`:''}>
         ${g.checked?'✓':''}</div>
@@ -1488,7 +1842,7 @@ function renderHomework(){
       <div class="hw-head">
         <div class="check-box ${h.done?'done':''} ${can?'':'readonly'}" ${can?`onclick="toggleHW(${h.id})"`:''}>
           ${h.done?'✓':''}</div>
-        <span class="badge b-${esc(h.subject)}">${t('subjects')[h.subject]||h.subject}</span>
+        <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
         <div class="hw-desc-text ${h.done?'done':''}">${esc(h.desc)}</div>
         ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">×</button>`:''}</div>
       ${h.due?`<div class="hw-due">${t('hwDueLabel',fmtDate(h.due))}</div>`:''}</div>`;
