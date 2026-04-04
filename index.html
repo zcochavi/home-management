@@ -1796,9 +1796,10 @@ function acPick(i) {
   if (_acInput && val !== undefined) _acInput.value = val;
   hideAc();
 }
-function onCityAc(inp, idx) {
+async function onCityAc(inp, idx) {
+  if (!_cachedCities) await loadCities();
   showAc(inp, _cachedCities || []);
-  loadSchoolsFor(inp.value); // preload schools while user types city
+  if (inp.value.trim()) loadSchoolsFor(inp.value); // preload schools while user types
 }
 async function onSchoolAc(inp, idx) {
   const city = el('mgmtEditCity_' + idx)?.value.trim();
