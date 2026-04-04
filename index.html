@@ -5,199 +5,309 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FamilyHub 🏠</title>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <!-- Firebase SDKs — must load before main script -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root { font-family: 'Heebo', 'Nunito', sans-serif; }
     :root[lang="en"] { font-family: 'Nunito', 'Heebo', sans-serif; }
     body { background: #f0f4ff; min-height: 100vh; max-width: 520px; margin: 0 auto; padding-bottom: 32px; }
 
-    /* Login */
-    #loginScreen { position: fixed; inset: 0; background: linear-gradient(160deg,#6a11cb 0%,#c471ed 50%,#f5576c 100%); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:999; padding:24px; }
-    #loginScreen.hidden { display:none; }
-    .login-logo { font-size:52px; margin-bottom:8px; animation:bounce 1.8s infinite; }
-    @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
-    .login-title { font-size:32px; font-weight:900; color:white; letter-spacing:-0.5px; }
-    .login-sub { font-size:16px; color:rgba(255,255,255,0.75); font-weight:700; margin-top:6px; margin-bottom:32px; }
-    .login-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; width:100%; max-width:340px; }
-    .login-grid .login-card:nth-child(5) { grid-column:1/-1; max-width:152px; margin:0 auto; }
-    .login-card { background:rgba(255,255,255,0.15); border:2px solid rgba(255,255,255,0.3); border-radius:22px; padding:20px 12px 16px; display:flex; flex-direction:column; align-items:center; gap:8px; cursor:pointer; transition:transform 0.18s,background 0.18s,box-shadow 0.18s; backdrop-filter:blur(6px); }
-    .login-card:hover { transform:scale(1.06); background:rgba(255,255,255,0.28); box-shadow:0 8px 24px rgba(0,0,0,0.2); }
-    .login-card-emoji { width:62px; height:62px; background:rgba(255,255,255,0.25); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:32px; border:2px solid rgba(255,255,255,0.5); }
-    .login-card-name { font-size:15px; font-weight:900; color:white; }
-    .login-card-role { font-size:11px; color:rgba(255,255,255,0.65); font-weight:700; }
+    /* ── Loading ─────────────────────────────── */
+    #loadingScreen { position:fixed;inset:0;background:linear-gradient(160deg,#6a11cb 0%,#c471ed 50%,#f5576c 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:1000; }
+    #loadingScreen.hidden { display:none; }
+    .loading-emoji { font-size:52px;animation:bounce 1.8s infinite; }
+    .loading-txt { font-size:15px;color:rgba(255,255,255,0.8);font-weight:700;margin-top:12px; }
 
-    /* App */
+    /* ── Auth Screen ─────────────────────────── */
+    #authScreen { position:fixed;inset:0;background:linear-gradient(160deg,#6a11cb 0%,#c471ed 50%,#f5576c 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;padding:20px;overflow-y:auto; }
+    #authScreen.hidden { display:none; }
+    .auth-card { background:white;border-radius:24px;padding:24px 22px;width:100%;max-width:360px;box-shadow:0 20px 60px rgba(0,0,0,0.25); }
+    .auth-logo { font-size:40px;text-align:center;margin-bottom:2px; }
+    .auth-title { font-size:24px;font-weight:900;text-align:center;color:#1a202c;margin-bottom:18px; }
+    .auth-tabs { display:flex;background:#f0f4ff;border-radius:14px;padding:3px;gap:3px;margin-bottom:20px; }
+    .auth-tab { flex:1;padding:9px;text-align:center;font-size:14px;font-weight:800;color:#718096;cursor:pointer;border-radius:11px;transition:all 0.2s;user-select:none; }
+    .auth-tab.active { background:white;color:#6a11cb;box-shadow:0 2px 8px rgba(0,0,0,0.1); }
+    .auth-input { width:100%;padding:11px 14px;border:2px solid #e8edf5;border-radius:12px;font-family:inherit;font-size:14px;font-weight:700;outline:none;margin-bottom:10px;display:block;box-sizing:border-box;color:#1a202c; }
+    .auth-input:focus { border-color:#6a11cb; }
+    .auth-error { color:#e53e3e;font-size:13px;font-weight:700;margin-bottom:6px;min-height:16px; }
+    .auth-btn-main { width:100%;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,#6a11cb,#f093fb);color:white;font-family:inherit;font-size:15px;font-weight:900;cursor:pointer;margin-top:4px;transition:opacity 0.18s; }
+    .auth-btn-main:hover { opacity:0.9; }
+    .auth-loading { text-align:center;padding:14px;color:#6a11cb;font-size:14px;font-weight:700; }
+    .auth-panel-label { font-size:13px;font-weight:800;color:#4a5568;margin-bottom:10px; }
+    .emoji-row { display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px; }
+    .emoji-opt { font-size:22px;padding:5px 7px;border-radius:10px;cursor:pointer;border:2px solid transparent;transition:all 0.15s;line-height:1; }
+    .emoji-opt:hover { background:#f0f4ff; }
+    .emoji-opt.selected { border-color:#6a11cb;background:#f0f4ff; }
+    .mb-add-row { display:flex;gap:8px;margin-bottom:10px;align-items:center; }
+    .mb-name-input { margin-bottom:0 !important;flex:1; }
+    .mb-role-toggle { display:flex;background:#f0f4ff;border-radius:10px;overflow:hidden;flex-shrink:0; }
+    .mb-role-btn { padding:8px 10px;border:none;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;background:transparent;color:#718096;transition:all 0.15s; }
+    .mb-role-btn.active { background:#6a11cb;color:white; }
+    .auth-btn-add { width:100%;padding:9px;border:none;border-radius:10px;background:#f0f4ff;color:#6a11cb;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:12px;transition:background 0.15s; }
+    .auth-btn-add:hover { background:#e0e8ff; }
+    .member-preview { display:flex;flex-direction:column;gap:6px;max-height:160px;overflow-y:auto;margin-bottom:8px; }
+    .member-chip { display:flex;align-items:center;gap:8px;background:#f8faff;border-radius:10px;padding:8px 10px; }
+    .member-chip-emoji { font-size:20px;flex-shrink:0; }
+    .member-chip-name { flex:1;font-size:14px;font-weight:800;color:#1a202c; }
+    .member-chip-role { font-size:11px;color:#718096;font-weight:700;flex-shrink:0; }
+    .member-chip-del { background:none;border:none;color:#e53e3e;cursor:pointer;font-size:16px;opacity:0.45;flex-shrink:0;line-height:1;padding:0 2px; }
+    .member-chip-del:hover { opacity:1; }
+    .auth-btns-row { display:flex;align-items:center;justify-content:space-between;margin-top:8px; }
+    .auth-btn-back { background:none;border:none;color:#6a11cb;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;padding:0; }
+    .auth-btn-create { width:auto !important;padding:10px 20px !important; }
+
+    /* ── Login (member picker) ───────────────── */
+    #loginScreen { position:fixed;inset:0;background:linear-gradient(160deg,#6a11cb 0%,#c471ed 50%,#f5576c 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:998;padding:24px; }
+    #loginScreen.hidden { display:none; }
+    .login-logo { font-size:52px;margin-bottom:8px;animation:bounce 1.8s infinite; }
+    @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+    .login-title { font-size:32px;font-weight:900;color:white;letter-spacing:-0.5px; }
+    .login-family-name { font-size:14px;color:rgba(255,255,255,0.65);font-weight:700;margin-top:2px; }
+    .login-sub { font-size:16px;color:rgba(255,255,255,0.75);font-weight:700;margin-top:6px;margin-bottom:28px; }
+    .login-grid { display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;max-width:340px; }
+    .login-card-solo { grid-column:1/-1;max-width:152px;margin:0 auto; }
+    .login-card { background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.3);border-radius:22px;padding:20px 12px 16px;display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer;transition:transform 0.18s,background 0.18s,box-shadow 0.18s;backdrop-filter:blur(6px); }
+    .login-card:hover { transform:scale(1.06);background:rgba(255,255,255,0.28);box-shadow:0 8px 24px rgba(0,0,0,0.2); }
+    .login-card-emoji { width:62px;height:62px;background:rgba(255,255,255,0.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;border:2px solid rgba(255,255,255,0.5); }
+    .login-card-name { font-size:15px;font-weight:900;color:white; }
+    .login-card-role { font-size:11px;color:rgba(255,255,255,0.65);font-weight:700; }
+    .login-signout { background:rgba(255,255,255,0.1);border:1.5px solid rgba(255,255,255,0.25);border-radius:20px;color:rgba(255,255,255,0.6);font-family:inherit;font-size:12px;font-weight:800;padding:7px 18px;cursor:pointer;margin-top:18px;transition:background 0.18s; }
+    .login-signout:hover { background:rgba(255,255,255,0.2);color:white; }
+
+    /* ── App ─────────────────────────────────── */
     #app { display:none; }
     #app.visible { display:block; }
 
     /* Header */
-    .header { background:linear-gradient(135deg,#6a11cb 0%,#f093fb 55%,#f5576c 100%); padding:16px 16px 14px; color:white; }
-    .header-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:2px; }
-    .header-title { font-size:22px; font-weight:900; letter-spacing:-0.5px; }
-    .header-greeting { font-size:18px; font-weight:900; }
-    .header-btns { display:flex; gap:8px; align-items:center; flex-shrink:0; }
-    .switch-btn,.lang-btn { background:rgba(255,255,255,0.2); border:1.5px solid rgba(255,255,255,0.45); border-radius:20px; color:white; font-family:inherit; font-size:11px; font-weight:800; padding:5px 12px; cursor:pointer; transition:background 0.18s; white-space:nowrap; }
+    .header { background:linear-gradient(135deg,#6a11cb 0%,#f093fb 55%,#f5576c 100%);padding:16px 16px 14px;color:white; }
+    .header-top { display:flex;align-items:center;justify-content:space-between;margin-bottom:2px; }
+    .header-title { font-size:22px;font-weight:900;letter-spacing:-0.5px; }
+    .header-greeting { font-size:18px;font-weight:900; }
+    .header-btns { display:flex;gap:8px;align-items:center;flex-shrink:0; }
+    .switch-btn,.lang-btn { background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.45);border-radius:20px;color:white;font-family:inherit;font-size:11px;font-weight:800;padding:5px 12px;cursor:pointer;transition:background 0.18s;white-space:nowrap; }
     .switch-btn:hover,.lang-btn:hover { background:rgba(255,255,255,0.32); }
-    .header-date { font-size:12px; opacity:0.8; font-weight:600; margin-bottom:14px; }
-    .avatar-row { display:flex; gap:10px; overflow-x:auto; padding-bottom:2px; }
+    .header-date { font-size:12px;opacity:0.8;font-weight:600;margin-bottom:14px; }
+    .avatar-row { display:flex;gap:10px;overflow-x:auto;padding-bottom:2px; }
     .avatar-row::-webkit-scrollbar { display:none; }
-    .avatar-chip { display:flex; flex-direction:column; align-items:center; cursor:pointer; flex-shrink:0; transition:transform 0.15s; }
+    .avatar-chip { display:flex;flex-direction:column;align-items:center;cursor:pointer;flex-shrink:0;transition:transform 0.15s; }
     .avatar-chip:active { transform:scale(0.9); }
-    .avatar-bubble { width:44px; height:44px; background:rgba(255,255,255,0.2); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:21px; border:2.5px solid rgba(255,255,255,0.35); transition:all 0.2s; }
-    .avatar-chip.active .avatar-bubble { background:white; border-color:white; box-shadow:0 0 0 3px rgba(255,255,255,0.4); }
-    .avatar-label { font-size:10px; font-weight:800; margin-top:4px; opacity:0.9; }
+    .avatar-bubble { width:44px;height:44px;background:rgba(255,255,255,0.2);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:21px;border:2.5px solid rgba(255,255,255,0.35);transition:all 0.2s; }
+    .avatar-chip.active .avatar-bubble { background:white;border-color:white;box-shadow:0 0 0 3px rgba(255,255,255,0.4); }
+    .avatar-label { font-size:10px;font-weight:800;margin-top:4px;opacity:0.9; }
 
     /* Tab bar */
-    .tab-bar { display:flex; background:white; border-bottom:2px solid #e8edf5; position:sticky; top:0; z-index:100; box-shadow:0 3px 10px rgba(0,0,0,0.08); overflow-x:auto; }
+    .tab-bar { display:flex;background:white;border-bottom:2px solid #e8edf5;position:sticky;top:0;z-index:100;box-shadow:0 3px 10px rgba(0,0,0,0.08);overflow-x:auto; }
     .tab-bar::-webkit-scrollbar { display:none; }
-    .tab { flex:0 0 auto; min-width:72px; padding:11px 10px 9px; text-align:center; font-size:11px; font-weight:800; color:#9aa5b8; cursor:pointer; border-bottom:3px solid transparent; transition:all 0.2s; user-select:none; white-space:nowrap; }
-    .tab.active { color:#6a11cb; border-bottom-color:#6a11cb; }
-    .tab-icon { font-size:19px; display:block; margin-bottom:2px; }
+    .tab { flex:0 0 auto;min-width:72px;padding:11px 10px 9px;text-align:center;font-size:11px;font-weight:800;color:#9aa5b8;cursor:pointer;border-bottom:3px solid transparent;transition:all 0.2s;user-select:none;white-space:nowrap; }
+    .tab.active { color:#6a11cb;border-bottom-color:#6a11cb; }
+    .tab-icon { font-size:19px;display:block;margin-bottom:2px; }
 
     /* Content / Cards */
     .content { padding:14px; }
     .tab-content { display:none; }
     .tab-content.active { display:block; }
-    .card { background:white; border-radius:18px; padding:16px; margin-bottom:14px; box-shadow:0 2px 14px rgba(0,0,0,0.06); }
-    .card-title { font-size:16px; font-weight:900; color:#1a202c; margin-bottom:12px; display:flex; align-items:center; gap:6px; }
-    .welcome-banner { border-radius:18px; padding:18px 16px; margin-bottom:14px; color:white; font-weight:800; }
+    .card { background:white;border-radius:18px;padding:16px;margin-bottom:14px;box-shadow:0 2px 14px rgba(0,0,0,0.06); }
+    .card-title { font-size:16px;font-weight:900;color:#1a202c;margin-bottom:12px;display:flex;align-items:center;gap:6px; }
+    .welcome-banner { border-radius:18px;padding:18px 16px;margin-bottom:14px;color:white;font-weight:800; }
     .wb-emoji { font-size:36px; }
-    .wb-name  { font-size:22px; font-weight:900; }
-    .wb-sub   { font-size:12px; opacity:0.85; margin-top:2px; }
+    .wb-name  { font-size:22px;font-weight:900; }
+    .wb-sub   { font-size:12px;opacity:0.85;margin-top:2px; }
 
     /* Task rows */
-    .task-row { display:flex; align-items:center; gap:9px; padding:9px 0; border-bottom:1px solid #f3f6ff; }
-    .task-row:last-of-type { border-bottom:none; padding-bottom:0; }
+    .task-row { display:flex;align-items:center;gap:9px;padding:9px 0;border-bottom:1px solid #f3f6ff; }
+    .task-row:last-of-type { border-bottom:none;padding-bottom:0; }
     .task-row:first-of-type { padding-top:0; }
-    .check-box { width:24px; height:24px; border-radius:7px; border:2px solid #c8d3e8; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:13px; transition:all 0.18s; }
-    .check-box.done { background:linear-gradient(135deg,#6a11cb,#f093fb); border-color:transparent; color:white; }
+    .check-box { width:24px;height:24px;border-radius:7px;border:2px solid #c8d3e8;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;transition:all 0.18s; }
+    .check-box.done { background:linear-gradient(135deg,#6a11cb,#f093fb);border-color:transparent;color:white; }
     .check-box.readonly { cursor:default; }
-    .task-text { flex:1; font-size:14px; font-weight:700; color:#2d3748; }
-    .task-text.done { text-decoration:line-through; color:#a0aec0; }
-    .mini-avatar { font-size:18px; width:30px; height:30px; background:#f3f6ff; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .del-btn { background:none; border:none; font-size:17px; cursor:pointer; opacity:0.35; line-height:1; padding:0 3px; transition:opacity 0.15s; }
+    .task-text { flex:1;font-size:14px;font-weight:700;color:#2d3748; }
+    .task-text.done { text-decoration:line-through;color:#a0aec0; }
+    .mini-avatar { font-size:18px;width:30px;height:30px;background:#f3f6ff;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+    .del-btn { background:none;border:none;font-size:17px;cursor:pointer;opacity:0.35;line-height:1;padding:0 3px;transition:opacity 0.15s; }
     .del-btn:hover { opacity:0.7; }
-    .pri { font-size:9px; font-weight:900; padding:2px 7px; border-radius:20px; text-transform:uppercase; letter-spacing:0.3px; flex-shrink:0; }
-    .pri-high   { background:#fff0f0; color:#e53e3e; }
-    .pri-medium { background:#fffbeb; color:#c87b00; }
-    .pri-low    { background:#f0fff4; color:#38a169; }
+    .pri { font-size:9px;font-weight:900;padding:2px 7px;border-radius:20px;text-transform:uppercase;letter-spacing:0.3px;flex-shrink:0; }
+    .pri-high   { background:#fff0f0;color:#e53e3e; }
+    .pri-medium { background:#fffbeb;color:#c87b00; }
+    .pri-low    { background:#f0fff4;color:#38a169; }
 
     /* Stars */
-    .star-chart { display:flex; flex-direction:column; gap:14px; }
-    .star-row { display:flex; align-items:center; gap:10px; }
-    .star-person { display:flex; align-items:center; gap:6px; min-width:80px; }
+    .star-chart { display:flex;flex-direction:column;gap:14px; }
+    .star-row { display:flex;align-items:center;gap:10px; }
+    .star-person { display:flex;align-items:center;gap:6px;min-width:80px; }
     .star-person-emoji { font-size:20px; }
-    .star-person-name { font-size:13px; font-weight:800; color:#2d3748; }
-    .stars { display:flex; gap:3px; }
-    .star { font-size:24px; cursor:pointer; transition:transform 0.15s; filter:grayscale(1) opacity(0.25); line-height:1; }
+    .star-person-name { font-size:13px;font-weight:800;color:#2d3748; }
+    .stars { display:flex;gap:3px; }
+    .star { font-size:24px;cursor:pointer;transition:transform 0.15s;filter:grayscale(1) opacity(0.25);line-height:1; }
     .star.on { filter:none; }
     .star:hover { transform:scale(1.25); }
     .star.readonly { cursor:default; }
     .star.readonly:hover { transform:none; }
-    .star-count { font-size:11px; color:#a0aec0; font-weight:800; margin-inline-start:3px; }
-    .star-row.mine { background:#fefce8; border-radius:12px; padding:6px 10px; margin:0 -10px; }
+    .star-count { font-size:11px;color:#a0aec0;font-weight:800;margin-inline-start:3px; }
+    .star-row.mine { background:#fefce8;border-radius:12px;padding:6px 10px;margin:0 -10px; }
 
     /* Subject badges */
-    .badge { font-size:10px; font-weight:900; padding:3px 9px; border-radius:20px; flex-shrink:0; }
-    .b-Maths   { background:#ebf4ff; color:#2b6cb0; }
-    .b-English { background:#f0fff4; color:#276749; }
-    .b-Science { background:#faf5ff; color:#6b46c1; }
-    .b-History { background:#fffaf0; color:#c05621; }
-    .b-Art     { background:#fff5f7; color:#b83280; }
+    .badge { font-size:10px;font-weight:900;padding:3px 9px;border-radius:20px;flex-shrink:0; }
+    .b-Maths   { background:#ebf4ff;color:#2b6cb0; }
+    .b-English { background:#f0fff4;color:#276749; }
+    .b-Science { background:#faf5ff;color:#6b46c1; }
+    .b-History { background:#fffaf0;color:#c05621; }
+    .b-Art     { background:#fff5f7;color:#b83280; }
 
     /* Homework */
-    .hw-item { padding:10px 0; border-bottom:1px solid #f3f6ff; }
+    .hw-item { padding:10px 0;border-bottom:1px solid #f3f6ff; }
     .hw-item:last-child { border-bottom:none; }
-    .hw-head { display:flex; align-items:center; gap:7px; }
-    .hw-desc-text { flex:1; font-size:13px; font-weight:700; color:#2d3748; }
-    .hw-desc-text.done { text-decoration:line-through; color:#a0aec0; }
-    .hw-due { font-size:11px; color:#a0aec0; font-weight:600; margin-top:4px; margin-inline-start:31px; }
+    .hw-head { display:flex;align-items:center;gap:7px; }
+    .hw-desc-text { flex:1;font-size:13px;font-weight:700;color:#2d3748; }
+    .hw-desc-text.done { text-decoration:line-through;color:#a0aec0; }
+    .hw-due { font-size:11px;color:#a0aec0;font-weight:600;margin-top:4px;margin-inline-start:31px; }
 
     /* Grocery */
-    .grocery-add { display:flex; gap:7px; margin-bottom:14px; flex-wrap:wrap; }
-    .g-input { flex:1; min-width:120px; padding:9px 13px; border:2px solid #e8edf5; border-radius:12px; font-family:inherit; font-size:14px; font-weight:700; outline:none; }
+    .grocery-add { display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap; }
+    .g-input { flex:1;min-width:120px;padding:9px 13px;border:2px solid #e8edf5;border-radius:12px;font-family:inherit;font-size:14px;font-weight:700;outline:none; }
     .g-input:focus { border-color:#6a11cb; }
-    .g-cat { padding:9px 8px; border:2px solid #e8edf5; border-radius:12px; font-family:inherit; font-size:12px; font-weight:700; outline:none; background:white; cursor:pointer; }
-    .g-item { display:flex; align-items:center; gap:9px; padding:8px 10px; background:#f8faff; border-radius:11px; margin-bottom:6px; }
-    .g-item-text { flex:1; font-size:14px; font-weight:700; color:#2d3748; }
-    .g-item-text.done { text-decoration:line-through; color:#a0aec0; }
-    .cat-title { font-size:11px; font-weight:900; color:#8896ab; text-transform:uppercase; letter-spacing:0.6px; margin:10px 0 7px; }
+    .g-cat { padding:9px 8px;border:2px solid #e8edf5;border-radius:12px;font-family:inherit;font-size:12px;font-weight:700;outline:none;background:white;cursor:pointer; }
+    .g-item { display:flex;align-items:center;gap:9px;padding:8px 10px;background:#f8faff;border-radius:11px;margin-bottom:6px; }
+    .g-item-text { flex:1;font-size:14px;font-weight:700;color:#2d3748; }
+    .g-item-text.done { text-decoration:line-through;color:#a0aec0; }
+    .cat-title { font-size:11px;font-weight:900;color:#8896ab;text-transform:uppercase;letter-spacing:0.6px;margin:10px 0 7px; }
     .cat-title:first-child { margin-top:0; }
 
     /* Buttons */
-    .btn { padding:9px 16px; border:none; border-radius:12px; background:linear-gradient(135deg,#6a11cb,#f093fb); color:white; font-family:inherit; font-size:14px; font-weight:800; cursor:pointer; transition:opacity 0.18s,transform 0.12s; flex-shrink:0; }
-    .btn:active { opacity:0.8; transform:scale(0.96); }
-    .btn-sm { padding:8px 14px; border:none; border-radius:10px; background:linear-gradient(135deg,#6a11cb,#f093fb); color:white; font-family:inherit; font-size:13px; font-weight:800; cursor:pointer; flex-shrink:0; }
-    .btn-ghost { padding:6px 12px; border:none; border-radius:9px; background:#f0f4ff; color:#718096; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer; display:block; margin-top:10px; margin-inline-start:auto; }
+    .btn { padding:9px 16px;border:none;border-radius:12px;background:linear-gradient(135deg,#6a11cb,#f093fb);color:white;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;transition:opacity 0.18s,transform 0.12s;flex-shrink:0; }
+    .btn:active { opacity:0.8;transform:scale(0.96); }
+    .btn-sm { padding:8px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#6a11cb,#f093fb);color:white;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;flex-shrink:0; }
+    .btn-ghost { padding:6px 12px;border:none;border-radius:9px;background:#f0f4ff;color:#718096;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;display:block;margin-top:10px;margin-inline-start:auto; }
     .btn-ghost:hover { background:#e2e8f0; }
 
     /* Forms */
-    .add-form { margin-top:12px; padding-top:12px; border-top:1.5px dashed #e8edf5; display:flex; flex-direction:column; gap:8px; }
-    .form-row { display:flex; gap:7px; }
-    .add-input { flex:1; padding:9px 12px; border:2px solid #e8edf5; border-radius:11px; font-family:inherit; font-size:14px; font-weight:700; outline:none; }
+    .add-form { margin-top:12px;padding-top:12px;border-top:1.5px dashed #e8edf5;display:flex;flex-direction:column;gap:8px; }
+    .form-row { display:flex;gap:7px; }
+    .add-input { flex:1;padding:9px 12px;border:2px solid #e8edf5;border-radius:11px;font-family:inherit;font-size:14px;font-weight:700;outline:none; }
     .add-input:focus { border-color:#6a11cb; }
-    select { padding:9px 8px; border:2px solid #e8edf5; border-radius:11px; font-family:inherit; font-size:13px; font-weight:700; outline:none; background:white; cursor:pointer; }
+    select { padding:9px 8px;border:2px solid #e8edf5;border-radius:11px;font-family:inherit;font-size:13px;font-weight:700;outline:none;background:white;cursor:pointer; }
     select:focus { border-color:#6a11cb; }
-    input[type="date"],input[type="time"] { padding:9px 8px; border:2px solid #e8edf5; border-radius:11px; font-family:inherit; font-size:13px; font-weight:700; outline:none; background:white; }
+    input[type="date"],input[type="time"] { padding:9px 8px;border:2px solid #e8edf5;border-radius:11px;font-family:inherit;font-size:13px;font-weight:700;outline:none;background:white; }
     input[type="date"]:focus,input[type="time"]:focus { border-color:#6a11cb; }
 
     /* Child tabs */
-    .child-tabs { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
-    .child-tab { padding:7px 16px; border-radius:22px; background:#f0f4ff; font-size:13px; font-weight:800; color:#718096; cursor:pointer; transition:all 0.2s; user-select:none; }
-    .child-tab.active { background:linear-gradient(135deg,#6a11cb,#f093fb); color:white; }
-    .person-header { font-size:15px; font-weight:900; color:#1a202c; margin-bottom:8px; display:flex; align-items:center; gap:7px; }
+    .child-tabs { display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap; }
+    .child-tab { padding:7px 16px;border-radius:22px;background:#f0f4ff;font-size:13px;font-weight:800;color:#718096;cursor:pointer;transition:all 0.2s;user-select:none; }
+    .child-tab.active { background:linear-gradient(135deg,#6a11cb,#f093fb);color:white; }
+    .person-header { font-size:15px;font-weight:900;color:#1a202c;margin-bottom:8px;display:flex;align-items:center;gap:7px; }
     .card.mine-card { border:2px solid #c471ed; }
-    .empty { text-align:center; padding:22px; color:#a0aec0; font-size:14px; font-weight:700; }
+    .empty { text-align:center;padding:22px;color:#a0aec0;font-size:14px;font-weight:700; }
 
     /* Calendar */
-    .gcal-bar { display:flex; align-items:center; gap:10px; padding:10px 12px; background:#f8faff; border-radius:12px; margin-bottom:14px; }
-    .gcal-status { flex:1; font-size:13px; font-weight:700; color:#4a5568; }
+    .gcal-bar { display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8faff;border-radius:12px;margin-bottom:14px; }
+    .gcal-status { flex:1;font-size:13px;font-weight:700;color:#4a5568; }
     .gcal-status .connected { color:#38a169; }
-    .gcal-status .needs-setup { color:#e53e3e; font-size:11px; }
-    .gcal-btn { padding:7px 14px; border:none; border-radius:10px; font-family:inherit; font-size:12px; font-weight:800; cursor:pointer; white-space:nowrap; }
-    .gcal-btn-connect    { background:#4285f4; color:white; }
-    .gcal-btn-disconnect { background:#f0f4ff; color:#718096; }
-    .gcal-btn-refresh    { background:#f0f4ff; color:#4285f4; margin-inline-end:4px; }
-    .cal-nav { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
-    .cal-nav-btn { background:#f0f4ff; border:none; border-radius:10px; width:34px; height:34px; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background 0.18s; color:#6a11cb; font-weight:900; }
+    .gcal-status .needs-setup { color:#e53e3e;font-size:11px; }
+    .gcal-btn { padding:7px 14px;border:none;border-radius:10px;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap; }
+    .gcal-btn-connect    { background:#4285f4;color:white; }
+    .gcal-btn-disconnect { background:#f0f4ff;color:#718096; }
+    .gcal-btn-refresh    { background:#f0f4ff;color:#4285f4;margin-inline-end:4px; }
+    .cal-nav { display:flex;align-items:center;justify-content:space-between;margin-bottom:14px; }
+    .cal-nav-btn { background:#f0f4ff;border:none;border-radius:10px;width:34px;height:34px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.18s;color:#6a11cb;font-weight:900; }
     .cal-nav-btn:hover { background:#e0e8ff; }
-    .cal-month-label { font-size:18px; font-weight:900; color:#1a202c; }
-    .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
-    .cal-dow { text-align:center; font-size:10px; font-weight:900; color:#a0aec0; text-transform:uppercase; padding:4px 0 6px; }
-    .cal-day { aspect-ratio:1; border-radius:10px; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:5px; cursor:pointer; transition:background 0.15s; }
+    .cal-month-label { font-size:18px;font-weight:900;color:#1a202c; }
+    .cal-grid { display:grid;grid-template-columns:repeat(7,1fr);gap:3px; }
+    .cal-dow { text-align:center;font-size:10px;font-weight:900;color:#a0aec0;text-transform:uppercase;padding:4px 0 6px; }
+    .cal-day { aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:5px;cursor:pointer;transition:background 0.15s; }
     .cal-day:hover { background:#f0f4ff; }
     .cal-day.other-month .cal-day-num { color:#d0d8e8; }
     .cal-day.today { background:#f0f4ff; }
-    .cal-day.today .cal-day-num { color:#6a11cb; font-weight:900; }
+    .cal-day.today .cal-day-num { color:#6a11cb;font-weight:900; }
     .cal-day.selected { background:linear-gradient(135deg,#6a11cb,#f093fb) !important; }
     .cal-day.selected .cal-day-num { color:white !important; }
-    .cal-day-num { font-size:13px; font-weight:700; color:#2d3748; line-height:1; }
-    .cal-dots { display:flex; gap:2px; flex-wrap:wrap; justify-content:center; margin-top:3px; padding:0 2px; }
-    .cal-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+    .cal-day-num { font-size:13px;font-weight:700;color:#2d3748;line-height:1; }
+    .cal-dots { display:flex;gap:2px;flex-wrap:wrap;justify-content:center;margin-top:3px;padding:0 2px; }
+    .cal-dot { width:5px;height:5px;border-radius:50%;flex-shrink:0; }
     .cal-day.selected .cal-dot { opacity:0.85; }
     .day-panel { margin-top:14px; }
-    .day-panel-title { font-size:15px; font-weight:900; color:#1a202c; margin-bottom:10px; }
-    .event-item { display:flex; align-items:center; gap:9px; padding:9px 10px; background:#f8faff; border-radius:12px; margin-bottom:7px; border-inline-start:4px solid #c8d3e8; }
+    .day-panel-title { font-size:15px;font-weight:900;color:#1a202c;margin-bottom:10px; }
+    .event-item { display:flex;align-items:center;gap:9px;padding:9px 10px;background:#f8faff;border-radius:12px;margin-bottom:7px;border-inline-start:4px solid #c8d3e8; }
     .event-item.gcal-event { background:#f0f7ff; }
-    .event-body { flex:1; min-width:0; }
-    .event-title { font-size:14px; font-weight:800; color:#2d3748; display:flex; align-items:center; gap:5px; }
-    .event-meta  { font-size:11px; color:#a0aec0; font-weight:600; margin-top:1px; }
-    .event-person-chip { font-size:11px; font-weight:800; padding:2px 8px; border-radius:12px; background:#f0f4ff; color:#6a11cb; flex-shrink:0; }
-    .g-badge { font-size:10px; font-weight:900; background:#4285f4; color:white; border-radius:4px; padding:1px 4px; }
+    .event-body { flex:1;min-width:0; }
+    .event-title { font-size:14px;font-weight:800;color:#2d3748;display:flex;align-items:center;gap:5px; }
+    .event-meta  { font-size:11px;color:#a0aec0;font-weight:600;margin-top:1px; }
+    .event-person-chip { font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px;background:#f0f4ff;color:#6a11cb;flex-shrink:0; }
+    .g-badge { font-size:10px;font-weight:900;background:#4285f4;color:white;border-radius:4px;padding:1px 4px; }
 
-    ::-webkit-scrollbar { width:4px; height:4px; }
+    ::-webkit-scrollbar { width:4px;height:4px; }
     ::-webkit-scrollbar-track { background:transparent; }
-    ::-webkit-scrollbar-thumb { background:#c8d3e8; border-radius:4px; }
+    ::-webkit-scrollbar-thumb { background:#c8d3e8;border-radius:4px; }
   </style>
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="loginScreen">
+<!-- LOADING -->
+<div id="loadingScreen">
+  <div class="loading-emoji">🏠</div>
+  <div class="loading-txt">טוען...</div>
+</div>
+
+<!-- AUTH SCREEN -->
+<div id="authScreen" class="hidden">
+  <div class="auth-logo">🏠</div>
+  <div class="auth-title" style="color:white;margin-bottom:20px">FamilyHub</div>
+  <div class="auth-card">
+    <div class="auth-tabs">
+      <div class="auth-tab active" id="authTabSignin" onclick="setAuthMode('signin')">כניסה</div>
+      <div class="auth-tab"        id="authTabSignup" onclick="setAuthMode('signup')">הרשמה</div>
+    </div>
+
+    <!-- Sign In -->
+    <div id="signinPanel">
+      <input class="auth-input" id="siEmail" type="email"    placeholder="אימייל" dir="ltr" autocomplete="email">
+      <input class="auth-input" id="siPwd"   type="password" placeholder="סיסמה"  dir="ltr" autocomplete="current-password">
+      <div id="siError" class="auth-error"></div>
+      <button class="auth-btn-main" onclick="doSignIn()">כניסה</button>
+    </div>
+
+    <!-- Sign Up step 1 -->
+    <div id="signupPanel1" style="display:none">
+      <input class="auth-input" id="suFamily" type="text"     placeholder="שם המשפחה (משפחת כהן...)">
+      <input class="auth-input" id="suEmail"  type="email"    placeholder="אימייל" dir="ltr" autocomplete="email">
+      <input class="auth-input" id="suPwd"    type="password" placeholder="סיסמה (לפחות 6 תווים)" dir="ltr" autocomplete="new-password">
+      <div id="su1Error" class="auth-error"></div>
+      <button class="auth-btn-main" onclick="signupNext()">הבא ←</button>
+    </div>
+
+    <!-- Sign Up step 2: member builder -->
+    <div id="signupPanel2" style="display:none">
+      <div class="auth-panel-label">מי בן/בת המשפחה?</div>
+      <div class="emoji-row" id="emojiRow"></div>
+      <div class="mb-add-row">
+        <input class="auth-input mb-name-input" id="mbName" type="text" placeholder="שם" onkeydown="if(event.key==='Enter')addDraftMember()">
+        <div class="mb-role-toggle">
+          <button class="mb-role-btn active" id="mbRoleParent" onclick="setMbRole('parent')">הורה</button>
+          <button class="mb-role-btn"        id="mbRoleKid"    onclick="setMbRole('kid')">ילד</button>
+        </div>
+      </div>
+      <button class="auth-btn-add" onclick="addDraftMember()">+ הוסף</button>
+      <div class="member-preview" id="memberPreview"></div>
+      <div id="su2Error" class="auth-error"></div>
+      <div class="auth-btns-row">
+        <button class="auth-btn-back" onclick="signupBack()">‹ חזור</button>
+        <button class="auth-btn-main auth-btn-create" onclick="doSignUp()">✓ צור חשבון</button>
+      </div>
+    </div>
+
+    <div id="authLoadingOverlay" style="display:none" class="auth-loading">⏳ טוען...</div>
+  </div>
+</div>
+
+<!-- MEMBER PICKER (shown after Firebase auth) -->
+<div id="loginScreen" class="hidden">
   <div class="login-logo">🏠</div>
   <div class="login-title">FamilyHub</div>
+  <div class="login-family-name" id="loginFamilyName"></div>
   <div class="login-sub" id="loginSub">מי אתה?</div>
   <div class="login-grid" id="loginGrid"></div>
+  <button class="login-signout" onclick="authSignOut()">← יציאה מהחשבון</button>
 </div>
 
 <!-- APP -->
@@ -242,10 +352,7 @@
         <div class="add-form">
           <input class="add-input" id="newChoreText" type="text" onkeydown="if(event.key==='Enter')addChore()">
           <div class="form-row">
-            <select id="newChoreAssignee" style="flex:1">
-              <option value="Zohar">👩 Zohar</option><option value="Nir">👨 Nir</option>
-              <option value="Roni">👧 Roni</option><option value="Shira">🧒 Shira</option><option value="Noya">👶 Noya</option>
-            </select>
+            <select id="newChoreAssignee" style="flex:1"></select>
             <select id="newChorePriority" style="flex:1"></select>
             <button class="btn-sm" id="addChoreBtn" onclick="addChore()"></button>
           </div>
@@ -269,11 +376,7 @@
 
     <!-- HOMEWORK -->
     <div id="tab-homework" class="tab-content">
-      <div class="child-tabs">
-        <div class="child-tab active" onclick="switchChild('Roni')">👧 Roni</div>
-        <div class="child-tab"        onclick="switchChild('Shira')">🧒 Shira</div>
-        <div class="child-tab"        onclick="switchChild('Noya')">👶 Noya</div>
-      </div>
+      <div class="child-tabs" id="childTabsContainer"></div>
       <div class="card">
         <div class="card-title" id="hwCardTitle"></div>
         <div id="hwList"></div>
@@ -324,7 +427,29 @@
 
 <script>
 // ════════════════════════════════════════
-//  CONFIG
+//  FIREBASE CONFIG
+//  → Replace placeholder values with your Firebase project config
+//  → Get from: Firebase Console → Project Settings → Your apps → Web app
+// ════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyAlaDotuWTCk3GDqpgY-tEaNkpDrbOKM6M",
+  authDomain:        "familyhub-7fdd5.firebaseapp.com",
+  projectId:         "familyhub-7fdd5",
+  storageBucket:     "familyhub-7fdd5.firebasestorage.app",
+  messagingSenderId: "655474126170",
+  appId:             "1:655474126170:web:65ffc8203c863bd47b9763",
+};
+
+const FB_CONFIGURED = !FIREBASE_CONFIG.apiKey.startsWith('YOUR_');
+let fbAuth, fbDb;
+if (FB_CONFIGURED) {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  fbAuth = firebase.auth();
+  fbDb   = firebase.firestore();
+}
+
+// ════════════════════════════════════════
+//  GOOGLE CALENDAR CONFIG
 // ════════════════════════════════════════
 const GOOGLE_CLIENT_ID = '34982320669-4sg8h4qmppd7v9jdtflqmoqretjsnffa.apps.googleusercontent.com';
 const GCAL_SCOPE       = 'https://www.googleapis.com/auth/calendar.events';
@@ -337,7 +462,7 @@ const STRINGS = {
   he: {
     dir:'rtl', locale:'he-IL',
     loginSub:'מי אתה?',
-    loginRoles:{ Zohar:'אמא', Nir:'אבא', Roni:'בת 12', Shira:'בת 9', Noya:'בת 5' },
+    parentRole:'הורה', kidRole:'ילד/ה',
     greetMorning:'בוקר טוב', greetAfternoon:'צהריים טובים', greetEvening:'ערב טוב',
     switchUser:'החלף משתמש', langToggle:'EN',
     tabs:['בית','משימות','קניות','שיעורים','לוח שנה'],
@@ -372,11 +497,12 @@ const STRINGS = {
     dows:['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'],
     months:['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'],
     gcalSource:'· Google Calendar',
+    noKids:'אין ילדים במשפחה',
   },
   en: {
     dir:'ltr', locale:'en-US',
     loginSub:"Who's there?",
-    loginRoles:{ Zohar:'Mom', Nir:'Dad', Roni:'Age 12', Shira:'Age 9', Noya:'Age 5' },
+    parentRole:'Parent', kidRole:'Kid',
     greetMorning:'Good morning', greetAfternoon:'Good afternoon', greetEvening:'Good evening',
     switchUser:'Switch user', langToggle:'עב',
     tabs:['Home','Chores','Grocery','Homework','Calendar'],
@@ -411,6 +537,7 @@ const STRINGS = {
     dows:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
     months:['January','February','March','April','May','June','July','August','September','October','November','December'],
     gcalSource:'· Google Calendar',
+    noKids:'No kids in this family',
   },
 };
 
@@ -418,12 +545,12 @@ const STRINGS = {
 //  i18n HELPERS
 // ════════════════════════════════════════
 function getLang() {
-  if (!S || !S.user) return 'he';
-  return localStorage.getItem('familyhub_lang_' + S.user) || 'he';
+  if (!S || !S.uid || !S.user) return 'he';
+  return localStorage.getItem('familyhub_lang_' + S.uid + '_' + S.user) || 'he';
 }
 function setLang(l) {
-  if (!S.user) return;
-  localStorage.setItem('familyhub_lang_' + S.user, l);
+  if (!S.uid || !S.user) return;
+  localStorage.setItem('familyhub_lang_' + S.uid + '_' + S.user, l);
   applyDir(); renderAll();
 }
 function toggleLang() { setLang(getLang() === 'he' ? 'en' : 'he'); }
@@ -432,7 +559,6 @@ function applyDir() {
   document.documentElement.lang = l;
   document.documentElement.dir  = STRINGS[l].dir;
 }
-// t(key) — returns string or calls function with extra args
 function t(key, ...args) {
   const s = STRINGS[getLang()] || STRINGS.he;
   const v = s[key] !== undefined ? s[key] : (STRINGS.he[key] || key);
@@ -440,104 +566,245 @@ function t(key, ...args) {
 }
 
 // ════════════════════════════════════════
+//  DYNAMIC MEMBER HELPERS
+// ════════════════════════════════════════
+let familyData = null;
+
+function getMembers()        { return familyData?.members || []; }
+function getKids()           { return getMembers().filter(m => m.role === 'kid').map(m => m.name); }
+function getParents()        { return getMembers().filter(m => m.role === 'parent').map(m => m.name); }
+function getAllMemberNames()  { return getMembers().map(m => m.name); }
+function getEmoji(name)      { return getMembers().find(m => m.name === name)?.emoji || '👤'; }
+
+const COLOR_PALETTE  = ['#c471ed','#4facfe','#fa709a','#43e97b','#f9d423','#f5576c','#667eea','#48bb78'];
+const KID_GRADIENTS  = ['#f093fb,#f5576c','#43e97b,#38f9d7','#fda085,#f6d365','#a18cd1,#fbc2eb','#667eea,#764ba2'];
+
+function getPersonColor(name) {
+  if (name === 'All') return '#a0aec0';
+  const idx = getAllMemberNames().indexOf(name);
+  return COLOR_PALETTE[Math.max(0, idx) % COLOR_PALETTE.length];
+}
+function getKidGradient(name) {
+  const idx = getKids().indexOf(name);
+  return KID_GRADIENTS[Math.max(0, idx) % KID_GRADIENTS.length];
+}
+
+// ════════════════════════════════════════
 //  CONSTANTS
 // ════════════════════════════════════════
-const KIDS    = ['Roni','Shira','Noya'];
-const PARENTS = ['Zohar','Nir'];
-const EMOJI   = { Zohar:'👩', Nir:'👨', Roni:'👧', Shira:'🧒', Noya:'👶' };
-const CATS    = ['Fruit & Veg','Dairy & Eggs','Pantry','Meat & Fish'];
-const CAT_EM  = { 'Fruit & Veg':'🥦','Dairy & Eggs':'🥛','Pantry':'🥫','Meat & Fish':'🥩' };
-const PERSON_COLOR = { Zohar:'#c471ed',Nir:'#4facfe',Roni:'#fa709a',Shira:'#43e97b',Noya:'#f9d423',All:'#a0aec0' };
-const KID_COLORS   = { Roni:'#f093fb,#f5576c',Shira:'#43e97b,#38f9d7',Noya:'#fda085,#f6d365' };
+const CATS   = ['Fruit & Veg','Dairy & Eggs','Pantry','Meat & Fish'];
+const CAT_EM = { 'Fruit & Veg':'🥦','Dairy & Eggs':'🥛','Pantry':'🥫','Meat & Fish':'🥩' };
 
-// ════════════════════════════════════════
-//  DEFAULT DATA  (Hebrew)
-// ════════════════════════════════════════
-const _now   = new Date();
+const _now     = new Date();
 const today    = _now.toISOString().slice(0,10);
 const tomorrow = new Date(_now.getTime()+864e5).toISOString().slice(0,10);
-const nextWeek = new Date(_now.getTime()+7*864e5).toISOString().slice(0,10);
-
-const D_CHORES = [
-  {id:1, text:'להכין ארוחת ערב',    assignee:'Zohar',priority:'high',  done:false},
-  {id:2, text:'קניות בסופר',         assignee:'Nir',  priority:'medium',done:false},
-  {id:3, text:'לזרוק אשפה',          assignee:'Nir',  priority:'high',  done:false},
-  {id:4, text:'להשקות עציצים',       assignee:'Zohar',priority:'low',   done:false},
-  {id:5, text:'לסדר חדר',            assignee:'Roni', priority:'medium',done:false},
-  {id:6, text:'לקפל כביסה',          assignee:'Roni', priority:'low',   done:false},
-  {id:7, text:'לערוך שולחן',         assignee:'Shira',priority:'low',   done:false},
-  {id:8, text:'להאכיל דגים',         assignee:'Shira',priority:'medium',done:false},
-  {id:9, text:'לסדר צעצועים',        assignee:'Noya', priority:'low',   done:false},
-  {id:10,text:'לעזור לארוז תיק ספר', assignee:'Noya', priority:'medium',done:false},
-];
-const D_GROCERY = [
-  {id:1, text:'תפוחים',        category:'Fruit & Veg', checked:false},
-  {id:2, text:'בננות',         category:'Fruit & Veg', checked:false},
-  {id:3, text:'גזרים',         category:'Fruit & Veg', checked:false},
-  {id:4, text:'חלב',           category:'Dairy & Eggs',checked:false},
-  {id:5, text:'ביצים',         category:'Dairy & Eggs',checked:false},
-  {id:6, text:'גבינה צהובה',   category:'Dairy & Eggs',checked:false},
-  {id:7, text:'פסטה',          category:'Pantry',       checked:false},
-  {id:8, text:'רוטב עגבניות',  category:'Pantry',       checked:false},
-  {id:9, text:'שמן זית',       category:'Pantry',       checked:false},
-  {id:10,text:'חזה עוף',       category:'Meat & Fish',  checked:false},
-  {id:11,text:'פילה סלמון',    category:'Meat & Fish',  checked:false},
-];
-const D_HW = [
-  {id:1,child:'Roni', subject:'Maths',  desc:'תרגילים בספר פרק 5 עמ׳ 42-43',due:tomorrow,done:false},
-  {id:2,child:'Roni', subject:'English',desc:'טיוטה ראשונה של סיכום הספר', due:today,   done:false},
-  {id:3,child:'Shira',subject:'Science',desc:'לצייר ולתייג את מחזור המים', due:tomorrow,done:false},
-  {id:4,child:'Shira',subject:'Art',    desc:'להשלים פורטרט עצמי בצבע',    due:today,   done:false},
-  {id:5,child:'Noya', subject:'Maths',  desc:'דף עבודה ספירה עד 100',       due:today,   done:false},
-  {id:6,child:'Noya', subject:'Art',    desc:'לצייר את החיה האהובה עלי',    due:tomorrow,done:false},
-];
-const D_EVENTS = [
-  {id:1,date:today,   title:'איסוף מבית הספר',   person:'Nir',  time:'15:30'},
-  {id:2,date:today,   title:'ארוחת ערב משפחתית', person:'All',  time:'19:00'},
-  {id:3,date:tomorrow,title:'חוג ריקוד של רוני',  person:'Roni', time:'16:00'},
-  {id:4,date:tomorrow,title:'קניות בסופר',         person:'Zohar',time:'10:00'},
-  {id:5,date:nextWeek,title:'תור לרופא',           person:'Noya', time:'09:30'},
-];
-const D_STARS = { Roni:3,Shira:4,Noya:2 };
 
 // ════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════
 let S = {
-  user:null,tab:'home',filter:'All',child:'Roni',
-  chores:[],grocery:[],homework:[],stars:{},events:[],
-  calYear:_now.getFullYear(),calMonth:_now.getMonth(),calSelected:today,
+  user:null, uid:null, tab:'home', filter:'All', child:null,
+  chores:[], grocery:[], homework:[], stars:{}, events:[],
+  calYear:_now.getFullYear(), calMonth:_now.getMonth(), calSelected:today,
 };
-let gcal = { gapiReady:false,gisReady:false,tokenClient:null,accessToken:null,events:[],syncing:false };
+let gcal = { gapiReady:false, gisReady:false, tokenClient:null, accessToken:null, events:[], syncing:false };
+let fbUnsubscribe = null;
 
-const isParent    = () => PARENTS.includes(S.user);
-const isKid       = () => KIDS.includes(S.user);
+const isParent    = () => getParents().includes(S.user);
+const isKid       = () => getKids().includes(S.user);
 const gcalReady   = () => gcal.gapiReady && gcal.gisReady && !GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID');
 const gcalConnected = () => !!gcal.accessToken;
 
 // ════════════════════════════════════════
-//  PERSISTENCE
+//  AUTH SCREEN
 // ════════════════════════════════════════
-function save() {
-  localStorage.setItem('familyhub_v3', JSON.stringify({
-    chores:S.chores,grocery:S.grocery,homework:S.homework,stars:S.stars,events:S.events,
-  }));
+const EMOJI_OPTIONS = ['👩','👨','👧','👦','🧒','👶','🧑','👵','👴','🧔','🧑‍🍼','👱'];
+let _draftMembers = [];
+let _mbRole = 'parent';
+let _mbEmoji = EMOJI_OPTIONS[0];
+
+function initEmojiRow() {
+  el('emojiRow').innerHTML = EMOJI_OPTIONS.map(e =>
+    `<span class="emoji-opt ${e===_mbEmoji?'selected':''}" onclick="selectMbEmoji('${e}',this)">${e}</span>`
+  ).join('');
 }
-function load() {
-  const raw = localStorage.getItem('familyhub_v3');
-  if (raw) {
-    const d=JSON.parse(raw);
-    S.chores  =d.chores  ||JSON.parse(JSON.stringify(D_CHORES));
-    S.grocery =d.grocery ||JSON.parse(JSON.stringify(D_GROCERY));
-    S.homework=d.homework||JSON.parse(JSON.stringify(D_HW));
-    S.stars   =d.stars   ||{...D_STARS};
-    S.events  =d.events  ||JSON.parse(JSON.stringify(D_EVENTS));
+function selectMbEmoji(emoji, target) {
+  _mbEmoji = emoji;
+  document.querySelectorAll('.emoji-opt').forEach(e => e.classList.remove('selected'));
+  target.classList.add('selected');
+}
+function setMbRole(role) {
+  _mbRole = role;
+  el('mbRoleParent').classList.toggle('active', role==='parent');
+  el('mbRoleKid').classList.toggle('active', role==='kid');
+}
+function addDraftMember() {
+  const name = el('mbName').value.trim();
+  if (!name) { el('mbName').focus(); return; }
+  _draftMembers.push({ name, emoji: _mbEmoji, role: _mbRole });
+  el('mbName').value = '';
+  renderMemberPreview();
+}
+function removeDraftMember(i) {
+  _draftMembers.splice(i, 1);
+  renderMemberPreview();
+}
+function renderMemberPreview() {
+  el('memberPreview').innerHTML = _draftMembers.map((m, i) => `
+    <div class="member-chip">
+      <span class="member-chip-emoji">${m.emoji}</span>
+      <span class="member-chip-name">${esc(m.name)}</span>
+      <span class="member-chip-role">${m.role==='parent'?'הורה':'ילד/ה'}</span>
+      <button class="member-chip-del" onclick="removeDraftMember(${i})">×</button>
+    </div>`).join('');
+}
+
+function setAuthMode(mode) {
+  el('signinPanel').style.display   = mode==='signin' ? '' : 'none';
+  el('signupPanel1').style.display  = mode==='signup' ? '' : 'none';
+  el('signupPanel2').style.display  = 'none';
+  el('authTabSignin').classList.toggle('active', mode==='signin');
+  el('authTabSignup').classList.toggle('active', mode==='signup');
+  ['siError','su1Error','su2Error'].forEach(id => { const e=el(id); if(e) e.textContent=''; });
+}
+
+function signupNext() {
+  const familyName = el('suFamily').value.trim();
+  const email      = el('suEmail').value.trim();
+  const pwd        = el('suPwd').value;
+  el('su1Error').textContent = '';
+  if (!familyName) { el('su1Error').textContent = 'נדרש שם משפחה'; return; }
+  if (!email)      { el('su1Error').textContent = 'נדרש אימייל';   return; }
+  if (pwd.length < 6) { el('su1Error').textContent = 'הסיסמה חייבת להיות לפחות 6 תווים'; return; }
+  el('signupPanel1').style.display = 'none';
+  el('signupPanel2').style.display = '';
+  _draftMembers = [];
+  renderMemberPreview();
+  initEmojiRow();
+}
+function signupBack() {
+  el('signupPanel2').style.display = 'none';
+  el('signupPanel1').style.display = '';
+}
+
+async function doSignIn() {
+  if (!FB_CONFIGURED) return;
+  const email = el('siEmail').value.trim();
+  const pwd   = el('siPwd').value;
+  el('siError').textContent = '';
+  if (!email || !pwd) { el('siError').textContent = 'נדרשים אימייל וסיסמה'; return; }
+  setAuthLoading(true);
+  try {
+    await fbAuth.signInWithEmailAndPassword(email, pwd);
+  } catch(e) {
+    setAuthLoading(false);
+    el('siError').textContent = getAuthError(e.code);
+  }
+}
+
+async function doSignUp() {
+  if (!FB_CONFIGURED) return;
+  el('su2Error').textContent = '';
+  const validMembers = _draftMembers.filter(m => m.name.trim());
+  if (validMembers.length === 0) { el('su2Error').textContent = 'יש להוסיף לפחות איש משפחה אחד'; return; }
+  const members = validMembers.map(m => ({ name:m.name.trim(), emoji:m.emoji, role:m.role }));
+  const familyName = el('suFamily').value.trim();
+  const email      = el('suEmail').value.trim();
+  const pwd        = el('suPwd').value;
+  setAuthLoading(true);
+  try {
+    const cred = await fbAuth.createUserWithEmailAndPassword(email, pwd);
+    const uid  = cred.user.uid;
+    // Migrate existing localStorage data if present
+    const localRaw = localStorage.getItem('familyhub_v3');
+    let init = { chores:[], grocery:[], homework:[], events:[], stars:{} };
+    if (localRaw) { try { Object.assign(init, JSON.parse(localRaw)); } catch(e){} }
+    await fbDb.collection('families').doc(uid).set({
+      familyName, email, members,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      chores: init.chores||[], grocery: init.grocery||[],
+      homework: init.homework||[], events: init.events||[], stars: init.stars||{},
+    });
+  } catch(e) {
+    setAuthLoading(false);
+    el('su2Error').textContent = getAuthError(e.code);
+  }
+}
+
+function setAuthLoading(on) {
+  el('authLoadingOverlay').style.display = on ? '' : 'none';
+  ['signinPanel','signupPanel1','signupPanel2'].forEach(id => {
+    const e = el(id); if (e) e.style.pointerEvents = on ? 'none' : '';
+  });
+}
+
+function getAuthError(code) {
+  const m = {
+    'auth/user-not-found':         'לא נמצא חשבון עם אימייל זה',
+    'auth/wrong-password':         'סיסמה שגויה',
+    'auth/invalid-credential':     'אימייל או סיסמה שגויים',
+    'auth/email-already-in-use':   'כתובת האימייל כבר בשימוש',
+    'auth/invalid-email':          'כתובת אימייל לא תקינה',
+    'auth/weak-password':          'הסיסמה חלשה מדי (6 תווים לפחות)',
+    'auth/network-request-failed': 'בעיית חיבור לרשת',
+    'auth/too-many-requests':      'יותר מדי ניסיונות, נסה שוב מאוחר יותר',
+  };
+  return m[code] || 'שגיאה: ' + code;
+}
+
+function authSignOut() {
+  if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
+  S.user = null; S.uid = null; familyData = null;
+  if (fbAuth) fbAuth.signOut();
+  el('loginScreen').classList.add('hidden');
+  el('app').classList.remove('visible');
+  el('authScreen').classList.remove('hidden');
+  setAuthMode('signin');
+  setAuthLoading(false);
+}
+
+// ════════════════════════════════════════
+//  FIRESTORE PERSISTENCE
+// ════════════════════════════════════════
+async function save() {
+  if (!S.uid || !fbDb) return;
+  try {
+    await fbDb.collection('families').doc(S.uid).update({
+      chores: S.chores, grocery: S.grocery, homework: S.homework,
+      events: S.events, stars: S.stars,
+    });
+  } catch(e) { console.error('Save error:', e); }
+}
+
+function subscribeToFamily(uid) {
+  if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
+  fbUnsubscribe = fbDb.collection('families').doc(uid).onSnapshot(snap => {
+    if (!snap.exists) return;
+    const d = snap.data();
+    familyData = d;
+    S.chores   = d.chores   || [];
+    S.grocery  = d.grocery  || [];
+    S.homework = d.homework || [];
+    S.events   = d.events   || [];
+    S.stars    = d.stars    || {};
+    afterLoad();
+  }, err => console.error('Firestore error:', err));
+}
+
+function afterLoad() {
+  const kids = getKids();
+  if (!S.child || !kids.includes(S.child)) S.child = kids[0] || null;
+  el('loadingScreen').classList.add('hidden');
+  if (S.user && getAllMemberNames().includes(S.user)) {
+    renderAll();
   } else {
-    S.chores  =JSON.parse(JSON.stringify(D_CHORES));
-    S.grocery =JSON.parse(JSON.stringify(D_GROCERY));
-    S.homework=JSON.parse(JSON.stringify(D_HW));
-    S.stars   ={...D_STARS};
-    S.events  =JSON.parse(JSON.stringify(D_EVENTS));
+    const saved = localStorage.getItem('familyhub_member_' + S.uid);
+    if (saved && getAllMemberNames().includes(saved)) {
+      login(saved);
+    } else {
+      renderLoginScreen();
+      el('loginScreen').classList.remove('hidden');
+    }
   }
 }
 
@@ -590,13 +857,13 @@ function disconnectGCal() {
   renderGCalBar(); renderCalendar();
 }
 function renderGCalBar() {
-  const st=document.getElementById('gcalStatus'); const bt=document.getElementById('gcalBtns');
+  const st=el('gcalStatus'); const bt=el('gcalBtns');
   if (!st) return;
   if (GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID')) {
     st.innerHTML=`<span class="needs-setup">${t('gcalSetup')}</span>`; bt.innerHTML=''; return;
   }
-  if (!gcalReady())        { st.textContent=t('gcalLoading'); bt.innerHTML=''; return; }
-  if (gcal.syncing)        { st.textContent=t('gcalSyncing'); bt.innerHTML=''; return; }
+  if (!gcalReady())   { st.textContent=t('gcalLoading'); bt.innerHTML=''; return; }
+  if (gcal.syncing)   { st.textContent=t('gcalSyncing'); bt.innerHTML=''; return; }
   if (gcalConnected()) {
     st.innerHTML=`<span class="connected">${t('gcalConnected')}</span>`;
     bt.innerHTML=`<button class="gcal-btn gcal-btn-refresh" onclick="fetchGCalEvents()">${t('gcalRefresh')}</button>
@@ -635,41 +902,41 @@ function fmtDateLong(str) {
   return new Date(str+'T00:00:00').toLocaleDateString(t('locale'),{weekday:'long',month:'long',day:'numeric'});
 }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function el(id){ return document.getElementById(id); }
 
 // ════════════════════════════════════════
-//  LOGIN
+//  LOGIN / MEMBER PICKER
 // ════════════════════════════════════════
 function renderLoginScreen() {
-  const lang = 'he';
-  const L = STRINGS[lang];
-  document.getElementById('loginSub').textContent = L.loginSub;
-  const members = [
-    {name:'Zohar',emoji:'👩'},{name:'Nir',emoji:'👨'},
-    {name:'Roni',emoji:'👧'},{name:'Shira',emoji:'🧒'},{name:'Noya',emoji:'👶'},
-  ];
-  document.getElementById('loginGrid').innerHTML = members.map(m=>`
-    <div class="login-card" onclick="login('${m.name}')">
+  el('loginFamilyName').textContent = familyData?.familyName || '';
+  el('loginSub').textContent = STRINGS.he.loginSub;
+  const members = getMembers();
+  el('loginGrid').innerHTML = members.map((m, i) => `
+    <div class="login-card${i===members.length-1&&members.length%2!==0?' login-card-solo':''}" onclick="login('${esc(m.name)}')">
       <div class="login-card-emoji">${m.emoji}</div>
-      <div class="login-card-name">${m.name}</div>
-      <div class="login-card-role">${L.loginRoles[m.name]}</div>
+      <div class="login-card-name">${esc(m.name)}</div>
+      <div class="login-card-role">${m.role==='parent'?STRINGS.he.parentRole:STRINGS.he.kidRole}</div>
     </div>`).join('');
 }
 
 function login(name) {
-  S.user=name; S.filter=name;
-  if (isKid()) S.child=name;
-  localStorage.setItem('familyhub_user',name);
-  document.getElementById('loginScreen').classList.add('hidden');
-  document.getElementById('app').classList.add('visible');
+  S.user = name; S.filter = name;
+  if (getKids().includes(name)) S.child = name;
+  if (!S.child && getKids().length > 0) S.child = getKids()[0];
+  localStorage.setItem('familyhub_member_' + S.uid, name);
+  el('loginScreen').classList.add('hidden');
+  el('app').classList.add('visible');
   applyDir(); renderAll();
 }
+
 function switchUser() {
-  S.user=null; S.filter='All';
-  localStorage.removeItem('familyhub_user');
-  document.getElementById('app').classList.remove('visible');
-  document.getElementById('loginScreen').classList.remove('hidden');
-  document.documentElement.lang='he';
-  document.documentElement.dir='rtl';
+  S.user = null; S.filter = 'All';
+  localStorage.removeItem('familyhub_member_' + S.uid);
+  el('app').classList.remove('visible');
+  renderLoginScreen();
+  el('loginScreen').classList.remove('hidden');
+  document.documentElement.lang = 'he';
+  document.documentElement.dir  = 'rtl';
   switchTab('home');
 }
 
@@ -683,67 +950,60 @@ function renderAll() {
 }
 
 function renderStatic() {
-  // Tab labels
-  document.querySelectorAll('.tab-label').forEach((el,i)=>{ el.textContent=t('tabs')[i]||''; });
-  // Header buttons
-  const lb=document.getElementById('langBtn');   if(lb) lb.textContent=t('langToggle');
-  const sb=document.getElementById('switchBtn'); if(sb) sb.textContent=t('switchUser');
-  // Static card titles
-  el('starChartTitle').textContent  = t('starChart');
-  el('hwDueSoonTitle').textContent  = t('hwDueSoon');
+  document.querySelectorAll('.tab-label').forEach((e,i) => e.textContent = t('tabs')[i]||'');
+  const lb=el('langBtn');   if(lb) lb.textContent = t('langToggle');
+  const sb=el('switchBtn'); if(sb) sb.textContent = t('switchUser');
+  el('starChartTitle').textContent   = t('starChart');
+  el('hwDueSoonTitle').textContent   = t('hwDueSoon');
   el('shoppingListTitle').textContent = t('shoppingList');
-  el('addChoreTitle').textContent   = t('addChoreTitle');
-  el('addEventTitle').textContent   = t('addEventTitle');
-  // Placeholders
+  el('addChoreTitle').textContent    = t('addChoreTitle');
+  el('addEventTitle').textContent    = t('addEventTitle');
   el('newChoreText').placeholder  = t('chorePlaceholder');
   el('groceryItem').placeholder   = t('addItemPlaceholder');
   el('hwDesc').placeholder        = t('hwPlaceholder');
   el('newEventTitle').placeholder = t('eventPlaceholder');
-  // Buttons
-  el('addChoreBtn').textContent = t('add');
-  el('addHwBtn').textContent    = t('add');
-  el('addEventBtn').textContent = t('add');
+  el('addChoreBtn').textContent  = t('add');
+  el('addHwBtn').textContent     = t('add');
+  el('addEventBtn').textContent  = t('add');
   el('groceryClearBtn').textContent = t('clearChecked');
-  // Priority select
-  el('newChorePriority').innerHTML=`
+  el('newChorePriority').innerHTML = `
     <option value="high">🔴 ${t('high')}</option>
     <option value="medium">🟡 ${t('medium')}</option>
     <option value="low">🟢 ${t('low')}</option>`;
-  // Grocery category select
-  el('groceryCat').innerHTML = CATS.map(c=>
+  el('groceryCat').innerHTML = CATS.map(c =>
     `<option value="${c}">${CAT_EM[c]} ${t('cats')[c]}</option>`).join('');
-  // Homework subject select
-  el('hwSubject').innerHTML = Object.entries(t('subjects')).map(([k,v])=>`<option value="${k}">${v}</option>`).join('');
-  // Event person select
-  el('newEventPerson').innerHTML=`<option value="All">👨‍👩‍👧‍👧 ${t('everyone')}</option>`
-    +['Zohar','Nir','Roni','Shira','Noya'].map(n=>`<option value="${n}">${EMOJI[n]} ${n}</option>`).join('');
+  el('hwSubject').innerHTML = Object.entries(t('subjects')).map(([k,v]) =>
+    `<option value="${k}">${v}</option>`).join('');
+  // Dynamic member dropdowns
+  el('newChoreAssignee').innerHTML = getAllMemberNames().map(n =>
+    `<option value="${esc(n)}">${getEmoji(n)} ${esc(n)}</option>`).join('');
+  el('newEventPerson').innerHTML =
+    `<option value="All">👨‍👩‍👧‍👧 ${t('everyone')}</option>` +
+    getAllMemberNames().map(n =>
+      `<option value="${esc(n)}">${getEmoji(n)} ${esc(n)}</option>`).join('');
 }
-
-function el(id){ return document.getElementById(id); }
 
 function applyRoleUI() {
   el('addChoreCard').style.display    = isParent()?'':'none';
   el('groceryAddForm').style.display  = isParent()?'':'none';
   el('groceryClearBtn').style.display = isParent()?'':'none';
   el('addEventCard').style.display    = isParent()?'':'none';
-  document.querySelectorAll('.child-tab').forEach(e=>{
-    e.style.display=(isParent()||e.textContent.includes(S.user))?'':'none';
-  });
 }
 
 // ════════════════════════════════════════
 //  HEADER
 // ════════════════════════════════════════
 function renderHeader() {
-  const h=new Date().getHours();
-  const g=h<12?t('greetMorning'):h<17?t('greetAfternoon'):t('greetEvening');
-  el('headerGreeting').textContent=`${g}, ${S.user}! ${EMOJI[S.user]||''}`;
-  el('headerDate').textContent=new Date().toLocaleDateString(t('locale'),{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const members=isParent()
-    ?[{name:'All',emoji:'👨‍👩‍👧‍👧'},...['Zohar','Nir','Roni','Shira','Noya'].map(n=>({name:n,emoji:EMOJI[n]}))]
-    :[{name:'All',emoji:'👨‍👩‍👧‍👧'},{name:S.user,emoji:EMOJI[S.user]}];
-  el('avatarRow').innerHTML=members.map(f=>`
-    <div class="avatar-chip ${S.filter===f.name?'active':''}" onclick="setFilter('${f.name}')">
+  const h = new Date().getHours();
+  const g = h<12?t('greetMorning'):h<17?t('greetAfternoon'):t('greetEvening');
+  el('headerGreeting').textContent = `${g}, ${S.user}! ${getEmoji(S.user)}`;
+  el('headerDate').textContent = new Date().toLocaleDateString(t('locale'),{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const allNames = getAllMemberNames();
+  const members = isParent()
+    ? [{name:'All',emoji:'👨‍👩‍👧‍👧'}, ...allNames.map(n=>({name:n,emoji:getEmoji(n)}))]
+    : [{name:'All',emoji:'👨‍👩‍👧‍👧'}, {name:S.user,emoji:getEmoji(S.user)}];
+  el('avatarRow').innerHTML = members.map(f => `
+    <div class="avatar-chip ${S.filter===f.name?'active':''}" onclick="setFilter('${esc(f.name)}')">
       <div class="avatar-bubble">${f.emoji}</div>
       <div class="avatar-label">${f.name==='All'?t('all'):f.name}</div>
     </div>`).join('');
@@ -753,52 +1013,55 @@ function renderHeader() {
 //  HOME
 // ════════════════════════════════════════
 function renderHome() {
-  const bannerEl=el('welcomeBanner');
+  const bannerEl = el('welcomeBanner');
   if (isKid()) {
-    const col=KID_COLORS[S.user]||'#6a11cb,#f093fb', n=S.stars[S.user]||0;
-    bannerEl.innerHTML=`<div class="welcome-banner" style="background:linear-gradient(135deg,${col})">
-      <div class="wb-emoji">${EMOJI[S.user]}</div>
+    const col = getKidGradient(S.user);
+    const n = S.stars[S.user]||0;
+    bannerEl.innerHTML = `<div class="welcome-banner" style="background:linear-gradient(135deg,${col})">
+      <div class="wb-emoji">${getEmoji(S.user)}</div>
       <div class="wb-name">${t('wbHi',S.user)}</div>
       <div class="wb-sub">${t('wbStars',n)}</div></div>`;
-  } else { bannerEl.innerHTML=''; }
+  } else { bannerEl.innerHTML = ''; }
 
-  el('homeChoresTitle').textContent=S.filter==='All'?t('todayChores'):t('personChores',S.filter);
-  let tasks=S.chores.filter(c=>!c.done);
-  if (S.filter!=='All') tasks=tasks.filter(c=>c.assignee===S.filter);
-  el('homeTasks').innerHTML=tasks.length
-    ?tasks.slice(0,8).map(c=>{
-        const can=isParent()||c.assignee===S.user;
+  el('homeChoresTitle').textContent = S.filter==='All'?t('todayChores'):t('personChores',S.filter);
+  let tasks = S.chores.filter(c=>!c.done);
+  if (S.filter!=='All') tasks = tasks.filter(c=>c.assignee===S.filter);
+  el('homeTasks').innerHTML = tasks.length
+    ? tasks.slice(0,8).map(c => {
+        const can = isParent()||c.assignee===S.user;
         return `<div class="task-row">
           <div class="check-box ${c.done?'done':''} ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
             ${c.done?'✓':''}</div>
           <div class="task-text ${c.done?'done':''}">${esc(c.text)}</div>
-          ${isParent()?`<div class="mini-avatar">${EMOJI[c.assignee]||'👤'}</div>`:''}
+          ${isParent()?`<div class="mini-avatar">${getEmoji(c.assignee)}</div>`:''}
           <span class="pri pri-${c.priority}">${t(c.priority)}</span></div>`;
       }).join('')
-    :t('allDone');
+    : t('allDone');
 
   renderStarChart();
 
-  let hw=S.homework.filter(h=>!h.done);
-  if (isKid()) hw=hw.filter(h=>h.child===S.user);
-  else if (S.filter!=='All'&&KIDS.includes(S.filter)) hw=hw.filter(h=>h.child===S.filter);
-  el('hwSummary').innerHTML=hw.length
-    ?hw.slice(0,5).map(h=>`<div class="task-row">
-        ${isParent()?`<div class="mini-avatar">${EMOJI[h.child]||'👤'}</div>`:''}
+  let hw = S.homework.filter(h=>!h.done);
+  if (isKid()) hw = hw.filter(h=>h.child===S.user);
+  else if (S.filter!=='All'&&getKids().includes(S.filter)) hw = hw.filter(h=>h.child===S.filter);
+  el('hwSummary').innerHTML = hw.length
+    ? hw.slice(0,5).map(h => `<div class="task-row">
+        ${isParent()?`<div class="mini-avatar">${getEmoji(h.child)}</div>`:''}
         <div class="task-text">${esc(h.desc)}</div>
         <span class="badge b-${esc(h.subject)}">${t('subjects')[h.subject]||h.subject}</span></div>`).join('')
-    :t('noPendingHw');
+    : t('noPendingHw');
 }
 
 // ════════════════════════════════════════
 //  STARS
 // ════════════════════════════════════════
 function renderStarChart() {
-  const ed=isParent();
-  el('starChart').innerHTML=KIDS.map(kid=>{
-    const n=S.stars[kid]||0,me=kid===S.user;
+  const ed = isParent();
+  const kids = getKids();
+  if (!kids.length) { el('starChart').innerHTML=''; return; }
+  el('starChart').innerHTML = kids.map(kid => {
+    const n = S.stars[kid]||0, me = kid===S.user;
     return `<div class="star-row ${me?'mine':''}">
-      <div class="star-person"><span class="star-person-emoji">${EMOJI[kid]}</span><span class="star-person-name">${kid}</span></div>
+      <div class="star-person"><span class="star-person-emoji">${getEmoji(kid)}</span><span class="star-person-name">${kid}</span></div>
       <div class="stars">${[1,2,3,4,5].map(i=>`<span class="star ${n>=i?'on':''} ${ed?'':'readonly'}" ${ed?`onclick="setStar('${kid}',${i})"`:''}>⭐</span>`).join('')}</div>
       <span class="star-count">${n}/5</span></div>`;
   }).join('');
@@ -813,16 +1076,16 @@ function setStar(kid,val){
 //  CHORES
 // ════════════════════════════════════════
 function renderChores() {
-  const people=['Zohar','Nir','Roni','Shira','Noya'];
-  let items=S.filter==='All'?S.chores:S.chores.filter(c=>c.assignee===S.filter);
-  const g={};people.forEach(p=>g[p]=[]);
+  const people = getAllMemberNames();
+  let items = S.filter==='All' ? S.chores : S.chores.filter(c=>c.assignee===S.filter);
+  const g={}; people.forEach(p=>g[p]=[]);
   items.forEach(c=>{if(g[c.assignee])g[c.assignee].push(c);});
   let html='';
   people.forEach(p=>{
     if(!g[p].length)return;
     const mine=p===S.user;
     html+=`<div class="card ${mine?'mine-card':''}">
-      <div class="person-header">${EMOJI[p]} ${p}${mine?` <span style="font-size:11px;color:#c471ed;font-weight:700">${t('youLabel')}</span>`:''}</div>
+      <div class="person-header">${getEmoji(p)} ${p}${mine?` <span style="font-size:11px;color:#c471ed;font-weight:700">${t('youLabel')}</span>`:''}</div>
       ${g[p].map(c=>{
         const can=isParent()||c.assignee===S.user;
         return `<div class="task-row">
@@ -873,12 +1136,22 @@ function clearChecked(){if(!isParent())return;S.grocery=S.grocery.filter(g=>!g.c
 //  HOMEWORK
 // ════════════════════════════════════════
 function renderHomework(){
-  el('hwCardTitle').textContent=t('hwTitle',S.child);
-  document.querySelectorAll('.child-tab').forEach(e=>e.classList.toggle('active',e.textContent.trim().includes(S.child)));
-  const canAdd=isParent()||S.child===S.user;
-  el('addHwForm').style.display=canAdd?'':'none';
-  const items=S.homework.filter(h=>h.child===S.child);
-  el('hwList').innerHTML=items.length?items.map(h=>{
+  const kids = isParent() ? getKids() : getKids().filter(k=>k===S.user);
+  el('childTabsContainer').innerHTML = kids.map(k =>
+    `<div class="child-tab ${S.child===k?'active':''}" onclick="switchChild('${esc(k)}')">${getEmoji(k)} ${k}</div>`
+  ).join('');
+
+  if (!S.child) {
+    el('hwCardTitle').textContent = t('hwTitle','');
+    el('hwList').innerHTML = `<div class="empty">${t('noKids')}</div>`;
+    el('addHwForm').style.display = 'none';
+    return;
+  }
+  el('hwCardTitle').textContent = t('hwTitle', S.child);
+  const canAdd = isParent()||S.child===S.user;
+  el('addHwForm').style.display = canAdd ? '' : 'none';
+  const items = S.homework.filter(h=>h.child===S.child);
+  el('hwList').innerHTML = items.length ? items.map(h=>{
     const can=isParent()||h.child===S.user;
     return `<div class="hw-item">
       <div class="hw-head">
@@ -888,12 +1161,13 @@ function renderHomework(){
         <div class="hw-desc-text ${h.done?'done':''}">${esc(h.desc)}</div>
         ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">×</button>`:''}</div>
       ${h.due?`<div class="hw-due">${t('hwDueLabel',fmtDate(h.due))}</div>`:''}</div>`;
-  }).join(''):`<div class="empty">${t('noHw')}</div>`;
+  }).join('') : `<div class="empty">${t('noHw')}</div>`;
 }
 function switchChild(c){S.child=c;renderHomework();}
 function toggleHW(id){const h=S.homework.find(x=>x.id===id);if(!h||(!isParent()&&h.child!==S.user))return;h.done=!h.done;save();renderHomework();renderHome();}
 function deleteHW(id){if(!isParent())return;S.homework=S.homework.filter(x=>x.id!==id);save();renderHomework();renderHome();}
 function addHomework(){
+  if(!S.child)return;
   const desc=el('hwDesc').value.trim();if(!desc||(!isParent()&&S.child!==S.user))return;
   S.homework.push({id:Date.now(),child:S.child,subject:el('hwSubject').value,desc,due:el('hwDue').value,done:false});
   el('hwDesc').value='';save();renderHomework();renderHome();
@@ -912,7 +1186,7 @@ function renderCalendar(){
   const di=el('newEventDate');if(di&&!di.value)di.value=S.calSelected;
   const events=allCalEvents();
   const dotMap={};
-  events.forEach(ev=>{if(!dotMap[ev.date])dotMap[ev.date]=[];dotMap[ev.date].push(ev.gcal?'#4285f4':(PERSON_COLOR[ev.person]||'#a0aec0'));});
+  events.forEach(ev=>{if(!dotMap[ev.date])dotMap[ev.date]=[];dotMap[ev.date].push(ev.gcal?'#4285f4':getPersonColor(ev.person));});
   let html=t('dows').map(d=>`<div class="cal-dow">${d}</div>`).join('');
   const firstDay=new Date(yr,mo,1).getDay(),daysInMo=new Date(yr,mo+1,0).getDate(),daysInPrev=new Date(yr,mo,0).getDate();
   for(let i=firstDay-1;i>=0;i--) html+=dayCell(`${yr}-${String(mo).padStart(2,'0')}-${String(daysInPrev-i).padStart(2,'0')}`,daysInPrev-i,true,dotMap);
@@ -938,8 +1212,8 @@ function renderDayPanel(events){
   let html=`<div class="day-panel-title">📆 ${title}</div>`;
   if(!evs.length){html+=`<div class="empty" style="padding:12px">${t('noEvents')}</div>`;}
   else html+=evs.map(e=>{
-    const color=e.gcal?'#4285f4':(PERSON_COLOR[e.person]||'#a0aec0');
-    const personLabel=e.gcal?'':(e.person==='All'?`👨‍👩‍👧‍👧 ${t('everyone')}`:(EMOJI[e.person]||'')+' '+e.person);
+    const color=e.gcal?'#4285f4':getPersonColor(e.person);
+    const personLabel=e.gcal?'':(e.person==='All'?`👨‍👩‍👧‍👧 ${t('everyone')}`:(getEmoji(e.person)||'')+' '+e.person);
     const canDel=isParent()&&(!e.gcal||gcalConnected());
     return `<div class="event-item ${e.gcal?'gcal-event':''}" style="border-inline-start-color:${color}">
       <div class="event-body">
@@ -987,10 +1261,24 @@ function setFilter(name){
 // ════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════
-load();
-renderLoginScreen();
-const savedUser=localStorage.getItem('familyhub_user');
-if(savedUser) login(savedUser);
+if (!FB_CONFIGURED) {
+  // Firebase not configured — show helpful message
+  el('loadingScreen').querySelector('.loading-txt').textContent = '⚠ Firebase לא מוגדר';
+  el('loadingScreen').querySelector('.loading-emoji').textContent = '⚙️';
+} else {
+  fbAuth.onAuthStateChanged(user => {
+    if (user) {
+      S.uid = user.uid;
+      el('authScreen').classList.add('hidden');
+      subscribeToFamily(user.uid);
+    } else {
+      S.uid = null; familyData = null;
+      el('loadingScreen').classList.add('hidden');
+      el('authScreen').classList.remove('hidden');
+      setAuthMode('signin');
+    }
+  });
+}
 </script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
