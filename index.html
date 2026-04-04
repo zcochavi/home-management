@@ -1170,7 +1170,7 @@ function afterLoad() {
   if (!S.child || !kids.includes(S.child)) S.child = kids[0] || null;
   el('loadingScreen').classList.add('hidden');
   if (S.user && getAllMemberNames().includes(S.user)) {
-    renderAll();
+    renderAll(); tryAutoConnectGCal();
   } else {
     const saved = localStorage.getItem('familyhub_member_' + S.uid);
     if (saved && getAllMemberNames().includes(saved)) {
@@ -1188,7 +1188,7 @@ function afterLoad() {
 function gapiLoaded() {
   gapi.load('client', async () => {
     await gapi.client.init({discoveryDocs:[GCAL_DISCOVERY]});
-    gcal.gapiReady=true; renderGCalBar();
+    gcal.gapiReady=true; renderGCalBar(); tryAutoConnectGCal();
   });
 }
 function gisLoaded() {
@@ -1197,11 +1197,19 @@ function gisLoaded() {
       client_id:GOOGLE_CLIENT_ID, scope:GCAL_SCOPE, callback:onGCalToken,
     });
   }
-  gcal.gisReady=true; renderGCalBar();
+  gcal.gisReady=true; renderGCalBar(); tryAutoConnectGCal();
+}
+function tryAutoConnectGCal() {
+  if (!gcalReady() || !S.uid || !S.user) return;
+  if (gcalConnected() || !gcal.tokenClient) return;
+  if (localStorage.getItem('familyhub_gcal_' + S.uid + '_' + S.user) === '1') {
+    gcal.tokenClient.requestAccessToken({prompt:''});
+  }
 }
 async function onGCalToken(resp) {
   if (resp.error) return;
   gcal.accessToken=resp.access_token;
+  if (S.uid && S.user) localStorage.setItem('familyhub_gcal_' + S.uid + '_' + S.user, '1');
   await fetchGCalEvents(); renderGCalBar();
 }
 async function fetchGCalEvents() {
@@ -1228,6 +1236,7 @@ function connectGCal()    { if (gcalReady()&&gcal.tokenClient) gcal.tokenClient.
 function disconnectGCal() {
   if (gcal.accessToken) google.accounts.oauth2.revoke(gcal.accessToken,()=>{});
   gcal.accessToken=null; gcal.events=[];
+  if (S.uid && S.user) localStorage.removeItem('familyhub_gcal_' + S.uid + '_' + S.user);
   renderGCalBar(); renderCalendar();
 }
 function renderGCalBar() {
@@ -1307,7 +1316,7 @@ function login(name) {
   localStorage.setItem('familyhub_member_' + S.uid, name);
   el('loginScreen').classList.add('hidden');
   el('app').classList.add('visible');
-  applyDir(); renderAll();
+  applyDir(); renderAll(); tryAutoConnectGCal();
 }
 
 function switchUser() {
@@ -1722,7 +1731,13 @@ function openMenu() {
       <span>${isHe ? 'ניהול המשפחה' : 'Family management'}</span>
     </div>
     <div class="menu-sep"></div>` : '';
-  el('menuDropdown').innerHTML = parentItems + `
+  const gcalItem = gcalConnected() ? `
+    <div class="menu-item" onclick="closeMenu();disconnectGCal()" style="color:#4285f4">
+      <span class="menu-item-icon">📅</span>
+      <span>${isHe ? 'נתק Google Calendar' : 'Disconnect Google Calendar'}</span>
+    </div>
+    <div class="menu-sep"></div>` : '';
+  el('menuDropdown').innerHTML = parentItems + gcalItem + `
     <div class="menu-item" onclick="closeMenu();openPhotoModal()">
       <span class="menu-item-icon">📷</span>
       <span>${isHe ? 'תמונות משפחה' : 'Family photos'}</span>
