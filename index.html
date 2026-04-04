@@ -48,6 +48,7 @@
     .auth-tab.active { background:white;color:#6a11cb;box-shadow:0 2px 8px rgba(0,0,0,0.1); }
     .auth-input { width:100%;padding:11px 14px;border:2px solid #e8edf5;border-radius:12px;font-family:inherit;font-size:14px;font-weight:700;outline:none;margin-bottom:10px;display:block;box-sizing:border-box;color:#1a202c; }
     .auth-input:focus { border-color:#6a11cb; }
+    .auth-input:disabled { background:#f7f8fc;color:#b0bac8;cursor:not-allowed;border-color:#e8edf5; }
     .auth-error { color:#e53e3e;font-size:13px;font-weight:700;margin-bottom:6px;min-height:16px; }
     .auth-btn-main { width:100%;padding:12px;border:none;border-radius:12px;background:linear-gradient(135deg,#6a11cb,#f093fb);color:white;font-family:inherit;font-size:15px;font-weight:900;cursor:pointer;margin-top:4px;transition:opacity 0.18s; }
     .auth-btn-main:hover { opacity:0.9; }
@@ -1576,12 +1577,13 @@ function renderMgmtMembers() {
         <input class="auth-input" id="mgmtEditCity_${i}" placeholder="עיר" value="${esc(m.school?.city||'')}" style="margin-bottom:6px"
   oninput="onCityAc(this,${i})" onfocus="onCityAc(this,${i})" onblur="scheduleHideAc()">
         <input class="auth-input" id="mgmtEditSchoolName_${i}" placeholder="שם בית הספר" value="${esc(m.school?.name||'')}" style="margin-bottom:6px"
-  oninput="onSchoolAc(this,${i})" onfocus="onSchoolAc(this,${i})" onblur="scheduleHideAc()">
+  oninput="onSchoolAc(this,${i})" onfocus="onSchoolAc(this,${i})" onblur="scheduleHideAc()"
+  ${!m.school?.city ? 'disabled' : ''}>
         <div style="display:flex;gap:8px;margin-bottom:12px">
-          <select class="auth-input" id="mgmtEditGrade_${i}" style="flex:1">
+          <select class="auth-input" id="mgmtEditGrade_${i}" style="flex:1" ${!m.school?.name ? 'disabled' : ''}>
             ${GRADE_OPTIONS.map(g=>`<option value="${g}" ${(m.school?.grade||'')==g?'selected':''}>${g?'כיתה '+g:'כיתה...'}</option>`).join('')}
           </select>
-          <input class="auth-input" id="mgmtEditClassNum_${i}" placeholder="מספר כיתה" value="${esc(m.school?.classNum||'')}" style="flex:1" maxlength="3">
+          <input class="auth-input" id="mgmtEditClassNum_${i}" placeholder="מספר כיתה" value="${esc(m.school?.classNum||'')}" style="flex:1" maxlength="3" ${!m.school?.name ? 'disabled' : ''}>
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
@@ -1799,12 +1801,29 @@ function acPick(i) {
 async function onCityAc(inp, idx) {
   if (!_cachedCities) await loadCities();
   showAc(inp, _cachedCities || []);
-  if (inp.value.trim()) loadSchoolsFor(inp.value); // preload schools while user types
+  const hasCity = !!inp.value.trim();
+  const schoolInp = el('mgmtEditSchoolName_' + idx);
+  if (schoolInp) {
+    schoolInp.disabled = !hasCity;
+    if (!hasCity) { schoolInp.value = ''; setClassFieldsEnabled(idx, false); }
+  }
+  if (hasCity) loadSchoolsFor(inp.value);
 }
 async function onSchoolAc(inp, idx) {
   const city = el('mgmtEditCity_' + idx)?.value.trim();
   if (city) await loadSchoolsFor(city);
   showAc(inp, city ? (_cachedSchools[normCityId(city)] || []) : []);
+  setClassFieldsEnabled(idx, !!inp.value.trim());
+}
+function setClassFieldsEnabled(idx, enabled) {
+  const grade    = el('mgmtEditGrade_'    + idx);
+  const classNum = el('mgmtEditClassNum_' + idx);
+  if (grade)    grade.disabled    = !enabled;
+  if (classNum) classNum.disabled = !enabled;
+  if (!enabled) {
+    if (grade)    grade.value    = '';
+    if (classNum) classNum.value = '';
+  }
 }
 
 // ── School Community ─────────────────────
