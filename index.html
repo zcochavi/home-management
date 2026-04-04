@@ -146,6 +146,8 @@
     .comm-event-meta { font-size:11px;color:#718096;font-weight:600;margin-top:2px; }
     .comm-event-date { font-weight:800;color:#6a11cb; }
     .comm-event-note { font-size:12px;color:#4a5568;margin-top:3px;font-style:italic; }
+    .paybox-btn { display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:5px 12px;border-radius:20px;background:linear-gradient(135deg,#00c6a2,#0097d6);color:white;font-size:12px;font-weight:800;text-decoration:none;border:none;cursor:pointer;transition:opacity 0.15s; }
+    .paybox-btn:hover { opacity:0.85; }
     .comm-add-form { background:#f8faff;border-radius:14px;padding:14px;margin-top:8px;display:none; }
     .comm-add-form.open { display:block; }
     .comm-section-label { font-size:11px;font-weight:800;color:#a0aec0;text-transform:uppercase;letter-spacing:0.6px;margin:12px 0 6px; }
@@ -815,6 +817,8 @@ const STRINGS = {
     commPost:'פרסם',
     commEventTitle:'כותרת האירוע...',
     commEventNote:'הערה (אופציונלי)',
+    commEventPaybox:'קישור Paybox (אופציונלי)',
+    commPayNow:'💳 שלם עכשיו',
     commTomorrow:'מחר',
     commInDays: n => `בעוד ${n} ימים`,
     commDaysAgo: n => `לפני ${n} ימים`,
@@ -874,6 +878,8 @@ const STRINGS = {
     commPost:'Post',
     commEventTitle:'Event title...',
     commEventNote:'Note (optional)',
+    commEventPaybox:'Paybox link (optional)',
+    commPayNow:'💳 Pay now',
     commTomorrow:'Tomorrow',
     commInDays: n => `In ${n} days`,
     commDaysAgo: n => `${n} days ago`,
@@ -2046,6 +2052,7 @@ function renderEventRow(ev, cid, isPast) {
         ${ev.postedBy?.familyName ? ` · ${esc(ev.postedBy.familyName)}` : ''}
       </div>
       ${ev.note ? `<div class="comm-event-note">${esc(ev.note)}</div>` : ''}
+      ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
     ${canDel ? `<button class="del-btn" onclick="deleteClassEvent('${cid}','${ev.id}')">×</button>` : ''}
   </div>`;
@@ -2089,7 +2096,8 @@ function renderCommCard(kid) {
           ${EVENT_TYPES.map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
         </select>
       </div>
-      <input class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" style="margin-bottom:10px">
+      <input class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" style="margin-bottom:6px">
+      <input class="auth-input" id="commEvPaybox_${cid}" placeholder="${t('commEventPaybox')}" style="margin-bottom:10px" type="url" dir="ltr">
       <div style="display:flex;gap:8px">
         <button class="auth-btn-main" style="flex:1;padding:10px" onclick="submitClassEvent('${cid}')">${t('commPost')}</button>
         <button class="auth-btn-back" style="flex:1;padding:10px" onclick="toggleCommAddForm('${cid}')">ביטול</button>
@@ -2153,17 +2161,20 @@ function toggleCommAddForm(cid) {
 }
 
 async function submitClassEvent(cid) {
-  const title = el('commEvTitle_' + cid)?.value.trim();
-  const date  = el('commEvDate_'  + cid)?.value;
-  const type  = el('commEvType_'  + cid)?.value || 'other';
-  const note  = el('commEvNote_'  + cid)?.value.trim() || '';
+  const title      = el('commEvTitle_'  + cid)?.value.trim();
+  const date       = el('commEvDate_'   + cid)?.value;
+  const type       = el('commEvType_'   + cid)?.value || 'other';
+  const note       = el('commEvNote_'   + cid)?.value.trim() || '';
+  const payboxRaw  = el('commEvPaybox_' + cid)?.value.trim() || '';
+  const payboxUrl  = payboxRaw && (payboxRaw.startsWith('http://') || payboxRaw.startsWith('https://')) ? payboxRaw : '';
   if (!title || !date) return;
+  const docData = { title, date, type, note,
+    postedBy: { familyUid: S.uid, familyName: familyData?.familyName||'' },
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  if (payboxUrl) docData.payboxUrl = payboxUrl;
   try {
-    await fbDb.collection('schoolClasses').doc(cid).collection('events').add({
-      title, date, type, note,
-      postedBy: { familyUid: S.uid, familyName: familyData?.familyName||'' },
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
+    await fbDb.collection('schoolClasses').doc(cid).collection('events').add(docData);
     delete _commCache[cid];
     _commAddOpen[cid] = false;
     await renderCommunity();
@@ -3056,10 +3067,12 @@ function renderDayPanel(events){
           ? `<button class="gcal-class-btn synced" title="הסר מ-Google Calendar" onclick="unsyncClassEvent('${e.id}')">G ✓</button>`
           : `<button class="gcal-class-btn" title="הוסף ל-Google Calendar" onclick="syncClassEventToGcal('${e.id}','${esc(e.title).replace(/'/g,"\\'")}','${e.date}','${e.time||''}')">+ G</button>`
         : '';
-      return `<div class="event-item" style="border-inline-start-color:${col}">
-        <div class="event-body">
+      const payBtn=e.payboxUrl?`<a class="paybox-btn" href="${esc(e.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>`:'';
+      return `<div class="event-item" style="border-inline-start-color:${col};flex-wrap:wrap">
+        <div class="event-body" style="width:100%">
           <div class="event-title">${eventTypeIcon(e.type)} ${esc(e.title)}</div>
           <div class="event-meta">${e.time?'🕐 '+e.time:t('allDay')}${e.note?` · ${esc(e.note)}`:''}</div>
+          ${payBtn}
         </div>
         <span class="event-person-chip" style="background:${col}22;color:${col}">🏫 ${esc(e.classKid)}</span>
         ${gcalBtn}
