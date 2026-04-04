@@ -25,6 +25,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root { font-family: 'Heebo', 'Nunito', sans-serif; }
@@ -404,6 +405,10 @@
     .event-person-chip { font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px;background:#f0f4ff;color:#6a11cb;flex-shrink:0; }
     .g-badge { font-size:10px;font-weight:900;background:#4285f4;color:white;border-radius:4px;padding:1px 4px; }
     .gcal-class-btn { font-size:11px;font-weight:800;background:#e8f0fe;color:#4285f4;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;transition:background 0.15s;flex-shrink:0; }
+    .notif-toast { position:fixed;top:16px;left:50%;transform:translateX(-50%) translateY(-140%);background:#1a202c;color:white;border-radius:16px;padding:14px 18px;max-width:340px;width:90%;box-shadow:0 8px 28px rgba(0,0,0,0.25);z-index:9999;transition:transform 0.3s cubic-bezier(.34,1.56,.64,1);pointer-events:none; }
+    .notif-toast.show { transform:translateX(-50%) translateY(0); }
+    .notif-toast-title { font-size:14px;font-weight:800;margin-bottom:3px; }
+    .notif-toast-body  { font-size:12px;opacity:0.75;font-weight:600;line-height:1.4; }
     .gcal-class-btn:hover { background:#d2e3fc; }
     .gcal-class-btn.synced { background:#4285f4;color:white; }
 
@@ -749,7 +754,8 @@ const FIREBASE_CONFIG = {
 };
 
 const FB_CONFIGURED = !FIREBASE_CONFIG.apiKey.startsWith('YOUR_');
-let fbAuth, fbDb;
+const VAPID_KEY = 'BD6LTj6Mp9N1QdCD59_QrRWic6s7uBQV-qJFkUaH8oRCXhTuPrHhIy4WEi158caziOmGm9D1WQq4bhJVidRFPVI';
+let fbAuth, fbDb, fbMessaging = null;
 if (FB_CONFIGURED) {
   firebase.initializeApp(FIREBASE_CONFIG);
   fbAuth = firebase.auth();
@@ -1297,6 +1303,44 @@ async function save() {
   } catch(e) { console.error('Save error:', e); }
 }
 
+// ════════════════════════════════════════
+//  PUSH NOTIFICATIONS (FCM)
+// ════════════════════════════════════════
+async function initFCM() {
+  if (!FB_CONFIGURED || !fbDb || !S.uid) return;
+  if (!('serviceWorker' in navigator) || !('Notification' in window)) return;
+  try {
+    const swReg = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+    fbMessaging = firebase.messaging();
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+    const token = await fbMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
+    if (token) {
+      await fbDb.collection('families').doc(S.uid)
+        .collection('fcmTokens').doc(token.slice(0, 20))
+        .set({ token, platform: 'web', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    }
+    fbMessaging.onMessage(payload => {
+      showNotifToast(
+        payload.notification?.title || 'FamilyHub',
+        payload.notification?.body  || ''
+      );
+    });
+  } catch(e) { console.warn('FCM init:', e.message); }
+}
+
+function showNotifToast(title, body) {
+  const t = document.createElement('div');
+  t.className = 'notif-toast';
+  t.innerHTML = `<div class="notif-toast-title">${esc(title)}</div><div class="notif-toast-body">${esc(body)}</div>`;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => { requestAnimationFrame(() => t.classList.add('show')); });
+  setTimeout(() => {
+    t.classList.remove('show');
+    setTimeout(() => t.remove(), 400);
+  }, 4500);
+}
+
 function subscribeToFamily(uid) {
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
   fbUnsubscribe = fbDb.collection('families').doc(uid).onSnapshot(snap => {
@@ -1487,6 +1531,7 @@ function login(name) {
   el('app').classList.add('visible');
   loadSyncedClassEvents();
   applyDir(); renderAll(); tryAutoConnectGCal();
+  initFCM();
 }
 
 function switchUser() {
