@@ -266,8 +266,19 @@
       0%   { opacity:0;transform:translateY(-10px); }
       100% { opacity:1;transform:translateY(0); }
     }
-    .hw-fly-out { animation:hwFlyOut 0.28s ease forwards;overflow:hidden; }
-    .hw-fly-in  { animation:hwFlyIn 0.25s ease; }
+    @keyframes hwFlyOutHist {
+      0%   { opacity:1;transform:translateX(0);max-height:60px;padding-top:9px;padding-bottom:9px; }
+      55%  { opacity:0;transform:translateX(-36px); }
+      100% { opacity:0;max-height:0;padding-top:0;padding-bottom:0;overflow:hidden; }
+    }
+    @keyframes hwFlyInActive {
+      0%   { opacity:0;transform:translateX(-20px); }
+      100% { opacity:1;transform:translateX(0); }
+    }
+    .hw-fly-out      { animation:hwFlyOut 0.28s ease forwards;overflow:hidden; }
+    .hw-fly-in       { animation:hwFlyIn 0.25s ease; }
+    .hw-fly-out-hist { animation:hwFlyOutHist 0.28s ease forwards;overflow:hidden; }
+    .hw-fly-in-active{ animation:hwFlyInActive 0.25s ease; }
     /* History section */
     .hw-hist-hdr { display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;user-select:none; }
     .hw-hist-title { font-size:14px;font-weight:800;color:#4a5568;flex:1; }
@@ -2175,9 +2186,23 @@ function toggleHW(id){
     }
     h.done=true; h.doneAt=Date.now(); _hwHistOpen=true;
   } else {
+    // Animate history item out, then restore to active list
+    const histRow=document.querySelector(`.hw-hist-item[data-hw-id="${id}"]`);
+    if(histRow){
+      histRow.classList.add('hw-fly-out-hist');
+      setTimeout(()=>{
+        h.done=false; delete h.doneAt;
+        save(); renderHomework(); renderHome();
+        requestAnimationFrame(()=>{
+          const active=document.querySelector(`.hw-item[data-hw-id="${id}"]`);
+          if(active) active.classList.add('hw-fly-in-active');
+        });
+      },270);
+      return;
+    }
     h.done=false; delete h.doneAt;
+    save(); renderHomework(); renderHome();
   }
-  save(); renderHomework(); renderHome();
 }
 
 function deleteHW(id){if(!isParent())return;S.homework=S.homework.filter(x=>x.id!==id);save();renderHomework();renderHome();}
