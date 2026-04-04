@@ -100,9 +100,9 @@
     .tab-ed-remove[disabled] { opacity:0.15;cursor:default; }
     .tab-ed-add { padding:7px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#6a11cb,#f093fb);color:white;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;flex-shrink:0;transition:opacity 0.15s; }
     .tab-ed-add:hover { opacity:0.9; }
-    /* Management screen */
-    #mgmtScreen { position:fixed;inset:0;background:#f0f4ff;z-index:900;overflow-y:auto; }
-    #mgmtScreen.hidden { display:none; }
+    /* Management + Tab editor screens */
+    #mgmtScreen, #tabEditorScreen { position:fixed;inset:0;background:#f0f4ff;z-index:900;overflow-y:auto; }
+    #mgmtScreen.hidden, #tabEditorScreen.hidden { display:none; }
     .mgmt-header { position:sticky;top:0;background:linear-gradient(135deg,#6a11cb 0%,#f093fb 55%,#f5576c 100%);padding:14px 16px;display:flex;align-items:center;gap:10px;z-index:10; }
     .mgmt-back-btn { background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.45);border-radius:50%;width:34px;height:34px;color:white;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1; }
     .mgmt-header-title { font-size:18px;font-weight:900;color:white; }
@@ -420,7 +420,7 @@
 <!-- TAB EDITOR SCREEN -->
 <div id="tabEditorScreen" class="hidden">
   <div class="mgmt-header">
-    <button class="mgmt-back-btn" onclick="closeTabEditor()">‹</button>
+    <button class="mgmt-back-btn" onclick="closeTabEditor()">×</button>
     <div class="mgmt-header-title">🗂 התאמת לשוניות</div>
   </div>
   <div class="mgmt-content">
@@ -439,7 +439,7 @@
 <!-- MANAGEMENT SCREEN -->
 <div id="mgmtScreen" class="hidden">
   <div class="mgmt-header">
-    <button class="mgmt-back-btn" onclick="closeMgmt()">‹</button>
+    <button class="mgmt-back-btn" onclick="closeMgmt()">×</button>
     <div class="mgmt-header-title">⚙️ ניהול המשפחה</div>
   </div>
   <div class="mgmt-content">
