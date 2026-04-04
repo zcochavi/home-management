@@ -152,6 +152,9 @@
     .comm-past-event { opacity:0.5; }
     .cal-class-toggles { display:flex;flex-wrap:wrap;gap:6px;padding:8px 2px 4px; }
     .cal-class-toggle { display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;border:1.5px solid #e8edf5;background:white;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.18s;user-select:none; }
+    .cal-view-seg { display:flex;border-radius:10px;overflow:hidden;border:1.5px solid #e8edf5;width:fit-content;margin-top:8px; }
+    .cal-view-seg-btn { padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#9aa5b8;border:none;transition:all 0.15s;user-select:none; }
+    .cal-view-seg-btn.active { background:#6a11cb;color:white; }
     .mgmt-icon-btn { background:none;border:none;cursor:pointer;opacity:0.45;padding:4px 5px;line-height:1;font-size:15px;transition:opacity 0.15s;flex-shrink:0; }
     .mgmt-icon-btn:hover { opacity:1; }
     .mgmt-icon-btn.red { color:#e53e3e; }
@@ -2920,6 +2923,7 @@ function addHomework(){
 //  CALENDAR
 // ════════════════════════════════════════
 let _calClassEventsOn = {}; // { [kidName]: bool }
+let _calClassOnly = false;  // true = show class events only
 let _syncedClassEvents = {}; // { [firestoreEventId]: gcalId }
 
 function loadSyncedClassEvents(){
@@ -2943,9 +2947,7 @@ async function unsyncClassEvent(evId){
 }
 
 function allCalEvents(){
-  const syncedIds=new Set(S.events.filter(e=>e.gcalId).map(e=>e.gcalId));
-  const base=[...S.events.filter(e=>!e.gcalId),...S.events.filter(e=>e.gcalId),...gcal.events.filter(e=>!syncedIds.has(e.gcalId))];
-  // Add class events for toggled-on kids
+  const anyClassOn=Object.values(_calClassEventsOn).some(Boolean);
   const classEvs=[];
   getKids().forEach(name=>{
     if(!_calClassEventsOn[name])return;
@@ -2960,6 +2962,9 @@ function allCalEvents(){
       classEvs.push({...ev,classEvent:true,classKid:name,_cid:cid});
     });
   });
+  if(anyClassOn&&_calClassOnly) return classEvs;
+  const syncedIds=new Set(S.events.filter(e=>e.gcalId).map(e=>e.gcalId));
+  const base=[...S.events.filter(e=>!e.gcalId),...S.events.filter(e=>e.gcalId),...gcal.events.filter(e=>!syncedIds.has(e.gcalId))];
   return [...base,...classEvs];
 }
 
@@ -2970,6 +2975,12 @@ function renderCalClassToggles(){
     .map(name=>getMembers().find(m=>m.name===name))
     .filter(m=>m?.school?.city&&m?.school?.grade);
   if(!kids.length){wrap.innerHTML='';return;}
+  const anyOn=Object.values(_calClassEventsOn).some(Boolean);
+  const isHe=getLang()==='he';
+  const segControl=anyOn?`<div class="cal-view-seg">
+    <div class="cal-view-seg-btn ${!_calClassOnly?'active':''}" onclick="setCalClassOnly(false)">${isHe?'כל האירועים':'All events'}</div>
+    <div class="cal-view-seg-btn ${_calClassOnly?'active':''}" onclick="setCalClassOnly(true)">${isHe?'כיתה בלבד':'Class only'}</div>
+  </div>`:'';
   wrap.innerHTML=`<div class="cal-class-toggles">${kids.map(m=>{
     const on=_calClassEventsOn[m.name];
     const col=getPersonColor(m.name);
@@ -2980,7 +2991,12 @@ function renderCalClassToggles(){
       onclick="toggleCalClassEvents('${esc(m.name)}')">
       <span>${getAvatar(m.name,14)}</span><span>${esc(m.name)}</span><span style="opacity:0.75">🏫 ${esc(classLabel)}</span>
     </div>`;
-  }).join('')}</div>`;
+  }).join('')}</div>${segControl}`;
+}
+
+function setCalClassOnly(val){
+  _calClassOnly=val;
+  renderCalendar();
 }
 
 async function toggleCalClassEvents(kidName){
