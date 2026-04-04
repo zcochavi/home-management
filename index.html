@@ -132,6 +132,10 @@
     .comm-mate:last-child { border-bottom:none; }
     .comm-mate-family { font-size:13px;font-weight:700;color:#2d3748;flex:1; }
     .comm-mate-kid { font-size:12px;color:#718096;font-weight:600; }
+    /* Custom autocomplete dropdown */
+    #acDropdown { display:none;background:white;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,0.14);border:1.5px solid #e8edf5;overflow:hidden;max-height:200px;overflow-y:auto; }
+    .ac-item { padding:11px 14px;font-size:14px;font-weight:700;color:#2d3748;cursor:pointer;transition:background 0.12s;user-select:none; }
+    .ac-item:hover,.ac-item:active { background:#f0f4ff;color:#6a11cb; }
     /* Community events */
     .comm-event { display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #f3f6ff; }
     .comm-event:last-child { border-bottom:none; }
@@ -571,9 +575,8 @@
   </div>
 </div>
 
-<!-- School autocomplete datalists -->
-<datalist id="dataCities"></datalist>
-<datalist id="dataSchools"></datalist>
+<!-- Custom autocomplete dropdown -->
+<div id="acDropdown"></div>
 
 <!-- PHOTO MANAGER MODAL -->
 <div id="photoModal" class="photo-modal-wrap" style="display:none">
@@ -1570,10 +1573,10 @@ function renderMgmtMembers() {
       </div>
       <div id="mgmtSchoolSection_${i}" style="display:${m.role==='kid'?'block':'none'}">
         <span class="mgmt-edit-label" style="display:block;margin-bottom:6px">🏫 בית ספר</span>
-        <input list="dataCities" class="auth-input" id="mgmtEditCity_${i}" placeholder="עיר" value="${esc(m.school?.city||'')}" style="margin-bottom:6px"
-  oninput="loadSchoolsFor(this.value)">
-        <input list="dataSchools" class="auth-input" id="mgmtEditSchoolName_${i}" placeholder="שם בית הספר" value="${esc(m.school?.name||'')}" style="margin-bottom:6px"
-  onfocus="loadSchoolsFor(el('mgmtEditCity_${i}')?.value)">
+        <input class="auth-input" id="mgmtEditCity_${i}" placeholder="עיר" value="${esc(m.school?.city||'')}" style="margin-bottom:6px"
+  oninput="onCityAc(this,${i})" onfocus="onCityAc(this,${i})" onblur="scheduleHideAc()">
+        <input class="auth-input" id="mgmtEditSchoolName_${i}" placeholder="שם בית הספר" value="${esc(m.school?.name||'')}" style="margin-bottom:6px"
+  oninput="onSchoolAc(this,${i})" onfocus="onSchoolAc(this,${i})" onblur="scheduleHideAc()">
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <select class="auth-input" id="mgmtEditGrade_${i}" style="flex:1">
             ${GRADE_OPTIONS.map(g=>`<option value="${g}" ${(m.school?.grade||'')==g?'selected':''}>${g?'כיתה '+g:'כיתה...'}</option>`).join('')}
@@ -1718,7 +1721,9 @@ async function mgmtRemoveMember(name) {
 }
 
 // ── School Index (autocomplete) ───────────
-let _cachedCities = null;
+let _cachedCities  = null;
+let _cachedSchools = {}; // { [normCityId]: string[] }
+
 function normCityId(city) {
   return (city||'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^\w\u0590-\u05FF]/g,'');
 }
@@ -1727,17 +1732,15 @@ async function loadCities() {
     const snap = await fbDb.collection('schoolIndex').doc('cities_list').get();
     _cachedCities = snap.exists ? (snap.data().cities||[]) : [];
   } catch(e) { _cachedCities = []; }
-  const dl = el('dataCities');
-  if (dl) dl.innerHTML = (_cachedCities).map(c=>`<option value="${esc(c)}">`).join('');
 }
 async function loadSchoolsFor(city) {
   if (!city?.trim()) return;
+  const key = normCityId(city);
+  if (_cachedSchools[key]) return;
   try {
-    const snap = await fbDb.collection('schoolIndex').doc('schools__'+normCityId(city)).get();
-    const schools = snap.exists ? (snap.data().schools||[]) : [];
-    const dl = el('dataSchools');
-    if (dl) dl.innerHTML = schools.map(s=>`<option value="${esc(s)}">`).join('');
-  } catch(e) {}
+    const snap = await fbDb.collection('schoolIndex').doc('schools__'+key).get();
+    _cachedSchools[key] = snap.exists ? (snap.data().schools||[]) : [];
+  } catch(e) { _cachedSchools[key] = []; }
 }
 async function updateSchoolIndex(city, schoolName) {
   if (!city?.trim()) return;
@@ -1750,8 +1753,57 @@ async function updateSchoolIndex(city, schoolName) {
         { schools: firebase.firestore.FieldValue.arrayUnion(schoolName.trim()) }, { merge:true }
       );
     }
-    _cachedCities = null; // invalidate cache so next open re-fetches
+    _cachedCities = null;
+    _cachedSchools = {};
   } catch(e) { console.error('updateSchoolIndex:', e); }
+}
+
+// ── Custom autocomplete ───────────────────
+let _acInput   = null;
+let _acOptions = [];
+let _acHideTimer = null;
+
+function showAc(inputEl, options) {
+  _acInput = inputEl;
+  const q = (inputEl.value || '').trim();
+  const filtered = q
+    ? options.filter(o => o.includes(q) || o.toLowerCase().includes(q.toLowerCase()))
+    : options;
+  const dd = el('acDropdown');
+  if (!filtered.length) { hideAc(); return; }
+  _acOptions = filtered.slice(0, 8);
+  const r = inputEl.getBoundingClientRect();
+  Object.assign(dd.style, {
+    display:'block', position:'fixed',
+    top: (r.bottom + 3) + 'px',
+    left: r.left + 'px',
+    width: r.width + 'px',
+  });
+  dd.innerHTML = _acOptions.map((o, i) =>
+    `<div class="ac-item" onmousedown="acPick(${i})">${esc(o)}</div>`
+  ).join('');
+}
+function hideAc() {
+  el('acDropdown').style.display = 'none';
+  _acInput = null;
+}
+function scheduleHideAc() {
+  _acHideTimer = setTimeout(hideAc, 150);
+}
+function acPick(i) {
+  if (_acHideTimer) { clearTimeout(_acHideTimer); _acHideTimer = null; }
+  const val = _acOptions[i];
+  if (_acInput && val !== undefined) _acInput.value = val;
+  hideAc();
+}
+function onCityAc(inp, idx) {
+  showAc(inp, _cachedCities || []);
+  loadSchoolsFor(inp.value); // preload schools while user types city
+}
+async function onSchoolAc(inp, idx) {
+  const city = el('mgmtEditCity_' + idx)?.value.trim();
+  if (city) await loadSchoolsFor(city);
+  showAc(inp, city ? (_cachedSchools[normCityId(city)] || []) : []);
 }
 
 // ── School Community ─────────────────────
