@@ -631,6 +631,7 @@
     <!-- CHORES -->
     <div id="tab-chores" class="tab-content">
       <div id="choresContent"></div>
+      <div id="choreHistoryWrap"></div>
       <div class="card" id="addChoreCard">
         <div class="card-title" id="addChoreTitle"></div>
         <div class="add-form">
@@ -770,6 +771,7 @@ const STRINGS = {
     wbStars: n => `יש לך ${n} ⭐ כוכבים השבוע`,
     addChoreTitle:'➕ הוסף משימה', chorePlaceholder:'מה צריך לעשות...',
     noChores:'🎉 אין משימות להציג',
+    choreHistory:'✅ היסטוריה', choreHistoryEmpty:'אין משימות שהושלמו עדיין', choreHistorySearch:'חיפוש בהיסטוריה...',
     high:'גבוה', medium:'בינוני', low:'נמוך',
     youLabel:'(את/ה)', add:'הוסף',
     shoppingList:'🛒 רשימת קניות', addItemPlaceholder:'הוסף פריט...',
@@ -828,6 +830,7 @@ const STRINGS = {
     wbStars: n => `You have ${n} ⭐ star${n!==1?'s':''} this week`,
     addChoreTitle:'➕ Add Chore', chorePlaceholder:'What needs doing…',
     noChores:'🎉 No chores to show',
+    choreHistory:'✅ History', choreHistoryEmpty:'No completed chores yet', choreHistorySearch:'Search history…',
     high:'high', medium:'medium', low:'low',
     youLabel:'(you)', add:'Add',
     shoppingList:'🛒 Shopping List', addItemPlaceholder:'Add item…',
@@ -2561,35 +2564,135 @@ function setStar(kid,val){
 // ════════════════════════════════════════
 //  CHORES
 // ════════════════════════════════════════
+// ── Chore history state ───────────────────
+let _choreHistOpen   = false;
+let _choreHistSearch = '';
+
 function renderChores() {
   const people = getAllMemberNames();
   let items = S.filter==='All' ? S.chores : S.chores.filter(c=>c.assignee===S.filter);
+  const active = items.filter(c=>!c.done);
   const g={}; people.forEach(p=>g[p]=[]);
-  items.forEach(c=>{if(g[c.assignee])g[c.assignee].push(c);});
+  active.forEach(c=>{if(g[c.assignee])g[c.assignee].push(c);});
   let html='';
   people.forEach(p=>{
     if(!g[p].length)return;
     const mine=p===S.user;
     html+=`<div class="card ${mine?'mine-card':''}">
-      <div class="person-header">${getAvatar(p, 22)} ${p}${mine?` <span style="font-size:11px;color:#c471ed;font-weight:700">${t('youLabel')}</span>`:''}</div>
+      <div class="person-header">${getAvatar(p,22)} ${p}${mine?` <span style="font-size:11px;color:#c471ed;font-weight:700">${t('youLabel')}</span>`:''}</div>
       ${g[p].map(c=>{
         const can=isParent()||c.assignee===S.user;
-        return `<div class="task-row">
-          <div class="check-box ${c.done?'done':''} ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
-            ${c.done?'✓':''}</div>
-          <div class="task-text ${c.done?'done':''}">${esc(c.text)}</div>
+        return `<div class="task-row" data-chore-id="${c.id}">
+          <div class="check-box ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
+          </div>
+          <div class="task-text">${esc(c.text)}</div>
           <span class="pri pri-${c.priority}">${t(c.priority)}</span>
           ${isParent()?`<button class="del-btn" onclick="deleteChore(${c.id})">×</button>`:''}</div>`;
       }).join('')}</div>`;
   });
   el('choresContent').innerHTML=html||`<div class="card"><div class="empty">${t('noChores')}</div></div>`;
+  renderChoreHistory(S.filter);
 }
-function toggleChore(id){
+
+function renderChoreHistory(filter) {
+  const wrap = el('choreHistoryWrap');
+  if (!wrap) return;
+  let allDone = S.chores.filter(c=>c.done);
+  if (filter!=='All') allDone = allDone.filter(c=>c.assignee===filter);
+  allDone.sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
+  if (!allDone.length) { wrap.innerHTML=''; return; }
+  const q = _choreHistSearch.toLowerCase();
+  const filtered = q ? allDone.filter(c=>
+    c.text.toLowerCase().includes(q)||c.assignee.toLowerCase().includes(q)
+  ) : allDone;
+  wrap.innerHTML=`<div class="card" style="margin-top:0">
+    <div class="hw-hist-hdr" onclick="toggleChoreHistory()">
+      <span class="hw-hist-title">${t('choreHistory')}</span>
+      <span class="hw-hist-count">${allDone.length}</span>
+      <span style="color:#a0aec0;font-size:12px;margin-inline-start:4px">${_choreHistOpen?'▲':'▼'}</span>
+    </div>
+    ${_choreHistOpen?`
+      <input class="hw-hist-search" placeholder="${t('choreHistorySearch')}"
+        value="${esc(_choreHistSearch)}"
+        oninput="_choreHistSearch=this.value;filterChoreHistory('${esc(filter)}')">
+      <div id="choreHistList">${choreHistListHTML(filtered,filter)}</div>`:''}
+  </div>`;
+}
+
+function choreHistListHTML(filtered, filter) {
+  return filtered.length ? filtered.map(c=>`
+    <div class="hw-hist-item" data-chore-id="${c.id}">
+      ${filter==='All'?`<span style="font-size:16px;flex-shrink:0">${getAvatar(c.assignee,16)}</span>`:''}
+      <div class="hw-hist-desc" style="flex:1">${esc(c.text)}</div>
+      <span class="hw-hist-ts">${fmtDoneAt(c.doneAt)}</span>
+      ${isParent()?`<button class="del-btn" style="opacity:0.5;font-size:14px" title="בטל סימון" onclick="toggleChore(${c.id})">↩</button>`:''}
+      ${isParent()?`<button class="del-btn" onclick="deleteChore(${c.id})">×</button>`:''}</div>`
+  ).join('') : `<div class="empty" style="padding:8px 0">${t('choreHistoryEmpty')}</div>`;
+}
+
+function filterChoreHistory(filter) {
+  const listEl = el('choreHistList');
+  if (!listEl) return;
+  let allDone = S.chores.filter(c=>c.done);
+  if (filter!=='All') allDone = allDone.filter(c=>c.assignee===filter);
+  allDone.sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
+  const q = _choreHistSearch.toLowerCase();
+  const filtered = q ? allDone.filter(c=>
+    c.text.toLowerCase().includes(q)||c.assignee.toLowerCase().includes(q)
+  ) : allDone;
+  listEl.innerHTML = choreHistListHTML(filtered, filter);
+}
+
+function toggleChoreHistory() {
+  _choreHistOpen = !_choreHistOpen;
+  renderChoreHistory(S.filter);
+}
+
+function toggleChore(id) {
   const c=S.chores.find(x=>x.id===id);
   if(!c||(!isParent()&&c.assignee!==S.user))return;
-  c.done=!c.done;save();renderHome();renderChores();
+  if(!c.done){
+    const row=document.querySelector(`.task-row[data-chore-id="${id}"]`);
+    if(row){
+      row.classList.remove('hw-fly-in-active');
+      void row.offsetWidth;
+      row.classList.add('hw-fly-out');
+      setTimeout(()=>{
+        c.done=true; c.doneAt=Date.now();
+        _choreHistOpen=true;
+        save(); renderChores(); renderHome();
+        requestAnimationFrame(()=>{
+          const hist=document.querySelector(`.hw-hist-item[data-chore-id="${id}"]`);
+          if(hist) hist.classList.add('hw-fly-in');
+        });
+      },270);
+      return;
+    }
+    c.done=true; c.doneAt=Date.now(); _choreHistOpen=true;
+  } else {
+    const histRow=document.querySelector(`.hw-hist-item[data-chore-id="${id}"]`);
+    if(histRow){
+      histRow.classList.add('hw-fly-out-hist');
+      setTimeout(()=>{
+        c.done=false; delete c.doneAt;
+        save(); renderChores(); renderHome();
+        requestAnimationFrame(()=>{
+          const active=document.querySelector(`.task-row[data-chore-id="${id}"]`);
+          if(active) active.classList.add('hw-fly-in-active');
+        });
+      },270);
+      return;
+    }
+    c.done=false; delete c.doneAt;
+  }
+  save(); renderChores(); renderHome();
 }
-function deleteChore(id){if(!isParent())return;S.chores=S.chores.filter(x=>x.id!==id);save();renderHome();renderChores();}
+
+function deleteChore(id){
+  if(!isParent())return;
+  S.chores=S.chores.filter(x=>x.id!==id);
+  save(); renderHome(); renderChores();
+}
 function addChore(){
   const text=el('newChoreText').value.trim();if(!text)return;
   const assignee=isParent()?el('newChoreAssignee').value:S.user;
