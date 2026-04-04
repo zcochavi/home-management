@@ -471,8 +471,10 @@
       <div class="mgmt-section-hint">קטגוריות משמשות לארגון פריטי הקניות</div>
       <div id="mgmtCatList"></div>
       <div class="mgmt-add-form">
-        <input class="mgmt-input mgmt-emoji-input" id="mgmtNewCatEmoji" type="text" placeholder="🛒" maxlength="4">
+        <input class="mgmt-input mgmt-emoji-input" id="mgmtNewCatEmoji" type="text" placeholder="🛒" maxlength="4"
+          oninput="this.dataset.manual='1'">
         <input class="mgmt-input" id="mgmtNewCatName" type="text" placeholder="שם קטגוריה"
+          oninput="autoSuggestCatEmoji(this.value)"
           onkeydown="if(event.key==='Enter')mgmtAddCat()">
         <button class="mgmt-add-btn" onclick="mgmtAddCat()">+</button>
       </div>
@@ -822,6 +824,52 @@ const SUBJECT_COLOR_POOL = [
   { bg:'#d1fae5', color:'#065f46' },{ bg:'#fce7f3', color:'#9d174d' },
   { bg:'#ede9fe', color:'#5b21b6' },{ bg:'#fee2e2', color:'#991b1b' },
 ];
+
+// Keyword → emoji suggestions for grocery category names
+const CAT_EMOJI_HINTS = [
+  { emoji:'🥦', keys:['fruit','veg','produce','salad','leaf','green','herb','mushroom','ירק','פרי','ירקות','פירות','סלט','פטריה','עשב'] },
+  { emoji:'🥛', keys:['dairy','milk','cream','butter','cheese','yogurt','egg','חלב','ביצ','גבינ','יוגורט','חמאה','שמנת','קוטג','מחלבה'] },
+  { emoji:'🍗', keys:['chicken','poultry','turkey','duck','wing','עוף','פרגית','הודו','ברווז','כנף'] },
+  { emoji:'🥩', keys:['meat','beef','lamb','steak','pork','veal','butcher','בשר','סטייק','טלה','כבש','עגל','נקניק','קצב'] },
+  { emoji:'🐟', keys:['fish','seafood','tuna','salmon','shrimp','prawn','דג','טונה','סלמון','שרימפס','פירות ים','קרפיון'] },
+  { emoji:'🥖', keys:['bread','bak','pastry','roll','bun','pita','toast','bagel','challah','לחם','אפייה','מאפה','פיתה','טוסט','בגל','חלה'] },
+  { emoji:'☕', keys:['coffee','tea','espresso','cappuccino','latte','קפה','תה','אספרסו','קפוצ'] },
+  { emoji:'🍷', keys:['wine','beer','alcohol','spirits','whisky','vodka','יין','בירה','אלכוהול','וויסקי','וודקה','ליקר'] },
+  { emoji:'🥤', keys:['drink','juice','soda','water','beverage','lemonade','משקה','מיץ','מים','סודה','לימונדה','קולה'] },
+  { emoji:'🍫', keys:['snack','chocolate','candy','sweet','chip','crisp','cookie','wafer','חטיף','שוקולד','ממתק','עוגיה','צ\'יפס','ופל'] },
+  { emoji:'🧊', keys:['frozen','freeze','ice','קפוא','גלידה','קרח','מוקפא'] },
+  { emoji:'🥫', keys:['pantry','canned','can','tin','preserve','מזווה','קופסא','שימור'] },
+  { emoji:'🍝', keys:['pasta','noodle','spaghetti','rice','grain','פסטה','אטריה','ספגטי','אורז'] },
+  { emoji:'🧂', keys:['spice','seasoning','salt','pepper','condiment','תבלין','מלח','פלפל','חומץ','חרדל'] },
+  { emoji:'🫙', keys:['jam','spread','honey','tahini','peanut','jelly','hummus','ריבה','דבש','טחינה','חמאת','ממרח','חומוס'] },
+  { emoji:'🌾', keys:['flour','cereal','oat','grain','muesli','granola','קמח','שיבולת','גרנולה','דגני','קורנפלקס'] },
+  { emoji:'🥣', keys:['breakfast','בוקר'] },
+  { emoji:'🫒', keys:['oil','olive','שמן','זית'] },
+  { emoji:'🍳', keys:['kitchen','cook','cookware','מטבח','בישול','כלי'] },
+  { emoji:'🧹', keys:['clean','detergent','laundry','bleach','mop','scrub','wash','ניקוי','ניקיון','כביסה','אקונומיקה','שטיפה','מגב','נקי'] },
+  { emoji:'🧻', keys:['paper','tissue','toilet','napkin','disposable','towel','נייר','טישו','מגבת','חד פעמי','מפית','נייר אסלה'] },
+  { emoji:'🧴', keys:['personal','hygiene','shampoo','lotion','deodorant','cosmetic','beauty','shower','soap','סבון','שמפו','קרם','דאודורנט','קוסמטיקה','טיפוח','רחצה'] },
+  { emoji:'💊', keys:['health','pharmacy','vitamin','medicine','supplement','pill','pharma','בריאות','ויטמין','תרופה','תוסף','כדור','פארמ','רפואה'] },
+  { emoji:'👶', keys:['baby','infant','diaper','formula','nappy','תינוק','חיתול','פורמולה'] },
+  { emoji:'🐾', keys:['pet','dog','cat','animal','kibble','חיות','כלב','חתול','מחמד','פט'] },
+  { emoji:'🌸', keys:['flower','plant','garden','floral','פרח','צמח','גינה','פרחים'] },
+  { emoji:'📦', keys:['misc','other','general','misc','שונות','כללי','אחר'] },
+];
+function suggestCatEmoji(name) {
+  if (!name) return '';
+  const lower = name.toLowerCase();
+  for (const hint of CAT_EMOJI_HINTS) {
+    if (hint.keys.some(k => lower.includes(k.toLowerCase()))) return hint.emoji;
+  }
+  return '';
+}
+function autoSuggestCatEmoji(val, emojiInputId) {
+  const emojiEl = el(emojiInputId || 'mgmtNewCatEmoji');
+  if (!emojiEl || emojiEl.dataset.manual) return;
+  const suggested = suggestCatEmoji(val);
+  emojiEl.value = suggested;
+  emojiEl.placeholder = suggested || '🛒';
+}
 
 function getGroceryCats() {
   return (familyData?.groceryCategories?.length) ? familyData.groceryCategories : DEFAULT_GROCERY_CATS;
@@ -1481,22 +1529,65 @@ async function mgmtRemoveMember(name) {
 // ── Grocery Categories ───────────────────
 function renderMgmtCats() {
   const cats = getGroceryCats();
-  el('mgmtCatList').innerHTML = cats.length ? cats.map(c => `
-    <div class="mgmt-item-row">
-      <span style="font-size:22px;width:28px;text-align:center;flex-shrink:0">${esc(c.emoji)}</span>
-      <div class="mgmt-item-label">${esc(c.name)}</div>
-      <button class="mgmt-icon-btn red" onclick="mgmtRemoveCat('${esc(c.name)}')">🗑</button>
+  el('mgmtCatList').innerHTML = cats.length ? cats.map((c, i) => `
+    <div>
+      <div class="mgmt-item-row">
+        <span style="font-size:22px;width:28px;text-align:center;flex-shrink:0">${esc(c.emoji||'🛒')}</span>
+        <div class="mgmt-item-label">${esc(c.name)}</div>
+        <button class="mgmt-icon-btn purple" onclick="toggleMgmtCatEdit(${i})" title="ערוך">✏️</button>
+        <button class="mgmt-icon-btn red" onclick="mgmtRemoveCat('${esc(c.name)}')">🗑</button>
+      </div>
+      <div class="mgmt-edit-panel" id="mgmtCatPanel_${i}">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <input class="mgmt-input mgmt-emoji-input" id="mgmtCatEmoji_${i}" value="${esc(c.emoji||'🛒')}" maxlength="4"
+            oninput="this.dataset.manual='1'" title="אימוג'י">
+          <input class="mgmt-input" id="mgmtCatName_${i}" value="${esc(c.name)}"
+            oninput="autoSuggestCatEmoji(this.value,'mgmtCatEmoji_${i}')"
+            onkeydown="if(event.key==='Enter')saveMgmtCatEdit(${i},'${esc(c.name)}')">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="auth-btn-main" style="padding:8px 16px;width:auto" onclick="saveMgmtCatEdit(${i},'${esc(c.name)}')">✓ שמור</button>
+          <button class="auth-btn-back" onclick="toggleMgmtCatEdit(${i})">ביטול</button>
+        </div>
+      </div>
     </div>`).join('') : '<div class="empty" style="padding:8px 0">אין קטגוריות</div>';
 }
 
+function toggleMgmtCatEdit(i) {
+  const panel = el(`mgmtCatPanel_${i}`);
+  const opening = !panel.classList.contains('open');
+  // Close all other cat panels
+  getGroceryCats().forEach((_, j) => { if (j !== i) el(`mgmtCatPanel_${j}`)?.classList.remove('open'); });
+  panel.classList.toggle('open', opening);
+  if (opening) el(`mgmtCatName_${i}`)?.focus();
+}
+
+async function saveMgmtCatEdit(i, originalName) {
+  const newName  = el(`mgmtCatName_${i}`).value.trim();
+  const newEmoji = el(`mgmtCatEmoji_${i}`).value.trim() || suggestCatEmoji(newName) || '🛒';
+  if (!newName) return;
+  const cats = getGroceryCats().map((c, ci) => ci === i ? { name: newName, emoji: newEmoji } : c);
+  if (familyData) familyData.groceryCategories = cats;
+  if (newName !== originalName) {
+    S.grocery = S.grocery.map(g => g.category === originalName ? { ...g, category: newName } : g);
+    await fbDb.collection('families').doc(S.uid).update({ groceryCategories: cats, grocery: S.grocery });
+  } else {
+    await fbDb.collection('families').doc(S.uid).update({ groceryCategories: cats });
+  }
+  el(`mgmtCatPanel_${i}`).classList.remove('open');
+  renderMgmtCats(); renderStatic(); renderGrocery();
+}
+
 async function mgmtAddCat() {
-  const name  = el('mgmtNewCatName').value.trim();
-  const emoji = el('mgmtNewCatEmoji').value.trim() || '🛒';
+  const name     = el('mgmtNewCatName').value.trim();
+  const emojiEl  = el('mgmtNewCatEmoji');
+  const emoji    = emojiEl.value.trim() || suggestCatEmoji(name) || '🛒';
   if (!name) { el('mgmtNewCatName').focus(); return; }
   const cats = [...getGroceryCats(), { name, emoji }];
   if (familyData) familyData.groceryCategories = cats;
   await fbDb.collection('families').doc(S.uid).update({ groceryCategories: cats });
-  el('mgmtNewCatName').value = ''; el('mgmtNewCatEmoji').value = '';
+  el('mgmtNewCatName').value = '';
+  emojiEl.value = ''; emojiEl.placeholder = '🛒'; delete emojiEl.dataset.manual;
   renderMgmtCats(); renderStatic();
 }
 
