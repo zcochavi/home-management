@@ -492,10 +492,14 @@
       <div class="card-title">📚 נושאי שיעורי בית</div>
       <div class="mgmt-section-hint">נושאים משמשים לסיווג שיעורי בית</div>
       <div id="mgmtSubjectList"></div>
-      <div class="mgmt-add-form">
-        <input class="mgmt-input" id="mgmtNewSubjectName" type="text" placeholder="שם הנושא"
-          onkeydown="if(event.key==='Enter')mgmtAddSubject()">
-        <button class="mgmt-add-btn" onclick="mgmtAddSubject()">+</button>
+      <div class="mgmt-add-form" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <input class="mgmt-input" id="mgmtNewSubjectNameHe" type="text" placeholder="שם בעברית"
+            style="flex:1" onkeydown="if(event.key==='Enter')mgmtAddSubject()">
+          <input class="mgmt-input" id="mgmtNewSubjectName" type="text" placeholder="English name"
+            style="flex:1;direction:ltr" onkeydown="if(event.key==='Enter')mgmtAddSubject()">
+          <button class="mgmt-add-btn" onclick="mgmtAddSubject()">+</button>
+        </div>
       </div>
     </div>
 
@@ -820,11 +824,11 @@ const DEFAULT_GROCERY_CATS = [
   { name:'Meat & Fish', emoji:'🥩' },
 ];
 const DEFAULT_SUBJECTS = [
-  { name:'Maths',   bg:'#ebf4ff', color:'#2b6cb0' },
-  { name:'English', bg:'#f0fff4', color:'#276749' },
-  { name:'Science', bg:'#faf5ff', color:'#6b46c1' },
-  { name:'History', bg:'#fffaf0', color:'#c05621' },
-  { name:'Art',     bg:'#fff5f7', color:'#b83280' },
+  { name:'Maths',   nameHe:'מתמטיקה', bg:'#ebf4ff', color:'#2b6cb0' },
+  { name:'English', nameHe:'אנגלית',  bg:'#f0fff4', color:'#276749' },
+  { name:'Science', nameHe:'מדעים',   bg:'#faf5ff', color:'#6b46c1' },
+  { name:'History', nameHe:'היסטוריה',bg:'#fffaf0', color:'#c05621' },
+  { name:'Art',     nameHe:'אמנות',   bg:'#fff5f7', color:'#b83280' },
 ];
 const SUBJECT_COLOR_POOL = [
   { bg:'#fef3c7', color:'#92400e' },{ bg:'#e0f2fe', color:'#0369a1' },
@@ -893,7 +897,9 @@ function subjectBadgeStyle(name) {
   return 'background:#f0f4ff;color:#718096';
 }
 function subjectLabel(name) {
-  return t('subjects')[name] || name;
+  const s = getSubjects().find(s => s.name === name);
+  if (getLang() === 'he') return s?.nameHe || s?.name || name;
+  return s?.name || name;
 }
 
 const _now     = new Date();
@@ -1617,24 +1623,69 @@ async function mgmtRemoveCat(name) {
 // ── Homework Subjects ────────────────────
 function renderMgmtSubjects() {
   const subs = getSubjects();
-  el('mgmtSubjectList').innerHTML = subs.length ? subs.map(s => `
-    <div class="mgmt-item-row">
-      <span class="badge" style="${subjectBadgeStyle(s.name)};flex-shrink:0">${esc(subjectLabel(s.name))}</span>
-      ${s.name !== subjectLabel(s.name) ? `<span style="font-size:12px;color:#a0aec0;font-weight:600">${esc(s.name)}</span>` : ''}
-      <div class="mgmt-item-label"></div>
-      <button class="mgmt-icon-btn red" onclick="mgmtRemoveSubject('${esc(s.name)}')">🗑</button>
+  el('mgmtSubjectList').innerHTML = subs.length ? subs.map((s, i) => `
+    <div>
+      <div class="mgmt-item-row">
+        <span class="badge" style="${subjectBadgeStyle(s.name)};flex-shrink:0">${esc(s.nameHe || s.name)}</span>
+        ${s.nameHe ? `<span style="font-size:12px;color:#a0aec0;font-weight:600;direction:ltr">${esc(s.name)}</span>` : ''}
+        <div class="mgmt-item-label"></div>
+        <button class="mgmt-icon-btn purple" onclick="toggleMgmtSubjectEdit(${i})" title="ערוך">✏️</button>
+        <button class="mgmt-icon-btn red" onclick="mgmtRemoveSubject('${esc(s.name)}')">🗑</button>
+      </div>
+      <div class="mgmt-edit-panel" id="mgmtSubjectPanel_${i}">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <input class="mgmt-input" id="mgmtSubjectNameHe_${i}" value="${esc(s.nameHe || '')}" placeholder="שם בעברית"
+            onkeydown="if(event.key==='Enter')saveMgmtSubjectEdit(${i},'${esc(s.name)}')">
+          <input class="mgmt-input" id="mgmtSubjectName_${i}" value="${esc(s.name)}" placeholder="English name"
+            style="direction:ltr"
+            onkeydown="if(event.key==='Enter')saveMgmtSubjectEdit(${i},'${esc(s.name)}')">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="auth-btn-main" style="padding:8px 16px;width:auto" onclick="saveMgmtSubjectEdit(${i},'${esc(s.name)}')">✓ שמור</button>
+          <button class="auth-btn-back" onclick="toggleMgmtSubjectEdit(${i})">ביטול</button>
+        </div>
+      </div>
     </div>`).join('') : '<div class="empty" style="padding:8px 0">אין נושאים</div>';
 }
 
+function toggleMgmtSubjectEdit(i) {
+  const panel = el(`mgmtSubjectPanel_${i}`);
+  const opening = !panel.classList.contains('open');
+  getSubjects().forEach((_, j) => { if (j !== i) el(`mgmtSubjectPanel_${j}`)?.classList.remove('open'); });
+  panel.classList.toggle('open', opening);
+  if (opening) el(`mgmtSubjectNameHe_${i}`)?.focus();
+}
+
+async function saveMgmtSubjectEdit(i, originalName) {
+  const newName   = el(`mgmtSubjectName_${i}`).value.trim();
+  const newNameHe = el(`mgmtSubjectNameHe_${i}`).value.trim();
+  if (!newName) return;
+  const subs = getSubjects().map((s, si) => si === i ? { ...s, name: newName, nameHe: newNameHe || undefined } : s);
+  if (familyData) familyData.subjects = subs;
+  if (newName !== originalName) {
+    S.homework = S.homework.map(h => h.subject === originalName ? { ...h, subject: newName } : h);
+    await fbDb.collection('families').doc(S.uid).update({ subjects: subs, homework: S.homework });
+  } else {
+    await fbDb.collection('families').doc(S.uid).update({ subjects: subs });
+  }
+  el(`mgmtSubjectPanel_${i}`).classList.remove('open');
+  renderMgmtSubjects(); renderStatic(); renderHomework();
+}
+
 async function mgmtAddSubject() {
-  const name = el('mgmtNewSubjectName').value.trim();
-  if (!name) { el('mgmtNewSubjectName').focus(); return; }
+  const name   = el('mgmtNewSubjectName').value.trim();
+  const nameHe = el('mgmtNewSubjectNameHe').value.trim();
+  if (!name && !nameHe) { el('mgmtNewSubjectNameHe').focus(); return; }
+  const effectiveName = name || nameHe;
   const subs = getSubjects();
   const { bg, color } = SUBJECT_COLOR_POOL[subs.length % SUBJECT_COLOR_POOL.length];
-  const updated = [...subs, { name, bg, color }];
+  const entry = { name: effectiveName, bg, color };
+  if (nameHe) entry.nameHe = nameHe;
+  const updated = [...subs, entry];
   if (familyData) familyData.subjects = updated;
   await fbDb.collection('families').doc(S.uid).update({ subjects: updated });
   el('mgmtNewSubjectName').value = '';
+  el('mgmtNewSubjectNameHe').value = '';
   renderMgmtSubjects(); renderStatic();
 }
 
