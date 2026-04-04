@@ -86,6 +86,20 @@
     .photo-remove-btn { padding:7px 8px;border:none;border-radius:10px;background:none;color:#e53e3e;font-size:14px;cursor:pointer;opacity:0.5;flex-shrink:0;line-height:1; }
     .photo-remove-btn:hover { opacity:1; }
     .photo-modal-wrap { position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px; }
+    /* Tab editor */
+    .tab-ed-row { display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f3f6ff; }
+    .tab-ed-row:last-of-type { border-bottom:none; }
+    .tab-ed-icon { font-size:22px;width:30px;text-align:center;flex-shrink:0; }
+    .tab-ed-label { flex:1;font-size:14px;font-weight:800;color:#1a202c; }
+    .tab-ed-btns { display:flex;gap:4px;align-items:center;flex-shrink:0; }
+    .tab-ed-arrow { background:#f0f4ff;border:none;border-radius:8px;width:30px;height:30px;font-size:13px;cursor:pointer;color:#6a11cb;font-weight:900;transition:background 0.15s;display:flex;align-items:center;justify-content:center; }
+    .tab-ed-arrow:hover:not([disabled]) { background:#e0e8ff; }
+    .tab-ed-arrow[disabled] { opacity:0.22;cursor:default; }
+    .tab-ed-remove { background:none;border:none;font-size:18px;cursor:pointer;color:#e53e3e;opacity:0.45;padding:4px 6px;line-height:1;transition:opacity 0.15s; }
+    .tab-ed-remove:hover:not([disabled]) { opacity:1; }
+    .tab-ed-remove[disabled] { opacity:0.15;cursor:default; }
+    .tab-ed-add { padding:7px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#6a11cb,#f093fb);color:white;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;flex-shrink:0;transition:opacity 0.15s; }
+    .tab-ed-add:hover { opacity:0.9; }
     /* Management screen */
     #mgmtScreen { position:fixed;inset:0;background:#f0f4ff;z-index:900;overflow-y:auto; }
     #mgmtScreen.hidden { display:none; }
@@ -403,6 +417,25 @@
   <button class="login-signout" onclick="authSignOut()">← יציאה מהחשבון</button>
 </div>
 
+<!-- TAB EDITOR SCREEN -->
+<div id="tabEditorScreen" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeTabEditor()">‹</button>
+    <div class="mgmt-header-title">🗂 התאמת לשוניות</div>
+  </div>
+  <div class="mgmt-content">
+    <div class="card">
+      <div class="card-title">לשוניות פעילות</div>
+      <div class="mgmt-section-hint">שנה סדר עם החצים · לחץ × להסרה</div>
+      <div id="tabEditorActive"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">הוסף לשונית</div>
+      <div id="tabEditorPool"></div>
+    </div>
+  </div>
+</div>
+
 <!-- MANAGEMENT SCREEN -->
 <div id="mgmtScreen" class="hidden">
   <div class="mgmt-header">
@@ -492,13 +525,7 @@
     <div class="avatar-row" id="avatarRow"></div>
   </div>
 
-  <div class="tab-bar" id="tabBar">
-    <div class="tab active"  onclick="switchTab('home')">    <span class="tab-icon">🏡</span><span class="tab-label"></span></div>
-    <div class="tab"         onclick="switchTab('chores')">  <span class="tab-icon">✅</span><span class="tab-label"></span></div>
-    <div class="tab"         onclick="switchTab('grocery')"> <span class="tab-icon">🛒</span><span class="tab-label"></span></div>
-    <div class="tab"         onclick="switchTab('homework')"><span class="tab-icon">📚</span><span class="tab-label"></span></div>
-    <div class="tab"         onclick="switchTab('calendar')"><span class="tab-icon">📅</span><span class="tab-label"></span></div>
-  </div>
+  <div class="tab-bar" id="tabBar"></div>
 
   <div class="content">
     <!-- HOME -->
@@ -1283,7 +1310,7 @@ function toggleEventPerson(key) {
 //  RENDER ALL + STATIC LABELS
 // ════════════════════════════════════════
 function renderAll() {
-  renderStatic(); renderHeader(); renderHome();
+  renderTabBar(); renderStatic(); renderHeader(); renderHome();
   renderChores(); renderGrocery(); renderHomework();
   renderCalendar(); renderGCalBar(); applyRoleUI();
 }
@@ -1603,6 +1630,11 @@ function openMenu() {
       <span>${isHe ? 'תמונות משפחה' : 'Family photos'}</span>
     </div>
     <div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();openTabEditor()">
+      <span class="menu-item-icon">🗂</span>
+      <span>${isHe ? 'התאמת לשוניות' : 'Customize tabs'}</span>
+    </div>
+    <div class="menu-sep"></div>
     <div class="menu-item" onclick="closeMenu();toggleLang()">
       <span class="menu-item-icon">🌐</span>
       <span>${isHe ? 'Switch to English' : 'עבור לעברית'}</span>
@@ -1627,7 +1659,6 @@ function closeMenu() {
 }
 
 function renderStatic() {
-  document.querySelectorAll('.tab-label').forEach((e,i) => e.textContent = t('tabs')[i]||'');
   const lb=el('langBtn');   if(lb) lb.textContent = t('langToggle');
   const sb=el('switchBtn'); if(sb) sb.textContent = t('switchUser');
   el('starChartTitle').textContent   = t('starChart');
@@ -1942,12 +1973,119 @@ async function deleteEvent(id,gcalId){
 // ════════════════════════════════════════
 //  TABS & FILTER
 // ════════════════════════════════════════
-const TABS=['home','chores','grocery','homework','calendar'];
-function switchTab(tab){
-  S.tab=tab;
-  document.querySelectorAll('.tab').forEach((e,i)=>e.classList.toggle('active',TABS[i]===tab));
-  document.querySelectorAll('.tab-content').forEach(e=>e.classList.remove('active'));
-  el('tab-'+tab).classList.add('active');
+const ALL_TABS = [
+  { id:'home',     icon:'🏡' },
+  { id:'chores',   icon:'✅' },
+  { id:'grocery',  icon:'🛒' },
+  { id:'homework', icon:'📚' },
+  { id:'calendar', icon:'📅' },
+];
+const TAB_IDX = { home:0, chores:1, grocery:2, homework:3, calendar:4 };
+function tabLabel(id) { return t('tabs')[TAB_IDX[id]] || id; }
+
+function getActiveTabs() {
+  if (!S.uid || !S.user) return ALL_TABS.map(t => t.id);
+  try {
+    const saved = localStorage.getItem('familyhub_tabs_' + S.uid + '_' + S.user);
+    if (saved) {
+      const ids = JSON.parse(saved).filter(id => ALL_TABS.find(t => t.id === id));
+      if (ids.length > 0) return ids;
+    }
+  } catch(e) {}
+  return ALL_TABS.map(t => t.id);
+}
+function saveActiveTabs(ids) {
+  if (!S.uid || !S.user) return;
+  localStorage.setItem('familyhub_tabs_' + S.uid + '_' + S.user, JSON.stringify(ids));
+}
+
+function renderTabBar() {
+  const active = getActiveTabs();
+  // If current tab was removed, fall back to first active
+  if (!active.includes(S.tab)) {
+    S.tab = active[0];
+    document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+    el('tab-' + S.tab)?.classList.add('active');
+  }
+  el('tabBar').innerHTML = active.map(id => {
+    const tab = ALL_TABS.find(t => t.id === id);
+    if (!tab) return '';
+    return `<div class="tab ${S.tab===id?'active':''}" data-tab="${id}" onclick="switchTab('${id}')">
+      <span class="tab-icon">${tab.icon}</span>
+      <span class="tab-label">${tabLabel(id)}</span>
+    </div>`;
+  }).join('');
+}
+
+function switchTab(tab) {
+  S.tab = tab;
+  el('tabBar').querySelectorAll('.tab').forEach(e =>
+    e.classList.toggle('active', e.dataset.tab === tab));
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  el('tab-' + tab).classList.add('active');
+}
+
+// ════════════════════════════════════════
+//  TAB EDITOR
+// ════════════════════════════════════════
+function openTabEditor() { renderTabEditor(); el('tabEditorScreen').classList.remove('hidden'); }
+function closeTabEditor() { el('tabEditorScreen').classList.add('hidden'); }
+
+function renderTabEditor() {
+  const active   = getActiveTabs();
+  const inactive = ALL_TABS.map(t => t.id).filter(id => !active.includes(id));
+
+  el('tabEditorActive').innerHTML = active.map((id, i) => {
+    const tab = ALL_TABS.find(t => t.id === id);
+    const first = i === 0, last = i === active.length - 1, only = active.length === 1;
+    return `<div class="tab-ed-row">
+      <span class="tab-ed-icon">${tab.icon}</span>
+      <span class="tab-ed-label">${tabLabel(id)}</span>
+      <div class="tab-ed-btns">
+        <button class="tab-ed-arrow" onclick="tabMoveUp('${id}')"   ${first?'disabled':''}>↑</button>
+        <button class="tab-ed-arrow" onclick="tabMoveDown('${id}')" ${last ?'disabled':''}>↓</button>
+        <button class="tab-ed-remove" onclick="tabRemove('${id}')"  ${only ?'disabled':''}>×</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  el('tabEditorPool').innerHTML = inactive.length
+    ? inactive.map(id => {
+        const tab = ALL_TABS.find(t => t.id === id);
+        return `<div class="tab-ed-row">
+          <span class="tab-ed-icon">${tab.icon}</span>
+          <span class="tab-ed-label">${tabLabel(id)}</span>
+          <button class="tab-ed-add" onclick="tabAdd('${id}')">+ הוסף</button>
+        </div>`;
+      }).join('')
+    : '<div style="padding:12px 0;color:#a0aec0;font-size:13px;font-weight:700;text-align:center">כל הלשוניות פעילות ✓</div>';
+}
+
+function tabMoveUp(id) {
+  const active = getActiveTabs(), i = active.indexOf(id);
+  if (i <= 0) return;
+  [active[i-1], active[i]] = [active[i], active[i-1]];
+  saveActiveTabs(active); renderTabBar(); renderTabEditor();
+}
+function tabMoveDown(id) {
+  const active = getActiveTabs(), i = active.indexOf(id);
+  if (i < 0 || i >= active.length - 1) return;
+  [active[i], active[i+1]] = [active[i+1], active[i]];
+  saveActiveTabs(active); renderTabBar(); renderTabEditor();
+}
+function tabRemove(id) {
+  const active = getActiveTabs();
+  if (active.length <= 1) return;
+  const updated = active.filter(x => x !== id);
+  saveActiveTabs(updated);
+  if (S.tab === id) switchTab(updated[0]);
+  renderTabBar(); renderTabEditor();
+}
+function tabAdd(id) {
+  const active = getActiveTabs();
+  if (active.includes(id)) return;
+  saveActiveTabs([...active, id]);
+  renderTabBar(); renderTabEditor();
 }
 function setFilter(name){
   S.filter=(S.filter===name&&name!=='All')?'All':name;
