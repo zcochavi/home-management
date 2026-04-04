@@ -257,6 +257,27 @@
     .hw-desc-text { flex:1;font-size:13px;font-weight:700;color:#2d3748; }
     .hw-desc-text.done { text-decoration:line-through;color:#a0aec0; }
     .hw-due { font-size:11px;color:#a0aec0;font-weight:600;margin-top:4px;margin-inline-start:31px; }
+    @keyframes hwFlyOut {
+      0%   { opacity:1;transform:translateX(0);max-height:80px;padding-top:10px;padding-bottom:10px; }
+      55%  { opacity:0;transform:translateX(36px); }
+      100% { opacity:0;max-height:0;padding-top:0;padding-bottom:0;overflow:hidden; }
+    }
+    @keyframes hwFlyIn {
+      0%   { opacity:0;transform:translateY(-10px); }
+      100% { opacity:1;transform:translateY(0); }
+    }
+    .hw-fly-out { animation:hwFlyOut 0.28s ease forwards;overflow:hidden; }
+    .hw-fly-in  { animation:hwFlyIn 0.25s ease; }
+    /* History section */
+    .hw-hist-hdr { display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;user-select:none; }
+    .hw-hist-title { font-size:14px;font-weight:800;color:#4a5568;flex:1; }
+    .hw-hist-count { background:#e2e8f0;color:#718096;font-size:11px;font-weight:800;padding:2px 8px;border-radius:20px; }
+    .hw-hist-search { width:100%;padding:8px 12px;border:2px solid #e8edf5;border-radius:10px;font-family:inherit;font-size:13px;font-weight:600;outline:none;box-sizing:border-box;margin:6px 0 10px;display:block; }
+    .hw-hist-search:focus { border-color:#6a11cb; }
+    .hw-hist-item { display:flex;align-items:center;gap:7px;padding:9px 0;border-bottom:1px solid #f3f6ff; }
+    .hw-hist-item:last-child { border-bottom:none; }
+    .hw-hist-desc { flex:1;font-size:13px;font-weight:700;color:#a0aec0;text-decoration:line-through; }
+    .hw-hist-ts { font-size:11px;color:#a0aec0;font-weight:600;white-space:nowrap; }
 
     /* Grocery */
     .grocery-add { display:flex;gap:7px;margin-bottom:14px;flex-wrap:wrap; }
@@ -600,6 +621,7 @@
           </div>
         </div>
       </div>
+      <div id="hwHistoryWrap"></div>
     </div>
 
     <!-- CALENDAR -->
@@ -686,6 +708,7 @@ const STRINGS = {
     hwDueSoon:'📋 שיעורים להגשה',
     allDone:'🎉 הכל גמור! כל הכבוד!',
     noPendingHw:'📭 אין שיעורים ממתינים!',
+    hwHistory:'📋 היסטוריה', hwHistoryEmpty:'אין שיעורים שהושלמו עדיין', hwHistorySearch:'חיפוש בהיסטוריה...',
     wbHi: n => `!שלום ${n}`,
     wbStars: n => `יש לך ${n} ⭐ כוכב${n!==1?'ות':''} השבוע`,
     addChoreTitle:'➕ הוסף משימה', chorePlaceholder:'מה צריך לעשות...',
@@ -728,6 +751,7 @@ const STRINGS = {
     hwDueSoon:'📋 Homework Due Soon',
     allDone:'🎉 All done! Great job!',
     noPendingHw:'📭 No pending homework!',
+    hwHistory:'📋 History', hwHistoryEmpty:'No completed homework yet', hwHistorySearch:'Search history…',
     wbHi: n => `Hi ${n}!`,
     wbStars: n => `You have ${n} ⭐ star${n!==1?'s':''} this week`,
     addChoreTitle:'➕ Add Chore', chorePlaceholder:'What needs doing…',
@@ -2022,6 +2046,17 @@ function clearChecked(){if(!isParent())return;S.grocery=S.grocery.filter(g=>!g.c
 // ════════════════════════════════════════
 //  HOMEWORK
 // ════════════════════════════════════════
+let _hwHistOpen = false;
+let _hwHistSearch = '';
+
+function fmtDoneAt(ts) {
+  if (!ts) return '';
+  const d = new Date(ts), now = new Date();
+  if (d.toDateString() === now.toDateString())
+    return d.toLocaleTimeString(t('locale'), {hour:'2-digit', minute:'2-digit'});
+  return d.toLocaleDateString(t('locale'), {month:'short', day:'numeric'});
+}
+
 function renderHomework(){
   const kids = isParent() ? getKids() : getKids().filter(k=>k===S.user);
   el('childTabsContainer').innerHTML = kids.map(k =>
@@ -2032,26 +2067,97 @@ function renderHomework(){
     el('hwCardTitle').textContent = t('hwTitle','');
     el('hwList').innerHTML = `<div class="empty">${t('noKids')}</div>`;
     el('addHwForm').style.display = 'none';
+    el('hwHistoryWrap').innerHTML = '';
     return;
   }
   el('hwCardTitle').textContent = t('hwTitle', S.child);
   const canAdd = isParent()||S.child===S.user;
   el('addHwForm').style.display = canAdd ? '' : 'none';
-  const items = S.homework.filter(h=>h.child===S.child);
-  el('hwList').innerHTML = items.length ? items.map(h=>{
+
+  // Active (not done) items only
+  const pending = S.homework.filter(h=>h.child===S.child && !h.done);
+  el('hwList').innerHTML = pending.length ? pending.map(h=>{
     const can=isParent()||h.child===S.user;
-    return `<div class="hw-item">
+    return `<div class="hw-item" data-hw-id="${h.id}">
       <div class="hw-head">
-        <div class="check-box ${h.done?'done':''} ${can?'':'readonly'}" ${can?`onclick="toggleHW(${h.id})"`:''}>
-          ${h.done?'✓':''}</div>
+        <div class="check-box ${can?'':'readonly'}" ${can?`onclick="toggleHW(${h.id})"`:''}>
+        </div>
         <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
-        <div class="hw-desc-text ${h.done?'done':''}">${esc(h.desc)}</div>
+        <div class="hw-desc-text">${esc(h.desc)}</div>
         ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">×</button>`:''}</div>
       ${h.due?`<div class="hw-due">${t('hwDueLabel',fmtDate(h.due))}</div>`:''}</div>`;
   }).join('') : `<div class="empty">${t('noHw')}</div>`;
+
+  renderHwHistory(S.child);
 }
+
+function renderHwHistory(child) {
+  const wrap = el('hwHistoryWrap');
+  if (!wrap || !child) return;
+  const allDone = S.homework.filter(h=>h.child===child && h.done)
+    .sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
+  if (!allDone.length) { wrap.innerHTML = ''; return; }
+
+  const q = _hwHistSearch.toLowerCase();
+  const filtered = q ? allDone.filter(h=>
+    h.desc.toLowerCase().includes(q) || subjectLabel(h.subject).toLowerCase().includes(q)
+  ) : allDone;
+
+  wrap.innerHTML = `<div class="card" style="margin-top:10px">
+    <div class="hw-hist-hdr" onclick="toggleHwHistory()">
+      <span class="hw-hist-title">${t('hwHistory')}</span>
+      <span class="hw-hist-count">${allDone.length}</span>
+      <span style="color:#a0aec0;font-size:12px;margin-inline-start:4px">${_hwHistOpen?'▲':'▼'}</span>
+    </div>
+    ${_hwHistOpen ? `
+      <input class="hw-hist-search" placeholder="${t('hwHistorySearch')}"
+        value="${esc(_hwHistSearch)}"
+        oninput="_hwHistSearch=this.value;renderHwHistory('${esc(child)}')">
+      <div>${filtered.length ? filtered.map(h=>`
+        <div class="hw-hist-item" data-hw-id="${h.id}">
+          <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
+          <div class="hw-hist-desc">${esc(h.desc)}</div>
+          <span class="hw-hist-ts">${fmtDoneAt(h.doneAt)}</span>
+          ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">×</button>`:''}
+        </div>`).join('')
+      : `<div class="empty" style="padding:8px 0">${t('hwHistoryEmpty')}</div>`}
+      </div>` : ''}
+  </div>`;
+}
+
+function toggleHwHistory() {
+  _hwHistOpen = !_hwHistOpen;
+  renderHwHistory(S.child);
+}
+
 function switchChild(c){S.child=c;renderHomework();}
-function toggleHW(id){const h=S.homework.find(x=>x.id===id);if(!h||(!isParent()&&h.child!==S.user))return;h.done=!h.done;save();renderHomework();renderHome();}
+
+function toggleHW(id){
+  const h=S.homework.find(x=>x.id===id);
+  if(!h||(!isParent()&&h.child!==S.user))return;
+  if(!h.done){
+    // Animate the item out, then mark done
+    const row=document.querySelector(`.hw-item[data-hw-id="${id}"]`);
+    if(row){
+      row.classList.add('hw-fly-out');
+      setTimeout(()=>{
+        h.done=true; h.doneAt=Date.now();
+        _hwHistOpen=true;  // auto-open history so user sees where it went
+        save(); renderHomework(); renderHome();
+        requestAnimationFrame(()=>{
+          const hist=document.querySelector(`.hw-hist-item[data-hw-id="${id}"]`);
+          if(hist) hist.classList.add('hw-fly-in');
+        });
+      },270);
+      return;
+    }
+    h.done=true; h.doneAt=Date.now(); _hwHistOpen=true;
+  } else {
+    h.done=false; delete h.doneAt;
+  }
+  save(); renderHomework(); renderHome();
+}
+
 function deleteHW(id){if(!isParent())return;S.homework=S.homework.filter(x=>x.id!==id);save();renderHomework();renderHome();}
 function addHomework(){
   if(!S.child)return;
