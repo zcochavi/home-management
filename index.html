@@ -1774,7 +1774,7 @@ function showAc(inputEl, options) {
   _acOptions = filtered.slice(0, 8);
   const r = inputEl.getBoundingClientRect();
   Object.assign(dd.style, {
-    display:'block', position:'fixed',
+    display:'block', position:'fixed', zIndex:'1100',
     top: (r.bottom + 3) + 'px',
     left: r.left + 'px',
     width: r.width + 'px',
