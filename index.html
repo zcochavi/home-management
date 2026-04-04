@@ -76,6 +76,16 @@
     .auth-btn-create { width:auto !important;padding:10px 20px !important; }
     .auth-link-btn { background:none;border:none;color:#6a11cb;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;padding:6px 8px;opacity:0.75;transition:opacity 0.15s;display:block;margin:6px auto 0;text-align:center; }
     .auth-link-btn:hover { opacity:1; }
+    /* Photo manager modal */
+    .photo-member-row { display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid #f0f4ff; }
+    .photo-member-row:last-child { border-bottom:none; }
+    .photo-member-avatar { width:52px;height:52px;border-radius:50%;background:#f0f4ff;display:flex;align-items:center;justify-content:center;font-size:26px;overflow:hidden;flex-shrink:0; }
+    .photo-member-name { flex:1;font-size:14px;font-weight:800;color:#1a202c; }
+    .photo-upload-btn { padding:7px 12px;border:none;border-radius:10px;background:#f0f4ff;color:#6a11cb;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;transition:background 0.15s;flex-shrink:0; }
+    .photo-upload-btn:hover { background:#e0e8ff; }
+    .photo-remove-btn { padding:7px 8px;border:none;border-radius:10px;background:none;color:#e53e3e;font-size:14px;cursor:pointer;opacity:0.5;flex-shrink:0;line-height:1; }
+    .photo-remove-btn:hover { opacity:1; }
+    .photo-modal-wrap { position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px; }
     /* Invite code card */
     .invite-code-display { font-size:28px;font-weight:900;letter-spacing:5px;color:#6a11cb;text-align:center;padding:14px;background:#f0f4ff;border-radius:14px;margin:10px 0;direction:ltr; }
     .invite-hint { font-size:12px;color:#718096;font-weight:700;text-align:center;margin-bottom:10px; }
@@ -359,6 +369,18 @@
   <button class="login-signout" onclick="authSignOut()">← יציאה מהחשבון</button>
 </div>
 
+<!-- PHOTO MANAGER MODAL -->
+<div id="photoModal" class="photo-modal-wrap" style="display:none">
+  <div style="background:white;border-radius:20px;padding:22px;width:100%;max-width:340px;max-height:80vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-size:16px;font-weight:900;color:#1a202c">📷 תמונות משפחה</div>
+      <button onclick="closePhotoModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#718096;line-height:1;padding:0 2px">×</button>
+    </div>
+    <div id="photoMemberList"></div>
+  </div>
+</div>
+<input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoFile(event)">
+
 <!-- HAMBURGER MENU -->
 <div id="menuOverlay" onclick="closeMenu()"></div>
 <div id="menuDropdown"></div>
@@ -637,6 +659,16 @@ function getKids()           { return getMembers().filter(m => m.role === 'kid')
 function getParents()        { return getMembers().filter(m => m.role === 'parent').map(m => m.name); }
 function getAllMemberNames()  { return getMembers().map(m => m.name); }
 function getEmoji(name)      { return getMembers().find(m => m.name === name)?.emoji || '👤'; }
+// Returns <img> if member has a photo, else emoji string.
+// sizePx = explicit px (for inline/text contexts); omit to fill container (width/height 100%).
+function getAvatar(name, sizePx) {
+  const member = getMembers().find(m => m.name === name);
+  if (member?.photo) {
+    const s = sizePx != null ? `width:${sizePx}px;height:${sizePx}px` : 'width:100%;height:100%';
+    return `<img src="${esc(member.photo)}" style="${s};object-fit:cover;border-radius:50%;display:block">`;
+  }
+  return member?.emoji || '👤';
+}
 
 const COLOR_PALETTE  = ['#c471ed','#4facfe','#fa709a','#43e97b','#f9d423','#f5576c','#667eea','#48bb78'];
 const KID_GRADIENTS  = ['#f093fb,#f5576c','#43e97b,#38f9d7','#fda085,#f6d365','#a18cd1,#fbc2eb','#667eea,#764ba2'];
@@ -1055,7 +1087,7 @@ function renderLoginScreen() {
   const members = getMembers();
   el('loginGrid').innerHTML = members.map((m, i) => `
     <div class="login-card${i===members.length-1&&members.length%2!==0?' login-card-solo':''}" onclick="login('${esc(m.name)}')">
-      <div class="login-card-emoji">${m.emoji}</div>
+      <div class="login-card-emoji">${getAvatar(m.name)}</div>
       <div class="login-card-name">${esc(m.name)}</div>
       <div class="login-card-role">${m.role==='parent'?STRINGS.he.parentRole:STRINGS.he.kidRole}</div>
     </div>`).join('');
@@ -1132,6 +1164,77 @@ function renderAll() {
 }
 
 // ════════════════════════════════════════
+//  PHOTO MANAGEMENT
+// ════════════════════════════════════════
+let _photoTarget = null;
+
+function openPhotoModal() {
+  renderPhotoModal();
+  el('photoModal').style.display = 'flex';
+}
+function closePhotoModal() {
+  el('photoModal').style.display = 'none';
+}
+function renderPhotoModal() {
+  const members = getMembers().filter(m => isParent() || m.name === S.user);
+  el('photoMemberList').innerHTML = members.map(m => `
+    <div class="photo-member-row">
+      <div class="photo-member-avatar">${getAvatar(m.name)}</div>
+      <div class="photo-member-name">${esc(m.name)}</div>
+      <button class="photo-upload-btn" onclick="pickPhoto('${esc(m.name)}')">📷 ${m.photo ? 'החלף' : 'העלה'}</button>
+      ${m.photo ? `<button class="photo-remove-btn" onclick="removePhoto('${esc(m.name)}')">×</button>` : ''}
+    </div>`).join('');
+}
+function pickPhoto(name) {
+  _photoTarget = name;
+  el('photoInput').value = '';
+  el('photoInput').click();
+}
+async function handlePhotoFile(event) {
+  const file = event.target.files[0];
+  if (!file || !_photoTarget) return;
+  const photo = await resizePhoto(file, 120);
+  if (!photo) return;
+  await saveMemberPhoto(_photoTarget, photo);
+  renderPhotoModal();
+}
+function resizePhoto(file, size) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const ctx = c.getContext('2d');
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width  - min) / 2;
+      const sy = (img.height - min) / 2;
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', 0.75));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+async function saveMemberPhoto(name, photo) {
+  if (!S.uid || !fbDb) return;
+  const members = getMembers().map(m => m.name === name ? { ...m, photo } : m);
+  if (familyData) familyData.members = members;
+  await fbDb.collection('families').doc(S.uid).update({ members });
+}
+async function removePhoto(name) {
+  if (!S.uid || !fbDb) return;
+  const members = getMembers().map(m => {
+    if (m.name !== name) return m;
+    const copy = { ...m }; delete copy.photo; return copy;
+  });
+  if (familyData) familyData.members = members;
+  await fbDb.collection('families').doc(S.uid).update({ members });
+  renderPhotoModal();
+}
+
+// ════════════════════════════════════════
 //  HAMBURGER MENU
 // ════════════════════════════════════════
 let _menuOpen = false;
@@ -1141,6 +1244,11 @@ function openMenu() {
   const lang = getLang();
   const isHe = lang === 'he';
   el('menuDropdown').innerHTML = `
+    <div class="menu-item" onclick="closeMenu();openPhotoModal()">
+      <span class="menu-item-icon">📷</span>
+      <span>${isHe ? 'תמונות משפחה' : 'Family photos'}</span>
+    </div>
+    <div class="menu-sep"></div>
     <div class="menu-item" onclick="closeMenu();toggleLang()">
       <span class="menu-item-icon">🌐</span>
       <span>${isHe ? 'Switch to English' : 'עבור לעברית'}</span>
@@ -1216,7 +1324,7 @@ function renderHeader() {
     : [{name:'All',emoji:'👨‍👩‍👧‍👧'}, {name:S.user,emoji:getEmoji(S.user)}];
   el('avatarRow').innerHTML = members.map(f => `
     <div class="avatar-chip ${S.filter===f.name?'active':''}" onclick="setFilter('${esc(f.name)}')">
-      <div class="avatar-bubble">${f.emoji}</div>
+      <div class="avatar-bubble">${f.name==='All' ? '👨‍👩‍👧‍👧' : getAvatar(f.name)}</div>
       <div class="avatar-label">${f.name==='All'?t('all'):f.name}</div>
     </div>`).join('');
 }
@@ -1230,7 +1338,7 @@ function renderHome() {
     const col = getKidGradient(S.user);
     const n = S.stars[S.user]||0;
     bannerEl.innerHTML = `<div class="welcome-banner" style="background:linear-gradient(135deg,${col})">
-      <div class="wb-emoji">${getEmoji(S.user)}</div>
+      <div class="wb-emoji">${getAvatar(S.user, 48)}</div>
       <div class="wb-name">${t('wbHi',S.user)}</div>
       <div class="wb-sub">${t('wbStars',n)}</div></div>`;
   } else { bannerEl.innerHTML = ''; }
@@ -1245,7 +1353,7 @@ function renderHome() {
           <div class="check-box ${c.done?'done':''} ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
             ${c.done?'✓':''}</div>
           <div class="task-text ${c.done?'done':''}">${esc(c.text)}</div>
-          ${isParent()?`<div class="mini-avatar">${getEmoji(c.assignee)}</div>`:''}
+          ${isParent()?`<div class="mini-avatar">${getAvatar(c.assignee)}</div>`:''}
           <span class="pri pri-${c.priority}">${t(c.priority)}</span></div>`;
       }).join('')
     : t('allDone');
@@ -1268,7 +1376,7 @@ function renderHome() {
   else if (S.filter!=='All'&&getKids().includes(S.filter)) hw = hw.filter(h=>h.child===S.filter);
   el('hwSummary').innerHTML = hw.length
     ? hw.slice(0,5).map(h => `<div class="task-row">
-        ${isParent()?`<div class="mini-avatar">${getEmoji(h.child)}</div>`:''}
+        ${isParent()?`<div class="mini-avatar">${getAvatar(h.child)}</div>`:''}
         <div class="task-text">${esc(h.desc)}</div>
         <span class="badge b-${esc(h.subject)}">${t('subjects')[h.subject]||h.subject}</span></div>`).join('')
     : t('noPendingHw');
@@ -1284,7 +1392,7 @@ function renderStarChart() {
   el('starChart').innerHTML = kids.map(kid => {
     const n = S.stars[kid]||0, me = kid===S.user;
     return `<div class="star-row ${me?'mine':''}">
-      <div class="star-person"><span class="star-person-emoji">${getEmoji(kid)}</span><span class="star-person-name">${kid}</span></div>
+      <div class="star-person"><span class="star-person-emoji">${getAvatar(kid, 24)}</span><span class="star-person-name">${kid}</span></div>
       <div class="stars">${[1,2,3,4,5].map(i=>`<span class="star ${n>=i?'on':''} ${ed?'':'readonly'}" ${ed?`onclick="setStar('${kid}',${i})"`:''}>⭐</span>`).join('')}</div>
       <span class="star-count">${n}/5</span></div>`;
   }).join('');
@@ -1308,7 +1416,7 @@ function renderChores() {
     if(!g[p].length)return;
     const mine=p===S.user;
     html+=`<div class="card ${mine?'mine-card':''}">
-      <div class="person-header">${getEmoji(p)} ${p}${mine?` <span style="font-size:11px;color:#c471ed;font-weight:700">${t('youLabel')}</span>`:''}</div>
+      <div class="person-header">${getAvatar(p, 22)} ${p}${mine?` <span style="font-size:11px;color:#c471ed;font-weight:700">${t('youLabel')}</span>`:''}</div>
       ${g[p].map(c=>{
         const can=isParent()||c.assignee===S.user;
         return `<div class="task-row">
