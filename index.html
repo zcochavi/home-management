@@ -1245,10 +1245,23 @@ function gisLoaded() {
 function gcalWasConnected() {
   return !!(S.uid && S.user && localStorage.getItem('familyhub_gcal_' + S.uid + '_' + S.user) === '1');
 }
+let _gcalGestureListener = null;
 function tryAutoConnectGCal() {
-  // Browsers block requestAccessToken() without a user gesture, so we can't silently
-  // restore the token on page load. Instead, renderGCalBar shows a one-tap reconnect button.
   if (gcalReady()) renderGCalBar();
+  // Schedule a silent reconnect on the next user gesture (click/tap).
+  // requestAccessToken() requires a user-gesture context to avoid popup blockers;
+  // piggybacking on the very next tap achieves this invisibly.
+  if (!gcalConnected() && gcalWasConnected() && gcalReady() && gcal.tokenClient && !_gcalGestureListener) {
+    _gcalGestureListener = () => {
+      document.removeEventListener('click',      _gcalGestureListener, true);
+      document.removeEventListener('touchstart', _gcalGestureListener, true);
+      _gcalGestureListener = null;
+      if (!gcalConnected() && gcalWasConnected() && gcalReady() && gcal.tokenClient)
+        gcal.tokenClient.requestAccessToken({prompt:''});
+    };
+    document.addEventListener('click',      _gcalGestureListener, true);
+    document.addEventListener('touchstart', _gcalGestureListener, true);
+  }
 }
 async function onGCalToken(resp) {
   if (resp.error) { renderGCalBar(); return; }
@@ -1281,6 +1294,11 @@ function disconnectGCal() {
   if (gcal.accessToken) google.accounts.oauth2.revoke(gcal.accessToken,()=>{});
   gcal.accessToken=null; gcal.events=[];
   if (S.uid && S.user) localStorage.removeItem('familyhub_gcal_' + S.uid + '_' + S.user);
+  if (_gcalGestureListener) {
+    document.removeEventListener('click',      _gcalGestureListener, true);
+    document.removeEventListener('touchstart', _gcalGestureListener, true);
+    _gcalGestureListener = null;
+  }
   renderGCalBar(); renderCalendar();
 }
 function renderGCalBar() {
