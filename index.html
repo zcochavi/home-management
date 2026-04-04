@@ -1962,7 +1962,7 @@ function renderHome() {
     return a.due.localeCompare(b.due);
   });
   el('hwSummary').innerHTML = hw.length
-    ? hw.slice(0,5).map(h => `<div class="task-row">
+    ? hw.map(h => `<div class="task-row">
         ${isParent()?`<div class="mini-avatar">${getAvatar(h.child)}</div>`:''}
         <div class="task-text">${esc(h.desc)}</div>
         ${h.due?`<span style="font-size:11px;color:#a0aec0;font-weight:600;white-space:nowrap">${fmtDate(h.due)}</span>`:''}
