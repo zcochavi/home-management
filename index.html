@@ -150,6 +150,8 @@
     .comm-add-form.open { display:block; }
     .comm-section-label { font-size:11px;font-weight:800;color:#a0aec0;text-transform:uppercase;letter-spacing:0.6px;margin:12px 0 6px; }
     .comm-past-event { opacity:0.5; }
+    .cal-class-toggles { display:flex;flex-wrap:wrap;gap:6px;padding:8px 2px 4px; }
+    .cal-class-toggle { display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;border:1.5px solid #e8edf5;background:white;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.18s;user-select:none; }
     .mgmt-icon-btn { background:none;border:none;cursor:pointer;opacity:0.45;padding:4px 5px;line-height:1;font-size:15px;transition:opacity 0.15s;flex-shrink:0; }
     .mgmt-icon-btn:hover { opacity:1; }
     .mgmt-icon-btn.red { color:#e53e3e; }
@@ -695,6 +697,7 @@
           <div class="cal-month-label" id="calMonthLabel"></div>
           <button class="cal-nav-btn" onclick="calShift(1)">›</button>
         </div>
+        <div id="calClassToggles"></div>
         <div class="cal-grid" id="calGrid"></div>
         <div class="day-panel" id="dayPanel"></div>
       </div>
@@ -2912,20 +2915,71 @@ function addHomework(){
 // ════════════════════════════════════════
 //  CALENDAR
 // ════════════════════════════════════════
+let _calClassEventsOn = {}; // { [kidName]: bool }
+
 function allCalEvents(){
   const syncedIds=new Set(S.events.filter(e=>e.gcalId).map(e=>e.gcalId));
-  return [...S.events.filter(e=>!e.gcalId),...S.events.filter(e=>e.gcalId),...gcal.events.filter(e=>!syncedIds.has(e.gcalId))];
+  const base=[...S.events.filter(e=>!e.gcalId),...S.events.filter(e=>e.gcalId),...gcal.events.filter(e=>!syncedIds.has(e.gcalId))];
+  // Add class events for toggled-on kids
+  const classEvs=[];
+  getKids().forEach(name=>{
+    if(!_calClassEventsOn[name])return;
+    const member=getMembers().find(m=>m.name===name);
+    if(!member?.school)return;
+    const cid=classIdFor(member.school);
+    if(!cid)return;
+    const cache=_commCache[cid];
+    if(!cache)return;
+    cache.events.forEach(ev=>{
+      if(!ev.date)return;
+      classEvs.push({...ev,classEvent:true,classKid:name,_cid:cid});
+    });
+  });
+  return [...base,...classEvs];
+}
+
+function renderCalClassToggles(){
+  const wrap=el('calClassToggles');
+  if(!wrap)return;
+  const kids=getKids()
+    .map(name=>getMembers().find(m=>m.name===name))
+    .filter(m=>m?.school?.city&&m?.school?.grade);
+  if(!kids.length){wrap.innerHTML='';return;}
+  wrap.innerHTML=`<div class="cal-class-toggles">${kids.map(m=>{
+    const on=_calClassEventsOn[m.name];
+    const col=getPersonColor(m.name);
+    const s=m.school;
+    const classLabel='כיתה '+s.grade+(s.classNum?'\''+s.classNum:'');
+    return `<div class="cal-class-toggle"
+      style="${on?`background:${col};border-color:${col};color:white`:`border-color:${col};color:${col}`}"
+      onclick="toggleCalClassEvents('${esc(m.name)}')">
+      <span>${getAvatar(m.name,14)}</span><span>${esc(m.name)}</span><span style="opacity:0.75">🏫 ${esc(classLabel)}</span>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+async function toggleCalClassEvents(kidName){
+  _calClassEventsOn[kidName]=!_calClassEventsOn[kidName];
+  if(_calClassEventsOn[kidName]){
+    const member=getMembers().find(m=>m.name===kidName);
+    if(member?.school){
+      const cid=classIdFor(member.school);
+      if(cid&&(!_commCache[cid]||(Date.now()-_commCache[cid].loadedAt)>120000))
+        await loadCommunityData([member]);
+    }
+  }
+  renderCalendar();
 }
 function renderCalendar(){
   const yr=S.calYear,mo=S.calMonth;
   el('calMonthLabel').textContent=`${t('months')[mo]} ${yr}`;
   const di=el('newEventDate');if(di&&!di.value)di.value=S.calSelected;
+  renderCalClassToggles();
   const events=allCalEvents();
   const dotMap={};
   events.forEach(ev=>{
     if(!dotMap[ev.date])dotMap[ev.date]=[];
-    const ps=eventPersons(ev);
-    const col=ev.gcal?'#4285f4':getPersonColor(ps.includes('All')?'All':ps[0]);
+    const col=ev.classEvent?getPersonColor(ev.classKid):ev.gcal?'#4285f4':getPersonColor(eventPersons(ev).includes('All')?'All':eventPersons(ev)[0]);
     dotMap[ev.date].push(col);
   });
   let html=t('dows').map(d=>`<div class="cal-dow">${d}</div>`).join('');
@@ -2953,6 +3007,16 @@ function renderDayPanel(events){
   let html=`<div class="day-panel-title">📆 ${title}</div>`;
   if(!evs.length){html+=`<div class="empty" style="padding:12px">${t('noEvents')}</div>`;}
   else html+=evs.map(e=>{
+    if(e.classEvent){
+      const col=getPersonColor(e.classKid);
+      return `<div class="event-item" style="border-inline-start-color:${col}">
+        <div class="event-body">
+          <div class="event-title">${eventTypeIcon(e.type)} ${esc(e.title)}</div>
+          <div class="event-meta">${e.time?'🕐 '+e.time:t('allDay')}${e.note?` · ${esc(e.note)}`:''}</div>
+        </div>
+        <span class="event-person-chip" style="background:${col}22;color:${col}">🏫 ${esc(e.classKid)}</span>
+      </div>`;
+    }
     const ps=eventPersons(e);
     const isAll=ps.includes('All');
     const color=e.gcal?'#4285f4':getPersonColor(isAll?'All':ps[0]);
