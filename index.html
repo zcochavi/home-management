@@ -132,6 +132,19 @@
     .comm-mate:last-child { border-bottom:none; }
     .comm-mate-family { font-size:13px;font-weight:700;color:#2d3748;flex:1; }
     .comm-mate-kid { font-size:12px;color:#718096;font-weight:600; }
+    /* Community events */
+    .comm-event { display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #f3f6ff; }
+    .comm-event:last-child { border-bottom:none; }
+    .comm-event-icon { font-size:22px;flex-shrink:0;width:30px;text-align:center;margin-top:1px; }
+    .comm-event-body { flex:1;min-width:0; }
+    .comm-event-title { font-size:14px;font-weight:800;color:#1a202c; }
+    .comm-event-meta { font-size:11px;color:#718096;font-weight:600;margin-top:2px; }
+    .comm-event-date { font-weight:800;color:#6a11cb; }
+    .comm-event-note { font-size:12px;color:#4a5568;margin-top:3px;font-style:italic; }
+    .comm-add-form { background:#f8faff;border-radius:14px;padding:14px;margin-top:8px;display:none; }
+    .comm-add-form.open { display:block; }
+    .comm-section-label { font-size:11px;font-weight:800;color:#a0aec0;text-transform:uppercase;letter-spacing:0.6px;margin:12px 0 6px; }
+    .comm-past-event { opacity:0.5; }
     .mgmt-icon-btn { background:none;border:none;cursor:pointer;opacity:0.45;padding:4px 5px;line-height:1;font-size:15px;transition:opacity 0.15s;flex-shrink:0; }
     .mgmt-icon-btn:hover { opacity:1; }
     .mgmt-icon-btn.red { color:#e53e3e; }
@@ -659,6 +672,11 @@
       <div id="hwHistoryWrap"></div>
     </div>
 
+    <!-- COMMUNITY -->
+    <div id="tab-community" class="tab-content">
+      <div id="communityContent"></div>
+    </div>
+
     <!-- CALENDAR -->
     <div id="tab-calendar" class="tab-content">
       <div class="gcal-bar" id="gcalBar">
@@ -735,7 +753,7 @@ const STRINGS = {
     parentRole:'הורה', kidRole:'ילד/ה',
     greetMorning:'בוקר טוב', greetAfternoon:'צהריים טובים', greetEvening:'ערב טוב',
     switchUser:'החלף משתמש', langToggle:'EN',
-    tabs:['בית','משימות','קניות','שיעורים','לוח שנה'],
+    tabs:['בית','משימות','קניות','שיעורים','לוח שנה','קהילה'],
     all:'כולם',
     todayChores:'⚡ משימות היום',
     personChores: n => `⚡ משימות של ${n}`,
@@ -771,6 +789,21 @@ const STRINGS = {
     gcalSource:'· Google Calendar',
     gcalSyncOption:'📅 גם ב-Google Calendar',
     noKids:'אין ילדים במשפחה',
+    commNoSchool:'יש לשייך ילדים לבית ספר',
+    commNoSchoolHint:'הגדרות ← ניהול משפחה',
+    commClassEvents:'אירועי כיתה',
+    commNoEvents:'אין אירועים קרובים',
+    commPast:'עברו',
+    commClassmates:'חברי כיתה ב-FamilyHub',
+    commAddEvent:'➕ הוסף אירוע לכיתה',
+    commNewEvent:'אירוע חדש',
+    commPost:'פרסם',
+    commEventTitle:'כותרת האירוע...',
+    commEventNote:'הערה (אופציונלי)',
+    commTomorrow:'מחר',
+    commInDays: n => `בעוד ${n} ימים`,
+    commDaysAgo: n => `לפני ${n} ימים`,
+    evBirthday:'יום הולדת', evTrip:'טיול', evParty:'מסיבה', evAnnouncement:'הודעה', evOther:'אחר',
   },
   en: {
     dir:'ltr', locale:'en-US',
@@ -778,7 +811,7 @@ const STRINGS = {
     parentRole:'Parent', kidRole:'Kid',
     greetMorning:'Good morning', greetAfternoon:'Good afternoon', greetEvening:'Good evening',
     switchUser:'Switch user', langToggle:'עב',
-    tabs:['Home','Chores','Grocery','Homework','Calendar'],
+    tabs:['Home','Chores','Grocery','Homework','Calendar','Community'],
     all:'All',
     todayChores:"⚡ Today's Chores",
     personChores: n => `⚡ ${n}'s Chores`,
@@ -814,6 +847,21 @@ const STRINGS = {
     gcalSource:'· Google Calendar',
     gcalSyncOption:'📅 Also add to Google Calendar',
     noKids:'No kids in this family',
+    commNoSchool:'Associate kids with a school',
+    commNoSchoolHint:'Settings → Family management',
+    commClassEvents:'Class Events',
+    commNoEvents:'No upcoming events',
+    commPast:'Past',
+    commClassmates:'Classmates on FamilyHub',
+    commAddEvent:'➕ Add class event',
+    commNewEvent:'New Event',
+    commPost:'Post',
+    commEventTitle:'Event title...',
+    commEventNote:'Note (optional)',
+    commTomorrow:'Tomorrow',
+    commInDays: n => `In ${n} days`,
+    commDaysAgo: n => `${n} days ago`,
+    evBirthday:'Birthday', evTrip:'Trip', evParty:'Party', evAnnouncement:'Announcement', evOther:'Other',
   },
 };
 
@@ -1468,6 +1516,7 @@ function renderAll() {
   renderTabBar(); renderStatic(); renderHeader(); renderHome();
   renderChores(); renderGrocery(); renderHomework();
   renderCalendar(); renderGCalBar(); applyRoleUI();
+  if (S.tab === 'community') renderCommunity();
 }
 
 // ════════════════════════════════════════
@@ -1786,6 +1835,218 @@ async function renderMgmtCommunity() {
       : `<div style="font-size:12px;color:#a0aec0;padding:4px 0">אין עדיין ילדים מהכיתה ב-FamilyHub</div>`}
     </div>`;
   }).join('');
+}
+
+// ── Community Tab ─────────────────────────
+const EVENT_TYPES = [
+  { id:'birthday',     icon:'🎂' },
+  { id:'trip',         icon:'🚌' },
+  { id:'party',        icon:'🎉' },
+  { id:'announcement', icon:'📢' },
+  { id:'other',        icon:'📝' },
+];
+function eventTypeIcon(type) { return EVENT_TYPES.find(e=>e.id===type)?.icon||'📝'; }
+function eventTypeName(type) {
+  const keys = { birthday:'evBirthday', trip:'evTrip', party:'evParty', announcement:'evAnnouncement', other:'evOther' };
+  return t(keys[type]||'evOther');
+}
+function classLabelFor(school) {
+  if (!school) return '';
+  const parts = [school.city, school.name];
+  if (school.grade) parts.push('כיתה ' + school.grade + (school.classNum ? '\'' + school.classNum : ''));
+  return parts.filter(Boolean).join(', ');
+}
+function isEventUpcoming(dateStr) {
+  if (!dateStr) return true;
+  const [y,m,d] = dateStr.split('-').map(Number);
+  return new Date(y, m-1, d+1) >= new Date();
+}
+function fmtEventDate(dateStr) {
+  if (!dateStr) return '';
+  const [y,m,d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m-1, d);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = Math.round((date - today) / 86400000);
+  if (diff === 0) return t('todayLabel');
+  if (diff === 1) return t('commTomorrow');
+  if (diff > 1 && diff <= 14) return t('commInDays', diff);
+  if (diff < 0 && diff >= -7) return t('commDaysAgo', -diff);
+  return date.toLocaleDateString(t('locale'), {month:'short', day:'numeric'});
+}
+
+let _commCache   = {}; // { [classId]: { classmates, events, loadedAt } }
+let _commAddOpen = {}; // { [classId]: bool }
+
+async function loadCommunityData(kidsWithSchool) {
+  const toLoad = kidsWithSchool.filter(kid => {
+    const cid = classIdFor(kid.school);
+    if (!cid) return false;
+    const c = _commCache[cid];
+    return !c || (Date.now() - c.loadedAt) > 120000;
+  });
+  await Promise.all(toLoad.map(async kid => {
+    const cid = classIdFor(kid.school);
+    try {
+      const [membersSnap, eventsSnap] = await Promise.all([
+        fbDb.collection('schoolClasses').doc(cid).collection('members').get(),
+        fbDb.collection('schoolClasses').doc(cid).collection('events').orderBy('date').get(),
+      ]);
+      _commCache[cid] = {
+        classmates: membersSnap.docs.map(d=>d.data()).filter(m=>m.familyUid!==S.uid),
+        events: eventsSnap.docs.map(d=>({id:d.id,...d.data()})),
+        loadedAt: Date.now(),
+      };
+    } catch(e) {
+      console.error('loadCommunityData:', e);
+      _commCache[cid] = { classmates:[], events:[], loadedAt:Date.now() };
+    }
+  }));
+}
+
+function renderEventRow(ev, cid, isPast) {
+  const canDel = isParent() && ev.postedBy?.familyUid === S.uid;
+  return `<div class="comm-event${isPast?' comm-past-event':''}">
+    <div class="comm-event-icon">${eventTypeIcon(ev.type)}</div>
+    <div class="comm-event-body">
+      <div class="comm-event-title">${esc(ev.title)}</div>
+      <div class="comm-event-meta">
+        <span class="comm-event-date">${fmtEventDate(ev.date)}</span>
+        ${ev.postedBy?.familyName ? ` · ${esc(ev.postedBy.familyName)}` : ''}
+      </div>
+      ${ev.note ? `<div class="comm-event-note">${esc(ev.note)}</div>` : ''}
+    </div>
+    ${canDel ? `<button class="del-btn" onclick="deleteClassEvent('${cid}','${ev.id}')">×</button>` : ''}
+  </div>`;
+}
+
+function renderCommCard(kid) {
+  const cid    = classIdFor(kid.school);
+  const cache  = _commCache[cid] || { classmates:[], events:[] };
+  const addOpen = _commAddOpen[cid];
+
+  const upcoming = cache.events.filter(e=>isEventUpcoming(e.date))
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const past = cache.events.filter(e=>!isEventUpcoming(e.date))
+    .sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,5);
+
+  return `<div class="card" id="commCard_${cid}">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div style="width:36px;height:36px;border-radius:50%;overflow:hidden;background:#f0f4ff;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">${getAvatar(kid.name)}</div>
+      <div style="flex:1">
+        <div style="font-size:15px;font-weight:900;color:#1a202c">${esc(kid.name)}</div>
+        <div style="font-size:11px;color:#718096;font-weight:600">🏫 ${esc(classLabelFor(kid.school))}</div>
+      </div>
+      <button onclick="refreshCommunity()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#c8d3e8;padding:4px;line-height:1" title="רענן">↻</button>
+    </div>
+
+    <div class="comm-section-label">📅 ${t('commClassEvents')}</div>
+    ${upcoming.length
+      ? upcoming.map(ev=>renderEventRow(ev,cid,false)).join('')
+      : `<div style="font-size:13px;color:#a0aec0;padding:6px 0;font-weight:600">${t('commNoEvents')}</div>`}
+    ${past.length ? `
+      <div class="comm-section-label" style="margin-top:10px;opacity:0.7">${t('commPast')}</div>
+      ${past.map(ev=>renderEventRow(ev,cid,true)).join('')}` : ''}
+
+    ${isParent() ? `
+    <div class="comm-add-form${addOpen?' open':''}" id="commAddForm_${cid}">
+      <div style="font-size:13px;font-weight:900;color:#1a202c;margin-bottom:10px">➕ ${t('commNewEvent')}</div>
+      <input class="auth-input" id="commEvTitle_${cid}" placeholder="${t('commEventTitle')}" style="margin-bottom:6px">
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <input type="date" class="auth-input" id="commEvDate_${cid}" style="flex:1">
+        <select class="auth-input" id="commEvType_${cid}" style="flex:1">
+          ${EVENT_TYPES.map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
+        </select>
+      </div>
+      <input class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" style="margin-bottom:10px">
+      <div style="display:flex;gap:8px">
+        <button class="auth-btn-main" style="flex:1;padding:10px" onclick="submitClassEvent('${cid}')">${t('commPost')}</button>
+        <button class="auth-btn-back" style="flex:1;padding:10px" onclick="toggleCommAddForm('${cid}')">ביטול</button>
+      </div>
+    </div>
+    <button class="btn-ghost" style="width:100%;margin-top:8px" id="commAddBtn_${cid}" onclick="toggleCommAddForm('${cid}')">
+      ${addOpen ? '✕ סגור' : t('commAddEvent')}
+    </button>` : ''}
+
+    <div class="comm-section-label" style="margin-top:16px">
+      👥 ${t('commClassmates')} <span class="comm-count" style="margin-inline-start:6px">${cache.classmates.length}</span>
+    </div>
+    ${cache.classmates.length
+      ? cache.classmates.map(c=>`
+        <div class="comm-mate">
+          <span style="font-size:18px">👨‍👩‍👧</span>
+          <span class="comm-mate-family">${esc(c.familyName||'משפחה')}</span>
+          <span class="comm-mate-kid">${esc(c.kidName)}</span>
+        </div>`).join('')
+      : `<div style="font-size:12px;color:#a0aec0;padding:4px 0;font-weight:600">אין עדיין ילדים מהכיתה ב-FamilyHub</div>`}
+  </div>`;
+}
+
+async function renderCommunity() {
+  const container = el('communityContent');
+  if (!container) return;
+
+  const kidsWithSchool = getKids()
+    .map(name => getMembers().find(m => m.name === name))
+    .filter(m => m?.school?.city && m?.school?.grade);
+
+  if (!kidsWithSchool.length) {
+    container.innerHTML = `<div class="card"><div class="empty" style="padding:20px 0;text-align:center">
+      <div style="font-size:40px;margin-bottom:10px">🏫</div>
+      <div style="font-weight:800;color:#4a5568;font-size:15px">${t('commNoSchool')}</div>
+      <div style="font-size:12px;color:#a0aec0;margin-top:4px">${t('commNoSchoolHint')}</div>
+    </div></div>`;
+    return;
+  }
+
+  // Show skeleton while loading
+  const needsLoad = kidsWithSchool.some(kid => {
+    const cid = classIdFor(kid.school);
+    return !cid || !_commCache[cid];
+  });
+  if (needsLoad) {
+    container.innerHTML = `<div class="card" style="text-align:center;padding:24px;color:#a0aec0;font-size:14px;font-weight:700">⏳ טוען...</div>`;
+  }
+
+  await loadCommunityData(kidsWithSchool);
+  container.innerHTML = kidsWithSchool.map(kid => renderCommCard(kid)).join('');
+}
+
+function toggleCommAddForm(cid) {
+  _commAddOpen[cid] = !_commAddOpen[cid];
+  el('commAddForm_' + cid)?.classList.toggle('open', !!_commAddOpen[cid]);
+  const btn = el('commAddBtn_' + cid);
+  if (btn) btn.textContent = _commAddOpen[cid] ? '✕ סגור' : t('commAddEvent');
+}
+
+async function submitClassEvent(cid) {
+  const title = el('commEvTitle_' + cid)?.value.trim();
+  const date  = el('commEvDate_'  + cid)?.value;
+  const type  = el('commEvType_'  + cid)?.value || 'other';
+  const note  = el('commEvNote_'  + cid)?.value.trim() || '';
+  if (!title || !date) return;
+  try {
+    await fbDb.collection('schoolClasses').doc(cid).collection('events').add({
+      title, date, type, note,
+      postedBy: { familyUid: S.uid, familyName: familyData?.familyName||'' },
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    delete _commCache[cid];
+    _commAddOpen[cid] = false;
+    await renderCommunity();
+  } catch(e) { console.error('submitClassEvent:', e); }
+}
+
+async function deleteClassEvent(cid, eventId) {
+  try {
+    await fbDb.collection('schoolClasses').doc(cid).collection('events').doc(eventId).delete();
+    delete _commCache[cid];
+    await renderCommunity();
+  } catch(e) { console.error('deleteClassEvent:', e); }
+}
+
+async function refreshCommunity() {
+  _commCache = {};
+  await renderCommunity();
 }
 
 // ── Grocery Categories ───────────────────
@@ -2499,13 +2760,14 @@ async function deleteEvent(id,gcalId){
 //  TABS & FILTER
 // ════════════════════════════════════════
 const ALL_TABS = [
-  { id:'home',     icon:'🏡' },
-  { id:'chores',   icon:'✅' },
-  { id:'grocery',  icon:'🛒' },
-  { id:'homework', icon:'📚' },
-  { id:'calendar', icon:'📅' },
+  { id:'home',      icon:'🏡' },
+  { id:'chores',    icon:'✅' },
+  { id:'grocery',   icon:'🛒' },
+  { id:'homework',  icon:'📚' },
+  { id:'calendar',  icon:'📅' },
+  { id:'community', icon:'🏫' },
 ];
-const TAB_IDX = { home:0, chores:1, grocery:2, homework:3, calendar:4 };
+const TAB_IDX = { home:0, chores:1, grocery:2, homework:3, calendar:4, community:5 };
 function tabLabel(id) { return t('tabs')[TAB_IDX[id]] || id; }
 
 function getActiveTabs() {
@@ -2548,6 +2810,7 @@ function switchTab(tab) {
     e.classList.toggle('active', e.dataset.tab === tab));
   document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
   el('tab-' + tab).classList.add('active');
+  if (tab === 'community') renderCommunity();
 }
 
 // ════════════════════════════════════════
