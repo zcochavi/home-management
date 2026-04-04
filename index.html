@@ -558,6 +558,10 @@
   </div>
 </div>
 
+<!-- School autocomplete datalists -->
+<datalist id="dataCities"></datalist>
+<datalist id="dataSchools"></datalist>
+
 <!-- PHOTO MANAGER MODAL -->
 <div id="photoModal" class="photo-modal-wrap" style="display:none">
   <div style="background:white;border-radius:20px;padding:22px;width:100%;max-width:340px;max-height:80vh;overflow-y:auto">
@@ -1473,7 +1477,7 @@ let _mgmtNewRole  = 'parent';
 let _mgmtNewEmoji = EMOJI_OPTIONS[0];
 let _mgmtEditEmoji = {}; // keyed by memberIndex
 
-function openMgmt() { renderMgmt(); el('mgmtScreen').classList.remove('hidden'); }
+function openMgmt() { renderMgmt(); el('mgmtScreen').classList.remove('hidden'); loadCities(); }
 function closeMgmt() { el('mgmtScreen').classList.add('hidden'); }
 
 function renderMgmt() {
@@ -1514,8 +1518,10 @@ function renderMgmtMembers() {
       </div>
       <div id="mgmtSchoolSection_${i}" style="display:${m.role==='kid'?'block':'none'}">
         <span class="mgmt-edit-label" style="display:block;margin-bottom:6px">🏫 בית ספר</span>
-        <input class="auth-input" id="mgmtEditCity_${i}" placeholder="עיר" value="${esc(m.school?.city||'')}" style="margin-bottom:6px">
-        <input class="auth-input" id="mgmtEditSchoolName_${i}" placeholder="שם בית הספר" value="${esc(m.school?.name||'')}" style="margin-bottom:6px">
+        <input list="dataCities" class="auth-input" id="mgmtEditCity_${i}" placeholder="עיר" value="${esc(m.school?.city||'')}" style="margin-bottom:6px"
+  oninput="loadSchoolsFor(this.value)">
+        <input list="dataSchools" class="auth-input" id="mgmtEditSchoolName_${i}" placeholder="שם בית הספר" value="${esc(m.school?.name||'')}" style="margin-bottom:6px"
+  onfocus="loadSchoolsFor(el('mgmtEditCity_${i}')?.value)">
         <div style="display:flex;gap:8px;margin-bottom:12px">
           <select class="auth-input" id="mgmtEditGrade_${i}" style="flex:1">
             ${GRADE_OPTIONS.map(g=>`<option value="${g}" ${(m.school?.grade||'')==g?'selected':''}>${g?'כיתה '+g:'כיתה...'}</option>`).join('')}
@@ -1659,6 +1665,43 @@ async function mgmtRemoveMember(name) {
   renderAll();
 }
 
+// ── School Index (autocomplete) ───────────
+let _cachedCities = null;
+function normCityId(city) {
+  return (city||'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^\w\u0590-\u05FF]/g,'');
+}
+async function loadCities() {
+  try {
+    const snap = await fbDb.collection('schoolIndex').doc('cities_list').get();
+    _cachedCities = snap.exists ? (snap.data().cities||[]) : [];
+  } catch(e) { _cachedCities = []; }
+  const dl = el('dataCities');
+  if (dl) dl.innerHTML = (_cachedCities).map(c=>`<option value="${esc(c)}">`).join('');
+}
+async function loadSchoolsFor(city) {
+  if (!city?.trim()) return;
+  try {
+    const snap = await fbDb.collection('schoolIndex').doc('schools__'+normCityId(city)).get();
+    const schools = snap.exists ? (snap.data().schools||[]) : [];
+    const dl = el('dataSchools');
+    if (dl) dl.innerHTML = schools.map(s=>`<option value="${esc(s)}">`).join('');
+  } catch(e) {}
+}
+async function updateSchoolIndex(city, schoolName) {
+  if (!city?.trim()) return;
+  try {
+    await fbDb.collection('schoolIndex').doc('cities_list').set(
+      { cities: firebase.firestore.FieldValue.arrayUnion(city.trim()) }, { merge:true }
+    );
+    if (schoolName?.trim()) {
+      await fbDb.collection('schoolIndex').doc('schools__'+normCityId(city)).set(
+        { schools: firebase.firestore.FieldValue.arrayUnion(schoolName.trim()) }, { merge:true }
+      );
+    }
+    _cachedCities = null; // invalidate cache so next open re-fetches
+  } catch(e) { console.error('updateSchoolIndex:', e); }
+}
+
 // ── School Community ─────────────────────
 function classIdFor(school) {
   if (!school?.city?.trim() || !school?.grade) return null;
@@ -1682,6 +1725,7 @@ async function registerInClass(kidName, school) {
       familyName: familyData?.familyName || '',
       addedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
+  updateSchoolIndex(school.city, school.name); // fire-and-forget
 }
 
 async function unregisterFromClass(kidName, school) {
