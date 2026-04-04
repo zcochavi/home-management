@@ -252,6 +252,12 @@
     .event-person-chip { font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px;background:#f0f4ff;color:#6a11cb;flex-shrink:0; }
     .g-badge { font-size:10px;font-weight:900;background:#4285f4;color:white;border-radius:4px;padding:1px 4px; }
 
+    /* Event person multi-picker */
+    .event-person-picker { display:flex;flex-wrap:wrap;gap:6px;margin-top:2px; }
+    .ep-chip { display:flex;align-items:center;gap:5px;padding:6px 12px;border-radius:20px;background:#f0f4ff;color:#718096;font-size:12px;font-weight:800;cursor:pointer;border:2px solid transparent;transition:all 0.18s;user-select:none; }
+    .ep-chip:hover { background:#e0e8ff; }
+    .ep-chip.selected { background:linear-gradient(135deg,#6a11cb,#f093fb);color:white; }
+
     ::-webkit-scrollbar { width:4px;height:4px; }
     ::-webkit-scrollbar-track { background:transparent; }
     ::-webkit-scrollbar-thumb { background:#c8d3e8;border-radius:4px; }
@@ -431,10 +437,8 @@
             <input type="date" id="newEventDate" style="flex:1">
             <input type="time" id="newEventTime" style="flex:0 0 100px">
           </div>
-          <div class="form-row">
-            <select id="newEventPerson" style="flex:1"></select>
-            <button class="btn-sm" id="addEventBtn" onclick="addEvent()"></button>
-          </div>
+          <div id="newEventPersonPicker" class="event-person-picker"></div>
+          <button class="btn" id="addEventBtn" onclick="addEvent()" style="margin-top:2px"></button>
           <label id="gcalSyncRow" style="display:none;align-items:center;gap:7px;font-size:13px;font-weight:700;color:#4a5568;cursor:pointer;margin-top:4px">
             <input type="checkbox" id="gcalSyncCheck" style="width:16px;height:16px;accent-color:#4285f4">
             <span id="gcalSyncLabel"></span>
@@ -970,6 +974,46 @@ function switchUser() {
 }
 
 // ════════════════════════════════════════
+//  EVENT PERSON PICKER
+// ════════════════════════════════════════
+let _eventPersons = ['All'];
+
+// Normalise legacy string person → array
+function eventPersons(ev) {
+  if (Array.isArray(ev.person)) return ev.person;
+  return [ev.person || 'All'];
+}
+
+function renderEventPersonPicker() {
+  const picker = el('newEventPersonPicker');
+  if (!picker) return;
+  const others = getAllMemberNames().filter(n => n !== S.user);
+  const chips = [
+    { key:'All', label:t('everyone'), emoji:'👨‍👩‍👧‍👧' },
+    ...others.map(n => ({ key:n, label:n, emoji:getEmoji(n) })),
+  ];
+  picker.innerHTML = chips.map(c =>
+    `<div class="ep-chip ${_eventPersons.includes(c.key)?'selected':''}" onclick="toggleEventPerson('${esc(c.key)}')">
+       <span>${c.emoji}</span><span>${esc(c.label)}</span>
+     </div>`).join('');
+}
+
+function toggleEventPerson(key) {
+  if (key === 'All') {
+    _eventPersons = ['All'];
+  } else {
+    _eventPersons = _eventPersons.filter(k => k !== 'All');
+    if (_eventPersons.includes(key)) {
+      _eventPersons = _eventPersons.filter(k => k !== key);
+      if (_eventPersons.length === 0) _eventPersons = ['All'];
+    } else {
+      _eventPersons.push(key);
+    }
+  }
+  renderEventPersonPicker();
+}
+
+// ════════════════════════════════════════
 //  RENDER ALL + STATIC LABELS
 // ════════════════════════════════════════
 function renderAll() {
@@ -1007,10 +1051,7 @@ function renderStatic() {
   // Dynamic member dropdowns
   el('newChoreAssignee').innerHTML = getAllMemberNames().map(n =>
     `<option value="${esc(n)}">${getEmoji(n)} ${esc(n)}</option>`).join('');
-  el('newEventPerson').innerHTML =
-    `<option value="All">👨‍👩‍👧‍👧 ${t('everyone')}</option>` +
-    getAllMemberNames().map(n =>
-      `<option value="${esc(n)}">${getEmoji(n)} ${esc(n)}</option>`).join('');
+  renderEventPersonPicker();
 }
 
 function applyRoleUI() {
@@ -1215,7 +1256,12 @@ function renderCalendar(){
   const di=el('newEventDate');if(di&&!di.value)di.value=S.calSelected;
   const events=allCalEvents();
   const dotMap={};
-  events.forEach(ev=>{if(!dotMap[ev.date])dotMap[ev.date]=[];dotMap[ev.date].push(ev.gcal?'#4285f4':getPersonColor(ev.person));});
+  events.forEach(ev=>{
+    if(!dotMap[ev.date])dotMap[ev.date]=[];
+    const ps=eventPersons(ev);
+    const col=ev.gcal?'#4285f4':getPersonColor(ps.includes('All')?'All':ps[0]);
+    dotMap[ev.date].push(col);
+  });
   let html=t('dows').map(d=>`<div class="cal-dow">${d}</div>`).join('');
   const firstDay=new Date(yr,mo,1).getDay(),daysInMo=new Date(yr,mo+1,0).getDate(),daysInPrev=new Date(yr,mo,0).getDate();
   for(let i=firstDay-1;i>=0;i--) html+=dayCell(`${yr}-${String(mo).padStart(2,'0')}-${String(daysInPrev-i).padStart(2,'0')}`,daysInPrev-i,true,dotMap);
@@ -1241,8 +1287,12 @@ function renderDayPanel(events){
   let html=`<div class="day-panel-title">📆 ${title}</div>`;
   if(!evs.length){html+=`<div class="empty" style="padding:12px">${t('noEvents')}</div>`;}
   else html+=evs.map(e=>{
-    const color=e.gcal?'#4285f4':getPersonColor(e.person);
-    const personLabel=e.gcal?'':(e.person==='All'?`👨‍👩‍👧‍👧 ${t('everyone')}`:(getEmoji(e.person)||'')+' '+e.person);
+    const ps=eventPersons(e);
+    const isAll=ps.includes('All');
+    const color=e.gcal?'#4285f4':getPersonColor(isAll?'All':ps[0]);
+    const personLabel=e.gcal?'':isAll
+      ?`👨‍👩‍👧‍👧 ${t('everyone')}`
+      :ps.map(n=>getEmoji(n)+' '+n).join(' · ');
     const canDel=isParent()&&(!e.gcal||gcalConnected());
     return `<div class="event-item ${e.gcal?'gcal-event':''}" style="border-inline-start-color:${color}">
       <div class="event-body">
@@ -1258,10 +1308,12 @@ function calShift(d){S.calMonth+=d;if(S.calMonth>11){S.calMonth=0;S.calYear++;}i
 async function addEvent(){
   const title=el('newEventTitle').value.trim(),date=el('newEventDate').value;
   if(!title||!date)return;
-  const ev={id:Date.now(),title,date,time:el('newEventTime').value,person:el('newEventPerson').value};
+  const person = _eventPersons.length===1&&_eventPersons[0]==='All' ? 'All' : _eventPersons;
+  const ev={id:Date.now(),title,date,time:el('newEventTime').value,person};
   const syncGcal=gcalConnected()&&isParent()&&el('gcalSyncCheck').checked;
   if(syncGcal){const gcalId=await gcalCreateEvent(ev);if(gcalId)ev.gcalId=gcalId;}
   S.events.push(ev);el('newEventTitle').value='';el('newEventTime').value='';
+  _eventPersons=['All']; renderEventPersonPicker();
   S.calSelected=date;const d2=new Date(date+'T00:00:00');S.calYear=d2.getFullYear();S.calMonth=d2.getMonth();
   save();if(syncGcal)await fetchGCalEvents();else renderCalendar();
 }
