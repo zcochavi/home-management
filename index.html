@@ -1253,14 +1253,14 @@ function tryAutoConnectGCal() {
   // piggybacking on the very next tap achieves this invisibly.
   if (!gcalConnected() && gcalWasConnected() && gcalReady() && gcal.tokenClient && !_gcalGestureListener) {
     _gcalGestureListener = () => {
-      document.removeEventListener('click',      _gcalGestureListener, true);
-      document.removeEventListener('touchstart', _gcalGestureListener, true);
+      document.removeEventListener('click',      _gcalGestureListener);
+      document.removeEventListener('touchstart', _gcalGestureListener);
       _gcalGestureListener = null;
       if (!gcalConnected() && gcalWasConnected() && gcalReady() && gcal.tokenClient)
         gcal.tokenClient.requestAccessToken({prompt:''});
     };
-    document.addEventListener('click',      _gcalGestureListener, true);
-    document.addEventListener('touchstart', _gcalGestureListener, true);
+    document.addEventListener('click',      _gcalGestureListener);
+    document.addEventListener('touchstart', _gcalGestureListener);
   }
 }
 async function onGCalToken(resp) {
@@ -1295,8 +1295,8 @@ function disconnectGCal() {
   gcal.accessToken=null; gcal.events=[];
   if (S.uid && S.user) localStorage.removeItem('familyhub_gcal_' + S.uid + '_' + S.user);
   if (_gcalGestureListener) {
-    document.removeEventListener('click',      _gcalGestureListener, true);
-    document.removeEventListener('touchstart', _gcalGestureListener, true);
+    document.removeEventListener('click',      _gcalGestureListener);
+    document.removeEventListener('touchstart', _gcalGestureListener);
     _gcalGestureListener = null;
   }
   renderGCalBar(); renderCalendar();
