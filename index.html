@@ -2112,19 +2112,32 @@ function renderHwHistory(child) {
     ${_hwHistOpen ? `
       <input class="hw-hist-search" placeholder="${t('hwHistorySearch')}"
         value="${esc(_hwHistSearch)}"
-        oninput="_hwHistSearch=this.value;renderHwHistory('${esc(child)}')">
-      <div>${filtered.length ? filtered.map(h=>`
-        <div class="hw-hist-item" data-hw-id="${h.id}">
-          <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
-          <div class="hw-hist-desc">${esc(h.desc)}</div>
-          <span class="hw-hist-ts">${fmtDoneAt(h.doneAt)}</span>
-          ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">×</button>`:''}
-        </div>`).join('')
-      : `<div class="empty" style="padding:8px 0">${t('hwHistoryEmpty')}</div>`}
-      </div>` : ''}
+        oninput="_hwHistSearch=this.value;filterHwHistory('${esc(child)}')">
+      <div id="hwHistList">${hwHistListHTML(filtered)}</div>` : ''}
   </div>`;
 }
 
+function hwHistListHTML(filtered) {
+  return filtered.length ? filtered.map(h=>`
+    <div class="hw-hist-item" data-hw-id="${h.id}">
+      <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
+      <div class="hw-hist-desc">${esc(h.desc)}</div>
+      <span class="hw-hist-ts">${fmtDoneAt(h.doneAt)}</span>
+      ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">×</button>`:''}
+    </div>`).join('')
+  : `<div class="empty" style="padding:8px 0">${t('hwHistoryEmpty')}</div>`;
+}
+function filterHwHistory(child) {
+  const listEl = el('hwHistList');
+  if (!listEl) return;
+  const allDone = S.homework.filter(h=>h.child===child && h.done)
+    .sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
+  const q = _hwHistSearch.toLowerCase();
+  const filtered = q ? allDone.filter(h=>
+    h.desc.toLowerCase().includes(q) || subjectLabel(h.subject).toLowerCase().includes(q)
+  ) : allDone;
+  listEl.innerHTML = hwHistListHTML(filtered);
+}
 function toggleHwHistory() {
   _hwHistOpen = !_hwHistOpen;
   renderHwHistory(S.child);
