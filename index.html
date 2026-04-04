@@ -100,6 +100,10 @@
     .tab-ed-remove[disabled] { opacity:0.15;cursor:default; }
     .tab-ed-add { padding:7px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#6a11cb,#f093fb);color:white;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;flex-shrink:0;transition:opacity 0.15s; }
     .tab-ed-add:hover { opacity:0.9; }
+    .tab-ed-handle { font-size:17px;color:#c8d3e8;cursor:grab;padding:0 10px 0 0;user-select:none;flex-shrink:0;touch-action:none;line-height:1; }
+    .tab-ed-handle:active { cursor:grabbing;color:#6a11cb; }
+    .tab-ed-row { transition:transform 0.12s ease; }
+    .tab-ed-row.tab-ed-dragging { background:white;box-shadow:0 6px 24px rgba(106,17,203,0.18);border-radius:12px;z-index:10;position:relative;transition:none !important; }
     /* Management + Tab editor screens */
     #mgmtScreen, #tabEditorScreen { position:fixed;inset:0;background:#f0f4ff;z-index:900;overflow-y:auto; }
     #mgmtScreen.hidden, #tabEditorScreen.hidden { display:none; }
@@ -418,7 +422,10 @@
 </div>
 
 <!-- TAB EDITOR SCREEN -->
-<div id="tabEditorScreen" class="hidden">
+<div id="tabEditorScreen" class="hidden"
+  onpointermove="tabDragMove(event)"
+  onpointerup="tabDragUp(event)"
+  onpointercancel="tabDragUp(event)">
   <div class="mgmt-header">
     <button class="mgmt-back-btn" onclick="closeTabEditor()">×</button>
     <div class="mgmt-header-title">🗂 התאמת לשוניות</div>
@@ -2129,7 +2136,8 @@ function renderTabEditor() {
   el('tabEditorActive').innerHTML = active.map((id, i) => {
     const tab = ALL_TABS.find(t => t.id === id);
     const first = i === 0, last = i === active.length - 1, only = active.length === 1;
-    return `<div class="tab-ed-row">
+    return `<div class="tab-ed-row" data-drag-idx="${i}">
+      <span class="tab-ed-handle" onpointerdown="tabDragDown(event,${i})">⠿</span>
       <span class="tab-ed-icon">${tab.icon}</span>
       <span class="tab-ed-label">${tabLabel(id)}</span>
       <div class="tab-ed-btns">
@@ -2150,6 +2158,82 @@ function renderTabEditor() {
         </div>`;
       }).join('')
     : '<div style="padding:12px 0;color:#a0aec0;font-size:13px;font-weight:700;text-align:center">כל הלשוניות פעילות ✓</div>';
+}
+
+// ────────────────────────────────────────
+//  Drag-and-drop reorder
+// ────────────────────────────────────────
+const _drag = { on:false, timer:null, idx:-1, hoverIdx:-1, y0:0, rowH:48, tops:[] };
+
+function tabDragDown(e, idx) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  e.stopPropagation();
+  _drag.y0 = e.clientY;
+  _drag.timer = setTimeout(() => {
+    _drag.on = true;
+    _drag.idx = idx;
+    _drag.hoverIdx = idx;
+    const rows = [...el('tabEditorActive').querySelectorAll('.tab-ed-row')];
+    _drag.rowH = rows[0]?.offsetHeight || 48;
+    // Cache absolute tops at drag-start so moves are stable
+    _drag.tops = rows.map(r => r.getBoundingClientRect().top);
+    rows[idx]?.classList.add('tab-ed-dragging');
+    el('tabEditorScreen').style.touchAction = 'none';
+    if (navigator.vibrate) navigator.vibrate(40);
+  }, 350);
+}
+
+function tabDragMove(e) {
+  const y = e.clientY;
+  // Cancel long-press if finger/pointer moved too much before timer fired
+  if (_drag.timer && Math.abs(y - _drag.y0) > 8) {
+    clearTimeout(_drag.timer); _drag.timer = null;
+  }
+  if (!_drag.on) return;
+  e.preventDefault();
+
+  const dy = y - _drag.y0;
+  const rows = [...el('tabEditorActive').querySelectorAll('.tab-ed-row')];
+
+  // Translate the dragged row freely
+  rows[_drag.idx].style.transform = `translateY(${dy}px)`;
+  rows[_drag.idx].style.zIndex    = '10';
+
+  // Determine insertion slot: snap by row-height increments from origin
+  const raw = _drag.idx + dy / _drag.rowH;
+  _drag.hoverIdx = Math.max(0, Math.min(rows.length - 1, Math.round(raw)));
+
+  // Shift displaced rows to visualise the gap
+  rows.forEach((r, i) => {
+    if (i === _drag.idx) return;
+    let shift = 0;
+    if (_drag.hoverIdx > _drag.idx && i > _drag.idx && i <= _drag.hoverIdx) shift = -_drag.rowH;
+    if (_drag.hoverIdx < _drag.idx && i >= _drag.hoverIdx && i < _drag.idx) shift = _drag.rowH;
+    r.style.transform  = shift ? `translateY(${shift}px)` : '';
+  });
+}
+
+function tabDragUp(e) {
+  if (_drag.timer) { clearTimeout(_drag.timer); _drag.timer = null; }
+  if (!_drag.on) { _drag.on = false; return; }
+  _drag.on = false;
+  el('tabEditorScreen').style.touchAction = '';
+
+  // Clear all inline transforms before re-render
+  el('tabEditorActive').querySelectorAll('.tab-ed-row').forEach(r => {
+    r.style.transform = r.style.zIndex = r.style.transition = '';
+    r.classList.remove('tab-ed-dragging');
+  });
+
+  if (_drag.hoverIdx >= 0 && _drag.hoverIdx !== _drag.idx) {
+    const active = getActiveTabs();
+    const [moved] = active.splice(_drag.idx, 1);
+    active.splice(_drag.hoverIdx, 0, moved);
+    saveActiveTabs(active);
+    renderTabBar();
+  }
+  _drag.idx = _drag.hoverIdx = -1;
+  renderTabEditor();
 }
 
 function tabMoveUp(id) {
