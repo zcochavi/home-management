@@ -4,6 +4,22 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FamilyHub 🏠</title>
+  <link id="favicon" rel="icon" type="image/png">
+  <script>
+    (function(){
+      const c=document.createElement('canvas');c.width=c.height=64;
+      const x=c.getContext('2d');
+      // Purple gradient background
+      const g=x.createLinearGradient(0,0,64,64);
+      g.addColorStop(0,'#6a11cb');g.addColorStop(1,'#f5576c');
+      x.fillStyle=g;x.beginPath();
+      x.roundRect(0,0,64,64,14);x.fill();
+      // House emoji
+      x.font='38px serif';x.textAlign='center';x.textBaseline='middle';
+      x.fillText('🏠',32,34);
+      document.getElementById('favicon').href=c.toDataURL();
+    })();
+  </script>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <!-- Firebase SDKs — must load before main script -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
