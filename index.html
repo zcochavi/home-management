@@ -1148,6 +1148,7 @@ function getAuthError(code) {
     'auth/weak-password':          'הסיסמה חלשה מדי (6 תווים לפחות)',
     'auth/network-request-failed': 'בעיית חיבור לרשת',
     'auth/too-many-requests':      'יותר מדי ניסיונות, נסה שוב מאוחר יותר',
+    'permission-denied':           'אין הרשאה לכתוב למסד הנתונים — יש לעדכן את חוקי האבטחה ב-Firebase Console',
   };
   return m[code] || 'שגיאה: ' + code;
 }
