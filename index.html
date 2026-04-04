@@ -178,7 +178,7 @@
     .menu-btn { background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.45);border-radius:20px;color:white;font-size:17px;padding:4px 10px;cursor:pointer;transition:background 0.18s;line-height:1; }
     .menu-btn:hover { background:rgba(255,255,255,0.32); }
     #menuOverlay { position:fixed;inset:0;z-index:499;display:none; }
-    #menuDropdown { position:fixed;inset-inline-end:12px;top:54px;background:white;border-radius:16px;padding:6px;box-shadow:0 8px 32px rgba(0,0,0,0.18);z-index:500;min-width:196px;display:none; }
+    #menuDropdown { position:fixed;background:white;border-radius:16px;padding:6px;box-shadow:0 8px 32px rgba(0,0,0,0.18);z-index:500;min-width:196px;display:none; }
     .menu-item { display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;color:#2d3748;transition:background 0.15s;user-select:none; }
     .menu-item:hover { background:#f0f4ff; }
     .menu-item-icon { font-size:18px;width:22px;text-align:center;flex-shrink:0; }
@@ -604,7 +604,7 @@
         <div class="header-greeting" id="headerGreeting"></div>
       </div>
       <div class="header-btns">
-        <button class="menu-btn" onclick="toggleMenu()">☰</button>
+        <button class="menu-btn" onclick="toggleMenu(this)">☰</button>
       </div>
     </div>
     <div class="header-date" id="headerDate"></div>
@@ -2350,8 +2350,8 @@ async function removePhoto(name) {
 //  HAMBURGER MENU
 // ════════════════════════════════════════
 let _menuOpen = false;
-function toggleMenu() { _menuOpen ? closeMenu() : openMenu(); }
-function openMenu() {
+function toggleMenu(btn) { _menuOpen ? closeMenu() : openMenu(btn); }
+function openMenu(btn) {
   _menuOpen = true;
   const lang = getLang();
   const isHe = lang === 'he';
@@ -2392,8 +2392,23 @@ function openMenu() {
       <span class="menu-item-icon">🚪</span>
       <span>${isHe ? 'יציאה מהחשבון' : 'Sign out'}</span>
     </div>`;
-  el('menuDropdown').style.display = 'block';
-  el('menuOverlay').style.display  = 'block';
+  // Position dropdown relative to the ☰ button
+  const dd = el('menuDropdown');
+  dd.style.display = 'block';
+  const r = btn ? btn.getBoundingClientRect() : el('menuDropdown').getBoundingClientRect();
+  const ddW = dd.offsetWidth || 200;
+  // Align to whichever edge of the button is closer to the nearest app boundary
+  const spaceRight = window.innerWidth - r.right;
+  const spaceLeft  = r.left;
+  if (spaceRight >= spaceLeft) {
+    dd.style.left  = r.left + 'px';
+    dd.style.right = '';
+  } else {
+    dd.style.right = (window.innerWidth - r.right) + 'px';
+    dd.style.left  = '';
+  }
+  dd.style.top = (r.bottom + 6) + 'px';
+  el('menuOverlay').style.display = 'block';
 }
 function closeMenu() {
   _menuOpen = false;
