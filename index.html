@@ -2037,18 +2037,19 @@ async function loadCommunityData(kidsWithSchool) {
     const cid = classIdFor(kid.school);
     if (!cid) return false;
     const c = _commCache[cid];
-    return !c || (Date.now() - c.loadedAt) > 120000;
+    return !c || c.error || (Date.now() - c.loadedAt) > 120000;
   });
   await Promise.all(toLoad.map(async kid => {
     const cid = classIdFor(kid.school);
     const gid = gradeIdFor(kid.school);
     const sid = schoolIdFor(kid.school);
+    const safeGet = q => q.get().catch(() => ({docs:[]}));
     try {
       const [membersSnap, eventsSnap, gradeSnap, schoolSnap] = await Promise.all([
         fbDb.collection('schoolClasses').doc(cid).collection('members').get(),
         fbDb.collection('schoolClasses').doc(cid).collection('events').orderBy('date').get(),
-        gid ? fbDb.collection('schoolGrades').doc(gid).collection('events').orderBy('date').get() : Promise.resolve({docs:[]}),
-        sid ? fbDb.collection('schools').doc(sid).collection('events').orderBy('date').get() : Promise.resolve({docs:[]}),
+        gid ? safeGet(fbDb.collection('schoolGrades').doc(gid).collection('events').orderBy('date')) : Promise.resolve({docs:[]}),
+        sid ? safeGet(fbDb.collection('schools').doc(sid).collection('events').orderBy('date')) : Promise.resolve({docs:[]}),
       ]);
       _commCache[cid] = {
         classmates:   membersSnap.docs.map(d=>d.data()).filter(m=>m.familyUid!==S.uid),
