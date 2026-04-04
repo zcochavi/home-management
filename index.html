@@ -151,6 +151,10 @@
     .comm-add-form { background:#f8faff;border-radius:14px;padding:14px;margin-top:8px;display:none; }
     .comm-add-form.open { display:block; }
     .comm-section-label { font-size:11px;font-weight:800;color:#a0aec0;text-transform:uppercase;letter-spacing:0.6px;margin:12px 0 6px; }
+    .scope-badge { font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;margin-inline-start:6px;vertical-align:middle; }
+    .scope-class  { background:#ede9fe;color:#6a11cb; }
+    .scope-grade  { background:#fff3cd;color:#b7791f; }
+    .scope-school { background:#dbeafe;color:#1d4ed8; }
     .comm-past-event { opacity:0.5; }
     .cal-class-toggles { display:flex;flex-wrap:wrap;gap:6px;padding:8px 2px 4px; }
     .cal-class-toggle { display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;border:1.5px solid #e8edf5;background:white;font-size:12px;font-weight:700;cursor:pointer;transition:all 0.18s;user-select:none; }
@@ -819,6 +823,8 @@ const STRINGS = {
     commEventNote:'הערה (אופציונלי)',
     commEventPaybox:'קישור Paybox (אופציונלי)',
     commPayNow:'💳 שלם עכשיו',
+    commScopeClass:'כיתה', commScopeGrade:'שכבה', commScopeSchool:'בית ספר',
+    commScopeLabel:'רמת האירוע',
     commTomorrow:'מחר',
     commInDays: n => `בעוד ${n} ימים`,
     commDaysAgo: n => `לפני ${n} ימים`,
@@ -880,6 +886,8 @@ const STRINGS = {
     commEventNote:'Note (optional)',
     commEventPaybox:'Paybox link (optional)',
     commPayNow:'💳 Pay now',
+    commScopeClass:'Class', commScopeGrade:'Grade', commScopeSchool:'School',
+    commScopeLabel:'Audience',
     commTomorrow:'Tomorrow',
     commInDays: n => `In ${n} days`,
     commDaysAgo: n => `${n} days ago`,
@@ -1891,9 +1899,18 @@ function setClassFieldsEnabled(idx, enabled) {
 // ── School Community ─────────────────────
 function classIdFor(school) {
   if (!school?.city?.trim() || !school?.grade) return null;
-  // Collapse internal whitespace so "פתח  תקווה" === "פתח תקווה"
   const n = s => (s||'').trim().replace(/\s+/g,' ').replace(/\//g,'-').replace(/~/g,'');
   return [n(school.city), n(school.name||''), school.grade, n(school.classNum||'')].join('~~');
+}
+function gradeIdFor(school) {
+  if (!school?.city?.trim() || !school?.grade) return null;
+  const n = s => (s||'').trim().replace(/\s+/g,' ').replace(/\//g,'-').replace(/~/g,'');
+  return [n(school.city), n(school.name||''), school.grade].join('~~');
+}
+function schoolIdFor(school) {
+  if (!school?.city?.trim() || !school?.name?.trim()) return null;
+  const n = s => (s||'').trim().replace(/\s+/g,' ').replace(/\//g,'-').replace(/~/g,'');
+  return [n(school.city), n(school.name)].join('~~');
 }
 function classMemberId(familyUid, kidName) {
   return familyUid + '__' + kidName.replace(/[^a-z0-9א-תA-Z\u0590-\u05FF]/gi,'_');
@@ -2024,29 +2041,42 @@ async function loadCommunityData(kidsWithSchool) {
   });
   await Promise.all(toLoad.map(async kid => {
     const cid = classIdFor(kid.school);
+    const gid = gradeIdFor(kid.school);
+    const sid = schoolIdFor(kid.school);
     try {
-      const [membersSnap, eventsSnap] = await Promise.all([
+      const [membersSnap, eventsSnap, gradeSnap, schoolSnap] = await Promise.all([
         fbDb.collection('schoolClasses').doc(cid).collection('members').get(),
         fbDb.collection('schoolClasses').doc(cid).collection('events').orderBy('date').get(),
+        gid ? fbDb.collection('schoolGrades').doc(gid).collection('events').orderBy('date').get() : Promise.resolve({docs:[]}),
+        sid ? fbDb.collection('schools').doc(sid).collection('events').orderBy('date').get() : Promise.resolve({docs:[]}),
       ]);
       _commCache[cid] = {
-        classmates: membersSnap.docs.map(d=>d.data()).filter(m=>m.familyUid!==S.uid),
-        events: eventsSnap.docs.map(d=>({id:d.id,...d.data()})),
+        classmates:   membersSnap.docs.map(d=>d.data()).filter(m=>m.familyUid!==S.uid),
+        events:       eventsSnap.docs.map(d=>({id:d.id,...d.data(),scope:'class',scopeId:cid})),
+        gradeEvents:  gradeSnap.docs.map(d=>({id:d.id,...d.data(),scope:'grade',scopeId:gid})),
+        schoolEvents: schoolSnap.docs.map(d=>({id:d.id,...d.data(),scope:'school',scopeId:sid})),
         loadedAt: Date.now(),
       };
     } catch(e) {
       console.error('loadCommunityData error (classId=' + cid + '):', e);
-      _commCache[cid] = { classmates:[], events:[], loadedAt:Date.now(), error: e.code||e.message };
+      _commCache[cid] = { classmates:[], events:[], gradeEvents:[], schoolEvents:[], loadedAt:Date.now(), error: e.code||e.message };
     }
   }));
 }
 
+function scopeBadge(scope) {
+  if (!scope || scope === 'class') return `<span class="scope-badge scope-class">${t('commScopeClass')}</span>`;
+  if (scope === 'grade')  return `<span class="scope-badge scope-grade">${t('commScopeGrade')}</span>`;
+  if (scope === 'school') return `<span class="scope-badge scope-school">${t('commScopeSchool')}</span>`;
+  return '';
+}
 function renderEventRow(ev, cid, isPast) {
   const canDel = isParent() && ev.postedBy?.familyUid === S.uid;
+  const sid = ev.scopeId || cid;
   return `<div class="comm-event${isPast?' comm-past-event':''}">
     <div class="comm-event-icon">${eventTypeIcon(ev.type)}</div>
     <div class="comm-event-body">
-      <div class="comm-event-title">${esc(ev.title)}</div>
+      <div class="comm-event-title">${esc(ev.title)}${scopeBadge(ev.scope)}</div>
       <div class="comm-event-meta">
         <span class="comm-event-date">${fmtEventDate(ev.date)}</span>
         ${ev.postedBy?.familyName ? ` · ${esc(ev.postedBy.familyName)}` : ''}
@@ -2054,18 +2084,19 @@ function renderEventRow(ev, cid, isPast) {
       ${ev.note ? `<div class="comm-event-note">${esc(ev.note)}</div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
-    ${canDel ? `<button class="del-btn" onclick="deleteClassEvent('${cid}','${ev.id}')">×</button>` : ''}
+    ${canDel ? `<button class="del-btn" onclick="deleteClassEvent('${ev.scope||'class'}','${sid}','${ev.id}')">×</button>` : ''}
   </div>`;
 }
 
 function renderCommCard(kid) {
   const cid    = classIdFor(kid.school);
-  const cache  = _commCache[cid] || { classmates:[], events:[] };
+  const cache  = _commCache[cid] || { classmates:[], events:[], gradeEvents:[], schoolEvents:[] };
   const addOpen = _commAddOpen[cid];
 
-  const upcoming = cache.events.filter(e=>isEventUpcoming(e.date))
+  const allEvs = [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])];
+  const upcoming = allEvs.filter(e=>isEventUpcoming(e.date))
     .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
-  const past = cache.events.filter(e=>!isEventUpcoming(e.date))
+  const past = allEvs.filter(e=>!isEventUpcoming(e.date))
     .sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,5);
 
   return `<div class="card" id="commCard_${cid}">
@@ -2094,6 +2125,14 @@ function renderCommCard(kid) {
         <input type="date" class="auth-input" id="commEvDate_${cid}" style="flex:1">
         <select class="auth-input" id="commEvType_${cid}" style="flex:1">
           ${EVENT_TYPES.map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center">
+        <span style="font-size:12px;font-weight:700;color:#718096;white-space:nowrap">${t('commScopeLabel')}:</span>
+        <select class="auth-input" id="commEvScope_${cid}" style="flex:1">
+          <option value="class">🏫 ${t('commScopeClass')}</option>
+          <option value="grade">📚 ${t('commScopeGrade')}</option>
+          <option value="school">🏛 ${t('commScopeSchool')}</option>
         </select>
       </div>
       <input class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" style="margin-bottom:6px">
@@ -2164,27 +2203,41 @@ async function submitClassEvent(cid) {
   const title      = el('commEvTitle_'  + cid)?.value.trim();
   const date       = el('commEvDate_'   + cid)?.value;
   const type       = el('commEvType_'   + cid)?.value || 'other';
+  const scope      = el('commEvScope_'  + cid)?.value || 'class';
   const note       = el('commEvNote_'   + cid)?.value.trim() || '';
   const payboxRaw  = el('commEvPaybox_' + cid)?.value.trim() || '';
   const payboxUrl  = payboxRaw && (payboxRaw.startsWith('http://') || payboxRaw.startsWith('https://')) ? payboxRaw : '';
   if (!title || !date) return;
-  const docData = { title, date, type, note,
+  const docData = { title, date, type, note, scope,
     postedBy: { familyUid: S.uid, familyName: familyData?.familyName||'' },
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
   if (payboxUrl) docData.payboxUrl = payboxUrl;
+
+  // Resolve target collection and document ID
+  const kid = getKids().map(n=>getMembers().find(m=>m.name===n)).find(m=>classIdFor(m?.school)===cid);
+  let collName = 'schoolClasses', docId = cid;
+  if (scope === 'grade') { collName = 'schoolGrades'; docId = gradeIdFor(kid?.school) || cid; }
+  if (scope === 'school') { collName = 'schools'; docId = schoolIdFor(kid?.school) || cid; }
+
   try {
-    await fbDb.collection('schoolClasses').doc(cid).collection('events').add(docData);
-    delete _commCache[cid];
+    await fbDb.collection(collName).doc(docId).collection('events').add(docData);
+    delete _commCache[cid]; // invalidate so next load re-fetches all scopes
     _commAddOpen[cid] = false;
     await renderCommunity();
   } catch(e) { console.error('submitClassEvent:', e); }
 }
 
-async function deleteClassEvent(cid, eventId) {
+async function deleteClassEvent(scope, scopeId, eventId) {
+  const collName = scope === 'grade' ? 'schoolGrades' : scope === 'school' ? 'schools' : 'schoolClasses';
   try {
-    await fbDb.collection('schoolClasses').doc(cid).collection('events').doc(eventId).delete();
-    delete _commCache[cid];
+    await fbDb.collection(collName).doc(scopeId).collection('events').doc(eventId).delete();
+    if (scope === 'class') {
+      delete _commCache[scopeId];
+    } else {
+      // grade/school events are cached inside each classId entry — clear all
+      _commCache = {};
+    }
     await renderCommunity();
   } catch(e) { console.error('deleteClassEvent:', e); }
 }
@@ -2968,7 +3021,7 @@ function allCalEvents(){
     if(!cid)return;
     const cache=_commCache[cid];
     if(!cache)return;
-    cache.events.forEach(ev=>{
+    [...(cache.events||[]),...(cache.gradeEvents||[]),...(cache.schoolEvents||[])].forEach(ev=>{
       if(!ev.date)return;
       classEvs.push({...ev,classEvent:true,classKid:name,_cid:cid});
     });
