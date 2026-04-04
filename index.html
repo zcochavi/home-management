@@ -2609,28 +2609,23 @@ let _choreHistOpen   = false;
 let _choreHistSearch = '';
 
 function renderChores() {
-  const people = getAllMemberNames();
   let items = S.filter==='All' ? S.chores : S.chores.filter(c=>c.assignee===S.filter);
   const active = items.filter(c=>!c.done);
-  const g={}; people.forEach(p=>g[p]=[]);
-  active.forEach(c=>{if(g[c.assignee])g[c.assignee].push(c);});
-  let html='';
-  people.forEach(p=>{
-    if(!g[p].length)return;
-    const mine=p===S.user;
-    html+=`<div class="card ${mine?'mine-card':''}">
-      <div class="person-header">${getAvatar(p,22)} ${p}${mine?` <span style="font-size:11px;color:#c471ed;font-weight:700">${t('youLabel')}</span>`:''}</div>
-      ${g[p].map(c=>{
-        const can=isParent()||c.assignee===S.user;
-        return `<div class="task-row" data-chore-id="${c.id}">
-          <div class="check-box ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
-          </div>
-          <div class="task-text">${esc(c.text)}</div>
-          <span class="pri pri-${c.priority}">${t(c.priority)}</span>
-          ${isParent()?`<button class="del-btn" onclick="deleteChore(${c.id})">×</button>`:''}</div>`;
-      }).join('')}</div>`;
-  });
-  el('choresContent').innerHTML=html||`<div class="card"><div class="empty">${t('noChores')}</div></div>`;
+  const showAssignee = S.filter==='All';
+  const inner = active.length ? active.map(c=>{
+    const can = isParent()||c.assignee===S.user;
+    return `<div class="hw-item" data-chore-id="${c.id}">
+      <div class="hw-head">
+        <div class="check-box ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
+        </div>
+        ${showAssignee?`<span style="font-size:18px;flex-shrink:0;line-height:1">${getAvatar(c.assignee,20)}</span>`:''}
+        <div class="hw-desc-text" style="flex:1">${esc(c.text)}</div>
+        <span class="pri pri-${c.priority}">${t(c.priority)}</span>
+        ${isParent()?`<button class="del-btn" onclick="deleteChore(${c.id})">×</button>`:''}
+      </div>
+    </div>`;
+  }).join('') : `<div class="empty">${t('noChores')}</div>`;
+  el('choresContent').innerHTML = `<div class="card">${inner}</div>`;
   renderChoreHistory(S.filter);
 }
 
@@ -2692,7 +2687,7 @@ function toggleChore(id) {
   const c=S.chores.find(x=>x.id===id);
   if(!c||(!isParent()&&c.assignee!==S.user))return;
   if(!c.done){
-    const row=document.querySelector(`.task-row[data-chore-id="${id}"]`);
+    const row=document.querySelector(`.hw-item[data-chore-id="${id}"]`);
     if(row){
       row.classList.remove('hw-fly-in-active');
       void row.offsetWidth;
@@ -2717,7 +2712,7 @@ function toggleChore(id) {
         c.done=false; delete c.doneAt;
         save(); renderChores(); renderHome();
         requestAnimationFrame(()=>{
-          const active=document.querySelector(`.task-row[data-chore-id="${id}"]`);
+          const active=document.querySelector(`.hw-item[data-chore-id="${id}"]`);
           if(active) active.classList.add('hw-fly-in-active');
         });
       },270);
