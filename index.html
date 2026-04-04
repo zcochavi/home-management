@@ -1795,7 +1795,10 @@ function scheduleHideAc() {
 function acPick(i) {
   if (_acHideTimer) { clearTimeout(_acHideTimer); _acHideTimer = null; }
   const val = _acOptions[i];
-  if (_acInput && val !== undefined) _acInput.value = val;
+  if (_acInput && val !== undefined) {
+    _acInput.value = val;
+    _acInput.dispatchEvent(new Event('input', { bubbles: true }));
+  }
   hideAc();
 }
 async function onCityAc(inp, idx) {
