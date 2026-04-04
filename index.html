@@ -1308,6 +1308,7 @@ async function save() {
 // ════════════════════════════════════════
 async function initFCM() {
   if (!FB_CONFIGURED || !fbDb || !S.uid) { console.log('[FCM] skipped: not configured'); return; }
+  console.log('[FCM] SW support:', 'serviceWorker' in navigator, '| Notification support:', 'Notification' in window);
   if (!('serviceWorker' in navigator) || !('Notification' in window)) { console.log('[FCM] skipped: no SW or Notification API'); return; }
   try {
     console.log('[FCM] registering service worker...');
