@@ -1757,8 +1757,9 @@ async function updateSchoolIndex(city, schoolName) {
 // ── School Community ─────────────────────
 function classIdFor(school) {
   if (!school?.city?.trim() || !school?.grade) return null;
-  const n = s => (s||'').trim().replace(/\//g,'-').replace(/~/g,'');
-  return [n(school.city), n(school.name||''), school.grade, school.classNum||''].join('~~');
+  // Collapse internal whitespace so "פתח  תקווה" === "פתח תקווה"
+  const n = s => (s||'').trim().replace(/\s+/g,' ').replace(/\//g,'-').replace(/~/g,'');
+  return [n(school.city), n(school.name||''), school.grade, n(school.classNum||'')].join('~~');
 }
 function classMemberId(familyUid, kidName) {
   return familyUid + '__' + kidName.replace(/[^a-z0-9א-תA-Z\u0590-\u05FF]/gi,'_');
@@ -1877,7 +1878,7 @@ function fmtEventDate(dateStr) {
   return date.toLocaleDateString(t('locale'), {month:'short', day:'numeric'});
 }
 
-let _commCache   = {}; // { [classId]: { classmates, events, loadedAt } }
+let _commCache   = {}; // { [classId]: { classmates, events, loadedAt, error? } }
 let _commAddOpen = {}; // { [classId]: bool }
 
 async function loadCommunityData(kidsWithSchool) {
@@ -1900,8 +1901,8 @@ async function loadCommunityData(kidsWithSchool) {
         loadedAt: Date.now(),
       };
     } catch(e) {
-      console.error('loadCommunityData:', e);
-      _commCache[cid] = { classmates:[], events:[], loadedAt:Date.now() };
+      console.error('loadCommunityData error (classId=' + cid + '):', e);
+      _commCache[cid] = { classmates:[], events:[], loadedAt:Date.now(), error: e.code||e.message };
     }
   }));
 }
@@ -1973,14 +1974,17 @@ function renderCommCard(kid) {
     <div class="comm-section-label" style="margin-top:16px">
       👥 ${t('commClassmates')} <span class="comm-count" style="margin-inline-start:6px">${cache.classmates.length}</span>
     </div>
-    ${cache.classmates.length
-      ? cache.classmates.map(c=>`
-        <div class="comm-mate">
-          <span style="font-size:18px">👨‍👩‍👧</span>
-          <span class="comm-mate-family">${esc(c.familyName||'משפחה')}</span>
-          <span class="comm-mate-kid">${esc(c.kidName)}</span>
-        </div>`).join('')
-      : `<div style="font-size:12px;color:#a0aec0;padding:4px 0;font-weight:600">אין עדיין ילדים מהכיתה ב-FamilyHub</div>`}
+    ${cache.error
+      ? `<div style="font-size:12px;color:#e53e3e;padding:6px 0;font-weight:700">⚠ שגיאת Firestore: ${esc(cache.error)}<br><span style="opacity:0.6;font-weight:600">יש לעדכן את חוקי האבטחה ב-Firebase Console</span></div>`
+      : cache.classmates.length
+        ? cache.classmates.map(c=>`
+          <div class="comm-mate">
+            <span style="font-size:18px">👨‍👩‍👧</span>
+            <span class="comm-mate-family">${esc(c.familyName||'משפחה')}</span>
+            <span class="comm-mate-kid">${esc(c.kidName)}</span>
+          </div>`).join('')
+        : `<div style="font-size:12px;color:#a0aec0;padding:4px 0;font-weight:600">אין עדיין ילדים מהכיתה ב-FamilyHub</div>`}
+    <div style="font-size:10px;color:#c8d3e8;margin-top:6px;word-break:break-all">🔑 ${esc(cid)}</div>
   </div>`;
 }
 
