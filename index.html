@@ -1768,15 +1768,46 @@ let _acInput   = null;
 let _acOptions = [];
 let _acHideTimer = null;
 
+function levenshtein(a, b) {
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const dp = Array.from({length: a.length + 1}, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1]
+        : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+  return dp[a.length][b.length];
+}
+
 function showAc(inputEl, options) {
   _acInput = inputEl;
   const q = (inputEl.value || '').trim();
-  const filtered = q
-    ? options.filter(o => o.includes(q) || o.toLowerCase().includes(q.toLowerCase()))
+  const ql = q.toLowerCase();
+
+  // Exact substring matches
+  const exact = q
+    ? options.filter(o => o.toLowerCase().includes(ql))
     : options;
+
+  // Fuzzy fallback — only when substring finds nothing and query ≥ 3 chars
+  let fuzzy = [];
+  if (q.length >= 3 && exact.length === 0) {
+    const threshold = Math.max(1, Math.floor(q.length / 5));
+    fuzzy = options
+      .map(o => ({ o, d: levenshtein(ql, o.toLowerCase()) }))
+      .filter(x => x.d <= threshold)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 3)
+      .map(x => x.o);
+  }
+
   const dd = el('acDropdown');
-  if (!filtered.length) { hideAc(); return; }
-  _acOptions = filtered.slice(0, 8);
+  if (!exact.length && !fuzzy.length) { hideAc(); return; }
+
+  const exactSlice = exact.slice(0, 8);
+  _acOptions = [...exactSlice, ...fuzzy];
+
   const r = inputEl.getBoundingClientRect();
   Object.assign(dd.style, {
     display:'block', position:'fixed', zIndex:'1100',
@@ -1784,9 +1815,18 @@ function showAc(inputEl, options) {
     left: r.left + 'px',
     width: r.width + 'px',
   });
-  dd.innerHTML = _acOptions.map((o, i) =>
-    `<div class="ac-item" onmousedown="acPick(${i})">${esc(o)}</div>`
-  ).join('');
+
+  const isHe = getLang() === 'he';
+  const didYouMean = isHe ? 'האם התכוונת ל...' : 'Did you mean…';
+  dd.innerHTML = [
+    ...exactSlice.map((o, i) =>
+      `<div class="ac-item" onmousedown="acPick(${i})">${esc(o)}</div>`),
+    ...(fuzzy.length ? [
+      `<div style="font-size:11px;color:#a0aec0;padding:5px 14px 2px;font-weight:700;border-top:1px solid #f0f4ff">${didYouMean}</div>`,
+      ...fuzzy.map((o, i) =>
+        `<div class="ac-item" style="color:#6a11cb" onmousedown="acPick(${exactSlice.length + i})">🔍 ${esc(o)}</div>`)
+    ] : []),
+  ].join('');
 }
 function hideAc() {
   el('acDropdown').style.display = 'none';
