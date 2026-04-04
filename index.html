@@ -2123,6 +2123,7 @@ function hwHistListHTML(filtered) {
       <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
       <div class="hw-hist-desc">${esc(h.desc)}</div>
       <span class="hw-hist-ts">${fmtDoneAt(h.doneAt)}</span>
+      ${isParent()?`<button class="del-btn" style="opacity:0.5;font-size:14px" title="בטל סימון" onclick="toggleHW(${h.id})">↩</button>`:''}
       ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">×</button>`:''}
     </div>`).join('')
   : `<div class="empty" style="padding:8px 0">${t('hwHistoryEmpty')}</div>`;
