@@ -100,7 +100,7 @@
     .tab-ed-remove[disabled] { opacity:0.15;cursor:default; }
     .tab-ed-add { padding:7px 14px;border:none;border-radius:10px;background:linear-gradient(135deg,#6a11cb,#f093fb);color:white;font-family:inherit;font-size:12px;font-weight:800;cursor:pointer;flex-shrink:0;transition:opacity 0.15s; }
     .tab-ed-add:hover { opacity:0.9; }
-    .tab-ed-handle { font-size:17px;color:#c8d3e8;cursor:grab;padding:0 10px 0 0;user-select:none;flex-shrink:0;touch-action:none;line-height:1; }
+    .tab-ed-handle { font-size:17px;color:#c8d3e8;cursor:grab;padding:0 10px 0 0;user-select:none;flex-shrink:0;touch-action:none;line-height:1;-webkit-user-select:none; }
     .tab-ed-handle:active { cursor:grabbing;color:#6a11cb; }
     .tab-ed-row { transition:transform 0.12s ease; }
     .tab-ed-row.tab-ed-dragging { background:white;box-shadow:0 6px 24px rgba(106,17,203,0.18);border-radius:12px;z-index:10;position:relative;transition:none !important; }
@@ -2861,6 +2861,8 @@ const _drag = { on:false, timer:null, idx:-1, hoverIdx:-1, y0:0, rowH:48, tops:[
 function tabDragDown(e, idx) {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
   e.stopPropagation();
+  // Capture pointer immediately so all move/up events route here even if finger drifts off the handle
+  e.currentTarget.setPointerCapture(e.pointerId);
   _drag.y0 = e.clientY;
   _drag.timer = setTimeout(() => {
     _drag.on = true;
@@ -2871,15 +2873,14 @@ function tabDragDown(e, idx) {
     // Cache absolute tops at drag-start so moves are stable
     _drag.tops = rows.map(r => r.getBoundingClientRect().top);
     rows[idx]?.classList.add('tab-ed-dragging');
-    el('tabEditorScreen').style.touchAction = 'none';
     if (navigator.vibrate) navigator.vibrate(40);
   }, 350);
 }
 
 function tabDragMove(e) {
   const y = e.clientY;
-  // Cancel long-press if finger/pointer moved too much before timer fired
-  if (_drag.timer && Math.abs(y - _drag.y0) > 8) {
+  // Cancel long-press if finger moved too much — use 15px to tolerate natural tremor on mobile
+  if (_drag.timer && Math.abs(y - _drag.y0) > 15) {
     clearTimeout(_drag.timer); _drag.timer = null;
   }
   if (!_drag.on) return;
@@ -2910,8 +2911,6 @@ function tabDragUp(e) {
   if (_drag.timer) { clearTimeout(_drag.timer); _drag.timer = null; }
   if (!_drag.on) { _drag.on = false; return; }
   _drag.on = false;
-  el('tabEditorScreen').style.touchAction = '';
-
   // Clear all inline transforms before re-render
   el('tabEditorActive').querySelectorAll('.tab-ed-row').forEach(r => {
     r.style.transform = r.style.zIndex = r.style.transition = '';
