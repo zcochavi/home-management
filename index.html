@@ -705,7 +705,8 @@ const STRINGS = {
     gcalConnected:'✓ Google Calendar מחובר',
     gcalLoading:'...טוען',
     gcalSyncing:'🔄 מסנכרן...',
-    gcalConnect:'התחבר', gcalDisconnect:'התנתק', gcalRefresh:'↻',
+    gcalConnect:'התחבר', gcalDisconnect:'התנתק', gcalRefresh:'↻', gcalReconnect:'התחבר מחדש',
+    gcalWasConnected:'📅 Google Calendar — לחץ להתחבר מחדש',
     gcalSetup:'⚠ הדבק Client ID בקוד כדי לאפשר סנכרון',
     dows:['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'],
     months:['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'],
@@ -746,7 +747,8 @@ const STRINGS = {
     gcalConnected:'✓ Google Calendar connected',
     gcalLoading:'Loading Google APIs…',
     gcalSyncing:'🔄 Syncing…',
-    gcalConnect:'Connect', gcalDisconnect:'Disconnect', gcalRefresh:'↻',
+    gcalConnect:'Connect', gcalDisconnect:'Disconnect', gcalRefresh:'↻', gcalReconnect:'Reconnect',
+    gcalWasConnected:'📅 Google Calendar — tap to reconnect',
     gcalSetup:'⚠ Paste your Client ID in the script to enable sync',
     dows:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
     months:['January','February','March','April','May','June','July','August','September','October','November','December'],
@@ -1205,15 +1207,16 @@ function gisLoaded() {
   }
   gcal.gisReady=true; renderGCalBar(); tryAutoConnectGCal();
 }
+function gcalWasConnected() {
+  return !!(S.uid && S.user && localStorage.getItem('familyhub_gcal_' + S.uid + '_' + S.user) === '1');
+}
 function tryAutoConnectGCal() {
-  if (!gcalReady() || !S.uid || !S.user) return;
-  if (gcalConnected() || !gcal.tokenClient) return;
-  if (localStorage.getItem('familyhub_gcal_' + S.uid + '_' + S.user) === '1') {
-    gcal.tokenClient.requestAccessToken({prompt:''});
-  }
+  // Browsers block requestAccessToken() without a user gesture, so we can't silently
+  // restore the token on page load. Instead, renderGCalBar shows a one-tap reconnect button.
+  if (gcalReady()) renderGCalBar();
 }
 async function onGCalToken(resp) {
-  if (resp.error) return;
+  if (resp.error) { renderGCalBar(); return; }
   gcal.accessToken=resp.access_token;
   if (S.uid && S.user) localStorage.setItem('familyhub_gcal_' + S.uid + '_' + S.user, '1');
   await fetchGCalEvents(); renderGCalBar();
@@ -1257,6 +1260,9 @@ function renderGCalBar() {
     st.innerHTML=`<span class="connected">${t('gcalConnected')}</span>`;
     bt.innerHTML=`<button class="gcal-btn gcal-btn-refresh" onclick="fetchGCalEvents()">${t('gcalRefresh')}</button>
                   <button class="gcal-btn gcal-btn-disconnect" onclick="disconnectGCal()">${t('gcalDisconnect')}</button>`;
+  } else if (gcalWasConnected()) {
+    st.innerHTML=`<span style="color:#4285f4;font-weight:800">${t('gcalWasConnected')}</span>`;
+    bt.innerHTML=`<button class="gcal-btn gcal-btn-connect" onclick="connectGCal()">${t('gcalReconnect')}</button>`;
   } else {
     st.textContent=t('gcalSync');
     bt.innerHTML=`<button class="gcal-btn gcal-btn-connect" onclick="connectGCal()">${t('gcalConnect')}</button>`;
@@ -1782,7 +1788,7 @@ function openMenu() {
       <span>${isHe ? 'ניהול המשפחה' : 'Family management'}</span>
     </div>
     <div class="menu-sep"></div>` : '';
-  const gcalItem = gcalConnected() ? `
+  const gcalItem = (gcalConnected() || gcalWasConnected()) ? `
     <div class="menu-item" onclick="closeMenu();disconnectGCal()" style="color:#4285f4">
       <span class="menu-item-icon">📅</span>
       <span>${isHe ? 'נתק Google Calendar' : 'Disconnect Google Calendar'}</span>
