@@ -1860,9 +1860,10 @@ function renderStatic() {
 }
 
 function applyRoleUI() {
-  el('addChoreCard').style.display    = isParent()?'':'none';
-  el('groceryAddForm').style.display  = isParent()?'':'none';
-  el('groceryClearBtn').style.display = isParent()?'':'none';
+  // Kids can add chores for themselves but can't pick assignee
+  el('newChoreAssignee').style.display = isParent()?'':'none';
+  el('groceryAddForm').style.display   = isParent()?'':'none';
+  el('groceryClearBtn').style.display  = isParent()?'':'none';
 }
 
 // ════════════════════════════════════════
@@ -1991,9 +1992,9 @@ function toggleChore(id){
 }
 function deleteChore(id){if(!isParent())return;S.chores=S.chores.filter(x=>x.id!==id);save();renderHome();renderChores();}
 function addChore(){
-  if(!isParent())return;
   const text=el('newChoreText').value.trim();if(!text)return;
-  S.chores.push({id:Date.now(),text,assignee:el('newChoreAssignee').value,priority:el('newChorePriority').value,done:false});
+  const assignee=isParent()?el('newChoreAssignee').value:S.user;
+  S.chores.push({id:Date.now(),text,assignee,priority:el('newChorePriority').value,done:false});
   el('newChoreText').value='';save();renderHome();renderChores();
 }
 
