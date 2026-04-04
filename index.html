@@ -1513,10 +1513,13 @@ function toggleEventPerson(key) {
 //  RENDER ALL + STATIC LABELS
 // ════════════════════════════════════════
 function renderAll() {
+  const sy = window.scrollY;
   renderTabBar(); renderStatic(); renderHeader(); renderHome();
   renderChores(); renderGrocery(); renderHomework();
   renderCalendar(); renderGCalBar(); applyRoleUI();
   if (S.tab === 'community') renderCommunity();
+  // Restore scroll position — Firestore onSnapshot re-renders reset it on mobile
+  if (sy > 0) window.scrollTo(0, sy);
 }
 
 // ════════════════════════════════════════
