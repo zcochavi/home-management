@@ -2190,6 +2190,8 @@ function toggleHW(id){
     // Animate the item out, then mark done
     const row=document.querySelector(`.hw-item[data-hw-id="${id}"]`);
     if(row){
+      row.classList.remove('hw-fly-in-active');
+      void row.offsetWidth; // force reflow so animation restarts clean
       row.classList.add('hw-fly-out');
       setTimeout(()=>{
         h.done=true; h.doneAt=Date.now();
