@@ -1308,24 +1308,17 @@ async function save() {
 // ════════════════════════════════════════
 async function initFCM() {
   if (!FB_CONFIGURED || !fbDb || !S.uid) { console.log('[FCM] skipped: not configured'); return; }
-  console.log('[FCM] SW support:', 'serviceWorker' in navigator, '| Notification support:', 'Notification' in window);
-  if (!('serviceWorker' in navigator) || !('Notification' in window)) { console.log('[FCM] skipped: no SW or Notification API'); return; }
+  if (!('serviceWorker' in navigator) || !('Notification' in window)) return;
   try {
-    console.log('[FCM] registering service worker...');
     const swReg = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
-    console.log('[FCM] SW registered:', swReg.scope);
     fbMessaging = firebase.messaging();
     const permission = await Notification.requestPermission();
-    console.log('[FCM] permission:', permission);
     if (permission !== 'granted') return;
-    console.log('[FCM] getting token...');
     const token = await fbMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
-    console.log('[FCM] token:', token ? token.slice(0,20) + '...' : 'NONE');
     if (token) {
       await fbDb.collection('families').doc(S.uid)
         .collection('fcmTokens').doc(token.slice(0, 20))
         .set({ token, platform: 'web', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-      console.log('[FCM] token saved to Firestore ✓');
     }
     fbMessaging.onMessage(payload => {
       showNotifToast(
@@ -1333,7 +1326,7 @@ async function initFCM() {
         payload.notification?.body  || ''
       );
     });
-  } catch(e) { console.error('[FCM] error:', e); }
+  } catch(e) { console.warn('FCM:', e.message); }
 }
 
 function showNotifToast(title, body) {
