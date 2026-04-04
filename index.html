@@ -394,6 +394,9 @@
     .event-meta  { font-size:11px;color:#a0aec0;font-weight:600;margin-top:1px; }
     .event-person-chip { font-size:11px;font-weight:800;padding:2px 8px;border-radius:12px;background:#f0f4ff;color:#6a11cb;flex-shrink:0; }
     .g-badge { font-size:10px;font-weight:900;background:#4285f4;color:white;border-radius:4px;padding:1px 4px; }
+    .gcal-class-btn { font-size:11px;font-weight:800;background:#e8f0fe;color:#4285f4;border:none;border-radius:6px;padding:3px 7px;cursor:pointer;transition:background 0.15s;flex-shrink:0; }
+    .gcal-class-btn:hover { background:#d2e3fc; }
+    .gcal-class-btn.synced { background:#4285f4;color:white; }
 
     /* Event person multi-picker */
     .event-person-picker { display:flex;flex-wrap:wrap;gap:6px;margin-top:2px; }
@@ -1465,6 +1468,7 @@ function login(name) {
   localStorage.setItem('familyhub_member_' + S.uid, name);
   el('loginScreen').classList.add('hidden');
   el('app').classList.add('visible');
+  loadSyncedClassEvents();
   applyDir(); renderAll(); tryAutoConnectGCal();
 }
 
@@ -2916,6 +2920,27 @@ function addHomework(){
 //  CALENDAR
 // ════════════════════════════════════════
 let _calClassEventsOn = {}; // { [kidName]: bool }
+let _syncedClassEvents = {}; // { [firestoreEventId]: gcalId }
+
+function loadSyncedClassEvents(){
+  try { _syncedClassEvents=JSON.parse(localStorage.getItem('familyhub_class_gcal_'+S.uid)||'{}'); } catch(e){ _syncedClassEvents={}; }
+}
+function saveSyncedClassEvents(){
+  localStorage.setItem('familyhub_class_gcal_'+S.uid, JSON.stringify(_syncedClassEvents));
+}
+async function syncClassEventToGcal(evId, title, date, time){
+  if(!gcalConnected()||!isParent())return;
+  const gcalId=await gcalCreateEvent({title,date,time});
+  if(gcalId){ _syncedClassEvents[evId]=gcalId; saveSyncedClassEvents(); renderCalendar(); }
+}
+async function unsyncClassEvent(evId){
+  const gcalId=_syncedClassEvents[evId];
+  if(!gcalId)return;
+  await gcalDeleteEvent(gcalId);
+  delete _syncedClassEvents[evId];
+  saveSyncedClassEvents();
+  renderCalendar();
+}
 
 function allCalEvents(){
   const syncedIds=new Set(S.events.filter(e=>e.gcalId).map(e=>e.gcalId));
@@ -3009,12 +3034,19 @@ function renderDayPanel(events){
   else html+=evs.map(e=>{
     if(e.classEvent){
       const col=getPersonColor(e.classKid);
+      const synced=!!_syncedClassEvents[e.id];
+      const gcalBtn=gcalConnected()&&isParent()
+        ? synced
+          ? `<button class="gcal-class-btn synced" title="הסר מ-Google Calendar" onclick="unsyncClassEvent('${e.id}')">G ✓</button>`
+          : `<button class="gcal-class-btn" title="הוסף ל-Google Calendar" onclick="syncClassEventToGcal('${e.id}','${esc(e.title).replace(/'/g,"\\'")}','${e.date}','${e.time||''}')">+ G</button>`
+        : '';
       return `<div class="event-item" style="border-inline-start-color:${col}">
         <div class="event-body">
           <div class="event-title">${eventTypeIcon(e.type)} ${esc(e.title)}</div>
           <div class="event-meta">${e.time?'🕐 '+e.time:t('allDay')}${e.note?` · ${esc(e.note)}`:''}</div>
         </div>
         <span class="event-person-chip" style="background:${col}22;color:${col}">🏫 ${esc(e.classKid)}</span>
+        ${gcalBtn}
       </div>`;
     }
     const ps=eventPersons(e);
