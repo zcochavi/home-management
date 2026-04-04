@@ -119,6 +119,7 @@
     .mgmt-member-info { flex:1;min-width:0; }
     .mgmt-member-name { font-size:14px;font-weight:800;color:#1a202c; }
     .mgmt-member-role { font-size:11px;color:#718096;font-weight:700; }
+    .mgmt-school-info { font-size:11px;color:#a0aec0;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
     .mgmt-icon-btn { background:none;border:none;cursor:pointer;opacity:0.45;padding:4px 5px;line-height:1;font-size:15px;transition:opacity 0.15s;flex-shrink:0; }
     .mgmt-icon-btn:hover { opacity:1; }
     .mgmt-icon-btn.red { color:#e53e3e; }
@@ -966,6 +967,7 @@ const JOIN_DOMAIN = 'fh.familyhub';
 let _registering = false;
 
 const EMOJI_OPTIONS = ['👩','👨','👧','👦','🧒','👶','🧑','👵','👴','🧔','🧑‍🍼','👱'];
+const GRADE_OPTIONS = ['','א','ב','ג','ד','ה','ו','ז','ח','ט','י','י"א','י"ב'];
 let _draftMembers = [];
 let _mbRole = 'parent';
 let _mbEmoji = EMOJI_OPTIONS[0];
@@ -1476,6 +1478,7 @@ function renderMgmtMembers() {
       <div class="mgmt-member-info">
         <div class="mgmt-member-name">${esc(m.name)}</div>
         <div class="mgmt-member-role">${m.role==='parent'?'הורה':'ילד/ה'}</div>
+        ${m.role==='kid'&&m.school?.city ? `<div class="mgmt-school-info">🏫 ${esc(m.school.city)}${m.school.name?', '+esc(m.school.name):''}${m.school.grade?', כיתה '+esc(m.school.grade)+(m.school.classNum?'\''+esc(m.school.classNum):''):''}</div>` : ''}
       </div>
       <button class="mgmt-icon-btn purple" onclick="toggleMgmtEdit(${i})" title="ערוך">✏️</button>
       ${canDel ? `<button class="mgmt-icon-btn red" onclick="mgmtRemoveMember('${esc(m.name)}')" title="הסר">🗑</button>` : '<span style="width:26px"></span>'}
@@ -1488,6 +1491,17 @@ function renderMgmtMembers() {
       <div class="mb-role-toggle" style="margin-bottom:12px;width:fit-content">
         <button class="mb-role-btn ${m.role==='parent'?'active':''}" id="mgmtEditRoleParent_${i}" onclick="setMgmtEditRole(${i},'parent')">הורה</button>
         <button class="mb-role-btn ${m.role==='kid'?'active':''}"    id="mgmtEditRoleKid_${i}"    onclick="setMgmtEditRole(${i},'kid')">ילד</button>
+      </div>
+      <div id="mgmtSchoolSection_${i}" style="display:${m.role==='kid'?'block':'none'}">
+        <span class="mgmt-edit-label" style="display:block;margin-bottom:6px">🏫 בית ספר</span>
+        <input class="auth-input" id="mgmtEditCity_${i}" placeholder="עיר" value="${esc(m.school?.city||'')}" style="margin-bottom:6px">
+        <input class="auth-input" id="mgmtEditSchoolName_${i}" placeholder="שם בית הספר" value="${esc(m.school?.name||'')}" style="margin-bottom:6px">
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <select class="auth-input" id="mgmtEditGrade_${i}" style="flex:1">
+            ${GRADE_OPTIONS.map(g=>`<option value="${g}" ${(m.school?.grade||'')==g?'selected':''}>${g?'כיתה '+g:'כיתה...'}</option>`).join('')}
+          </select>
+          <input class="auth-input" id="mgmtEditClassNum_${i}" placeholder="מספר כיתה" value="${esc(m.school?.classNum||'')}" style="flex:1" maxlength="3">
+        </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="auth-btn-main" style="padding:8px 16px;width:auto" onclick="saveMgmtEdit(${i},'${esc(m.name)}')">✓ שמור</button>
@@ -1551,6 +1565,8 @@ function setMgmtEditRole(i, role) {
   el(`mgmtEditPanel_${i}`).dataset.role = role;
   el(`mgmtEditRoleParent_${i}`).classList.toggle('active', role==='parent');
   el(`mgmtEditRoleKid_${i}`).classList.toggle('active',    role==='kid');
+  const sec = el(`mgmtSchoolSection_${i}`);
+  if (sec) sec.style.display = role==='kid' ? 'block' : 'none';
 }
 
 async function mgmtAddMember() {
@@ -1572,9 +1588,17 @@ async function saveMgmtEdit(i, originalName) {
   const newRole  = panel.dataset.role;
   const newEmoji = panel.dataset.emoji;
   if (!newName) return;
+  const school = newRole === 'kid' ? {
+    city:     (el(`mgmtEditCity_${i}`)?.value.trim()       || ''),
+    name:     (el(`mgmtEditSchoolName_${i}`)?.value.trim() || ''),
+    grade:    (el(`mgmtEditGrade_${i}`)?.value             || ''),
+    classNum: (el(`mgmtEditClassNum_${i}`)?.value.trim()   || ''),
+  } : undefined;
   let members = getMembers().map(m => {
     if (m.name !== originalName) return m;
-    return { ...m, name: newName, emoji: newEmoji, role: newRole };
+    const updated = { ...m, name: newName, emoji: newEmoji, role: newRole };
+    if (school !== undefined) updated.school = school; else delete updated.school;
+    return updated;
   });
   // Rename in existing data if member name changed
   if (newName !== originalName) {
