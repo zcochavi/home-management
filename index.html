@@ -74,6 +74,22 @@
     .auth-btns-row { display:flex;align-items:center;justify-content:space-between;margin-top:8px; }
     .auth-btn-back { background:none;border:none;color:#6a11cb;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;padding:0; }
     .auth-btn-create { width:auto !important;padding:10px 20px !important; }
+    .auth-link-btn { background:none;border:none;color:#6a11cb;font-family:inherit;font-size:13px;font-weight:800;cursor:pointer;padding:6px 8px;opacity:0.75;transition:opacity 0.15s;display:block;margin:6px auto 0;text-align:center; }
+    .auth-link-btn:hover { opacity:1; }
+    /* Invite code card */
+    .invite-code-display { font-size:28px;font-weight:900;letter-spacing:5px;color:#6a11cb;text-align:center;padding:14px;background:#f0f4ff;border-radius:14px;margin:10px 0;direction:ltr; }
+    .invite-hint { font-size:12px;color:#718096;font-weight:700;text-align:center;margin-bottom:10px; }
+    .invite-share-btn { width:100%;padding:10px;border:none;border-radius:12px;background:linear-gradient(135deg,#6a11cb,#f093fb);color:white;font-family:inherit;font-size:14px;font-weight:800;cursor:pointer;transition:opacity 0.18s; }
+    .invite-share-btn:hover { opacity:0.9; }
+    /* Hamburger menu */
+    .menu-btn { background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.45);border-radius:20px;color:white;font-size:17px;padding:4px 10px;cursor:pointer;transition:background 0.18s;line-height:1; }
+    .menu-btn:hover { background:rgba(255,255,255,0.32); }
+    #menuOverlay { position:fixed;inset:0;z-index:499;display:none; }
+    #menuDropdown { position:fixed;inset-inline-end:12px;top:54px;background:white;border-radius:16px;padding:6px;box-shadow:0 8px 32px rgba(0,0,0,0.18);z-index:500;min-width:196px;display:none; }
+    .menu-item { display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:10px;cursor:pointer;font-size:14px;font-weight:700;color:#2d3748;transition:background 0.15s;user-select:none; }
+    .menu-item:hover { background:#f0f4ff; }
+    .menu-item-icon { font-size:18px;width:22px;text-align:center;flex-shrink:0; }
+    .menu-sep { height:1px;background:#f0f4ff;margin:4px 6px; }
 
     /* ── Login (member picker) ───────────────── */
     #loginScreen { position:fixed;inset:0;background:linear-gradient(160deg,#6a11cb 0%,#c471ed 50%,#f5576c 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:998;padding:24px; }
@@ -278,7 +294,7 @@
   <div class="auth-card">
     <div class="auth-tabs">
       <div class="auth-tab active" id="authTabSignin" onclick="setAuthMode('signin')">כניסה</div>
-      <div class="auth-tab"        id="authTabSignup" onclick="setAuthMode('signup')">הרשמה</div>
+      <div class="auth-tab"       id="authTabJoin"   onclick="setAuthMode('join')">הצטרף</div>
     </div>
 
     <!-- Sign In -->
@@ -287,6 +303,17 @@
       <input class="auth-input" id="siPwd"   type="password" placeholder="סיסמה"  dir="ltr" autocomplete="current-password">
       <div id="siError" class="auth-error"></div>
       <button class="auth-btn-main" onclick="doSignIn()">כניסה</button>
+      <button class="auth-link-btn" onclick="setAuthMode('signup')">→ צור משפחה חדשה</button>
+    </div>
+
+    <!-- Join with family code -->
+    <div id="joinPanel" style="display:none">
+      <div class="auth-panel-label" style="text-align:center;margin-bottom:14px">הזן את קוד ההצטרפות שקיבלת מההורה</div>
+      <input class="auth-input" id="joinCode" type="text" placeholder="ABC123" maxlength="6" dir="ltr"
+        autocomplete="off" style="text-align:center;font-size:26px;font-weight:900;letter-spacing:6px;text-transform:uppercase"
+        oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')doJoin()">
+      <div id="joinError" class="auth-error"></div>
+      <button class="auth-btn-main" onclick="doJoin()">הצטרף →</button>
     </div>
 
     <!-- Sign Up step 1 -->
@@ -332,6 +359,10 @@
   <button class="login-signout" onclick="authSignOut()">← יציאה מהחשבון</button>
 </div>
 
+<!-- HAMBURGER MENU -->
+<div id="menuOverlay" onclick="closeMenu()"></div>
+<div id="menuDropdown"></div>
+
 <!-- APP -->
 <div id="app">
   <div class="header">
@@ -341,8 +372,7 @@
         <div class="header-greeting" id="headerGreeting"></div>
       </div>
       <div class="header-btns">
-        <button class="lang-btn"   id="langBtn"   onclick="toggleLang()"></button>
-        <button class="switch-btn" id="switchBtn" onclick="switchUser()"></button>
+        <button class="menu-btn" onclick="toggleMenu()">☰</button>
       </div>
     </div>
     <div class="header-date" id="headerDate"></div>
@@ -364,6 +394,12 @@
       <div class="card"><div class="card-title" id="homeChoresTitle"></div><div id="homeTasks"></div></div>
       <div class="card"><div class="card-title" id="starChartTitle"></div><div class="star-chart" id="starChart"></div></div>
       <div class="card"><div class="card-title" id="hwDueSoonTitle"></div><div id="hwSummary"></div></div>
+      <div class="card" id="inviteCard" style="display:none">
+        <div class="card-title">🔑 קוד הצטרפות</div>
+        <div class="invite-code-display" id="inviteCodeDisplay"></div>
+        <div class="invite-hint">שתף את הקוד עם בני המשפחה כדי שיוכלו להתחבר</div>
+        <button class="invite-share-btn" id="shareBtn" onclick="shareInvite()">📤 שתף</button>
+      </div>
     </div>
 
     <!-- CHORES -->
@@ -644,10 +680,20 @@ const gcalConnected = () => !!gcal.accessToken;
 // ════════════════════════════════════════
 //  AUTH SCREEN
 // ════════════════════════════════════════
+const JOIN_DOMAIN = 'fh.familyhub';
+let _registering = false;
+
 const EMOJI_OPTIONS = ['👩','👨','👧','👦','🧒','👶','🧑','👵','👴','🧔','🧑‍🍼','👱'];
 let _draftMembers = [];
 let _mbRole = 'parent';
 let _mbEmoji = EMOJI_OPTIONS[0];
+
+function generateFamilyCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
 
 function initEmojiRow() {
   el('emojiRow').innerHTML = EMOJI_OPTIONS.map(e =>
@@ -689,9 +735,10 @@ function setAuthMode(mode) {
   el('signinPanel').style.display   = mode==='signin' ? '' : 'none';
   el('signupPanel1').style.display  = mode==='signup' ? '' : 'none';
   el('signupPanel2').style.display  = 'none';
-  el('authTabSignin').classList.toggle('active', mode==='signin');
-  el('authTabSignup').classList.toggle('active', mode==='signup');
-  ['siError','su1Error','su2Error'].forEach(id => { const e=el(id); if(e) e.textContent=''; });
+  el('joinPanel').style.display     = mode==='join'   ? '' : 'none';
+  el('authTabSignin').classList.toggle('active', mode==='signin' || mode==='signup');
+  el('authTabJoin').classList.toggle('active',   mode==='join');
+  ['siError','su1Error','su2Error','joinError'].forEach(id => { const e=el(id); if(e) e.textContent=''; });
 }
 
 function signupNext() {
@@ -738,28 +785,73 @@ async function doSignUp() {
   const email      = el('suEmail').value.trim();
   const pwd        = el('suPwd').value;
   setAuthLoading(true);
+  _registering = true;
   try {
-    const cred = await fbAuth.createUserWithEmailAndPassword(email, pwd);
-    const uid  = cred.user.uid;
-    // Migrate existing localStorage data if present
+    // 1. Create owner account (Firebase auto-signs in as owner)
+    const ownerCred = await fbAuth.createUserWithEmailAndPassword(email, pwd);
+    const ownerUid  = ownerCred.user.uid;
+    // 2. Generate family code + create invite account via secondary app instance
+    const code = generateFamilyCode();
+    const inviteEmail = code + '@' + JOIN_DOMAIN;
+    const secondaryApp = firebase.initializeApp(FIREBASE_CONFIG, 'inv_' + Date.now());
+    try {
+      await secondaryApp.auth().createUserWithEmailAndPassword(inviteEmail, code);
+    } finally {
+      await secondaryApp.delete();
+    }
+    // 3. Write family doc + join code lookup
     const localRaw = localStorage.getItem('familyhub_v3');
     let init = { chores:[], grocery:[], homework:[], events:[], stars:{} };
     if (localRaw) { try { Object.assign(init, JSON.parse(localRaw)); } catch(e){} }
-    await fbDb.collection('families').doc(uid).set({
-      familyName, email, members,
+    await fbDb.collection('families').doc(ownerUid).set({
+      familyName, email, members, familyCode: code,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       chores: init.chores||[], grocery: init.grocery||[],
       homework: init.homework||[], events: init.events||[], stars: init.stars||{},
     });
+    await fbDb.collection('joinCodes').doc(code).set({ ownerUid });
+    _registering = false;
+    // 4. Manually kick off subscription (onAuthStateChanged was suppressed)
+    S.uid = ownerUid;
+    el('authScreen').classList.add('hidden');
+    subscribeToFamily(ownerUid);
   } catch(e) {
+    _registering = false;
     setAuthLoading(false);
     el('su2Error').textContent = getAuthError(e.code);
   }
 }
 
+async function doJoin() {
+  if (!FB_CONFIGURED) return;
+  const code = el('joinCode').value.trim().toUpperCase();
+  el('joinError').textContent = '';
+  if (code.length < 4) { el('joinError').textContent = 'הזן קוד הצטרפות תקין'; return; }
+  setAuthLoading(true);
+  try {
+    // Look up code → ownerUid
+    const snap = await fbDb.collection('joinCodes').doc(code).get();
+    if (!snap.exists) {
+      setAuthLoading(false);
+      el('joinError').textContent = 'קוד לא נמצא. בדוק שהעתקת נכון.';
+      return;
+    }
+    const ownerUid = snap.data().ownerUid;
+    // Sign in as the invite Firebase account
+    const inviteEmail = code + '@' + JOIN_DOMAIN;
+    const cred = await fbAuth.signInWithEmailAndPassword(inviteEmail, code);
+    // Map invite uid → owner uid so onAuthStateChanged knows which family to load
+    localStorage.setItem('familyhub_family_uid_' + cred.user.uid, ownerUid);
+    // onAuthStateChanged will fire and call subscribeToFamily(ownerUid)
+  } catch(e) {
+    setAuthLoading(false);
+    el('joinError').textContent = getAuthError(e.code);
+  }
+}
+
 function setAuthLoading(on) {
   el('authLoadingOverlay').style.display = on ? '' : 'none';
-  ['signinPanel','signupPanel1','signupPanel2'].forEach(id => {
+  ['signinPanel','signupPanel1','signupPanel2','joinPanel'].forEach(id => {
     const e = el(id); if (e) e.style.pointerEvents = on ? 'none' : '';
   });
 }
@@ -780,6 +872,8 @@ function getAuthError(code) {
 
 function authSignOut() {
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
+  const firebaseUid = fbAuth?.currentUser?.uid;
+  if (firebaseUid) localStorage.removeItem('familyhub_family_uid_' + firebaseUid);
   S.user = null; S.uid = null; familyData = null;
   if (fbAuth) fbAuth.signOut();
   el('loginScreen').classList.add('hidden');
@@ -787,6 +881,21 @@ function authSignOut() {
   el('authScreen').classList.remove('hidden');
   setAuthMode('signin');
   setAuthLoading(false);
+}
+
+function shareInvite() {
+  const code = familyData?.familyCode;
+  if (!code) return;
+  const url  = location.origin + location.pathname + '?join=' + code;
+  const text = `הצטרפ/י למשפחת ${familyData?.familyName || ''} ב-FamilyHub!\nקוד הצטרפות: ${code}\n${url}`;
+  if (navigator.share) {
+    navigator.share({ title: 'FamilyHub', text });
+  } else {
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = el('shareBtn');
+      if (btn) { btn.textContent = '✓ הועתק!'; setTimeout(() => { if(el('shareBtn')) el('shareBtn').textContent = '📤 שתף'; }, 2200); }
+    }).catch(() => prompt('העתק את הקוד:', text));
+  }
 }
 
 // ════════════════════════════════════════
@@ -1022,6 +1131,39 @@ function renderAll() {
   renderCalendar(); renderGCalBar(); applyRoleUI();
 }
 
+// ════════════════════════════════════════
+//  HAMBURGER MENU
+// ════════════════════════════════════════
+let _menuOpen = false;
+function toggleMenu() { _menuOpen ? closeMenu() : openMenu(); }
+function openMenu() {
+  _menuOpen = true;
+  const lang = getLang();
+  const isHe = lang === 'he';
+  el('menuDropdown').innerHTML = `
+    <div class="menu-item" onclick="closeMenu();toggleLang()">
+      <span class="menu-item-icon">🌐</span>
+      <span>${isHe ? 'Switch to English' : 'עבור לעברית'}</span>
+    </div>
+    <div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();switchUser()">
+      <span class="menu-item-icon">👤</span>
+      <span>${isHe ? 'החלף משתמש' : 'Switch member'}</span>
+    </div>
+    <div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();authSignOut()" style="color:#e53e3e">
+      <span class="menu-item-icon">🚪</span>
+      <span>${isHe ? 'יציאה מהחשבון' : 'Sign out'}</span>
+    </div>`;
+  el('menuDropdown').style.display = 'block';
+  el('menuOverlay').style.display  = 'block';
+}
+function closeMenu() {
+  _menuOpen = false;
+  el('menuDropdown').style.display = 'none';
+  el('menuOverlay').style.display  = 'none';
+}
+
 function renderStatic() {
   document.querySelectorAll('.tab-label').forEach((e,i) => e.textContent = t('tabs')[i]||'');
   const lb=el('langBtn');   if(lb) lb.textContent = t('langToggle');
@@ -1109,6 +1251,17 @@ function renderHome() {
     : t('allDone');
 
   renderStarChart();
+
+  // Invite card — visible only for parents
+  const inviteCard = el('inviteCard');
+  if (inviteCard) {
+    if (isParent() && familyData?.familyCode) {
+      inviteCard.style.display = '';
+      el('inviteCodeDisplay').textContent = familyData.familyCode;
+    } else {
+      inviteCard.style.display = 'none';
+    }
+  }
 
   let hw = S.homework.filter(h=>!h.done);
   if (isKid()) hw = hw.filter(h=>h.child===S.user);
@@ -1348,15 +1501,23 @@ if (!FB_CONFIGURED) {
   el('loadingScreen').querySelector('.loading-emoji').textContent = '⚙️';
 } else {
   fbAuth.onAuthStateChanged(user => {
+    if (_registering) return;
     if (user) {
-      S.uid = user.uid;
+      const familyUid = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
+      S.uid = familyUid;
       el('authScreen').classList.add('hidden');
-      subscribeToFamily(user.uid);
+      subscribeToFamily(familyUid);
     } else {
       S.uid = null; familyData = null;
       el('loadingScreen').classList.add('hidden');
       el('authScreen').classList.remove('hidden');
-      setAuthMode('signin');
+      const joinParam = new URLSearchParams(location.search).get('join');
+      if (joinParam) {
+        setAuthMode('join');
+        el('joinCode').value = joinParam.toUpperCase();
+      } else {
+        setAuthMode('signin');
+      }
     }
   });
 }
