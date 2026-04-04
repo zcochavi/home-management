@@ -120,6 +120,18 @@
     .mgmt-member-name { font-size:14px;font-weight:800;color:#1a202c; }
     .mgmt-member-role { font-size:11px;color:#718096;font-weight:700; }
     .mgmt-school-info { font-size:11px;color:#a0aec0;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+    /* Community */
+    .comm-kid-block { padding:12px 0;border-bottom:1px solid #f3f6ff; }
+    .comm-kid-block:last-child { border-bottom:none; }
+    .comm-kid-header { display:flex;align-items:center;gap:10px;margin-bottom:6px; }
+    .comm-kid-info { flex:1;min-width:0; }
+    .comm-kid-name { font-size:14px;font-weight:800;color:#1a202c; }
+    .comm-class-label { font-size:11px;color:#718096;font-weight:600;margin-top:1px; }
+    .comm-count { background:#ebf4ff;color:#2b6cb0;font-size:12px;font-weight:800;padding:3px 10px;border-radius:20px;white-space:nowrap; }
+    .comm-mate { display:flex;align-items:center;gap:8px;padding:6px 0 6px 6px;border-bottom:1px solid #f8faff; }
+    .comm-mate:last-child { border-bottom:none; }
+    .comm-mate-family { font-size:13px;font-weight:700;color:#2d3748;flex:1; }
+    .comm-mate-kid { font-size:12px;color:#718096;font-weight:600; }
     .mgmt-icon-btn { background:none;border:none;cursor:pointer;opacity:0.45;padding:4px 5px;line-height:1;font-size:15px;transition:opacity 0.15s;flex-shrink:0; }
     .mgmt-icon-btn:hover { opacity:1; }
     .mgmt-icon-btn.red { color:#e53e3e; }
@@ -534,6 +546,13 @@
           <button class="mgmt-add-btn" onclick="mgmtAddSubject()">+</button>
         </div>
       </div>
+    </div>
+
+    <!-- ── School Community ── -->
+    <div class="card">
+      <div class="card-title">🏫 קהילת הכיתה</div>
+      <div class="mgmt-section-hint">ילדים מאותה כיתה שמשתמשים ב-FamilyHub</div>
+      <div id="mgmtCommunityList"></div>
     </div>
 
   </div>
@@ -1461,6 +1480,7 @@ function renderMgmt() {
   renderMgmtMembers();
   renderMgmtCats();
   renderMgmtSubjects();
+  renderMgmtCommunity();
 }
 
 // ── Members ──────────────────────────────
@@ -1588,6 +1608,8 @@ async function saveMgmtEdit(i, originalName) {
   const newRole  = panel.dataset.role;
   const newEmoji = panel.dataset.emoji;
   if (!newName) return;
+  const oldMember = getMembers().find(m => m.name === originalName);
+  const oldSchool = oldMember?.school;
   const school = newRole === 'kid' ? {
     city:     (el(`mgmtEditCity_${i}`)?.value.trim()       || ''),
     name:     (el(`mgmtEditSchoolName_${i}`)?.value.trim() || ''),
@@ -1615,12 +1637,17 @@ async function saveMgmtEdit(i, originalName) {
     members, chores:S.chores, homework:S.homework, stars:S.stars,
   });
   panel.classList.remove('open');
+  // Sync school class index (fire-and-forget, don't block the UI)
+  syncKidClass(newName, school, oldSchool, newRole).then(() => renderMgmtCommunity());
   renderMgmtMembers();
   renderAll();
 }
 
 async function mgmtRemoveMember(name) {
   if (!confirm(`הסר את ${name}?`)) return;
+  const removedMember = getMembers().find(m => m.name === name);
+  if (removedMember?.role === 'kid' && removedMember?.school)
+    unregisterFromClass(name, removedMember.school); // fire-and-forget
   const members = getMembers().filter(m => m.name !== name);
   S.chores   = S.chores.filter(c   => c.assignee !== name);
   S.homework = S.homework.filter(h => h.child    !== name);
@@ -1630,6 +1657,91 @@ async function mgmtRemoveMember(name) {
   await fbDb.collection('families').doc(S.uid).update({ members, chores:S.chores, homework:S.homework, stars:S.stars });
   renderMgmtMembers();
   renderAll();
+}
+
+// ── School Community ─────────────────────
+function classIdFor(school) {
+  if (!school?.city?.trim() || !school?.grade) return null;
+  const n = s => (s||'').trim().replace(/\//g,'-').replace(/~/g,'');
+  return [n(school.city), n(school.name||''), school.grade, school.classNum||''].join('~~');
+}
+function classMemberId(familyUid, kidName) {
+  return familyUid + '__' + kidName.replace(/[^a-z0-9א-תA-Z\u0590-\u05FF]/gi,'_');
+}
+
+async function registerInClass(kidName, school) {
+  const classId = classIdFor(school);
+  if (!classId || !S.uid) return;
+  await fbDb.collection('schoolClasses').doc(classId).set(
+    { city:school.city, schoolName:school.name||'', grade:school.grade, classNum:school.classNum||'' },
+    { merge: true }
+  );
+  await fbDb.collection('schoolClasses').doc(classId)
+    .collection('members').doc(classMemberId(S.uid, kidName)).set({
+      kidName, familyUid: S.uid,
+      familyName: familyData?.familyName || '',
+      addedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+}
+
+async function unregisterFromClass(kidName, school) {
+  const classId = classIdFor(school);
+  if (!classId || !S.uid) return;
+  await fbDb.collection('schoolClasses').doc(classId)
+    .collection('members').doc(classMemberId(S.uid, kidName)).delete();
+}
+
+async function syncKidClass(kidName, newSchool, oldSchool, newRole) {
+  const oldId = classIdFor(oldSchool);
+  const newId = classIdFor(newSchool);
+  if (oldId && oldId !== newId) await unregisterFromClass(kidName, oldSchool);
+  if (newRole === 'kid' && newId)  await registerInClass(kidName, newSchool);
+}
+
+async function fetchClassmates(school) {
+  const classId = classIdFor(school);
+  if (!classId) return [];
+  try {
+    const snap = await fbDb.collection('schoolClasses').doc(classId).collection('members').get();
+    return snap.docs.map(d => d.data()).filter(m => m.familyUid !== S.uid);
+  } catch(e) { console.error('fetchClassmates:', e); return []; }
+}
+
+async function renderMgmtCommunity() {
+  const container = el('mgmtCommunityList');
+  if (!container) return;
+  const kidsWithSchool = getKids()
+    .map(name => getMembers().find(m => m.name === name))
+    .filter(m => m?.school?.city && m?.school?.grade);
+  if (!kidsWithSchool.length) {
+    container.innerHTML = `<div class="empty">יש לשייך ילדים לבית ספר כדי לראות קהילה</div>`;
+    return;
+  }
+  container.innerHTML = `<div class="empty" style="padding:8px">טוען...</div>`;
+  const results = await Promise.all(kidsWithSchool.map(async kid => ({
+    kid, classmates: await fetchClassmates(kid.school)
+  })));
+  container.innerHTML = results.map(({ kid, classmates }) => {
+    const s = kid.school;
+    const classLabel = [s.city, s.name, s.grade ? 'כיתה '+s.grade+(s.classNum?'\''+s.classNum:'') : ''].filter(Boolean).join(', ');
+    return `<div class="comm-kid-block">
+      <div class="comm-kid-header">
+        <div style="width:34px;height:34px;border-radius:50%;overflow:hidden;background:#f0f4ff;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">${getAvatar(kid.name)}</div>
+        <div class="comm-kid-info">
+          <div class="comm-kid-name">${esc(kid.name)}</div>
+          <div class="comm-class-label">🏫 ${esc(classLabel)}</div>
+        </div>
+        <span class="comm-count">${classmates.length} ${classmates.length===1?'משפחה':'משפחות'}</span>
+      </div>
+      ${classmates.length ? classmates.map(c=>`
+        <div class="comm-mate">
+          <span style="font-size:18px">👨‍👩‍👧</span>
+          <span class="comm-mate-family">${esc(c.familyName||'משפחה')}</span>
+          <span class="comm-mate-kid">${esc(c.kidName)}</span>
+        </div>`).join('')
+      : `<div style="font-size:12px;color:#a0aec0;padding:4px 0">אין עדיין ילדים מהכיתה ב-FamilyHub</div>`}
+    </div>`;
+  }).join('');
 }
 
 // ── Grocery Categories ───────────────────
