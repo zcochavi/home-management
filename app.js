@@ -679,8 +679,20 @@ function getAuthError(code) {
   return m[code] || 'שגיאה: ' + code;
 }
 
-function stopPresence() {
+let _sessionRef      = null;
+let _sessionStartMs  = null;
+
+async function stopPresence() {
   if (_presenceInterval) { clearInterval(_presenceInterval); _presenceInterval = null; }
+  // Close open session
+  if (_sessionRef && _sessionStartMs && fbDb) {
+    const durationMs = Date.now() - _sessionStartMs;
+    _sessionRef.update({
+      endTime:    firebase.firestore.FieldValue.serverTimestamp(),
+      durationMs,
+    }).catch(() => {});
+    _sessionRef = null; _sessionStartMs = null;
+  }
   if (S.uid && S.user && fbDb) {
     const docId = S.uid + '_' + S.user;
     return fbDb.collection('presence').doc(docId)
@@ -691,7 +703,7 @@ function stopPresence() {
 }
 
 async function initPresence() {
-  stopPresence();
+  await stopPresence();
   if (!S.uid || !S.user || !fbDb) return;
   const docId = S.uid + '_' + S.user;
   const ref   = fbDb.collection('presence').doc(docId);
@@ -705,6 +717,16 @@ async function initPresence() {
   }, { merge: true }).catch(e => console.warn('[presence] write failed:', e.code, e.message));
   write();
   _presenceInterval = setInterval(write, 2 * 60 * 1000);
+  // Start session
+  _sessionStartMs = Date.now();
+  _sessionRef = fbDb.collection('sessions').doc();
+  _sessionRef.set({
+    familyUid:  S.uid,
+    memberName: S.user,
+    familyName: familyData?.familyName || '',
+    role:       isParent() ? 'parent' : 'kid',
+    startTime:  firebase.firestore.FieldValue.serverTimestamp(),
+  }).catch(e => { console.warn('[session] write failed:', e.code, e.message); _sessionRef = null; _sessionStartMs = null; });
 }
 
 async function authSignOut() {
@@ -2241,6 +2263,30 @@ async function nudgePendingNow(type) {
   } catch(e) { alert('שגיאה: ' + e.message); }
 }
 
+async function renderLeaderboardSettings() {
+  const snap = await fbDb.collection('appConfig').doc('leaderboard').get().catch(() => null);
+  const days = snap?.exists ? (snap.data().days || 30) : 30;
+  el('adminLeaderboardSettings').innerHTML = `
+    <div class="card" style="margin-bottom:12px;padding:12px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:10px">🏆 לוח המובילים</div>
+      <label style="font-size:13px;display:flex;align-items:center;gap:8px">
+        מדידת פעילות ב-
+        <input type="number" min="1" max="365" value="${days}" id="leaderboardDaysInput"
+          style="width:60px;padding:4px 8px;border:1px solid #d0d9e8;border-radius:6px;font-family:inherit">
+        הימים האחרונים
+      </label>
+      <button class="admin-btn" onclick="saveLeaderboardSettings()" style="margin-top:10px;padding:8px;font-size:13px;width:100%">💾 שמור</button>
+    </div>`;
+}
+
+async function saveLeaderboardSettings() {
+  const days = parseInt(el('leaderboardDaysInput')?.value) || 30;
+  try {
+    await fbDb.collection('appConfig').doc('leaderboard').set({ days }, { merge: true });
+    alert('הגדרות נשמרו');
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
 function renderMaintenanceTools() {
   el('adminMaintenance').innerHTML = `
     <div class="card" style="margin-bottom:12px;padding:12px">
@@ -2383,6 +2429,7 @@ async function renderAdminPanel() {
       : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין היסטוריה עדיין</div>';
 
     await renderNotifSettings();
+    await renderLeaderboardSettings();
     renderMaintenanceTools();
   } catch(e) {
     console.error('renderAdminPanel:', e);
@@ -3613,6 +3660,15 @@ function _destroyCharts() {
   _analyticsCharts = {};
 }
 
+function _fmtDuration(ms) {
+  if (!ms) return '0 דק׳';
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `${mins} דק׳`;
+  const hours = Math.floor(mins / 60);
+  const rem   = mins % 60;
+  return rem ? `${hours}ש׳ ${rem}ד׳` : `${hours} שע׳`;
+}
+
 function _presenceTimeAgo(ms) {
   if (!ms) return 'מעולם';
   const diff = Date.now() - ms;
@@ -3803,6 +3859,30 @@ function _renderAnalyticsUI(container, d) {
         oninput="_renderPresenceGroups()" />
       <div id="presenceGrid" class="presence-grid">
         <div style="color:#a0aec0;font-size:12px;padding:8px">טוען...</div>
+      </div>
+    </div>
+
+    <div class="analytics-section">
+      <div class="analytics-section-title">🏆 לוח מובילים <span style="font-size:10px;color:#a0aec0;font-weight:700;margin-right:auto">${d.leaderboardDays} ימים אחרונים</span></div>
+      <div class="leaderboard-cards">
+        <div class="leaderboard-card">
+          <div class="leaderboard-icon">🏙️</div>
+          <div class="leaderboard-title">עיר מובילה</div>
+          <div class="leaderboard-value">${d.topCity ? esc(d.topCity[0]) : '—'}</div>
+          <div class="leaderboard-sub">${d.topCity ? d.topCity[1] + ' ילדים' : ''}</div>
+        </div>
+        <div class="leaderboard-card">
+          <div class="leaderboard-icon">🏫</div>
+          <div class="leaderboard-title">בית ספר מוביל</div>
+          <div class="leaderboard-value">${d.topSchool ? esc(d.topSchool[0]) : '—'}</div>
+          <div class="leaderboard-sub">${d.topSchool ? d.topSchool[1] + ' ילדים' : ''}</div>
+        </div>
+        <div class="leaderboard-card">
+          <div class="leaderboard-icon">⭐</div>
+          <div class="leaderboard-title">משתמש פעיל ביותר</div>
+          <div class="leaderboard-value">${d.topUser ? esc(d.topUser.memberName) : '—'}</div>
+          <div class="leaderboard-sub">${d.topUser ? _fmtDuration(d.topUser.durationMs) + ' · ' + esc(d.topUser.familyName) : ''}</div>
+        </div>
       </div>
     </div>
 

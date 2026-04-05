@@ -439,6 +439,12 @@
     .chart-wrap { position:relative;height:150px; }
     .analytics-log-row { display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid #f0f4ff;font-size:12px; }
     /* Presence */
+    .leaderboard-cards { display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:2px; }
+    .leaderboard-card { background:#f8f9ff;border-radius:12px;padding:12px 8px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px; }
+    .leaderboard-icon { font-size:20px; }
+    .leaderboard-title { font-size:10px;font-weight:800;color:#718096;text-transform:uppercase;letter-spacing:.3px; }
+    .leaderboard-value { font-size:13px;font-weight:900;color:#1a202c;margin-top:2px;line-height:1.2; }
+    .leaderboard-sub { font-size:10px;font-weight:700;color:#a0aec0; }
     .presence-search { width:100%;box-sizing:border-box;padding:7px 12px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:13px;font-family:inherit;margin-bottom:8px;outline:none;direction:rtl; }
     .presence-search:focus { border-color:#667eea; }
     .presence-grid { display:flex;flex-direction:column;gap:6px; }
