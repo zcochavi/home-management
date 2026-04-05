@@ -683,6 +683,27 @@ function getAuthError(code) {
 let _sessionRef      = null;
 let _sessionStartMs  = null;
 
+// ── Toast (temporary on-screen info, no bell) ────────────────
+function showToast(msg, type = 'info') {
+  let wrap = el('toastWrap');
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.id = 'toastWrap';
+    wrap.style.cssText = 'position:fixed;bottom:24px;right:50%;transform:translateX(50%);z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;width:90%;max-width:360px';
+    document.body.appendChild(wrap);
+  }
+  const t = document.createElement('div');
+  const bg = type === 'error' ? '#c53030' : type === 'success' ? '#276749' : '#4a6fa5';
+  t.style.cssText = `background:${bg};color:#fff;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.18);opacity:0;transition:opacity .25s;text-align:center;pointer-events:none`;
+  t.textContent = msg;
+  wrap.appendChild(t);
+  requestAnimationFrame(() => { t.style.opacity = '1'; });
+  setTimeout(() => {
+    t.style.opacity = '0';
+    setTimeout(() => t.remove(), 280);
+  }, 4000);
+}
+
 // ── Notification system (banners + message center) ───────────
 let _allNotifs = []; // cached for message center
 
@@ -1666,6 +1687,27 @@ async function requestNewSchool(kidName, school, requestType) {
   });
   if (familyData) familyData.members = members;
   await fbDb.collection('families').doc(S.uid).update({ members });
+
+  // Notify admin via their message center
+  if (ADMIN_UID && fbDb) {
+    const whatPending = requestType === 'city'
+      ? `עיר ובית ספר חדשים (${school.city} / ${school.name})`
+      : `בית ספר חדש (${school.name} בעיר ${school.city})`;
+    const requesterName = familyData?.familyName || S.user || '';
+    fbDb.collection('families').doc(ADMIN_UID).collection('notifications').add({
+      type: 'school_pending',
+      message: `בקשה חדשה לאישור ${whatPending} הוגשה על ידי ${requesterName} עבור ${kidName}`,
+      dismissed: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    }).catch(() => {});
+  }
+
+  // Show inline toast to the parent (not a bell notification)
+  const toastMsg = requestType === 'city'
+    ? `הבקשה לאישור עיר ובית ספר חדשים נשלחה — נודיע לך בהקדם 👍`
+    : `הבקשה לאישור בית ספר חדש נשלחה — נודיע לך בהקדם 👍`;
+  showToast(toastMsg, 'info');
+
   return pendingId;
 }
 
