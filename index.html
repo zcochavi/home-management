@@ -1477,17 +1477,25 @@ async function save() {
 // ════════════════════════════════════════
 async function initFCM() {
   if (!FB_CONFIGURED || !fbDb || !S.uid) { console.log('[FCM] skipped: not configured'); return; }
-  if (!('serviceWorker' in navigator) || !('Notification' in window)) return;
+  if (!('serviceWorker' in navigator) || !('Notification' in window) || !('PushManager' in window)) return;
+  if (typeof firebase.messaging.isSupported === 'function' && !firebase.messaging.isSupported()) {
+    console.log('[FCM] not supported in this browser'); return;
+  }
   try {
-    const swReg = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+    await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+    // Wait for SW to be fully active before subscribing — required in Firefox
+    const swReg = await navigator.serviceWorker.ready;
     fbMessaging = firebase.messaging();
     const permission = await Notification.requestPermission();
-    if (permission !== 'granted') return;
+    if (permission !== 'granted') { console.log('[FCM] permission not granted'); return; }
     const token = await fbMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
     if (token) {
+      const ua = navigator.userAgent;
+      const platform = ua.includes('Firefox') ? 'firefox' : ua.includes('Edg') ? 'edge' : 'chrome';
       await fbDb.collection('families').doc(S.uid)
         .collection('fcmTokens').doc(token.slice(0, 20))
-        .set({ token, platform: 'web', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        .set({ token, platform, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+      console.log('[FCM] registered on', platform);
     }
     fbMessaging.onMessage(payload => {
       showNotifToast(
