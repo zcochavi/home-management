@@ -3400,6 +3400,11 @@ function openMenu(btn) {
       <span class="menu-item-icon">🗂</span>
       <span>${isHe ? 'התאמת לשוניות' : 'Customize tabs'}</span>
     </div>
+    ${isAdmin() ? `<div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();openAdminPanel()">
+      <span class="menu-item-icon">🔧</span>
+      <span>${isHe ? 'ניהול מערכת' : 'Admin panel'}</span>
+    </div>` : ''}
     <div class="menu-sep"></div>
     <div class="menu-item" onclick="closeMenu();toggleLang()">
       <span class="menu-item-icon">🌐</span>
