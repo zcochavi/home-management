@@ -1175,6 +1175,7 @@ const gcalConnected = () => !!gcal.accessToken;
 // ════════════════════════════════════════
 const JOIN_DOMAIN = 'fh.familyhub';
 let _registering = false;
+let _joining = false;
 
 const EMOJI_OPTIONS = ['👩','👨','👧','👦','🧒','👶','🧑','👵','👴','🧔','🧑‍🍼','👱'];
 const GRADE_OPTIONS = ['','א','ב','ג','ד','ה','ו','ז','ח','ט','י','י"א','י"ב'];
@@ -1368,28 +1369,34 @@ async function doJoin() {
   el('joinError').textContent = '';
   if (code.length < 4) { el('joinError').textContent = 'הזן קוד הצטרפות תקין'; return; }
   setAuthLoading(true);
+  _joining = true;
   try {
     // Sign in as the invite account first (it was pre-created during registration)
-    // We must be authenticated before Firestore rules allow reading joinCodes
+    // _joining suppresses onAuthStateChanged until we've set up localStorage correctly
     const inviteEmail = code + '@' + JOIN_DOMAIN;
     const cred = await fbAuth.signInWithEmailAndPassword(inviteEmail, code);
     // Now authenticated — look up ownerUid
     const snap = await fbDb.collection('joinCodes').doc(code).get();
     if (!snap.exists) {
+      _joining = false;
       setAuthLoading(false);
       el('joinError').textContent = 'קוד לא נמצא. בדוק שהעתקת נכון.';
       return;
     }
     const ownerUid = snap.data().ownerUid;
-    // Store mapping and subscribe to the correct family
+    // Store mapping before subscribing
     localStorage.setItem('familyhub_family_uid_' + cred.user.uid, ownerUid);
     const memberName = snap.data().memberName;
     if (memberName) {
       localStorage.setItem('familyhub_locked_member_' + cred.user.uid, memberName);
     }
     S.uid = ownerUid;
+    S.lockedMember = memberName || null;
+    _joining = false;
+    el('authScreen').classList.add('hidden');
     subscribeToFamily(ownerUid);
   } catch(e) {
+    _joining = false;
     setAuthLoading(false);
     const invalidCode = ['auth/user-not-found','auth/wrong-password','auth/invalid-credential'].includes(e.code);
     el('joinError').textContent = invalidCode ? 'קוד לא נמצא. בדוק שהעתקת נכון.' : getAuthError(e.code);
@@ -1553,7 +1560,13 @@ function showNotifToast(title, body) {
 function subscribeToFamily(uid) {
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
   fbUnsubscribe = fbDb.collection('families').doc(uid).onSnapshot(snap => {
-    if (!snap.exists) return;
+    if (!snap.exists) {
+      // Family doc missing — mapping is stale, sign out and return to auth
+      console.warn('subscribeToFamily: doc not found for', uid);
+      el('loadingScreen').classList.add('hidden');
+      authSignOut();
+      return;
+    }
     const d = snap.data();
     familyData = d;
     S.chores   = d.chores   || [];
@@ -1562,7 +1575,11 @@ function subscribeToFamily(uid) {
     S.events   = d.events   || [];
     S.stars    = d.stars    || {};
     afterLoad();
-  }, err => console.error('Firestore error:', err));
+  }, err => {
+    console.error('Firestore error:', err);
+    el('loadingScreen').classList.add('hidden');
+    el('authScreen').classList.remove('hidden');
+  });
 }
 
 function afterLoad() {
@@ -4404,7 +4421,7 @@ if (!FB_CONFIGURED) {
   el('loadingScreen').querySelector('.loading-emoji').textContent = '⚙️';
 } else {
   fbAuth.onAuthStateChanged(user => {
-    if (_registering) return;
+    if (_registering || _joining) return;
     if (user) {
       const familyUid = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
       S.uid = familyUid;
