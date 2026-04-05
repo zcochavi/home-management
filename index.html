@@ -3390,6 +3390,12 @@ function openMenu(btn) {
       <span>${isHe ? 'נתק Google Calendar' : 'Disconnect Google Calendar'}</span>
     </div>
     <div class="menu-sep"></div>` : '';
+  const adminItem = isAdmin() ? `
+    <div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();openAdminPanel()">
+      <span class="menu-item-icon">🔧</span>
+      <span>${isHe ? 'ניהול מערכת' : 'Admin panel'}</span>
+    </div>` : '';
   el('menuDropdown').innerHTML = parentItems + gcalItem + `
     <div class="menu-item" onclick="closeMenu();openPhotoModal()">
       <span class="menu-item-icon">📷</span>
@@ -3399,12 +3405,7 @@ function openMenu(btn) {
     <div class="menu-item" onclick="closeMenu();openTabEditor()">
       <span class="menu-item-icon">🗂</span>
       <span>${isHe ? 'התאמת לשוניות' : 'Customize tabs'}</span>
-    </div>
-    ${isAdmin() ? `<div class="menu-sep"></div>
-    <div class="menu-item" onclick="closeMenu();openAdminPanel()">
-      <span class="menu-item-icon">🔧</span>
-      <span>${isHe ? 'ניהול מערכת' : 'Admin panel'}</span>
-    </div>` : ''}
+    </div>` + adminItem + `
     <div class="menu-sep"></div>
     <div class="menu-item" onclick="closeMenu();toggleLang()">
       <span class="menu-item-icon">🌐</span>
