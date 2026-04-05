@@ -2578,69 +2578,30 @@ async function adminDenyApplication(appId, cid) {
 
 async function approveSchool(id) {
   try {
+    // Register kids in class locally (needs client-side school index update)
     const docSnap = await fbDb.collection('pendingSchools').doc(id).get();
     if (!docSnap.exists) return;
     const req = docSnap.data();
-
-    // 1. Add to school index
     await updateSchoolIndex(req.city, req.schoolName);
-
-    // 2. Register each waiting family's kid in class
     for (const pf of (req.pendingFamilies || [])) {
       await registerInClass(pf.kidName, pf.school);
-      // Clear schoolPending from member
-      try {
-        const famSnap = await fbDb.collection('families').doc(pf.familyUid).get();
-        if (famSnap.exists) {
-          const members = famSnap.data().members.map(m =>
-            m.name === pf.kidName ? (({ schoolPending, ...rest }) => rest)(m) : m
-          );
-          await fbDb.collection('families').doc(pf.familyUid).update({ members });
-        }
-      } catch(e) { console.error('approveSchool clear pending:', e); }
     }
-
-    // 3. Mark as approved
-    await fbDb.collection('pendingSchools').doc(id).update({
-      status: 'approved',
-      approvedBy: { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName || '' },
-      approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    // Cloud Function handles family updates + notification
+    await fbFunctions.httpsCallable('approveSchoolRequest')({
+      id,
+      adminName: myFullName(),
     });
-
     await renderAdminPanel();
   } catch(e) { console.error('approveSchool:', e); alert('שגיאה: ' + e.message); }
 }
 
 async function denySchool(id) {
   try {
-    const docSnap = await fbDb.collection('pendingSchools').doc(id).get();
-    if (!docSnap.exists) return;
-    const req = docSnap.data();
-
-    // Clear school data from each waiting family's kid
-    for (const pf of (req.pendingFamilies || [])) {
-      try {
-        const famSnap = await fbDb.collection('families').doc(pf.familyUid).get();
-        if (famSnap.exists) {
-          const members = famSnap.data().members.map(m => {
-            if (m.name !== pf.kidName) return m;
-            const u = { ...m };
-            delete u.school;
-            delete u.schoolPending;
-            return u;
-          });
-          await fbDb.collection('families').doc(pf.familyUid).update({ members });
-        }
-      } catch(e) { console.error('denySchool clear:', e); }
-    }
-
-    // Mark as denied
-    await fbDb.collection('pendingSchools').doc(id).update({
-      status: 'denied',
-      deniedBy: { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName || '' },
-      deniedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    // Cloud Function clears school data, marks denied, and notifies parents
+    await fbFunctions.httpsCallable('denySchoolRequest')({
+      id,
+      adminName: myFullName(),
     });
-
     await renderAdminPanel();
   } catch(e) { console.error('denySchool:', e); alert('שגיאה: ' + e.message); }
 }

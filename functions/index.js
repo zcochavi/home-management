@@ -664,6 +664,82 @@ exports.migrateCommitteeRoles = functions.https.onCall(async (data, context) => 
   return { migrated, skipped, errors };
 });
 
+exports.approveSchoolRequest = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const { id, adminName } = data;
+  const docSnap = await db.collection('pendingSchools').doc(id).get();
+  if (!docSnap.exists) throw new functions.https.HttpsError('not-found', 'Request not found');
+  const req = docSnap.data();
+
+  // Register each waiting family's kid in class & clear pending flag
+  for (const pf of (req.pendingFamilies || [])) {
+    try {
+      const famSnap = await db.collection('families').doc(pf.familyUid).get();
+      if (!famSnap.exists) continue;
+      const members = famSnap.data().members.map(m =>
+        m.name === pf.kidName ? (({ schoolPending, ...rest }) => rest)(m) : m
+      );
+      await db.collection('families').doc(pf.familyUid).update({ members });
+
+      // Notify the family
+      const tokens = await getTokens(pf.familyUid);
+      const schoolLabel = req.schoolName || req.city || '';
+      await sendToTokens(tokens,
+        '✅ בית הספר אושר',
+        `בקשת הצטרפות של ${pf.kidName} לבית הספר ${schoolLabel} אושרה`
+      );
+    } catch(e) { console.error('approveSchoolRequest family:', e); }
+  }
+
+  await db.collection('pendingSchools').doc(id).update({
+    status: 'approved',
+    approvedBy: adminName || 'admin',
+    approvedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
+});
+
+exports.denySchoolRequest = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const { id, adminName } = data;
+  const docSnap = await db.collection('pendingSchools').doc(id).get();
+  if (!docSnap.exists) throw new functions.https.HttpsError('not-found', 'Request not found');
+  const req = docSnap.data();
+
+  // Clear school data & notify each affected family
+  for (const pf of (req.pendingFamilies || [])) {
+    try {
+      const famSnap = await db.collection('families').doc(pf.familyUid).get();
+      if (!famSnap.exists) continue;
+      const members = famSnap.data().members.map(m => {
+        if (m.name !== pf.kidName) return m;
+        const u = { ...m };
+        delete u.school;
+        delete u.schoolPending;
+        return u;
+      });
+      await db.collection('families').doc(pf.familyUid).update({ members });
+
+      // Notify the family
+      const tokens = await getTokens(pf.familyUid);
+      const schoolLabel = req.schoolName || req.city || '';
+      await sendToTokens(tokens,
+        '❌ בקשת בית הספר נדחתה',
+        `בקשת הצטרפות של ${pf.kidName} לבית הספר ${schoolLabel} נדחתה — יש לעדכן את פרטי בית הספר בניהול המשפחה`
+      );
+    } catch(e) { console.error('denySchoolRequest family:', e); }
+  }
+
+  await db.collection('pendingSchools').doc(id).update({
+    status: 'denied',
+    deniedBy: adminName || 'admin',
+    deniedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
+});
+
 exports.migrateKidCodes = functions.https.onCall(async (data, context) => {
   if (context.auth?.uid !== ADMIN_UID) {
     throw new functions.https.HttpsError('permission-denied', 'Admins only');
