@@ -1278,6 +1278,14 @@ function setMgmtNewRole(role) {
   _mgmtNewRole = role;
   el('mgmtNewRoleParent').classList.toggle('active', role==='parent');
   el('mgmtNewRoleKid').classList.toggle('active',    role==='kid');
+  const section = el('mgmtNewSchoolSection');
+  if (section) {
+    section.style.display = role === 'kid' ? 'block' : 'none';
+    // Populate grade select on first show
+    const gradeEl = el('mgmtEditGrade_new');
+    if (gradeEl && !gradeEl.options.length)
+      gradeEl.innerHTML = GRADE_OPTIONS.map(g => `<option value="${g}">${g ? 'כיתה ' + g : 'כיתה...'}</option>`).join('');
+  }
 }
 function setMgmtEditRole(i, role) {
   el(`mgmtEditPanel_${i}`).dataset.role = role;
@@ -1297,7 +1305,15 @@ async function mgmtAddMember() {
   const name = el('mgmtNewMemberName').value.trim();
   if (!name) { el('mgmtNewMemberName').focus(); return; }
   if (getMembers().find(m => m.name === name)) { el('mgmtNewMemberName').select(); return; }
-  const members = [...getMembers(), { name, emoji: _mgmtNewEmoji, role: _mgmtNewRole }];
+  const newMember = { name, emoji: _mgmtNewEmoji, role: _mgmtNewRole };
+  if (_mgmtNewRole === 'kid') {
+    const city     = el('mgmtEditCity_new')?.value.trim()       || '';
+    const school   = el('mgmtEditSchoolName_new')?.value.trim() || '';
+    const grade    = el('mgmtEditGrade_new')?.value             || '';
+    const classNum = el('mgmtEditClassNum_new')?.value.trim()   || '';
+    if (city || school) newMember.school = { city, name: school, grade, classNum };
+  }
+  const members = [...getMembers(), newMember];
   if (familyData) familyData.members = members;
   await fbDb.collection('families').doc(S.uid).update({ members });
   // Generate kid code if needed
@@ -1308,7 +1324,14 @@ async function mgmtAddMember() {
     if (familyData) familyData.members = updatedMembers;
     await fbDb.collection('families').doc(S.uid).update({ members: updatedMembers });
   }
+  // Register in school class if school was set
+  if (newMember.school?.city) syncKidClass(name, newMember.school, undefined, 'kid').then(() => renderMgmtCommunity());
+  // Reset form
   el('mgmtNewMemberName').value = '';
+  if (el('mgmtEditCity_new'))       el('mgmtEditCity_new').value = '';
+  if (el('mgmtEditSchoolName_new')) el('mgmtEditSchoolName_new').value = '';
+  if (el('mgmtEditGrade_new'))      { el('mgmtEditGrade_new').value = ''; el('mgmtEditGrade_new').disabled = true; }
+  if (el('mgmtEditClassNum_new'))   { el('mgmtEditClassNum_new').value = ''; el('mgmtEditClassNum_new').disabled = true; }
   _mgmtNewEmoji = EMOJI_OPTIONS[0]; _mgmtNewRole = 'parent';
   el('mgmtAddMemberForm').classList.remove('open');
   renderMgmtMembers();

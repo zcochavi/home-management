@@ -186,6 +186,17 @@
             <button class="mb-role-btn active" id="mgmtNewRoleParent" onclick="setMgmtNewRole('parent')">הורה</button>
             <button class="mb-role-btn"        id="mgmtNewRoleKid"    onclick="setMgmtNewRole('kid')">ילד</button>
           </div>
+          <div id="mgmtNewSchoolSection" style="display:none">
+            <span class="mgmt-edit-label" style="display:block;margin-bottom:6px">🏫 בית ספר</span>
+            <input class="auth-input" id="mgmtEditCity_new" placeholder="עיר" style="margin-bottom:6px"
+              oninput="onCityAc(this,'new')" onfocus="onCityAc(this,'new')" onblur="scheduleHideAc()">
+            <input class="auth-input" id="mgmtEditSchoolName_new" placeholder="שם בית הספר" style="margin-bottom:6px" disabled
+              oninput="onSchoolAc(this,'new')" onfocus="onSchoolAc(this,'new')" onblur="scheduleHideAc()">
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <select class="auth-input" id="mgmtEditGrade_new" style="flex:1" disabled></select>
+              <input class="auth-input" id="mgmtEditClassNum_new" placeholder="מספר כיתה" style="flex:1" maxlength="3" disabled>
+            </div>
+          </div>
           <button class="auth-btn-main" style="padding:9px 18px;width:auto" onclick="mgmtAddMember()">✓ הוסף</button>
         </div>
       </div>
