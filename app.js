@@ -774,8 +774,10 @@ function renderMessageCenter() {
   const list = el('messageCenterList');
   if (!list) return;
   const notifs = _allNotifs; // already sorted desc by createdAt
-  el('mcCount').textContent = `${notifs.length} הודעות`;
+  el('mcCount').textContent = notifs.length ? `${notifs.length} הודעות` : '';
   el('mcDeleteAllBtn').style.display = notifs.length ? '' : 'none';
+  const toolbar = el('mcSelectAllRow');
+  if (toolbar) toolbar.style.display = notifs.length ? '' : 'none';
   if (!notifs.length) {
     list.innerHTML = '<div style="text-align:center;color:#a0aec0;font-size:13px;font-weight:700;padding:40px 0">אין הודעות</div>';
     return;
