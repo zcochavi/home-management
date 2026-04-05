@@ -1150,8 +1150,9 @@ function renderAll() {
 // ════════════════════════════════════════
 //  MANAGEMENT SCREEN
 // ════════════════════════════════════════
-let _mgmtNewRole  = 'parent';
-let _mgmtNewEmoji = EMOJI_OPTIONS[0];
+let _mgmtNewRole   = 'parent';
+let _mgmtNewEmoji  = EMOJI_OPTIONS[0];
+let _mgmtNewGender = '';
 let _mgmtEditEmoji = {}; // keyed by memberIndex
 
 function openMgmt() { renderMgmt(); el('mgmtScreen').classList.remove('hidden'); loadCities(); }
@@ -1278,14 +1279,20 @@ function setMgmtNewRole(role) {
   _mgmtNewRole = role;
   el('mgmtNewRoleParent').classList.toggle('active', role==='parent');
   el('mgmtNewRoleKid').classList.toggle('active',    role==='kid');
-  const section = el('mgmtNewSchoolSection');
+  const section = el('mgmtNewKidSection');
   if (section) {
     section.style.display = role === 'kid' ? 'block' : 'none';
-    // Populate grade select on first show
     const gradeEl = el('mgmtEditGrade_new');
     if (gradeEl && !gradeEl.options.length)
       gradeEl.innerHTML = GRADE_OPTIONS.map(g => `<option value="${g}">${g ? 'כיתה ' + g : 'כיתה...'}</option>`).join('');
   }
+}
+function setMgmtNewGender(g) {
+  _mgmtNewGender = g;
+  el('mgmtNewGenderBoy') .classList.toggle('active', g === 'boy');
+  el('mgmtNewGenderGirl').classList.toggle('active', g === 'girl');
+  el('mgmtNewGenderBoy') .classList.remove('input-error');
+  el('mgmtNewGenderGirl').classList.remove('input-error');
 }
 function setMgmtEditRole(i, role) {
   el(`mgmtEditPanel_${i}`).dataset.role = role;
@@ -1321,19 +1328,27 @@ async function mgmtAddMember() {
     const school   = el('mgmtEditSchoolName_new')?.value.trim() || '';
     const grade    = el('mgmtEditGrade_new')?.value             || '';
     const classNum = el('mgmtEditClassNum_new')?.value.trim()   || '';
+    const dob      = el('mgmtEditDob_new')?.value               || '';
     const missing = [
-      !city     && 'mgmtEditCity_new',
-      !school   && 'mgmtEditSchoolName_new',
-      !grade    && 'mgmtEditGrade_new',
-      !classNum && 'mgmtEditClassNum_new',
+      !city          && 'mgmtEditCity_new',
+      !school        && 'mgmtEditSchoolName_new',
+      !grade         && 'mgmtEditGrade_new',
+      !classNum      && 'mgmtEditClassNum_new',
+      !dob           && 'mgmtEditDob_new',
     ].filter(Boolean);
-    if (missing.length) {
+    if (missing.length || !_mgmtNewGender) {
       missing.forEach(_markError);
+      if (!_mgmtNewGender) {
+        _markError('mgmtNewGenderBoy');
+        _markError('mgmtNewGenderGirl');
+      }
       el('mgmtAddError').textContent = 'יש למלא את כל שדות החובה';
       return;
     }
     el('mgmtAddError').textContent = '';
-    newMember.school = { city, name: school, grade, classNum };
+    newMember.school  = { city, name: school, grade, classNum };
+    newMember.gender  = _mgmtNewGender;
+    newMember.dob     = dob;
   }
   const members = [...getMembers(), newMember];
   if (familyData) familyData.members = members;
@@ -1354,7 +1369,10 @@ async function mgmtAddMember() {
   if (el('mgmtEditSchoolName_new')) el('mgmtEditSchoolName_new').value = '';
   if (el('mgmtEditGrade_new'))      el('mgmtEditGrade_new').value = '';
   if (el('mgmtEditClassNum_new'))   el('mgmtEditClassNum_new').value = '';
-  _mgmtNewEmoji = EMOJI_OPTIONS[0]; _mgmtNewRole = 'parent';
+  _mgmtNewEmoji = EMOJI_OPTIONS[0]; _mgmtNewRole = 'parent'; _mgmtNewGender = '';
+  if (el('mgmtNewGenderBoy'))  el('mgmtNewGenderBoy').classList.remove('active');
+  if (el('mgmtNewGenderGirl')) el('mgmtNewGenderGirl').classList.remove('active');
+  if (el('mgmtEditDob_new'))   el('mgmtEditDob_new').value = '';
   el('mgmtAddMemberForm').classList.remove('open');
   renderMgmtMembers();
 }

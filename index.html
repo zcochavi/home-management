@@ -186,7 +186,14 @@
             <button class="mb-role-btn active" id="mgmtNewRoleParent" onclick="setMgmtNewRole('parent')">הורה</button>
             <button class="mb-role-btn"        id="mgmtNewRoleKid"    onclick="setMgmtNewRole('kid')">ילד</button>
           </div>
-          <div id="mgmtNewSchoolSection" style="display:none">
+          <div id="mgmtNewKidSection" style="display:none">
+            <span class="mgmt-edit-label">מין</span>
+            <div class="mb-role-toggle" style="margin-bottom:12px">
+              <button class="mb-role-btn" id="mgmtNewGenderBoy"  onclick="setMgmtNewGender('boy')">👦 בן</button>
+              <button class="mb-role-btn" id="mgmtNewGenderGirl" onclick="setMgmtNewGender('girl')">👧 בת</button>
+            </div>
+            <span class="mgmt-edit-label">תאריך לידה</span>
+            <input class="auth-input" id="mgmtEditDob_new" type="date" style="margin-bottom:12px">
             <span class="mgmt-edit-label" style="display:block;margin-bottom:6px">🏫 בית ספר</span>
             <input class="auth-input" id="mgmtEditCity_new" placeholder="עיר" style="margin-bottom:6px"
               oninput="onCityAc(this,'new')" onfocus="onCityAc(this,'new')" onblur="scheduleHideAc()">
