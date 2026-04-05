@@ -1154,6 +1154,7 @@ let S = {
   user:null, uid:null, tab:'home', filter:'All', child:null,
   chores:[], grocery:[], homework:[], stars:{}, events:[],
   calYear:_now.getFullYear(), calMonth:_now.getMonth(), calSelected:today,
+  lockedMember: null,
 };
 let gcal = { gapiReady:false, gisReady:false, tokenClient:null, accessToken:null, events:[], syncing:false };
 let fbUnsubscribe = null;
@@ -1185,6 +1186,19 @@ function generateFamilyCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
   for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
+
+async function createKidCode(ownerUid, kidName) {
+  const code = generateFamilyCode();
+  const inviteEmail = code + '@' + JOIN_DOMAIN;
+  const app2 = firebase.initializeApp(FIREBASE_CONFIG, 'kid_' + Date.now());
+  try {
+    await app2.auth().createUserWithEmailAndPassword(inviteEmail, code);
+  } finally {
+    await app2.delete();
+  }
+  await fbDb.collection('joinCodes').doc(code).set({ ownerUid, memberName: kidName });
   return code;
 }
 
@@ -1324,6 +1338,16 @@ async function doSignUp() {
       homework: init.homework||[], events: init.events||[], stars: init.stars||{},
     });
     await fbDb.collection('joinCodes').doc(code).set({ ownerUid });
+    // Generate personal codes for each kid
+    const updatedMembers = [...members];
+    for (let i = 0; i < updatedMembers.length; i++) {
+      if (updatedMembers[i].role === 'kid') {
+        updatedMembers[i] = { ...updatedMembers[i], joinCode: await createKidCode(ownerUid, updatedMembers[i].name) };
+      }
+    }
+    if (updatedMembers.some(m => m.joinCode)) {
+      await fbDb.collection('families').doc(ownerUid).update({ members: updatedMembers });
+    }
     _registering = false;
     // 4. Manually kick off subscription (onAuthStateChanged was suppressed)
     S.uid = ownerUid;
@@ -1357,6 +1381,10 @@ async function doJoin() {
     const ownerUid = snap.data().ownerUid;
     // Store mapping and subscribe to the correct family
     localStorage.setItem('familyhub_family_uid_' + cred.user.uid, ownerUid);
+    const memberName = snap.data().memberName;
+    if (memberName) {
+      localStorage.setItem('familyhub_locked_member_' + cred.user.uid, memberName);
+    }
     S.uid = ownerUid;
     subscribeToFamily(ownerUid);
   } catch(e) {
@@ -1392,6 +1420,7 @@ function authSignOut() {
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
   const firebaseUid = fbAuth?.currentUser?.uid;
   if (firebaseUid) localStorage.removeItem('familyhub_family_uid_' + firebaseUid);
+  if (firebaseUid) localStorage.removeItem('familyhub_locked_member_' + firebaseUid);
   S.user = null; S.uid = null; familyData = null;
   if (fbAuth) fbAuth.signOut();
   el('loginScreen').classList.add('hidden');
@@ -1412,6 +1441,18 @@ function shareInvite() {
     navigator.clipboard.writeText(text).then(() => {
       const btn = el('shareBtn');
       if (btn) { btn.textContent = '✓ הועתק!'; setTimeout(() => { if(el('shareBtn')) el('shareBtn').textContent = '📤 שתף'; }, 2200); }
+    }).catch(() => prompt('העתק את הקוד:', text));
+  }
+}
+
+function shareKidCode(name, code) {
+  const url  = location.origin + location.pathname + '?join=' + code;
+  const text = `הצטרפ/י כ-${name} למשפחת ${familyData?.familyName || ''} ב-FamilyHub!\nקוד אישי: ${code}\n${url}`;
+  if (navigator.share) {
+    navigator.share({ title: 'FamilyHub', text });
+  } else {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('✓ הועתק!');
     }).catch(() => prompt('העתק את הקוד:', text));
   }
 }
@@ -1486,7 +1527,10 @@ function afterLoad() {
   const kids = getKids();
   if (!S.child || !kids.includes(S.child)) S.child = kids[0] || null;
   el('loadingScreen').classList.add('hidden');
-  if (S.user && getAllMemberNames().includes(S.user)) {
+  if (S.lockedMember && getAllMemberNames().includes(S.lockedMember)) {
+    // Locked device: auto-login as locked member, no choice
+    login(S.lockedMember);
+  } else if (S.user && getAllMemberNames().includes(S.user)) {
     renderAll(); tryAutoConnectGCal();
   } else {
     const saved = localStorage.getItem('familyhub_member_' + S.uid);
@@ -1640,8 +1684,17 @@ function renderLoginScreen() {
   el('loginFamilyName').textContent = familyData?.familyName || '';
   el('loginSub').textContent = STRINGS.he.loginSub;
   const members = getMembers();
-  el('loginGrid').innerHTML = members.map((m, i) => `
-    <div class="login-card${i===members.length-1&&members.length%2!==0?' login-card-solo':''}" onclick="login('${esc(m.name)}')">
+  // Restrict visible members based on current context
+  let visibleMembers = members;
+  if (S.lockedMember) {
+    // Locked device: only show the locked member
+    visibleMembers = members.filter(m => m.name === S.lockedMember);
+  } else if (S.user && getParents().includes(S.user)) {
+    // Parent device: show self + all kids, not other parents
+    visibleMembers = members.filter(m => m.name === S.user || m.role === 'kid');
+  }
+  el('loginGrid').innerHTML = visibleMembers.map((m, i) => `
+    <div class="login-card${i===visibleMembers.length-1&&visibleMembers.length%2!==0?' login-card-solo':''}" onclick="login('${esc(m.name)}')">
       <div class="login-card-emoji">${getAvatar(m.name)}</div>
       <div class="login-card-name">${esc(m.name)}</div>
       <div class="login-card-role">${m.role==='parent'?STRINGS.he.parentRole:STRINGS.he.kidRole}</div>
@@ -1662,6 +1715,7 @@ function login(name) {
 }
 
 function switchUser() {
+  if (S.lockedMember) return; // locked devices can't switch members
   S.user = null; S.filter = 'All';
   localStorage.removeItem('familyhub_member_' + S.uid);
   el('app').classList.remove('visible');
@@ -1758,6 +1812,11 @@ function renderMgmtMembers() {
         <div class="mgmt-member-name">${esc(m.name)}</div>
         <div class="mgmt-member-role">${m.role==='parent'?'הורה':'ילד/ה'}</div>
         ${m.role==='kid'&&m.school?.city ? `<div class="mgmt-school-info">🏫 ${esc(m.school.city)}${m.school.name?', '+esc(m.school.name):''}${m.school.grade?', כיתה '+esc(m.school.grade)+(m.school.classNum?'\''+esc(m.school.classNum):''):''} ${m.schoolPending?'<span style="background:#fef3c7;color:#92400e;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:700">⏳ ממתין</span>':''}</div>` : ''}
+        ${m.role === 'kid' && m.joinCode ? `
+          <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+            <span style="font-size:11px;color:#6a11cb;font-weight:700;background:#f0e6ff;padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
+            <button style="background:none;border:none;font-size:13px;cursor:pointer;padding:2px 4px" onclick="shareKidCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד">📤</button>
+          </div>` : ''}
       </div>
       <button class="mgmt-icon-btn purple" onclick="toggleMgmtEdit(${i})" title="ערוך">✏️</button>
       ${canDel ? `<button class="mgmt-icon-btn red" onclick="mgmtRemoveMember('${esc(m.name)}')" title="הסר">🗑</button>` : '<span style="width:26px"></span>'}
@@ -1873,6 +1932,14 @@ async function mgmtAddMember() {
   const members = [...getMembers(), { name, emoji: _mgmtNewEmoji, role: _mgmtNewRole }];
   if (familyData) familyData.members = members;
   await fbDb.collection('families').doc(S.uid).update({ members });
+  // Generate kid code if needed
+  const addedMember = members[members.length - 1];
+  if (addedMember.role === 'kid' && !addedMember.joinCode) {
+    const code = await createKidCode(S.uid, addedMember.name);
+    const updatedMembers = members.map(m => m.name === addedMember.name ? { ...m, joinCode: code } : m);
+    if (familyData) familyData.members = updatedMembers;
+    await fbDb.collection('families').doc(S.uid).update({ members: updatedMembers });
+  }
   el('mgmtNewMemberName').value = '';
   _mgmtNewEmoji = EMOJI_OPTIONS[0]; _mgmtNewRole = 'parent';
   el('mgmtAddMemberForm').classList.remove('open');
@@ -1918,6 +1985,14 @@ async function saveMgmtEdit(i, originalName) {
     members, chores:S.chores, homework:S.homework, stars:S.stars,
   });
   panel.classList.remove('open');
+  // Generate kid code if role changed to kid and no code yet
+  const savedMember = members.find(m => m.name === newName);
+  if (newRole === 'kid' && !savedMember?.joinCode) {
+    const code = await createKidCode(S.uid, newName);
+    const membersWithCode = members.map(m => m.name === newName ? { ...m, joinCode: code } : m);
+    if (familyData) familyData.members = membersWithCode;
+    await fbDb.collection('families').doc(S.uid).update({ members: membersWithCode });
+  }
   // Sync school class index (fire-and-forget, don't block the UI)
   syncKidClass(newName, school, oldSchool, newRole).then(() => renderMgmtCommunity());
   renderMgmtMembers();
@@ -3270,11 +3345,11 @@ function openMenu(btn) {
       <span class="menu-item-icon">🌐</span>
       <span>${isHe ? 'Switch to English' : 'עבור לעברית'}</span>
     </div>
-    <div class="menu-sep"></div>
+    ${!S.lockedMember ? `<div class="menu-sep"></div>
     <div class="menu-item" onclick="closeMenu();switchUser()">
       <span class="menu-item-icon">👤</span>
       <span>${isHe ? 'החלף משתמש' : 'Switch member'}</span>
-    </div>
+    </div>` : ''}
     <div class="menu-sep"></div>
     <div class="menu-item" onclick="closeMenu();authSignOut()" style="color:#e53e3e">
       <span class="menu-item-icon">🚪</span>
@@ -4227,6 +4302,7 @@ if (!FB_CONFIGURED) {
     if (user) {
       const familyUid = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
       S.uid = familyUid;
+      S.lockedMember = localStorage.getItem('familyhub_locked_member_' + user.uid) || null;
       el('authScreen').classList.add('hidden');
       subscribeToFamily(familyUid);
     } else {
