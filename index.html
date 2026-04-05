@@ -107,8 +107,16 @@
     .tab-ed-row { transition:transform 0.12s ease; }
     .tab-ed-row.tab-ed-dragging { background:white;box-shadow:0 6px 24px rgba(106,17,203,0.18);border-radius:12px;z-index:10;position:relative;transition:none !important; }
     /* Management + Tab editor screens */
-    #mgmtScreen, #tabEditorScreen { position:fixed;inset:0;background:#f0f4ff;z-index:900;overflow-y:auto; }
-    #mgmtScreen.hidden, #tabEditorScreen.hidden { display:none; }
+    #mgmtScreen, #tabEditorScreen, #adminPanel { position:fixed;inset:0;background:#f0f4ff;z-index:900;overflow-y:auto; }
+    #mgmtScreen.hidden, #tabEditorScreen.hidden, #adminPanel.hidden { display:none; }
+    .admin-log-row { padding:10px 0;border-bottom:1px solid #f0f4ff;display:flex;flex-direction:column;gap:3px; }
+    .admin-log-row:last-child { border-bottom:none; }
+    .admin-log-title { font-size:13px;font-weight:700;color:#1a202c; }
+    .admin-log-meta  { font-size:11px;color:#718096;font-weight:600; }
+    .admin-log-badge { display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;margin-inline-end:6px; }
+    .admin-log-badge.approved { background:#c6f6d5;color:#276749; }
+    .admin-log-badge.rejected { background:#fed7d7;color:#c53030; }
+    .admin-btn { background:linear-gradient(135deg,#6a11cb,#f5576c);color:white;border:none;border-radius:12px;font-family:inherit;font-size:12px;font-weight:800;padding:6px 14px;cursor:pointer;margin-bottom:12px; }
     .mgmt-header { position:sticky;top:0;background:linear-gradient(135deg,#6a11cb 0%,#f093fb 55%,#f5576c 100%);padding:14px 16px;display:flex;align-items:center;gap:10px;z-index:10; }
     .mgmt-back-btn { background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.45);border-radius:50%;width:34px;height:34px;color:white;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1; }
     .mgmt-header-title { font-size:18px;font-weight:900;color:white; }
@@ -135,16 +143,25 @@
     .pending-event-row { display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #fef3c7; }
     .pending-event-row:last-child { border-bottom:none; }
     .pending-event-info { flex:1;min-width:0; }
-    .pending-event-title { display:block;font-size:13px;font-weight:800;color:#1a202c; }
+    .pending-event-title { display:block;font-size:13px;font-weight:700;color:#1a202c; }
     .pending-event-meta { display:block;font-size:11px;color:#92400e;font-weight:600;margin-top:2px; }
     .pending-event-actions { display:flex;gap:5px;flex-shrink:0; }
-    .pending-approve-btn { background:#c6f6d5;color:#276749;border:none;border-radius:8px;font-size:12px;font-weight:800;padding:4px 9px;cursor:pointer; }
+    .pending-approve-btn { background:#c6f6d5;color:#276749;border:none;border-radius:8px;font-family:inherit;font-size:12px;font-weight:800;padding:4px 9px;cursor:pointer; }
     .pending-approve-btn:hover { background:#9ae6b4; }
-    .pending-reject-btn  { background:#fed7d7;color:#c53030;border:none;border-radius:8px;font-size:12px;font-weight:800;padding:4px 9px;cursor:pointer; }
+    .pending-reject-btn  { background:#fed7d7;color:#c53030;border:none;border-radius:8px;font-family:inherit;font-size:12px;font-weight:800;padding:4px 9px;cursor:pointer; }
     .pending-reject-btn:hover  { background:#feb2b2; }
     .role-badge-committee { background:#fef3c7;color:#92400e;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;white-space:nowrap; }
-    .role-toggle-btn { background:none;border:1px solid #e2e8f0;border-radius:8px;font-size:11px;font-weight:700;color:#718096;padding:2px 7px;cursor:pointer;white-space:nowrap; }
+    .role-toggle-btn { background:none;border:1px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:11px;font-weight:700;color:#718096;padding:2px 7px;cursor:pointer;white-space:nowrap; }
     .role-toggle-btn:hover { border-color:#6a11cb;color:#6a11cb; }
+    .application-row { display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #f0f4ff; }
+    .application-row:last-child { border-bottom:none; }
+    .application-info { flex:1;min-width:0; }
+    .application-name { font-size:13px;font-weight:800;color:#1a202c; }
+    .application-meta { font-size:11px;color:#718096;font-weight:600;margin-top:2px; }
+    .application-progress { height:4px;background:#e2e8f0;border-radius:2px;margin-top:6px;overflow:hidden; }
+    .application-progress-fill { height:100%;background:linear-gradient(90deg,#6a11cb,#f093fb);border-radius:2px;transition:width 0.3s; }
+    .apply-committee-btn { width:100%;background:#f0f4ff;color:#6a11cb;border:1.5px dashed #b794f4;border-radius:12px;font-family:inherit;font-size:13px;font-weight:800;padding:10px;cursor:pointer;margin-top:8px; }
+    .apply-committee-btn:hover { background:#e9d8fd; }
     .comm-mate { display:flex;align-items:center;gap:8px;padding:6px 0 6px 6px;border-bottom:1px solid #f8faff; }
     .comm-mate:last-child { border-bottom:none; }
     .comm-mate-name { font-size:13px;font-weight:700;color:#2d3748; }
@@ -494,6 +511,13 @@
           <button class="mb-role-btn"        id="mbRoleKid"    onclick="setMbRole('kid')">ילד</button>
         </div>
       </div>
+      <div id="mbKidExtras" style="display:none;margin-bottom:8px">
+        <div class="mb-role-toggle" style="margin-bottom:8px">
+          <button class="mb-role-btn" id="mbGenderBoy"  onclick="setMbGender('boy')">👦 בן</button>
+          <button class="mb-role-btn" id="mbGenderGirl" onclick="setMbGender('girl')">👧 בת</button>
+        </div>
+        <input class="auth-input" id="mbDob" type="date" placeholder="תאריך לידה" style="margin-bottom:0">
+      </div>
       <button class="auth-btn-add" onclick="addDraftMember()">+ הוסף</button>
       <div class="member-preview" id="memberPreview"></div>
       <div id="su2Error" class="auth-error"></div>
@@ -533,6 +557,25 @@
       <div class="card-title">הוסף לשונית</div>
       <div id="tabEditorPool"></div>
     </div>
+  </div>
+</div>
+
+<!-- ADMIN PANEL -->
+<div id="adminPanel" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeAdminPanel()">×</button>
+    <div class="mgmt-header-title">🔧 ניהול אירועים</div>
+  </div>
+  <div style="padding:16px">
+    <div class="comm-section-label" style="display:flex;align-items:center;gap:8px;color:#92400e">
+      <span>⏳ ממתינים לאישור</span>
+      <span id="adminPendingCount" class="comm-count" style="background:#fef3c7;color:#92400e"></span>
+    </div>
+    <div id="adminPendingList" style="margin-bottom:24px"></div>
+    <div class="comm-section-label" style="margin-top:4px">👤 מועמדויות לוועד</div>
+    <div id="adminAppsList" style="margin-bottom:24px"></div>
+    <div class="comm-section-label">✅ היסטוריית אישורים</div>
+    <div id="adminLogList"></div>
   </div>
 </div>
 
@@ -650,6 +693,10 @@
       <div class="card"><div class="card-title" id="homeChoresTitle"></div><div id="homeTasks"></div></div>
       <div class="card"><div class="card-title" id="starChartTitle"></div><div class="star-chart" id="starChart"></div></div>
       <div class="card"><div class="card-title" id="hwDueSoonTitle"></div><div id="hwSummary"></div></div>
+      <div class="card" id="homeUpcomingCard" style="display:none">
+        <div class="card-title">📅 קרוב לפניך</div>
+        <div id="homeUpcoming"></div>
+      </div>
       <div class="card" id="inviteCard" style="display:none">
         <div class="card-title">🔑 קוד הצטרפות</div>
         <div class="invite-code-display" id="inviteCodeDisplay"></div>
@@ -855,6 +902,14 @@ const STRINGS = {
     roleCommittee:'ועד',
     grantCommittee:'הוסף לועד',
     revokeCommittee:'הסר מהועד',
+    commApplyCommittee:'הגש מועמדות לוועד ההורים',
+    commApplicationsTitle:'מועמדויות לוועד',
+    commApplicationVote:'👍 אני תומך',
+    commApplicationVoted:'✓ הצבעת',
+    commApplicationApprove:'✓ אשר',
+    commApplicationDeny:'✕ דחה',
+    commMyApplication:'המועמדות שלך',
+    commApplicationExpires: d => `פג תוקף: ${d}`,
   },
   en: {
     dir:'ltr', locale:'en-US',
@@ -925,6 +980,14 @@ const STRINGS = {
     roleCommittee:'Committee',
     grantCommittee:'Make Committee',
     revokeCommittee:'Remove from Committee',
+    commApplyCommittee:'Apply for Parents Committee',
+    commApplicationsTitle:'Committee Applications',
+    commApplicationVote:'👍 Support',
+    commApplicationVoted:'✓ Voted',
+    commApplicationApprove:'✓ Approve',
+    commApplicationDeny:'✕ Deny',
+    commMyApplication:'Your Application',
+    commApplicationExpires: d => `Expires: ${d}`,
   },
 };
 
@@ -1107,8 +1170,10 @@ let _registering = false;
 const EMOJI_OPTIONS = ['👩','👨','👧','👦','🧒','👶','🧑','👵','👴','🧔','🧑‍🍼','👱'];
 const GRADE_OPTIONS = ['','א','ב','ג','ד','ה','ו','ז','ח','ט','י','י"א','י"ב'];
 let _draftMembers = [];
-let _mbRole = 'parent';
-let _mbEmoji = EMOJI_OPTIONS[0];
+let _mbRole   = 'parent';
+let _mbEmoji  = EMOJI_OPTIONS[0];
+let _mbGender = null;
+let _mbDob    = '';
 
 function generateFamilyCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -1130,13 +1195,31 @@ function selectMbEmoji(emoji, target) {
 function setMbRole(role) {
   _mbRole = role;
   el('mbRoleParent').classList.toggle('active', role==='parent');
-  el('mbRoleKid').classList.toggle('active', role==='kid');
+  el('mbRoleKid').classList.toggle('active',    role==='kid');
+  const extras = el('mbKidExtras');
+  if (extras) extras.style.display = role === 'kid' ? '' : 'none';
+  if (role !== 'kid') { _mbGender = null; _mbDob = ''; }
+}
+function setMbGender(g) {
+  _mbGender = g;
+  el('mbGenderBoy') .classList.toggle('active', g === 'boy');
+  el('mbGenderGirl').classList.toggle('active', g === 'girl');
 }
 function addDraftMember() {
   const name = el('mbName').value.trim();
   if (!name) { el('mbName').focus(); return; }
-  _draftMembers.push({ name, emoji: _mbEmoji, role: _mbRole });
+  const entry = { name, emoji: _mbEmoji, role: _mbRole };
+  if (_mbRole === 'kid') {
+    if (_mbGender) entry.gender = _mbGender;
+    const dob = el('mbDob')?.value;
+    if (dob) entry.dob = dob;
+  }
+  _draftMembers.push(entry);
   el('mbName').value = '';
+  if (el('mbDob')) el('mbDob').value = '';
+  _mbGender = null;
+  el('mbGenderBoy') ?.classList.remove('active');
+  el('mbGenderGirl')?.classList.remove('active');
   renderMemberPreview();
 }
 function removeDraftMember(i) {
@@ -1144,13 +1227,16 @@ function removeDraftMember(i) {
   renderMemberPreview();
 }
 function renderMemberPreview() {
-  el('memberPreview').innerHTML = _draftMembers.map((m, i) => `
-    <div class="member-chip">
+  el('memberPreview').innerHTML = _draftMembers.map((m, i) => {
+    const genderLabel = m.gender === 'boy' ? ' · 👦' : m.gender === 'girl' ? ' · 👧' : '';
+    const dobLabel    = m.dob ? ' · ' + m.dob : '';
+    return `<div class="member-chip">
       <span class="member-chip-emoji">${m.emoji}</span>
-      <span class="member-chip-name">${esc(m.name)}</span>
+      <span class="member-chip-name">${esc(m.name)}${genderLabel}${dobLabel}</span>
       <span class="member-chip-role">${m.role==='parent'?'הורה':'ילד/ה'}</span>
       <button class="member-chip-del" onclick="removeDraftMember(${i})">×</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 function setAuthMode(mode) {
@@ -1566,6 +1652,7 @@ function login(name) {
   loadSyncedClassEvents();
   applyDir(); renderAll(); tryAutoConnectGCal();
   initFCM();
+  refreshHomeUpcoming();
 }
 
 function switchUser() {
@@ -1678,6 +1765,15 @@ function renderMgmtMembers() {
         <button class="mb-role-btn ${m.role==='parent'?'active':''}" id="mgmtEditRoleParent_${i}" onclick="setMgmtEditRole(${i},'parent')">הורה</button>
         <button class="mb-role-btn ${m.role==='kid'?'active':''}"    id="mgmtEditRoleKid_${i}"    onclick="setMgmtEditRole(${i},'kid')">ילד</button>
       </div>
+      <div id="mgmtKidSection_${i}" style="display:${m.role==='kid'?'block':'none'}">
+        <span class="mgmt-edit-label">מין</span>
+        <div class="mb-role-toggle" style="margin-bottom:12px">
+          <button class="mb-role-btn ${m.gender==='boy'?'active':''}"  id="mgmtGenderBoy_${i}"  onclick="setMgmtGender(${i},'boy')">👦 בן</button>
+          <button class="mb-role-btn ${m.gender==='girl'?'active':''}" id="mgmtGenderGirl_${i}" onclick="setMgmtGender(${i},'girl')">👧 בת</button>
+        </div>
+        <span class="mgmt-edit-label">תאריך לידה</span>
+        <input class="auth-input" id="mgmtEditDob_${i}" type="date" value="${m.dob||''}" style="margin-bottom:12px">
+      </div>
       <div id="mgmtSchoolSection_${i}" style="display:${m.role==='kid'?'block':'none'}">
         <span class="mgmt-edit-label" style="display:block;margin-bottom:6px">🏫 בית ספר</span>
         <input class="auth-input" id="mgmtEditCity_${i}" placeholder="עיר" value="${esc(m.school?.city||'')}" style="margin-bottom:6px"
@@ -1754,8 +1850,14 @@ function setMgmtEditRole(i, role) {
   el(`mgmtEditPanel_${i}`).dataset.role = role;
   el(`mgmtEditRoleParent_${i}`).classList.toggle('active', role==='parent');
   el(`mgmtEditRoleKid_${i}`).classList.toggle('active',    role==='kid');
-  const sec = el(`mgmtSchoolSection_${i}`);
-  if (sec) sec.style.display = role==='kid' ? 'block' : 'none';
+  const show = role === 'kid' ? 'block' : 'none';
+  const sec = el(`mgmtSchoolSection_${i}`); if (sec) sec.style.display = show;
+  const kid = el(`mgmtKidSection_${i}`);   if (kid) kid.style.display  = show;
+}
+function setMgmtGender(i, g) {
+  el(`mgmtEditPanel_${i}`).dataset.gender = g;
+  el(`mgmtGenderBoy_${i}`) .classList.toggle('active', g === 'boy');
+  el(`mgmtGenderGirl_${i}`).classList.toggle('active', g === 'girl');
 }
 
 async function mgmtAddMember() {
@@ -1785,10 +1887,14 @@ async function saveMgmtEdit(i, originalName) {
     grade:    (el(`mgmtEditGrade_${i}`)?.value             || ''),
     classNum: (el(`mgmtEditClassNum_${i}`)?.value.trim()   || ''),
   } : undefined;
+  const newGender = newRole === 'kid' ? (panel.dataset.gender || null) : undefined;
+  const newDob    = newRole === 'kid' ? (el(`mgmtEditDob_${i}`)?.value || '') : undefined;
   let members = getMembers().map(m => {
     if (m.name !== originalName) return m;
     const updated = { ...m, name: newName, emoji: newEmoji, role: newRole };
-    if (school !== undefined) updated.school = school; else delete updated.school;
+    if (school   !== undefined) updated.school = school;   else delete updated.school;
+    if (newGender !== undefined) { if (newGender) updated.gender = newGender; else delete updated.gender; }
+    if (newDob    !== undefined) { if (newDob)    updated.dob    = newDob;    else delete updated.dob; }
     return updated;
   });
   // Rename in existing data if member name changed
@@ -2002,12 +2108,16 @@ async function registerInClass(kidName, school) {
     { city:school.city, schoolName:school.name||'', grade:school.grade, classNum:school.classNum||'' },
     { merge: true }
   );
+  const kidMember = getMembers().find(m => m.name === kidName);
+  const memberDoc = {
+    kidName, familyUid: S.uid,
+    familyName: familyData?.familyName || '',
+    addedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  if (kidMember?.gender) memberDoc.gender = kidMember.gender;
+  if (kidMember?.dob)    memberDoc.dob    = kidMember.dob;
   await fbDb.collection('schoolClasses').doc(classId)
-    .collection('members').doc(classMemberId(S.uid, kidName)).set({
-      kidName, familyUid: S.uid,
-      familyName: familyData?.familyName || '',
-      addedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
+    .collection('members').doc(classMemberId(S.uid, kidName)).set(memberDoc);
   updateSchoolIndex(school.city, school.name); // fire-and-forget
 }
 
@@ -2084,6 +2194,12 @@ function eventTypeName(type) {
   const keys = { birthday:'evBirthday', trip:'evTrip', party:'evParty', announcement:'evAnnouncement', other:'evOther' };
   return t(keys[type]||'evOther');
 }
+function classLabelFromId(classId) {
+  if (!classId) return '';
+  const [city, school, grade, classNum] = classId.split('~~');
+  return `${school || city} · כיתה ${grade || ''}${classNum ? "'" + classNum : ''}`;
+}
+
 function classLabelFor(school) {
   if (!school) return '';
   const parts = [school.city, school.name];
@@ -2124,12 +2240,13 @@ async function loadCommunityData(kidsWithSchool) {
     const sid = schoolIdFor(kid.school);
     const safeGet = q => q.get().catch(() => ({docs:[]}));
     try {
-      const [membersSnap, eventsSnap, gradeSnap, schoolSnap, pendingSnap] = await Promise.all([
+      const [membersSnap, eventsSnap, gradeSnap, schoolSnap, pendingSnap, appsSnap] = await Promise.all([
         fbDb.collection('schoolClasses').doc(cid).collection('members').get(),
         fbDb.collection('schoolClasses').doc(cid).collection('events').orderBy('date').get(),
         gid ? safeGet(fbDb.collection('schoolGrades').doc(gid).collection('events').orderBy('date')) : Promise.resolve({docs:[]}),
         sid ? safeGet(fbDb.collection('schools').doc(sid).collection('events').orderBy('date')) : Promise.resolve({docs:[]}),
         isCommittee() ? safeGet(fbDb.collection('schoolClasses').doc(cid).collection('pendingEvents')) : Promise.resolve({docs:[]}),
+        safeGet(fbDb.collection('committeeApplications').where('classId','==',cid).where('status','==','pending')),
       ]);
       const classmates = membersSnap.docs.map(d=>d.data()).filter(m=>m.familyUid!==S.uid);
       // Fetch roles for classmates (admin-only, to show/manage committee assignments)
@@ -2147,11 +2264,12 @@ async function loadCommunityData(kidsWithSchool) {
         gradeEvents:   gradeSnap.docs.map(d=>({id:d.id,...d.data(),scope:'grade',scopeId:gid})),
         schoolEvents:  schoolSnap.docs.map(d=>({id:d.id,...d.data(),scope:'school',scopeId:sid})),
         pendingEvents: pendingSnap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.createdAt?.toMillis?.()||0)-(b.createdAt?.toMillis?.()||0)),
+        applications: appsSnap.docs.map(d=>({id:d.id,...d.data()})),
         loadedAt: Date.now(),
       };
     } catch(e) {
       console.error('loadCommunityData error (classId=' + cid + '):', e);
-      _commCache[cid] = { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[], loadedAt:Date.now(), error: e.code||e.message };
+      _commCache[cid] = { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[], applications:[], loadedAt:Date.now(), error: e.code||e.message };
     }
   }));
 }
@@ -2191,10 +2309,11 @@ function filterClassmates(cid, q) {
 
 function renderCommCard(kid) {
   const cid    = classIdFor(kid.school);
-  const cache  = _commCache[cid] || { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[] };
+  const cache  = _commCache[cid] || { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[], applications:[] };
   const addOpen = _commAddOpen[cid];
 
-  const allEvs = [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])];
+  const allEvs = [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])]
+    .filter(e => matchesGenderFilter(e, kid.name));
   const upcoming = allEvs.filter(e=>isEventUpcoming(e.date))
     .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
 
@@ -2230,15 +2349,72 @@ function renderCommCard(kid) {
         </div>
       </div>`).join('')}` : ''}
 
+    ${(() => {
+  const apps = cache.applications || [];
+  if (!apps.length && (isCommittee() || isAdmin())) return '';
+  if (!apps.length && !isCommittee()) {
+    // Show apply button if this parent hasn't applied yet and isn't committee
+    const alreadyApplied = false; // no pending apps in cache
+    if (!isParent() || isCommittee()) return '';
+    return `<button class="apply-committee-btn" onclick="applyForCommittee('${cid}')">${t('commApplyCommittee')}</button>`;
+  }
+  const myApp = apps.find(a => a.applicantUid === S.uid);
+  const otherApps = apps.filter(a => a.applicantUid !== S.uid);
+  const canApply = isParent() && !isCommittee() && !myApp;
+  let html = `<div class="comm-section-label" style="margin-top:16px">${t('commApplicationsTitle')}</div>`;
+  if (myApp) {
+    const pct = Math.min(100, Math.round((myApp.voteCount||0)/15*100));
+    const exp = myApp.expiresAt?.toDate ? fmtDate(myApp.expiresAt.toDate().toISOString().slice(0,10)) : '';
+    html += `<div class="application-row">
+      <div class="application-info">
+        <div class="application-name">✋ ${t('commMyApplication')}</div>
+        <div class="application-meta">${myApp.voteCount||0}/15 תמיכות${exp ? ' · ' + t('commApplicationExpires',exp) : ''}</div>
+        <div class="application-progress"><div class="application-progress-fill" style="width:${pct}%"></div></div>
+      </div>
+    </div>`;
+  }
+  otherApps.forEach(app => {
+    const voted = (app.votes||[]).includes(S.uid);
+    const pct = Math.min(100, Math.round((app.voteCount||0)/15*100));
+    const exp = app.expiresAt?.toDate ? fmtDate(app.expiresAt.toDate().toISOString().slice(0,10)) : '';
+    const approveBtn = isAdmin() ? `<button class="pending-approve-btn" onclick="adminApproveApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationApprove')}</button><button class="pending-reject-btn" onclick="adminDenyApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationDeny')}</button>` : '';
+    const voteBtn = !isAdmin() && !isCommittee() && isParent()
+      ? (voted
+          ? `<span style="font-size:12px;font-weight:800;color:#48bb78">${t('commApplicationVoted')}</span>`
+          : `<button class="pending-approve-btn" onclick="voteForApplication('${app.id}','${cid}')">${t('commApplicationVote')}</button>`)
+      : '';
+    html += `<div class="application-row">
+      <div class="application-info">
+        <div class="application-name">👤 ${esc(app.applicantName)}</div>
+        <div class="application-meta">${app.voteCount||0}/15 תמיכות${exp ? ' · ' + t('commApplicationExpires',exp) : ''}</div>
+        <div class="application-progress"><div class="application-progress-fill" style="width:${pct}%"></div></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">${approveBtn}${voteBtn}</div>
+    </div>`;
+  });
+  if (canApply) {
+    html += `<button class="apply-committee-btn" onclick="applyForCommittee('${cid}')">${t('commApplyCommittee')}</button>`;
+  }
+  return html;
+})()}
+
     ${isParent() ? `
     <div class="comm-add-form${addOpen?' open':''}" id="commAddForm_${cid}">
       <div style="font-size:13px;font-weight:900;color:#1a202c;margin-bottom:10px">➕ ${t('commNewEvent')}</div>
       <input class="auth-input" id="commEvTitle_${cid}" placeholder="${t('commEventTitle')}" style="margin-bottom:6px">
       <div style="display:flex;gap:8px;margin-bottom:6px">
         <input type="date" class="auth-input" id="commEvDate_${cid}" style="flex:1">
-        <select class="auth-input" id="commEvType_${cid}" style="flex:1">
+        <select class="auth-input" id="commEvType_${cid}" style="flex:1" onchange="onCommEvTypeChange('${cid}')">
           ${EVENT_TYPES.map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
         </select>
+      </div>
+      <div id="commEvGenderWrap_${cid}" style="display:none;margin-bottom:6px">
+        <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">מי מוזמן?</div>
+        <div style="display:flex;gap:8px">
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" value="all"   checked> כולם</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" value="boys">  👦 בנים בלבד</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" value="girls"> 👧 בנות בלבד</label>
+        </div>
       </div>
       ${canPublishDirectly() ? `
       <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center">
@@ -2312,7 +2488,29 @@ async function renderCommunity() {
   }
 
   await loadCommunityData(kidsWithSchool);
-  container.innerHTML = kidsWithSchool.map(kid => renderCommCard(kid)).join('');
+  renderHomeUpcoming();
+  const adminBtn = isAdmin()
+    ? `<button class="admin-btn" onclick="openAdminPanel()">🔧 ניהול אירועים</button>`
+    : '';
+  container.innerHTML = adminBtn + kidsWithSchool.map(kid => renderCommCard(kid)).join('');
+}
+
+function onCommEvTypeChange(cid) {
+  const type = el('commEvType_' + cid)?.value;
+  const wrap = el('commEvGenderWrap_' + cid);
+  if (wrap) wrap.style.display = type === 'birthday' ? '' : 'none';
+}
+
+function matchesGenderFilter(ev, kidName) {
+  if (!ev.genderFilter || ev.genderFilter === 'all') return true;
+  // Poster always sees their own event
+  if (ev.postedBy?.familyUid === S.uid) return true;
+  const needed = ev.genderFilter === 'boys' ? 'boy' : 'girl';
+  if (kidName) {
+    const m = getMembers().find(m => m.name === kidName);
+    return m?.gender === needed;
+  }
+  return getKids().some(name => getMembers().find(m => m.name === name)?.gender === needed);
 }
 
 function toggleCommAddForm(cid) {
@@ -2330,10 +2528,14 @@ async function submitClassEvent(cid) {
   const note       = el('commEvNote_'   + cid)?.value.trim() || '';
   const payboxRaw  = el('commEvPaybox_' + cid)?.value.trim() || '';
   const payboxUrl  = payboxRaw && (payboxRaw.startsWith('http://') || payboxRaw.startsWith('https://')) ? payboxRaw : '';
+  const genderFilter = type === 'birthday'
+    ? (document.querySelector(`input[name="commEvGender_${cid}"]:checked`)?.value || 'all')
+    : 'all';
   if (!title || !date) return;
   const docData = { title, date, type, note, scope,
     postedBy: { familyUid: S.uid, familyName: familyData?.familyName||'' },
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    genderFilter,
   };
   if (payboxUrl) docData.payboxUrl = payboxUrl;
 
@@ -2378,9 +2580,20 @@ async function approveEvent(cid, pendingId) {
     if (!doc.exists) return;
     const data = { ...doc.data() };
     delete data.status;
+    const approver = { familyUid: S.uid, familyName: familyData?.familyName || '' };
+    data.approvedBy = approver;
+    data.approvedAt = firebase.firestore.FieldValue.serverTimestamp();
     await fbDb.collection('schoolClasses').doc(cid).collection('events').add(data);
+    await fbDb.collection('adminLog').add({
+      action: 'approved', classId: cid,
+      eventTitle: data.title, eventDate: data.date || '',
+      submittedBy: data.postedBy || {},
+      actionBy: approver,
+      actionAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
     await ref.delete();
     delete _commCache[cid];
+    if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
     await renderCommunity();
   } catch(e) { console.error('approveEvent:', e); }
 }
@@ -2388,10 +2601,95 @@ async function approveEvent(cid, pendingId) {
 async function rejectEvent(cid, pendingId) {
   if (!confirm('לדחות את הבקשה?')) return;
   try {
-    await fbDb.collection('schoolClasses').doc(cid).collection('pendingEvents').doc(pendingId).delete();
+    const ref = fbDb.collection('schoolClasses').doc(cid).collection('pendingEvents').doc(pendingId);
+    const doc = await ref.get();
+    const evData = doc.exists ? doc.data() : {};
+    await fbDb.collection('adminLog').add({
+      action: 'rejected', classId: cid,
+      eventTitle: evData.title || '', eventDate: evData.date || '',
+      submittedBy: evData.postedBy || {},
+      actionBy: { familyUid: S.uid, familyName: familyData?.familyName || '' },
+      actionAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    await ref.delete();
     delete _commCache[cid];
+    if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
     await renderCommunity();
   } catch(e) { console.error('rejectEvent:', e); }
+}
+
+function openAdminPanel() {
+  el('adminPanel').classList.remove('hidden');
+  renderAdminPanel();
+}
+function closeAdminPanel() { el('adminPanel').classList.add('hidden'); }
+
+async function renderAdminPanel() {
+  el('adminPendingList').innerHTML = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
+  el('adminLogList').innerHTML     = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
+  try {
+    const [pendingSnap, logSnap, appsSnap] = await Promise.all([
+      fbDb.collectionGroup('pendingEvents').get(),
+      fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get(),
+      fbDb.collection('committeeApplications').where('status','==','pending').get(),
+    ]);
+
+    // Pending
+    const pending = pendingSnap.docs.map(d => ({ id: d.id, classId: d.ref.parent.parent.id, ...d.data() }));
+    el('adminPendingCount').textContent = pending.length || '';
+    el('adminPendingList').innerHTML = pending.length
+      ? pending.map(ev => `
+          <div class="pending-event-row">
+            <div class="pending-event-info">
+              <span class="pending-event-title">${esc(ev.title)}</span>
+              <span class="pending-event-meta">${esc(ev.postedBy?.familyName||'')}${ev.date ? ' · ' + ev.date : ''} · ${esc(classLabelFromId(ev.classId))}</span>
+            </div>
+            <div class="pending-event-actions">
+              <button class="pending-approve-btn" onclick="approveEvent('${ev.classId}','${ev.id}')">${t('pendingApprove')}</button>
+              <button class="pending-reject-btn"  onclick="rejectEvent('${ev.classId}','${ev.id}')">${t('pendingReject')}</button>
+            </div>
+          </div>`).join('')
+      : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין בקשות ממתינות</div>';
+
+    // Committee applications section
+    const appsList = appsSnap.docs.map(d=>({id:d.id,...d.data()}));
+    const appsHtml = appsList.length
+      ? appsList.map(app => {
+          const pct = Math.min(100,Math.round((app.voteCount||0)/15*100));
+          return `<div class="application-row">
+        <div class="application-info">
+          <div class="application-name">👤 ${esc(app.applicantName||'')}</div>
+          <div class="application-meta">${app.voteCount||0}/15 תמיכות · ${esc(classLabelFromId(app.classId||''))}</div>
+          <div class="application-progress"><div class="application-progress-fill" style="width:${pct}%"></div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+          <button class="pending-approve-btn" onclick="adminApproveApplication('${app.id}','${app.classId||''}')">${t('commApplicationApprove')}</button>
+          <button class="pending-reject-btn"  onclick="adminDenyApplication('${app.id}','${app.classId||''}')">${t('commApplicationDeny')}</button>
+        </div>
+      </div>`;
+        }).join('')
+      : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין מועמדויות ממתינות</div>';
+    el('adminAppsList').innerHTML = appsHtml;
+
+    // Log
+    const log = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    el('adminLogList').innerHTML = log.length
+      ? log.map(entry => {
+          const approved = entry.action === 'approved';
+          const dt = entry.actionAt?.toDate ? entry.actionAt.toDate().toLocaleString('he-IL') : '';
+          return `<div class="admin-log-row">
+            <div class="admin-log-title">
+              <span class="admin-log-badge ${approved ? 'approved' : 'rejected'}">${approved ? '✓ אושר' : '✕ נדחה'}</span>${esc(entry.eventTitle)}
+            </div>
+            <div class="admin-log-meta">הוגש על ידי: ${esc(entry.submittedBy?.familyName||'?')} · ${approved ? 'אושר' : 'נדחה'} על ידי: ${esc(entry.actionBy?.familyName||'?')} · ${dt}</div>
+            <div class="admin-log-meta">כיתה: ${esc(classLabelFromId(entry.classId||''))}</div>
+          </div>`;
+        }).join('')
+      : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין היסטוריה עדיין</div>';
+  } catch(e) {
+    console.error('renderAdminPanel:', e);
+    el('adminPendingList').innerHTML = `<div style="color:#e53e3e;font-size:12px">${e.message}</div>`;
+  }
 }
 
 async function setCommitteeRole(targetUid, grant) {
@@ -2400,6 +2698,77 @@ async function setCommitteeRole(targetUid, grant) {
     _commCache = {};
     await renderCommunity();
   } catch(e) { console.error('setCommitteeRole:', e); }
+}
+
+async function applyForCommittee(cid) {
+  if (!confirm('להגיש מועמדות לוועד ההורים?')) return;
+  const expires = new Date();
+  expires.setDate(expires.getDate() + 5);
+  try {
+    await fbDb.collection('committeeApplications').add({
+      applicantUid: S.uid,
+      applicantName: familyData?.familyName || '',
+      classId: cid,
+      appliedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      expiresAt: firebase.firestore.Timestamp.fromDate(expires),
+      status: 'pending',
+      votes: [],
+      voteCount: 0,
+    });
+    delete _commCache[cid];
+    await renderCommunity();
+  } catch(e) { console.error('applyForCommittee:', e); }
+}
+
+async function voteForApplication(appId, cid) {
+  try {
+    const ref = fbDb.collection('committeeApplications').doc(appId);
+    await fbDb.runTransaction(async tx => {
+      const doc = await tx.get(ref);
+      if (!doc.exists || doc.data().status !== 'pending') return;
+      const votes = doc.data().votes || [];
+      if (votes.includes(S.uid)) return;
+      const newVotes = [...votes, S.uid];
+      const newCount = newVotes.length;
+      const update = { votes: newVotes, voteCount: newCount };
+      if (newCount >= 15) {
+        update.status = 'approved';
+        update.decisionReason = 'vote';
+        update.decidedAt = firebase.firestore.FieldValue.serverTimestamp();
+      }
+      tx.update(ref, update);
+    });
+    delete _commCache[cid];
+    await renderCommunity();
+  } catch(e) { console.error('voteForApplication:', e); }
+}
+
+async function adminApproveApplication(appId, cid) {
+  try {
+    await fbDb.collection('committeeApplications').doc(appId).update({
+      status: 'approved',
+      decisionReason: 'admin',
+      decidedBy: S.uid,
+      decidedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    delete _commCache[cid];
+    if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
+    await renderCommunity();
+  } catch(e) { console.error('adminApproveApplication:', e); }
+}
+
+async function adminDenyApplication(appId, cid) {
+  if (!confirm('לדחות מועמדות זו?')) return;
+  try {
+    await fbDb.collection('committeeApplications').doc(appId).update({
+      status: 'denied',
+      decisionReason: 'admin',
+      decidedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    delete _commCache[cid];
+    if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
+    await renderCommunity();
+  } catch(e) { console.error('adminDenyApplication:', e); }
 }
 
 async function refreshCommunity() {
@@ -2756,6 +3125,68 @@ function renderHeader() {
 // ════════════════════════════════════════
 //  HOME
 // ════════════════════════════════════════
+async function refreshHomeUpcoming() {
+  const kidsWithSchool = getKids()
+    .map(name => getMembers().find(m => m.name === name))
+    .filter(m => m?.school?.city && m?.school?.grade);
+  if (kidsWithSchool.length) await loadCommunityData(kidsWithSchool);
+  renderHomeUpcoming();
+}
+
+function renderHomeUpcoming() {
+  const card = el('homeUpcomingCard');
+  const container = el('homeUpcoming');
+  if (!card || !container) return;
+
+  // Personal calendar events
+  const personal = (S.events || [])
+    .filter(e => isEventUpcoming(e.date))
+    .map(e => ({ ...e, _src: 'personal' }));
+
+  // Class/grade/school events from cache
+  const classEvs = [];
+  getKids().forEach(name => {
+    const member = getMembers().find(m => m.name === name);
+    if (!member?.school) return;
+    const cid = classIdFor(member.school);
+    if (!cid || !_commCache[cid]) return;
+    const cache = _commCache[cid];
+    [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])].forEach(ev => {
+      if (isEventUpcoming(ev.date) && matchesGenderFilter(ev, name))
+        classEvs.push({ ...ev, _src: 'class', _kid: name });
+    });
+  });
+
+  // Merge, deduplicate, sort, take 5
+  const seen = new Set();
+  const all = [...personal, ...classEvs]
+    .filter(e => {
+      if (!e.date) return false;
+      const key = (e.id || e.title) + '_' + e.date;
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    })
+    .sort((a, b) => {
+      const d = (a.date||'').localeCompare(b.date||'');
+      return d !== 0 ? d : (a.time||'').localeCompare(b.time||'');
+    })
+    .slice(0, 5);
+
+  if (!all.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  container.innerHTML = all.map(ev => {
+    const isClass = ev._src === 'class';
+    return `<div class="task-row" style="gap:8px;padding:6px 0;align-items:flex-start">
+      <span style="font-size:18px;flex-shrink:0;line-height:1.4">${eventTypeIcon(ev.type)}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:#1a202c">${esc(ev.title)}${isClass ? scopeBadge(ev.scope) : ''}</div>
+        <div style="font-size:11px;color:#718096;font-weight:600;margin-top:2px">${fmtDate(ev.date)}${ev.time ? ' · ' + ev.time : ''}</div>
+      </div>
+      ${isClass && ev._kid ? `<span class="mini-avatar">${getAvatar(ev._kid)}</span>` : ''}
+    </div>`;
+  }).join('');
+}
+
 function renderHome() {
   const bannerEl = el('welcomeBanner');
   if (isKid()) {
@@ -2812,6 +3243,8 @@ function renderHome() {
         ${h.due?`<span style="font-size:11px;color:#a0aec0;font-weight:600;white-space:nowrap">${fmtDate(h.due)}</span>`:''}
         <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span></div>`).join('')
     : t('noPendingHw');
+
+  renderHomeUpcoming();
 }
 
 // ════════════════════════════════════════
@@ -3183,6 +3616,7 @@ function allCalEvents(){
     if(!cache)return;
     [...(cache.events||[]),...(cache.gradeEvents||[]),...(cache.schoolEvents||[])].forEach(ev=>{
       if(!ev.date)return;
+      if(!matchesGenderFilter(ev,name))return;
       classEvs.push({...ev,classEvent:true,classKid:name,_cid:cid});
     });
   });

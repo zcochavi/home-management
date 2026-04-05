@@ -52,11 +52,16 @@ async function sendToTokens(tokens, title, body, data = {}) {
   });
 }
 
-async function getClassFamilyUids(classId) {
+async function getClassFamilyUids(classId, genderFilter) {
   const snap = await db.collection('schoolClasses').doc(classId)
     .collection('members').get();
-  const uids = [...new Set(snap.docs.map(d => d.data().familyUid).filter(Boolean))];
-  console.log(`getClassFamilyUids(${classId}): ${uids.length} family(ies): ${uids.join(', ')}`);
+  let docs = snap.docs;
+  if (genderFilter && genderFilter !== 'all') {
+    const needed = genderFilter === 'boys' ? 'boy' : 'girl';
+    docs = docs.filter(d => d.data().gender === needed);
+  }
+  const uids = [...new Set(docs.map(d => d.data().familyUid).filter(Boolean))];
+  console.log(`getClassFamilyUids(${classId}, gender=${genderFilter||'all'}): ${uids.length} family(ies)`);
   return uids;
 }
 
@@ -109,12 +114,13 @@ exports.onPendingEventCreated = functions.firestore
     const familyDocs = await Promise.all(
       familyUids.map(uid => db.collection('families').doc(uid).get().catch(() => null))
     );
+    const posterUid = ev.postedBy?.familyUid;
+    // Committee members + admin, never the poster themselves
     const targetUids = familyDocs
-      .filter(d => d?.exists && d.data().role === 'committee')
+      .filter(d => d?.exists && d.data().role === 'committee' && d.id !== posterUid)
       .map(d => d.id);
-
-    // Always include admin
-    if (ADMIN_UID && !targetUids.includes(ADMIN_UID)) targetUids.push(ADMIN_UID);
+    if (ADMIN_UID && !targetUids.includes(ADMIN_UID) && ADMIN_UID !== posterUid)
+      targetUids.push(ADMIN_UID);
     console.log(`onPendingEventCreated: notifying ${targetUids.length} committee/admin user(s)`);
     if (!targetUids.length) return;
 
@@ -133,11 +139,22 @@ exports.onClassEventCreated = functions.firestore
     const ev  = snap.data();
     const cid = ctx.params.classId;
     console.log(`onClassEventCreated: classId=${cid}, title="${ev.title}", posterUid=${ev.postedBy?.familyUid}`);
-    const uids = await getClassFamilyUids(cid);
+    const uids = await getClassFamilyUids(cid, ev.genderFilter);
     const poster = ev.postedBy?.familyName || '';
     const body   = poster ? `${poster} · ${classLabel(cid)}` : classLabel(cid);
     await notifyFamilies(uids, ev.postedBy?.familyUid, ev.title, body,
       { type: 'classEvent', classId: cid, eventId: ctx.params.eventId });
+
+    // If this event went through the approval flow, notify the original poster
+    if (ev.approvedBy && ev.postedBy?.familyUid) {
+      const approverName = ev.approvedBy.familyName || '';
+      const posterTokens = await getTokens(ev.postedBy.familyUid);
+      await sendToTokens(posterTokens,
+        `✅ האירוע שלך אושר: ${ev.title}`,
+        approverName ? `אושר על ידי ${approverName} · ${classLabel(cid)}` : classLabel(cid),
+        { type: 'eventApproved', classId: cid, eventId: ctx.params.eventId }
+      );
+    }
   });
 
 exports.onGradeEventCreated = functions.firestore
@@ -166,4 +183,88 @@ exports.onSchoolEventCreated = functions.firestore
     const body   = `${poster ? poster + ' · ' : ''}${school || city}`;
     await notifyFamilies(uids, ev.postedBy?.familyUid, ev.title, body,
       { type: 'schoolEvent', schoolId: sid, eventId: ctx.params.eventId });
+  });
+
+exports.onApplicationCreated = functions.firestore
+  .document('committeeApplications/{appId}')
+  .onCreate(async (snap, ctx) => {
+    const app = snap.data();
+    const cid = app.classId;
+    console.log(`onApplicationCreated: ${app.applicantName} applied for class ${cid}`);
+
+    // Notify admin
+    const targets = [];
+    if (ADMIN_UID && ADMIN_UID !== app.applicantUid) targets.push(ADMIN_UID);
+
+    // Notify all class members (to vote), excluding applicant
+    const memberUids = await getClassFamilyUids(cid);
+    memberUids.filter(uid => uid !== app.applicantUid && !targets.includes(uid))
+              .forEach(uid => targets.push(uid));
+
+    if (!targets.length) return;
+    const tokenArrays = await Promise.all(targets.map(getTokens));
+    await sendToTokens(tokenArrays.flat(),
+      `👤 מועמדות חדשה לוועד: ${app.applicantName}`,
+      `${classLabel(cid)} · ${app.voteCount||0}/15 תמיכות`,
+      { type: 'committeeApplication', appId: ctx.params.appId, classId: cid }
+    );
+  });
+
+exports.onApplicationUpdated = functions.firestore
+  .document('committeeApplications/{appId}')
+  .onUpdate(async (change, ctx) => {
+    const before = change.before.data();
+    const after  = change.after.data();
+    if (before.status === after.status) return; // no status change
+    const applicantUid = after.applicantUid;
+
+    if (after.status === 'approved') {
+      // Grant committee role
+      await db.collection('families').doc(applicantUid)
+        .update({ role: 'committee' }).catch(e => console.error('grant role:', e));
+
+      // Notify applicant
+      const reason = after.decisionReason === 'admin'
+        ? 'אושרת על ידי מנהל המערכת'
+        : 'אושרת על ידי הצבעת 15 הורים';
+      const tokens = await getTokens(applicantUid);
+      await sendToTokens(tokens,
+        '🎉 המועמדות שלך לוועד ההורים אושרה!',
+        reason,
+        { type: 'applicationApproved', classId: after.classId }
+      );
+    } else if (after.status === 'denied') {
+      // Notify applicant
+      const reason = after.decisionReason === 'expired'
+        ? 'לא הגעת לרוב הנדרש של 15 תמיכות תוך 5 ימים'
+        : after.decisionReason === 'admin'
+          ? 'נדחתה על ידי מנהל המערכת'
+          : 'נדחתה';
+      const tokens = await getTokens(applicantUid);
+      await sendToTokens(tokens,
+        '❌ המועמדות שלך לוועד ההורים נדחתה',
+        reason,
+        { type: 'applicationDenied', classId: after.classId }
+      );
+    }
+  });
+
+exports.expireCommitteeApplications = functions.pubsub
+  .schedule('every 24 hours')
+  .onRun(async () => {
+    const now = admin.firestore.Timestamp.now();
+    const snap = await db.collection('committeeApplications')
+      .where('status', '==', 'pending')
+      .where('expiresAt', '<=', now)
+      .get();
+    if (snap.empty) { console.log('expireCommitteeApplications: nothing to expire'); return null; }
+    console.log(`expireCommitteeApplications: expiring ${snap.size} application(s)`);
+    await Promise.all(snap.docs.map(doc =>
+      doc.ref.update({
+        status: 'denied',
+        decisionReason: 'expired',
+        decidedAt: admin.firestore.FieldValue.serverTimestamp(),
+      })
+    ));
+    return null;
   });
