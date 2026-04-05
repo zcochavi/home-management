@@ -698,7 +698,7 @@ function initNotifBanners() {
       renderNotifBanners(_allNotifs.filter(n => !n.dismissed).reverse());
       _updateBellBadge();
       if (!el('messageCenterPanel')?.classList.contains('hidden')) renderMessageCenter();
-    });
+    }, err => console.error('[notif] onSnapshot error:', err.code, err.message));
 }
 
 function stopNotifBanners() {
