@@ -1433,8 +1433,7 @@ function setMgmtNewGender(g) {
   _mgmtNewGender = g;
   el('mgmtNewGenderBoy') .classList.toggle('active', g === 'boy');
   el('mgmtNewGenderGirl').classList.toggle('active', g === 'girl');
-  el('mgmtNewGenderBoy') .classList.remove('input-error');
-  el('mgmtNewGenderGirl').classList.remove('input-error');
+  el('mgmtNewGenderRow').classList.remove('input-error');
 }
 function setMgmtEditRole(i, role) {
   el(`mgmtEditPanel_${i}`).dataset.role = role;

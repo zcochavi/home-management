@@ -21,6 +21,8 @@
     .auth-input { width:100%;padding:11px 14px;border:2px solid #e8edf5;border-radius:12px;font-family:inherit;font-size:14px;font-weight:700;outline:none;margin-bottom:10px;display:block;box-sizing:border-box;color:#1a202c; }
     .auth-input:focus { border-color:#6a11cb; }
     .auth-input.input-error { border-color:#e53e3e !important; animation:shake .35s ease; }
+    .mb-role-toggle.input-error { outline:2px solid #e53e3e;animation:shake .35s ease; }
+    .mb-role-toggle.input-error .mb-role-btn { color:#e53e3e; }
     @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-5px)} 40%,80%{transform:translateX(5px)} }
     .auth-input:disabled { background:#f7f8fc;color:#b0bac8;cursor:not-allowed;border-color:#e8edf5; }
     .auth-error { color:#e53e3e;font-size:13px;font-weight:700;margin-bottom:6px;min-height:16px; }
