@@ -151,7 +151,12 @@
     .pending-approve-btn:hover { background:#9ae6b4; }
     .pending-reject-btn  { background:#fed7d7;color:#c53030;border:none;border-radius:8px;font-family:inherit;font-size:12px;font-weight:800;padding:4px 9px;cursor:pointer; }
     .pending-reject-btn:hover  { background:#feb2b2; }
-    .role-badge-committee { background:#fef3c7;color:#92400e;font-size:10px;font-weight:800;padding:2px 7px;border-radius:10px;white-space:nowrap; }
+    .role-badge { display:inline-block;font-size:11px;font-weight:800;padding:2px 9px;border-radius:10px;white-space:nowrap; }
+    .role-badge-admin     { background:#fde8ff;color:#6a11cb; }
+    .role-badge-committee { background:#fef3c7;color:#92400e; }
+    .role-badge-parent    { background:#e6f4ea;color:#276749; }
+    .role-badge-kid       { background:#e8f4fd;color:#1a6fa3; }
+    .header-role-badge    { margin-top:3px; }
     .role-toggle-btn { background:none;border:1px solid #e2e8f0;border-radius:8px;font-family:inherit;font-size:11px;font-weight:700;color:#718096;padding:2px 7px;cursor:pointer;white-space:nowrap; }
     .role-toggle-btn:hover { border-color:#6a11cb;color:#6a11cb; }
     .application-row { display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #f0f4ff; }
@@ -844,7 +849,7 @@ const STRINGS = {
   he: {
     dir:'rtl', locale:'he-IL',
     loginSub:'מי אתה?',
-    parentRole:'הורה', kidRole:'ילד/ה',
+    parentRole:'הורה', kidRole:'ילד/ה', roleAdmin:'🔑 מנהל', roleParent:'הורה', roleKid:'ילד/ה',
     greetMorning:'בוקר טוב', greetAfternoon:'צהריים טובים', greetEvening:'ערב טוב',
     switchUser:'החלף משתמש', langToggle:'EN',
     tabs:['בית','משימות','קניות','שיעורים','לוח שנה','קהילה'],
@@ -922,7 +927,7 @@ const STRINGS = {
   en: {
     dir:'ltr', locale:'en-US',
     loginSub:"Who's there?",
-    parentRole:'Parent', kidRole:'Kid',
+    parentRole:'Parent', kidRole:'Kid', roleAdmin:'🔑 Admin', roleParent:'Parent', roleKid:'Kid',
     greetMorning:'Good morning', greetAfternoon:'Good afternoon', greetEvening:'Good evening',
     switchUser:'Switch user', langToggle:'עב',
     tabs:['Home','Chores','Grocery','Homework','Calendar','Community'],
@@ -1165,6 +1170,27 @@ const isParent    = () => getParents().includes(S.user);
 const isKid       = () => getKids().includes(S.user);
 const isAdmin     = () => !!ADMIN_UID && S.uid === ADMIN_UID;
 const isCommittee = () => isAdmin() || familyData?.role === 'committee';
+
+function roleBadgeHtml(memberRole, familyUidForAdmin) {
+  // memberRole: 'parent' | 'kid'
+  // familyUidForAdmin: optional, to check if this member's family is admin
+  const isThisAdmin = familyUidForAdmin && ADMIN_UID && familyUidForAdmin === ADMIN_UID;
+  const isThisComm  = familyData?.role === 'committee';
+  if (memberRole === 'kid')
+    return `<span class="role-badge role-badge-kid">${t('roleKid')}</span>`;
+  if (isThisAdmin)
+    return `<span class="role-badge role-badge-admin">${t('roleAdmin')}</span>`;
+  if (isThisComm)
+    return `<span class="role-badge role-badge-committee">${t('roleCommittee')}</span>`;
+  return `<span class="role-badge role-badge-parent">${t('roleParent')}</span>`;
+}
+
+function currentUserRoleBadge() {
+  if (isKid())   return `<span class="role-badge role-badge-kid">${t('roleKid')}</span>`;
+  if (isAdmin()) return `<span class="role-badge role-badge-admin">${t('roleAdmin')}</span>`;
+  if (isCommittee()) return `<span class="role-badge role-badge-committee">${t('roleCommittee')}</span>`;
+  return `<span class="role-badge role-badge-parent">${t('roleParent')}</span>`;
+}
 // Committee members and admin publish immediately; regular parents need approval
 const canPublishDirectly = () => isParent() && isCommittee();
 const gcalReady   = () => gcal.gapiReady && gcal.gisReady && !GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID');
@@ -1756,7 +1782,7 @@ function renderLoginScreen() {
     <div class="login-card${i===visibleMembers.length-1&&visibleMembers.length%2!==0?' login-card-solo':''}" onclick="login('${esc(m.name)}')">
       <div class="login-card-emoji">${getAvatar(m.name)}</div>
       <div class="login-card-name">${esc(m.name)}</div>
-      <div class="login-card-role">${m.role==='parent'?STRINGS.he.parentRole:STRINGS.he.kidRole}</div>
+      <div class="login-card-role">${roleBadgeHtml(m.role, m.role==='parent'?S.uid:null)}</div>
     </div>`).join('');
 }
 
@@ -3546,7 +3572,7 @@ function applyRoleUI() {
 function renderHeader() {
   const h = new Date().getHours();
   const g = h<12?t('greetMorning'):h<17?t('greetAfternoon'):t('greetEvening');
-  el('headerGreeting').textContent = `${g}, ${S.user}! ${getEmoji(S.user)}`;
+  el('headerGreeting').innerHTML = `${esc(g)}, ${esc(S.user)}! ${getEmoji(S.user)} <span class="header-role-badge">${currentUserRoleBadge()}</span>`;
   el('headerDate').textContent = new Date().toLocaleDateString(t('locale'),{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const allNames = getAllMemberNames();
   const members = isParent()
