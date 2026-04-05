@@ -664,6 +664,77 @@ exports.migrateCommitteeRoles = functions.https.onCall(async (data, context) => 
   return { migrated, skipped, errors };
 });
 
+// Resolve one part ('city' or 'school') of a type:'city' pending request
+exports.resolveSchoolPart = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const { id, part, action } = data; // part: 'city'|'school', action: 'approved'|'denied'
+
+  const ref     = db.collection('pendingSchools').doc(id);
+  const docSnap = await ref.get();
+  if (!docSnap.exists) throw new functions.https.HttpsError('not-found', 'Request not found');
+  const req = docSnap.data();
+
+  // Record this part's decision
+  const update = { [`${part}Status`]: action };
+  await ref.update(update);
+
+  // Re-read to get full current state
+  const updated       = (await ref.get()).data();
+  const cityStatus    = updated.cityStatus   || 'pending';
+  const schoolStatus  = updated.schoolStatus || 'pending';
+  const bothResolved  = cityStatus !== 'pending' && schoolStatus !== 'pending';
+  const bothApproved  = cityStatus === 'approved' && schoolStatus === 'approved';
+  const anyDenied     = cityStatus === 'denied'   || schoolStatus === 'denied';
+
+  if (!bothResolved) return { ok: true, state: 'partial' };
+
+  // Both parts decided — finalise
+  if (bothApproved) {
+    // Add school to index
+    await db.collection('schoolIndex').doc('cities_list')
+      .set({ cities: admin.firestore.FieldValue.arrayUnion(req.city) }, { merge: true });
+    await db.collection('schoolIndex').doc('schools__' + (req.city||'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^\w\u0590-\u05FF]/g,''))
+      .set({ schools: admin.firestore.FieldValue.arrayUnion(req.schoolName) }, { merge: true });
+
+    // Register families & notify
+    for (const pf of (req.pendingFamilies || [])) {
+      try {
+        const famSnap = await db.collection('families').doc(pf.familyUid).get();
+        if (!famSnap.exists) continue;
+        const members = famSnap.data().members.map(m =>
+          m.name === pf.kidName ? (({ schoolPending, ...rest }) => rest)(m) : m
+        );
+        await db.collection('families').doc(pf.familyUid).update({ members });
+        const tokens = await getTokens(pf.familyUid);
+        await sendToTokens(tokens, '✅ בית הספר אושר',
+          `בקשת הצטרפות של ${pf.kidName} לבית הספר ${req.schoolName} אושרה`);
+      } catch(e) { console.error('resolveSchoolPart approve family:', e); }
+    }
+    await ref.update({ status: 'approved' });
+  } else if (anyDenied) {
+    // At least one denied — clear school data & notify about what was denied
+    const deniedPart = cityStatus === 'denied' ? `העיר "${req.city}"` : `בית הספר "${req.schoolName}"`;
+    for (const pf of (req.pendingFamilies || [])) {
+      try {
+        const famSnap = await db.collection('families').doc(pf.familyUid).get();
+        if (!famSnap.exists) continue;
+        const members = famSnap.data().members.map(m => {
+          if (m.name !== pf.kidName) return m;
+          const u = { ...m }; delete u.school; delete u.schoolPending; return u;
+        });
+        await db.collection('families').doc(pf.familyUid).update({ members });
+        const tokens = await getTokens(pf.familyUid);
+        await sendToTokens(tokens, '❌ בקשת בית הספר נדחתה',
+          `${deniedPart} שהוגשה עבור ${pf.kidName} נדחתה — יש לעדכן את פרטי בית הספר בניהול המשפחה`);
+      } catch(e) { console.error('resolveSchoolPart deny family:', e); }
+    }
+    await ref.update({ status: 'denied' });
+  }
+
+  return { ok: true, state: bothApproved ? 'approved' : 'denied' };
+});
+
 exports.approveSchoolRequest = functions.https.onCall(async (data, context) => {
   if (context.auth?.uid !== ADMIN_UID)
     throw new functions.https.HttpsError('permission-denied', 'Admins only');

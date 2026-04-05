@@ -1502,7 +1502,7 @@ async function requestNewSchool(kidName, school, requestType) {
     });
   } else {
     // Create new pending request
-    const ref = await fbDb.collection('pendingSchools').add({
+    const newReq = {
       type: requestType,
       city: school.city.trim(),
       schoolName: (school.name || '').trim(),
@@ -1510,7 +1510,12 @@ async function requestNewSchool(kidName, school, requestType) {
       pendingFamilies: [newFamily],
       status: 'pending',
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
+    };
+    if (requestType === 'city') {
+      newReq.cityStatus   = 'pending';
+      newReq.schoolStatus = 'pending';
+    }
+    const ref = await fbDb.collection('pendingSchools').add(newReq);
     pendingId = ref.id;
   }
 
@@ -2457,15 +2462,39 @@ async function renderAdminPanel() {
     const schoolsList = schoolsSnap.docs.map(d=>({id:d.id,...d.data()}));
     el('adminSchoolsList').innerHTML = schoolsList.length
       ? schoolsList.map(req => {
-          const label = req.type === 'city'
-            ? `עיר חדשה: ${esc(req.city)}`
-            : `בית ספר חדש: ${esc(req.schoolName)} (${esc(req.city)})`;
           const reqBy = personFullName(req.requestedBy);
           const count = (req.pendingFamilies||[]).length;
+          const meta  = `${reqBy ? 'הוגש על ידי: ' + esc(reqBy) + ' · ' : ''}${count} משפחה/ות ממתינות`;
+          if (req.type === 'city') {
+            // City + school are separate decisions
+            const cityStatus   = req.cityStatus   || 'pending';
+            const schoolStatus = req.schoolStatus || 'pending';
+            const statusBadge = s => s === 'approved'
+              ? '<span style="color:#276749;font-size:11px;font-weight:700">✅ אושר</span>'
+              : s === 'denied'
+              ? '<span style="color:#c53030;font-size:11px;font-weight:700">❌ נדחה</span>'
+              : '';
+            return `<div class="pending-event-row" style="flex-direction:column;align-items:stretch;gap:8px">
+              <div style="font-size:12px;color:#718096;font-weight:700">${meta}</div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span class="pending-event-title" style="flex:1">🏙️ עיר: ${esc(req.city)}</span>
+                ${statusBadge(cityStatus)}
+                ${cityStatus==='pending' ? `<button class="pending-approve-btn" onclick="approveSchoolPart('${req.id}','city')">אשר עיר</button>
+                <button class="pending-reject-btn" onclick="denySchoolPart('${req.id}','city')">דחה עיר</button>` : ''}
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span class="pending-event-title" style="flex:1">🏫 בית ספר: ${esc(req.schoolName)}</span>
+                ${statusBadge(schoolStatus)}
+                ${schoolStatus==='pending' ? `<button class="pending-approve-btn" onclick="approveSchoolPart('${req.id}','school')">אשר ב"ס</button>
+                <button class="pending-reject-btn" onclick="denySchoolPart('${req.id}','school')">דחה ב"ס</button>` : ''}
+              </div>
+            </div>`;
+          }
+          // type:'school' — just school, single approve/deny
           return `<div class="pending-event-row">
             <div class="pending-event-info">
-              <span class="pending-event-title">${label}</span>
-              <span class="pending-event-meta">${reqBy ? 'הוגש על ידי: ' + esc(reqBy) + ' · ' : ''}${count} משפחה/ות ממתינות</span>
+              <span class="pending-event-title">🏫 בית ספר חדש: ${esc(req.schoolName)} (${esc(req.city)})</span>
+              <span class="pending-event-meta">${meta}</span>
             </div>
             <div class="pending-event-actions">
               <button class="pending-approve-btn" onclick="approveSchool('${req.id}')">${t('pendingApprove')}</button>
@@ -2574,6 +2603,25 @@ async function adminDenyApplication(appId, cid) {
     if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('adminDenyApplication:', e); }
+}
+
+async function approveSchoolPart(id, part) {
+  try {
+    if (part === 'city') {
+      // Also update local school index for city
+      const docSnap = await fbDb.collection('pendingSchools').doc(id).get();
+      if (docSnap.exists) await updateSchoolIndex(docSnap.data().city, null);
+    }
+    await fbFunctions.httpsCallable('resolveSchoolPart')({ id, part, action: 'approved', adminName: myFullName() });
+    await renderAdminPanel();
+  } catch(e) { console.error('approveSchoolPart:', e); alert('שגיאה: ' + e.message); }
+}
+
+async function denySchoolPart(id, part) {
+  try {
+    await fbFunctions.httpsCallable('resolveSchoolPart')({ id, part, action: 'denied', adminName: myFullName() });
+    await renderAdminPanel();
+  } catch(e) { console.error('denySchoolPart:', e); alert('שגיאה: ' + e.message); }
 }
 
 async function approveSchool(id) {
