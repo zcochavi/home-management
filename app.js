@@ -683,11 +683,9 @@ function stopPresence() {
   if (_presenceInterval) { clearInterval(_presenceInterval); _presenceInterval = null; }
   if (S.uid && S.user && fbDb) {
     const docId = S.uid + '_' + S.user;
-    // Set lastSeen to epoch so the 4-min threshold marks them offline immediately
-    // (avoids needing delete permission in security rules)
     return fbDb.collection('presence').doc(docId)
-      .update({ lastSeen: new firebase.firestore.Timestamp(0, 0) })
-      .catch(() => {});
+      .update({ online: false, lastSeen: new firebase.firestore.Timestamp(0, 0) })
+      .catch(e => console.warn('[presence] stopPresence failed:', e.code, e.message));
   }
   return Promise.resolve();
 }
@@ -702,6 +700,7 @@ async function initPresence() {
     memberName: S.user,
     familyName: familyData?.familyName || '',
     role:       isParent() ? 'parent' : 'kid',
+    online:     true,
     lastSeen:   firebase.firestore.FieldValue.serverTimestamp(),
   }, { merge: true }).catch(e => console.warn('[presence] write failed:', e.code, e.message));
   write();
