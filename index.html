@@ -26,6 +26,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     :root { font-family: 'Heebo', 'Nunito', sans-serif; }
@@ -576,6 +577,8 @@
     <div id="adminAppsList" style="margin-bottom:24px"></div>
     <div class="comm-section-label">✅ היסטוריית אישורים</div>
     <div id="adminLogList"></div>
+    <div class="comm-section-label" style="margin-top:4px">⚙️ הגדרות התראות</div>
+    <div id="adminNotifSettings"></div>
   </div>
 </div>
 
@@ -815,11 +818,12 @@ const FB_CONFIGURED = !FIREBASE_CONFIG.apiKey.startsWith('YOUR_');
 const VAPID_KEY  = 'BD6LTj6Mp9N1QdCD59_QrRWic6s7uBQV-qJFkUaH8oRCXhTuPrHhIy4WEi158caziOmGm9D1WQq4bhJVidRFPVI';
 // Paste your Firebase UID here — this account gets admin privileges (see Settings → avatar for your UID)
 const ADMIN_UID  = 'TirsqoPeWHfpB3kIULJh4UM3e2r1';
-let fbAuth, fbDb, fbMessaging = null;
+let fbAuth, fbDb, fbMessaging = null, fbFunctions = null;
 if (FB_CONFIGURED) {
   firebase.initializeApp(FIREBASE_CONFIG);
   fbAuth = firebase.auth();
   fbDb   = firebase.firestore();
+  fbFunctions = firebase.functions();
 }
 
 // ════════════════════════════════════════
@@ -2624,6 +2628,78 @@ function openAdminPanel() {
 }
 function closeAdminPanel() { el('adminPanel').classList.add('hidden'); }
 
+const NOTIF_DEFAULTS = {
+  committeeApplications: { expiryDays: 5, reminderHoursBeforeExpiry: 24, notifyOnDecision: true },
+  pendingEvents:         { expiryDays: 7, reminderHoursBeforeExpiry: 24, notifyOnDecision: true },
+};
+
+async function loadNotifSettings() {
+  try {
+    const snap = await fbDb.collection('appConfig').doc('notifications').get();
+    const data = snap.exists ? snap.data() : {};
+    return {
+      committeeApplications: { ...NOTIF_DEFAULTS.committeeApplications, ...(data.committeeApplications || {}) },
+      pendingEvents:         { ...NOTIF_DEFAULTS.pendingEvents,         ...(data.pendingEvents || {}) },
+    };
+  } catch(e) { return NOTIF_DEFAULTS; }
+}
+
+async function renderNotifSettings() {
+  const cfg = await loadNotifSettings();
+  const types = [
+    { key: 'committeeApplications', label: '🗳️ מועמדויות לוועד' },
+    { key: 'pendingEvents',         label: '📋 אירועים ממתינים לאישור' },
+  ];
+  el('adminNotifSettings').innerHTML = types.map(({ key, label }) => {
+    const c = cfg[key];
+    return `<div class="card" style="margin-bottom:12px;padding:12px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:10px">${label}</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px">
+          תפוגה (ימים):
+          <input type="number" min="1" max="365" value="${c.expiryDays}"
+            id="notif_${key}_expiry" style="width:60px;padding:4px 8px;border:1px solid #d0d9e8;border-radius:6px;font-family:inherit">
+        </label>
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px">
+          תזכורת (שעות לפני תפוגה):
+          <input type="number" min="1" max="720" value="${c.reminderHoursBeforeExpiry}"
+            id="notif_${key}_reminder" style="width:60px;padding:4px 8px;border:1px solid #d0d9e8;border-radius:6px;font-family:inherit">
+        </label>
+        <label style="font-size:13px;display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="notif_${key}_notify" ${c.notifyOnDecision ? 'checked' : ''}
+            style="width:16px;height:16px">
+          עדכן מגיש על החלטה
+        </label>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="admin-btn" onclick="saveNotifSettings('${key}')" style="flex:1;padding:8px;font-size:13px">💾 שמור</button>
+          <button class="admin-btn" onclick="nudgePendingNow('${key}')" style="flex:1;padding:8px;font-size:13px;background:#f0fff4;color:#276749;border-color:#9ae6b4">🔔 שלח תזכורת עכשיו</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function saveNotifSettings(key) {
+  const expiryDays             = parseInt(el(`notif_${key}_expiry`)?.value) || NOTIF_DEFAULTS[key].expiryDays;
+  const reminderHoursBeforeExpiry = parseInt(el(`notif_${key}_reminder`)?.value) || NOTIF_DEFAULTS[key].reminderHoursBeforeExpiry;
+  const notifyOnDecision       = el(`notif_${key}_notify`)?.checked ?? true;
+  try {
+    await fbDb.collection('appConfig').doc('notifications').set(
+      { [key]: { expiryDays, reminderHoursBeforeExpiry, notifyOnDecision } },
+      { merge: true }
+    );
+    alert('הגדרות נשמרו');
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+async function nudgePendingNow(type) {
+  try {
+    const nudge = fbFunctions.httpsCallable('nudgePending');
+    const result = await nudge({ type });
+    alert(`נשלחו ${result.data.sent} תזכורות`);
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
 async function renderAdminPanel() {
   el('adminPendingList').innerHTML = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
   el('adminLogList').innerHTML     = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
@@ -2686,6 +2762,8 @@ async function renderAdminPanel() {
           </div>`;
         }).join('')
       : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין היסטוריה עדיין</div>';
+
+    await renderNotifSettings();
   } catch(e) {
     console.error('renderAdminPanel:', e);
     el('adminPendingList').innerHTML = `<div style="color:#e53e3e;font-size:12px">${e.message}</div>`;
@@ -2702,15 +2780,12 @@ async function setCommitteeRole(targetUid, grant) {
 
 async function applyForCommittee(cid) {
   if (!confirm('להגיש מועמדות לוועד ההורים?')) return;
-  const expires = new Date();
-  expires.setDate(expires.getDate() + 5);
   try {
     await fbDb.collection('committeeApplications').add({
       applicantUid: S.uid,
       applicantName: familyData?.familyName || '',
       classId: cid,
       appliedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      expiresAt: firebase.firestore.Timestamp.fromDate(expires),
       status: 'pending',
       votes: [],
       voteCount: 0,

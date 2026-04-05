@@ -97,6 +97,26 @@ function classLabel(classId) {
   return `${school || city} · כיתה ${grade || ''}${classNum ? "'" + classNum : ''}`;
 }
 
+const DEFAULT_CONFIG = {
+  committeeApplications: { expiryDays: 5, reminderHoursBeforeExpiry: 24, notifyOnDecision: true },
+  pendingEvents:         { expiryDays: 7, reminderHoursBeforeExpiry: 24, notifyOnDecision: true },
+};
+
+async function getNotificationConfig() {
+  try {
+    const snap = await db.collection('appConfig').doc('notifications').get();
+    if (!snap.exists) return DEFAULT_CONFIG;
+    const data = snap.data();
+    return {
+      committeeApplications: { ...DEFAULT_CONFIG.committeeApplications, ...(data.committeeApplications || {}) },
+      pendingEvents:         { ...DEFAULT_CONFIG.pendingEvents,         ...(data.pendingEvents || {}) },
+    };
+  } catch(e) {
+    console.warn('getNotificationConfig: using defaults, error:', e.message);
+    return DEFAULT_CONFIG;
+  }
+}
+
 // ── Triggers ──────────────────────────────────────────────
 
 exports.onPendingEventCreated = functions.firestore
@@ -131,6 +151,11 @@ exports.onPendingEventCreated = functions.firestore
       `${poster ? poster + ' · ' : ''}${classLabel(cid)}`,
       { type: 'pendingApproval', classId: cid, pendingId: ctx.params.pendingId }
     );
+
+    // Set expiresAt based on config
+    const cfg = await getNotificationConfig();
+    const expiresAt = new Date(Date.now() + cfg.pendingEvents.expiryDays * 24 * 3600 * 1000);
+    await snap.ref.update({ expiresAt: admin.firestore.Timestamp.fromDate(expiresAt) });
   });
 
 exports.onClassEventCreated = functions.firestore
@@ -147,13 +172,16 @@ exports.onClassEventCreated = functions.firestore
 
     // If this event went through the approval flow, notify the original poster
     if (ev.approvedBy && ev.postedBy?.familyUid) {
-      const approverName = ev.approvedBy.familyName || '';
-      const posterTokens = await getTokens(ev.postedBy.familyUid);
-      await sendToTokens(posterTokens,
-        `✅ האירוע שלך אושר: ${ev.title}`,
-        approverName ? `אושר על ידי ${approverName} · ${classLabel(cid)}` : classLabel(cid),
-        { type: 'eventApproved', classId: cid, eventId: ctx.params.eventId }
-      );
+      const cfg = await getNotificationConfig();
+      if (cfg.pendingEvents.notifyOnDecision) {
+        const approverName = ev.approvedBy.familyName || '';
+        const posterTokens = await getTokens(ev.postedBy.familyUid);
+        await sendToTokens(posterTokens,
+          `✅ האירוע שלך אושר: ${ev.title}`,
+          approverName ? `אושר על ידי ${approverName} · ${classLabel(cid)}` : classLabel(cid),
+          { type: 'eventApproved', classId: cid, eventId: ctx.params.eventId }
+        );
+      }
     }
   });
 
@@ -208,6 +236,11 @@ exports.onApplicationCreated = functions.firestore
       `${classLabel(cid)} · ${app.voteCount||0}/15 תמיכות`,
       { type: 'committeeApplication', appId: ctx.params.appId, classId: cid }
     );
+
+    // Set expiresAt based on config
+    const cfg = await getNotificationConfig();
+    const expiresAt = new Date(Date.now() + cfg.committeeApplications.expiryDays * 24 * 3600 * 1000);
+    await snap.ref.update({ expiresAt: admin.firestore.Timestamp.fromDate(expiresAt) });
   });
 
 exports.onApplicationUpdated = functions.firestore
@@ -217,54 +250,205 @@ exports.onApplicationUpdated = functions.firestore
     const after  = change.after.data();
     if (before.status === after.status) return; // no status change
     const applicantUid = after.applicantUid;
+    const cfg = await getNotificationConfig();
 
     if (after.status === 'approved') {
-      // Grant committee role
+      // Grant committee role (unconditional)
       await db.collection('families').doc(applicantUid)
         .update({ role: 'committee' }).catch(e => console.error('grant role:', e));
 
       // Notify applicant
-      const reason = after.decisionReason === 'admin'
-        ? 'אושרת על ידי מנהל המערכת'
-        : 'אושרת על ידי הצבעת 15 הורים';
-      const tokens = await getTokens(applicantUid);
-      await sendToTokens(tokens,
-        '🎉 המועמדות שלך לוועד ההורים אושרה!',
-        reason,
-        { type: 'applicationApproved', classId: after.classId }
-      );
+      if (cfg.committeeApplications.notifyOnDecision) {
+        const reason = after.decisionReason === 'admin'
+          ? 'אושרת על ידי מנהל המערכת'
+          : 'אושרת על ידי הצבעת 15 הורים';
+        const tokens = await getTokens(applicantUid);
+        await sendToTokens(tokens,
+          '🎉 המועמדות שלך לוועד ההורים אושרה!',
+          reason,
+          { type: 'applicationApproved', classId: after.classId }
+        );
+      }
     } else if (after.status === 'denied') {
       // Notify applicant
-      const reason = after.decisionReason === 'expired'
-        ? 'לא הגעת לרוב הנדרש של 15 תמיכות תוך 5 ימים'
-        : after.decisionReason === 'admin'
-          ? 'נדחתה על ידי מנהל המערכת'
-          : 'נדחתה';
-      const tokens = await getTokens(applicantUid);
-      await sendToTokens(tokens,
-        '❌ המועמדות שלך לוועד ההורים נדחתה',
-        reason,
-        { type: 'applicationDenied', classId: after.classId }
-      );
+      if (cfg.committeeApplications.notifyOnDecision) {
+        const reason = after.decisionReason === 'expired'
+          ? 'לא הגעת לרוב הנדרש של 15 תמיכות תוך 5 ימים'
+          : after.decisionReason === 'admin'
+            ? 'נדחתה על ידי מנהל המערכת'
+            : 'נדחתה';
+        const tokens = await getTokens(applicantUid);
+        await sendToTokens(tokens,
+          '❌ המועמדות שלך לוועד ההורים נדחתה',
+          reason,
+          { type: 'applicationDenied', classId: after.classId }
+        );
+      }
     }
   });
 
-exports.expireCommitteeApplications = functions.pubsub
+exports.dailyNotificationJobs = functions.pubsub
   .schedule('every 24 hours')
   .onRun(async () => {
+    const cfg = await getNotificationConfig();
     const now = admin.firestore.Timestamp.now();
-    const snap = await db.collection('committeeApplications')
-      .where('status', '==', 'pending')
-      .where('expiresAt', '<=', now)
-      .get();
-    if (snap.empty) { console.log('expireCommitteeApplications: nothing to expire'); return null; }
-    console.log(`expireCommitteeApplications: expiring ${snap.size} application(s)`);
-    await Promise.all(snap.docs.map(doc =>
-      doc.ref.update({
-        status: 'denied',
-        decisionReason: 'expired',
-        decidedAt: admin.firestore.FieldValue.serverTimestamp(),
-      })
-    ));
+
+    // ── committeeApplications ──────────────────────────────
+    const appReminderCutoff = admin.firestore.Timestamp.fromMillis(
+      now.toMillis() + cfg.committeeApplications.reminderHoursBeforeExpiry * 3600 * 1000
+    );
+
+    const appsAll = await db.collection('committeeApplications')
+      .where('status', '==', 'pending').get();
+
+    for (const doc of appsAll.docs) {
+      const app = doc.data();
+      if (!app.expiresAt) continue;
+      const expiresMs = app.expiresAt.toMillis();
+
+      if (expiresMs <= now.toMillis()) {
+        // Expire
+        await doc.ref.update({
+          status: 'denied',
+          decisionReason: 'expired',
+          decidedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        console.log(`dailyNotificationJobs: expired application ${doc.id}`);
+      } else if (expiresMs <= appReminderCutoff.toMillis() && !app.reminderSentAt) {
+        // Reminder
+        const targets = [];
+        if (ADMIN_UID && ADMIN_UID !== app.applicantUid) targets.push(ADMIN_UID);
+        const memberUids = await getClassFamilyUids(app.classId);
+        memberUids.filter(uid => uid !== app.applicantUid && !targets.includes(uid))
+                  .forEach(uid => targets.push(uid));
+        if (targets.length) {
+          const tokenArrays = await Promise.all(targets.map(getTokens));
+          const hoursLeft = Math.round((expiresMs - now.toMillis()) / 3600000);
+          await sendToTokens(tokenArrays.flat(),
+            `⏰ תזכורת: מועמדות ועד ממתינה`,
+            `${app.applicantName} · ${classLabel(app.classId)} · עוד ${hoursLeft} שעות`,
+            { type: 'committeeApplicationReminder', appId: doc.id, classId: app.classId }
+          );
+        }
+        await doc.ref.update({ reminderSentAt: admin.firestore.FieldValue.serverTimestamp() });
+        console.log(`dailyNotificationJobs: sent reminder for application ${doc.id}`);
+      }
+    }
+
+    // ── pendingEvents ──────────────────────────────────────
+    const evReminderCutoff = admin.firestore.Timestamp.fromMillis(
+      now.toMillis() + cfg.pendingEvents.reminderHoursBeforeExpiry * 3600 * 1000
+    );
+
+    const eventsAll = await db.collectionGroup('pendingEvents')
+      .where('status', '==', 'pending').get();
+
+    for (const doc of eventsAll.docs) {
+      const ev = doc.data();
+      if (!ev.expiresAt) continue;
+      const expiresMs = ev.expiresAt.toMillis();
+      const classId = doc.ref.parent.parent.id;
+
+      if (expiresMs <= now.toMillis()) {
+        // Expire (auto-reject)
+        await doc.ref.update({
+          status: 'rejected',
+          rejectedReason: 'expired',
+          rejectedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        // Notify submitter if configured
+        if (cfg.pendingEvents.notifyOnDecision && ev.postedBy?.familyUid) {
+          const tokens = await getTokens(ev.postedBy.familyUid);
+          await sendToTokens(tokens,
+            `❌ הבקשה שלך פגה`,
+            `"${ev.title}" לא אושרה בזמן · ${classLabel(classId)}`,
+            { type: 'pendingEventExpired', classId }
+          );
+        }
+        console.log(`dailyNotificationJobs: expired pendingEvent ${doc.id} in ${classId}`);
+      } else if (expiresMs <= evReminderCutoff.toMillis() && !ev.reminderSentAt) {
+        // Reminder to committee + admin
+        const uids = await getClassFamilyUids(classId);
+        const familyDocs = await Promise.all(
+          uids.map(uid => db.collection('families').doc(uid).get().catch(() => null))
+        );
+        const targets = familyDocs
+          .filter(d => d?.exists && d.data().role === 'committee')
+          .map(d => d.id);
+        if (ADMIN_UID && !targets.includes(ADMIN_UID)) targets.push(ADMIN_UID);
+        if (targets.length) {
+          const tokenArrays = await Promise.all(targets.map(getTokens));
+          const hoursLeft = Math.round((expiresMs - now.toMillis()) / 3600000);
+          await sendToTokens(tokenArrays.flat(),
+            `⏰ תזכורת: אירוע ממתין לאישור`,
+            `${ev.title} · ${classLabel(classId)} · עוד ${hoursLeft} שעות`,
+            { type: 'pendingEventReminder', classId, pendingId: doc.id }
+          );
+        }
+        await doc.ref.update({ reminderSentAt: admin.firestore.FieldValue.serverTimestamp() });
+        console.log(`dailyNotificationJobs: sent reminder for pendingEvent ${doc.id}`);
+      }
+    }
+
     return null;
   });
+
+exports.nudgePending = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID) {
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  }
+  const type = data.type;
+  let sent = 0;
+
+  if (type === 'committeeApplications') {
+    const snap = await db.collection('committeeApplications')
+      .where('status', '==', 'pending').get();
+    for (const doc of snap.docs) {
+      const app = doc.data();
+      const targets = [];
+      if (ADMIN_UID && ADMIN_UID !== app.applicantUid) targets.push(ADMIN_UID);
+      const memberUids = await getClassFamilyUids(app.classId);
+      memberUids.filter(uid => uid !== app.applicantUid && !targets.includes(uid))
+                .forEach(uid => targets.push(uid));
+      if (targets.length) {
+        const tokenArrays = await Promise.all(targets.map(getTokens));
+        await sendToTokens(tokenArrays.flat(),
+          `🔔 מועמדות ועד ממתינה להצבעה`,
+          `${app.applicantName} · ${classLabel(app.classId)}`,
+          { type: 'committeeApplicationNudge', appId: doc.id, classId: app.classId }
+        );
+        sent++;
+      }
+    }
+
+  } else if (type === 'pendingEvents') {
+    const snap = await db.collectionGroup('pendingEvents')
+      .where('status', '==', 'pending').get();
+    for (const doc of snap.docs) {
+      const ev = doc.data();
+      const classId = doc.ref.parent.parent.id;
+      const uids = await getClassFamilyUids(classId);
+      const familyDocs = await Promise.all(
+        uids.map(uid => db.collection('families').doc(uid).get().catch(() => null))
+      );
+      const targets = familyDocs
+        .filter(d => d?.exists && d.data().role === 'committee')
+        .map(d => d.id);
+      if (ADMIN_UID && !targets.includes(ADMIN_UID)) targets.push(ADMIN_UID);
+      if (targets.length) {
+        const tokenArrays = await Promise.all(targets.map(getTokens));
+        await sendToTokens(tokenArrays.flat(),
+          `🔔 אירוע ממתין לאישור`,
+          `${ev.title} · ${classLabel(classId)}`,
+          { type: 'pendingEventNudge', classId, pendingId: doc.id }
+        );
+        sent++;
+      }
+    }
+
+  } else {
+    throw new functions.https.HttpsError('invalid-argument', 'Unknown type: ' + type);
+  }
+
+  return { sent };
+});
