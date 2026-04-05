@@ -1301,15 +1301,19 @@ function setMgmtGender(i, g) {
   el(`mgmtGenderGirl_${i}`).classList.toggle('active', g === 'girl');
 }
 
+function _markError(id) {
+  const inp = el(id);
+  if (!inp) return;
+  inp.classList.remove('input-error');
+  void inp.offsetWidth; // force reflow to restart animation
+  inp.classList.add('input-error');
+  inp.addEventListener('input', () => inp.classList.remove('input-error'), { once: true });
+  inp.addEventListener('change', () => inp.classList.remove('input-error'), { once: true });
+}
+
 async function mgmtAddMember() {
   const name = el('mgmtNewMemberName').value.trim();
-  if (!name) {
-    const inp = el('mgmtNewMemberName');
-    inp.classList.add('input-error');
-    inp.addEventListener('input', () => inp.classList.remove('input-error'), { once: true });
-    inp.focus();
-    return;
-  }
+  if (!name) { _markError('mgmtNewMemberName'); return; }
   if (getMembers().find(m => m.name === name)) { el('mgmtNewMemberName').select(); return; }
   const newMember = { name, emoji: _mgmtNewEmoji, role: _mgmtNewRole };
   if (_mgmtNewRole === 'kid') {
@@ -1324,15 +1328,11 @@ async function mgmtAddMember() {
       !classNum && 'mgmtEditClassNum_new',
     ].filter(Boolean);
     if (missing.length) {
-      missing.forEach(id => {
-        const inp = el(id);
-        if (!inp) return;
-        inp.classList.add('input-error');
-        inp.addEventListener('input', () => inp.classList.remove('input-error'), { once: true });
-      });
-      el(missing[0])?.focus();
+      missing.forEach(_markError);
+      el('mgmtAddError').textContent = 'יש למלא את כל שדות החובה';
       return;
     }
+    el('mgmtAddError').textContent = '';
     newMember.school = { city, name: school, grade, classNum };
   }
   const members = [...getMembers(), newMember];
