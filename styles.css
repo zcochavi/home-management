@@ -448,6 +448,13 @@
     .presence-name { font-size:12px;font-weight:800;color:#1a202c;line-height:1.2; }
     .presence-time { font-size:10px;font-weight:700;color:#a0aec0;margin-top:1px; }
     .presence-time.online { color:#48bb78; }
+    .presence-card.just-online { animation: presence-shine 1.2s ease-out forwards; }
+    @keyframes presence-shine {
+      0%   { background:#f8f9ff; box-shadow:none; }
+      20%  { background:#d4f5e2; box-shadow:0 0 0 3px rgba(72,187,120,0.5); }
+      60%  { background:#e8fdf2; box-shadow:0 0 0 6px rgba(72,187,120,0.2); }
+      100% { background:#f8f9ff; box-shadow:none; }
+    }
     .analytics-log-row:last-child { border-bottom:none; }
     .analytics-log-action { font-weight:800;padding:2px 8px;border-radius:8px;white-space:nowrap;flex-shrink:0; }
     .analytics-log-action.approved { background:#e6f4ea;color:#276749; }

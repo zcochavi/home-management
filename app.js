@@ -3604,6 +3604,7 @@ function switchTab(tab) {
 
 let _analyticsCharts = {};
 let _presenceRefreshTimer = null;
+let _presencePrevOnline = new Set(); // tracks keys online in previous render
 
 function _destroyCharts() {
   Object.values(_analyticsCharts).forEach(c => { try { c.destroy(); } catch(e){} });
@@ -3631,18 +3632,22 @@ async function loadPresenceSection() {
     const onlineCount = members.filter(m => m.online).length;
     const countEl = el('presenceOnlineCount');
     if (countEl) countEl.textContent = `${onlineCount} מחוברים מתוך ${members.length}`;
+    const newOnline = new Set(members.filter(m => m.online).map(m => m.familyUid + '_' + m.memberName));
     list.innerHTML = members.map(m => {
+      const key = m.familyUid + '_' + m.memberName;
+      const justOnline = m.online && !_presencePrevOnline.has(key) && _presencePrevOnline.size > 0;
       const isKidRole = m.role === 'kid';
       const badgeClass = isKidRole ? 'role-badge-kid' : 'role-badge-parent';
       const badgeLabel = isKidRole ? t('roleKid') : t('roleParent');
       const timeLabel  = m.online ? 'מחובר/ת' : _presenceTimeAgo(m.lastSeenMs);
-      return `<div class="presence-card">
+      return `<div class="presence-card${justOnline ? ' just-online' : ''}">
         <div class="presence-dot ${m.online ? 'online' : 'offline'}"></div>
         <div class="presence-name">${esc(m.memberName)}<br><span style="font-weight:700;color:#718096">${esc(m.familyName)}</span></div>
         <span class="role-badge ${badgeClass}" style="font-size:9px;padding:1px 6px">${badgeLabel}</span>
         <div class="presence-time ${m.online ? 'online' : ''}">${timeLabel}</div>
       </div>`;
     }).join('');
+    _presencePrevOnline = newOnline;
   } catch(e) {
     const list2 = el('presenceGrid');
     if (list2) list2.innerHTML = `<div style="color:#e53e3e;font-size:12px;padding:8px">${esc(e.message)}</div>`;
