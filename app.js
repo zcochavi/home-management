@@ -3646,7 +3646,13 @@ function togglePresenceGroup(role) {
 function _renderPresenceGroups() {
   const container = el('presenceGrid');
   if (!container || !_presenceCachedData) return;
-  const members = _presenceCachedData;
+
+  const q = (el('presenceSearch')?.value || '').trim().toLowerCase();
+  const members = q
+    ? _presenceCachedData.filter(m =>
+        (m.memberName || '').toLowerCase().includes(q) ||
+        (m.familyName || '').toLowerCase().includes(q))
+    : _presenceCachedData;
 
   const parents = members.filter(m => m.role !== 'kid');
   const kids    = members.filter(m => m.role === 'kid');
@@ -3657,6 +3663,12 @@ function _renderPresenceGroups() {
   if (countEl) countEl.textContent = `${pOnline + kOnline} מחוברים מתוך ${members.length}`;
 
   const newOnline = new Set(members.filter(m => m.online).map(m => m.familyUid + '_' + m.memberName));
+
+  // Auto-expand groups that have search results
+  if (q) {
+    if (parents.length) _presenceExpanded.parent = true;
+    if (kids.length)    _presenceExpanded.kid    = true;
+  }
 
   const groupHtml = (role, label, group, onlineCount) => {
     const expanded = _presenceExpanded[role];
@@ -3787,6 +3799,8 @@ function _renderAnalyticsUI(container, d) {
         <span id="presenceOnlineCount" style="margin-right:auto;font-size:10px;color:#a0aec0;font-weight:700"></span>
         <button class="analytics-refresh-btn" onclick="loadPresenceSection()" title="רענן">↻</button>
       </div>
+      <input id="presenceSearch" type="search" placeholder="חיפוש משתמש..." class="presence-search"
+        oninput="_renderPresenceGroups()" />
       <div id="presenceGrid" class="presence-grid">
         <div style="color:#a0aec0;font-size:12px;padding:8px">טוען...</div>
       </div>

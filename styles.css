@@ -439,6 +439,8 @@
     .chart-wrap { position:relative;height:150px; }
     .analytics-log-row { display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid #f0f4ff;font-size:12px; }
     /* Presence */
+    .presence-search { width:100%;box-sizing:border-box;padding:7px 12px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:13px;font-family:inherit;margin-bottom:8px;outline:none;direction:rtl; }
+    .presence-search:focus { border-color:#667eea; }
     .presence-grid { display:flex;flex-direction:column;gap:6px; }
     .presence-group { border-radius:12px;overflow:hidden;border:1px solid #e8eaf6; }
     .presence-group-header { display:flex;align-items:center;gap:8px;padding:10px 14px;background:#f0f4ff;cursor:pointer;user-select:none;font-size:13px;font-weight:800;color:#2d3748; }
