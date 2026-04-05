@@ -1514,9 +1514,7 @@ async function initFCM() {
           await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKeyToUint8Array(VAPID_KEY) });
         console.log('[FCM] Firefox push subscription ready:', sub.endpoint.slice(0, 40) + '…');
       } catch(e) {
-        console.warn('[FCM] Firefox push subscription failed:', e.message,
-          '\n→ Check Firefox settings: about:preferences#privacy → Notifications must not be blocked,',
-          '\n→ and about:config → dom.push.enabled must be true');
+        console.info('[FCM] Firefox push unavailable (network may be blocking Mozilla push service):', e.message);
         return;
       }
     }
