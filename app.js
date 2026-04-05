@@ -2625,8 +2625,10 @@ async function renderAdminPanel() {
               <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
                 <span class="pending-event-title" style="flex:1">🏫 בית ספר: ${esc(req.schoolName)}</span>
                 ${statusBadge(schoolStatus)}
-                ${schoolStatus==='pending' ? `<button class="pending-approve-btn" onclick="approveSchoolPart('${req.id}','school')">אשר ב"ס</button>
+                ${schoolStatus==='pending' && cityStatus==='approved' ? `<button class="pending-approve-btn" onclick="approveSchoolPart('${req.id}','school')">אשר ב"ס</button>
                 <button class="pending-reject-btn" onclick="denySchoolPart('${req.id}','school')">דחה ב"ס</button>` : ''}
+                ${schoolStatus==='pending' && cityStatus==='pending' ? `<button class="pending-approve-btn" disabled title="יש לאשר את העיר תחילה" style="opacity:0.4;cursor:not-allowed">אשר ב"ס</button>` : ''}
+                ${schoolStatus==='pending' && cityStatus==='denied'  ? `<button class="pending-reject-btn" onclick="denySchoolPart('${req.id}','school')">דחה ב"ס</button>` : ''}
               </div>
             </div>`;
           }
