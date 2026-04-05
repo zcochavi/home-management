@@ -1480,10 +1480,7 @@ async function mgmtAddMember() {
     ].filter(Boolean);
     if (missing.length || !_mgmtNewGender) {
       missing.forEach(_markError);
-      if (!_mgmtNewGender) {
-        _markError('mgmtNewGenderBoy');
-        _markError('mgmtNewGenderGirl');
-      }
+      if (!_mgmtNewGender) _markError('mgmtNewGenderRow');
       el('mgmtAddError').textContent = 'יש למלא את כל שדות החובה';
       return;
     }

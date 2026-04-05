@@ -197,7 +197,7 @@
         <div id="mgmtAddMemberForm" class="mgmt-edit-panel" style="margin-top:8px">
           <span class="mgmt-edit-label">אימוג'י</span>
           <div class="emoji-row" id="mgmtNewEmojiRow"></div>
-          <span class="mgmt-edit-label">שם</span>
+          <span class="mgmt-edit-label">שם <span style="color:#e53e3e">*</span></span>
           <input class="auth-input" id="mgmtNewMemberName" type="text" placeholder="שם"
             onkeydown="if(event.key==='Enter')mgmtAddMember()">
           <div class="mb-role-toggle" style="margin-bottom:12px;width:fit-content">
@@ -205,14 +205,14 @@
             <button class="mb-role-btn"        id="mgmtNewRoleKid"    onclick="setMgmtNewRole('kid')">ילד</button>
           </div>
           <div id="mgmtNewKidSection" style="display:none">
-            <span class="mgmt-edit-label">מין</span>
-            <div class="mb-role-toggle" style="margin-bottom:12px">
+            <span class="mgmt-edit-label">מין <span style="color:#e53e3e">*</span></span>
+            <div id="mgmtNewGenderRow" class="mb-role-toggle" style="margin-bottom:12px">
               <button class="mb-role-btn" id="mgmtNewGenderBoy"  onclick="setMgmtNewGender('boy')">👦 בן</button>
               <button class="mb-role-btn" id="mgmtNewGenderGirl" onclick="setMgmtNewGender('girl')">👧 בת</button>
             </div>
-            <span class="mgmt-edit-label">תאריך לידה</span>
+            <span class="mgmt-edit-label">תאריך לידה <span style="color:#e53e3e">*</span></span>
             <input class="auth-input" id="mgmtEditDob_new" type="date" style="margin-bottom:12px">
-            <span class="mgmt-edit-label" style="display:block;margin-bottom:6px">🏫 בית ספר</span>
+            <span class="mgmt-edit-label" style="display:block;margin-bottom:6px">🏫 בית ספר <span style="color:#e53e3e">*</span></span>
             <input class="auth-input" id="mgmtEditCity_new" placeholder="עיר" style="margin-bottom:6px"
               oninput="onCityAc(this,'new')" onfocus="onCityAc(this,'new')" onblur="scheduleHideAc()">
             <input class="auth-input" id="mgmtEditSchoolName_new" placeholder="שם בית הספר" style="margin-bottom:6px"
