@@ -3604,7 +3604,9 @@ function switchTab(tab) {
 
 let _analyticsCharts = {};
 let _presenceRefreshTimer = null;
-let _presencePrevOnline = new Set(); // tracks keys online in previous render
+let _presencePrevOnline  = new Set();
+let _presenceCachedData  = null;
+let _presenceExpanded    = { parent: false, kid: false };
 
 function _destroyCharts() {
   Object.values(_analyticsCharts).forEach(c => { try { c.destroy(); } catch(e){} });
@@ -3623,20 +3625,45 @@ function _presenceTimeAgo(ms) {
 }
 
 async function loadPresenceSection() {
-  const list = el('presenceGrid');
-  if (!list) return;
+  const container = el('presenceGrid');
+  if (!container) return;
   try {
     const fn = firebase.functions().httpsCallable('getPresence');
     const { data } = await fn();
-    const members = data.members || [];
-    const onlineCount = members.filter(m => m.online).length;
-    const countEl = el('presenceOnlineCount');
-    if (countEl) countEl.textContent = `${onlineCount} מחוברים מתוך ${members.length}`;
-    const newOnline = new Set(members.filter(m => m.online).map(m => m.familyUid + '_' + m.memberName));
-    list.innerHTML = members.map(m => {
+    _presenceCachedData = data.members || [];
+    _renderPresenceGroups();
+  } catch(e) {
+    const c = el('presenceGrid');
+    if (c) c.innerHTML = `<div style="color:#e53e3e;font-size:12px;padding:8px">${esc(e.message)}</div>`;
+  }
+}
+
+function togglePresenceGroup(role) {
+  _presenceExpanded[role] = !_presenceExpanded[role];
+  _renderPresenceGroups();
+}
+
+function _renderPresenceGroups() {
+  const container = el('presenceGrid');
+  if (!container || !_presenceCachedData) return;
+  const members = _presenceCachedData;
+
+  const parents = members.filter(m => m.role !== 'kid');
+  const kids    = members.filter(m => m.role === 'kid');
+  const pOnline = parents.filter(m => m.online).length;
+  const kOnline = kids.filter(m => m.online).length;
+
+  const countEl = el('presenceOnlineCount');
+  if (countEl) countEl.textContent = `${pOnline + kOnline} מחוברים מתוך ${members.length}`;
+
+  const newOnline = new Set(members.filter(m => m.online).map(m => m.familyUid + '_' + m.memberName));
+
+  const groupHtml = (role, label, group, onlineCount) => {
+    const expanded = _presenceExpanded[role];
+    const cardsHtml = expanded ? group.map(m => {
       const key = m.familyUid + '_' + m.memberName;
       const justOnline = m.online && !_presencePrevOnline.has(key) && _presencePrevOnline.size > 0;
-      const isKidRole = m.role === 'kid';
+      const isKidRole  = m.role === 'kid';
       const badgeClass = isKidRole ? 'role-badge-kid' : 'role-badge-parent';
       const badgeLabel = isKidRole ? t('roleKid') : t('roleParent');
       const timeLabel  = m.online ? 'מחובר/ת' : _presenceTimeAgo(m.lastSeenMs);
@@ -3646,12 +3673,26 @@ async function loadPresenceSection() {
         <span class="role-badge ${badgeClass}" style="font-size:9px;padding:1px 6px">${badgeLabel}</span>
         <div class="presence-time ${m.online ? 'online' : ''}">${timeLabel}</div>
       </div>`;
-    }).join('');
-    _presencePrevOnline = newOnline;
-  } catch(e) {
-    const list2 = el('presenceGrid');
-    if (list2) list2.innerHTML = `<div style="color:#e53e3e;font-size:12px;padding:8px">${esc(e.message)}</div>`;
-  }
+    }).join('') : '';
+    return `
+      <div class="presence-group">
+        <div class="presence-group-header" onclick="togglePresenceGroup('${role}')">
+          <span class="presence-group-chevron">${expanded ? '▾' : '▸'}</span>
+          <span class="presence-group-label">${label}</span>
+          <span class="presence-group-count">
+            <span style="color:${onlineCount > 0 ? '#48bb78' : '#a0aec0'};font-weight:800">${onlineCount}</span>
+            <span style="color:#a0aec0">/ ${group.length} מחוברים</span>
+          </span>
+        </div>
+        ${expanded ? `<div class="presence-cards-grid">${cardsHtml}</div>` : ''}
+      </div>`;
+  };
+
+  container.innerHTML =
+    groupHtml('parent', 'הורים', parents, pOnline) +
+    groupHtml('kid',    'ילדים',  kids,    kOnline);
+
+  _presencePrevOnline = newOnline;
 }
 
 function _loadChartJs() {
