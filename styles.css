@@ -236,6 +236,24 @@
     .switch-btn,.lang-btn { background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.45);border-radius:20px;color:white;font-family:inherit;font-size:11px;font-weight:800;padding:5px 12px;cursor:pointer;transition:background 0.18s;white-space:nowrap; }
     .switch-btn:hover,.lang-btn:hover { background:rgba(255,255,255,0.32); }
     .header-date { font-size:12px;opacity:0.8;font-weight:600;margin-bottom:6px; }
+    /* Bell button */
+    .notif-bell-btn { position:relative;background:rgba(255,255,255,0.18);border:1.5px solid rgba(255,255,255,0.4);border-radius:20px;color:white;font-size:16px;padding:5px 10px;cursor:pointer;line-height:1; }
+    .notif-bell-badge { position:absolute;top:-5px;right:-5px;background:#e53e3e;color:#fff;font-size:9px;font-weight:900;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 3px;border:2px solid transparent; }
+    .notif-bell-badge.hidden { display:none; }
+    /* Message center panel */
+    .message-center-panel { position:fixed;inset:0;z-index:900;background:white;display:flex;flex-direction:column;transform:translateY(100%); }
+    .message-center-panel.mc-open    { animation:mc-slide-up .28s cubic-bezier(.34,1.2,.64,1) forwards; }
+    .message-center-panel.mc-closing { animation:mc-slide-down .28s ease forwards; }
+    @keyframes mc-slide-up   { from{transform:translateY(100%)} to{transform:translateY(0)} }
+    @keyframes mc-slide-down { from{transform:translateY(0)} to{transform:translateY(100%)} }
+    .mc-item { display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid #f0f4ff; }
+    .mc-item:last-child { border-bottom:none; }
+    .mc-checkbox { width:16px;height:16px;flex-shrink:0;margin-top:2px;cursor:pointer; }
+    .mc-item-icon { font-size:18px;flex-shrink:0; }
+    .mc-item-body { flex:1;min-width:0; }
+    .mc-item-msg  { font-size:13px;font-weight:700;color:#1a202c;line-height:1.4; }
+    .mc-item-date { font-size:11px;color:#a0aec0;font-weight:700;margin-top:2px; }
+    /* Banners */
     .notif-banner { display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:10px;border:1.5px solid;margin-bottom:6px;font-size:12px;font-weight:700;line-height:1.3; }
     .notif-banner-icon { font-size:15px;flex-shrink:0; }
     .notif-banner-text { flex:1; }

@@ -683,50 +683,142 @@ function getAuthError(code) {
 let _sessionRef      = null;
 let _sessionStartMs  = null;
 
-// ── In-app notification banners ──────────────────────────────
+// ── Notification system (banners + message center) ───────────
+let _allNotifs = []; // cached for message center
+
 function initNotifBanners() {
   if (_notifUnsubscribe) { _notifUnsubscribe(); _notifUnsubscribe = null; }
   if (!S.uid || !fbDb) return;
   _notifUnsubscribe = fbDb
     .collection('families').doc(S.uid)
     .collection('notifications')
-    .where('dismissed', '==', false)
-    .orderBy('createdAt', 'asc')
-    .onSnapshot(snap => renderNotifBanners(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    .orderBy('createdAt', 'desc')
+    .onSnapshot(snap => {
+      _allNotifs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      renderNotifBanners(_allNotifs.filter(n => !n.dismissed).reverse());
+      _updateBellBadge();
+      if (!el('messageCenterPanel')?.classList.contains('hidden')) renderMessageCenter();
+    });
 }
 
 function stopNotifBanners() {
   if (_notifUnsubscribe) { _notifUnsubscribe(); _notifUnsubscribe = null; }
+  _allNotifs = [];
   const c = el('notifBanners'); if (c) c.innerHTML = '';
+  _updateBellBadge();
 }
 
-function renderNotifBanners(notifs) {
+function _updateBellBadge() {
+  const badge = el('notifBellBadge');
+  if (!badge) return;
+  const count = _allNotifs.filter(n => !n.dismissed).length;
+  badge.textContent = count > 9 ? '9+' : count;
+  badge.classList.toggle('hidden', count === 0);
+}
+
+function renderNotifBanners(undismissed) {
   const container = el('notifBanners');
   if (!container) return;
-  if (!notifs.length) { container.innerHTML = ''; return; }
-  container.innerHTML = notifs.map((n, idx) => {
-    const isGood = n.type === 'school_approved' || n.type === 'city_approved';
+  // Only add banners that aren't already in the DOM (avoid re-animating existing ones)
+  const existing = new Set([...container.querySelectorAll('.notif-banner')].map(el => el.id));
+  // Remove banners for dismissed notifs
+  container.querySelectorAll('.notif-banner').forEach(el => {
+    const id = el.id.replace('notifBanner_','');
+    if (!undismissed.find(n => n.id === id)) {
+      el.classList.replace('notif-banner-in','notif-banner-out');
+      setTimeout(() => el.remove(), 300);
+    }
+  });
+  // Add new ones
+  undismissed.forEach(n => {
+    if (existing.has('notifBanner_' + n.id)) return;
+    const isGood = n.type?.includes('approved');
     const bg     = isGood ? '#f0fff4' : '#fff5f5';
     const border = isGood ? '#9ae6b4' : '#feb2b2';
     const color  = isGood ? '#276749' : '#c53030';
     const icon   = isGood ? '✅' : '❌';
-    return `<div class="notif-banner notif-banner-in" id="notifBanner_${n.id}"
-      style="background:${bg};border-color:${border};color:${color}">
-      <span class="notif-banner-icon">${icon}</span>
+    const div = document.createElement('div');
+    div.className = 'notif-banner notif-banner-in';
+    div.id = 'notifBanner_' + n.id;
+    div.style.cssText = `background:${bg};border-color:${border};color:${color}`;
+    div.innerHTML = `<span class="notif-banner-icon">${icon}</span>
       <span class="notif-banner-text">${esc(n.message)}</span>
-      <button class="notif-banner-dismiss" onclick="dismissNotifBanner('${n.id}',this)" title="סגור">×</button>
-    </div>`;
-  }).join('');
+      <button class="notif-banner-dismiss" onclick="dismissNotifBanner('${n.id}',this)" title="סגור">×</button>`;
+    container.appendChild(div);
+  });
 }
 
 async function dismissNotifBanner(id, btn) {
   btn?.closest('.notif-banner')?.classList.replace('notif-banner-in', 'notif-banner-out');
-  await new Promise(r => setTimeout(r, 300));
   try {
     await fbDb.collection('families').doc(S.uid)
       .collection('notifications').doc(id)
       .update({ dismissed: true, dismissedAt: firebase.firestore.FieldValue.serverTimestamp() });
   } catch(e) { console.warn('dismissNotifBanner:', e); }
+}
+
+// ── Message center ────────────────────────────────────────────
+function openMessageCenter() {
+  const panel = el('messageCenterPanel');
+  panel.classList.remove('hidden');
+  panel.classList.add('mc-open');
+  renderMessageCenter();
+}
+function closeMessageCenter() {
+  const panel = el('messageCenterPanel');
+  panel.classList.add('mc-closing');
+  setTimeout(() => { panel.classList.add('hidden'); panel.classList.remove('mc-open','mc-closing'); }, 280);
+}
+
+function renderMessageCenter() {
+  const list = el('messageCenterList');
+  if (!list) return;
+  const notifs = _allNotifs; // already sorted desc by createdAt
+  el('mcCount').textContent = `${notifs.length} הודעות`;
+  el('mcDeleteAllBtn').style.display = notifs.length ? '' : 'none';
+  if (!notifs.length) {
+    list.innerHTML = '<div style="text-align:center;color:#a0aec0;font-size:13px;font-weight:700;padding:40px 0">אין הודעות</div>';
+    return;
+  }
+  list.innerHTML = notifs.map(n => {
+    const isGood = n.type?.includes('approved');
+    const icon   = isGood ? '✅' : '❌';
+    const dt     = n.createdAt?.toDate ? n.createdAt.toDate().toLocaleString('he-IL', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
+    const dimmed = n.dismissed ? 'opacity:0.55;' : '';
+    return `<div class="mc-item" id="mcItem_${n.id}" style="${dimmed}">
+      <input type="checkbox" class="mc-checkbox" id="mcChk_${n.id}" onchange="mcOnCheck()">
+      <span class="mc-item-icon">${icon}</span>
+      <div class="mc-item-body">
+        <div class="mc-item-msg">${esc(n.message)}</div>
+        <div class="mc-item-date">${dt}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function mcOnCheck() {
+  const any = !!el('messageCenterList')?.querySelector('.mc-checkbox:checked');
+  el('mcDeleteSelectedBtn').style.display = any ? '' : 'none';
+  const all = [...(el('messageCenterList')?.querySelectorAll('.mc-checkbox') || [])];
+  el('mcSelectAll').checked = all.length > 0 && all.every(c => c.checked);
+}
+function mcToggleSelectAll(cb) {
+  el('messageCenterList')?.querySelectorAll('.mc-checkbox').forEach(c => c.checked = cb.checked);
+  el('mcDeleteSelectedBtn').style.display = cb.checked ? '' : 'none';
+}
+async function deleteSelectedNotifs() {
+  const checked = [...(el('messageCenterList')?.querySelectorAll('.mc-checkbox:checked') || [])];
+  const ids = checked.map(c => c.id.replace('mcChk_',''));
+  await Promise.all(ids.map(id =>
+    fbDb.collection('families').doc(S.uid).collection('notifications').doc(id).delete().catch(()=>{})
+  ));
+  el('mcSelectAll').checked = false;
+  el('mcDeleteSelectedBtn').style.display = 'none';
+}
+async function deleteAllNotifs() {
+  await Promise.all(_allNotifs.map(n =>
+    fbDb.collection('families').doc(S.uid).collection('notifications').doc(n.id).delete().catch(()=>{})
+  ));
 }
 
 async function stopPresence() {

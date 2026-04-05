@@ -135,6 +135,24 @@
   </div>
 </div>
 
+<!-- MESSAGE CENTER -->
+<div id="messageCenterPanel" class="message-center-panel hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeMessageCenter()">×</button>
+    <div class="mgmt-header-title">🔔 מרכז הודעות</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button class="admin-btn" id="mcDeleteSelectedBtn" onclick="deleteSelectedNotifs()" style="font-size:12px;padding:5px 10px;display:none">🗑 מחק נבחרים</button>
+      <button class="admin-btn" id="mcDeleteAllBtn" onclick="deleteAllNotifs()" style="font-size:12px;padding:5px 10px;background:#fff5f5;color:#c53030;border-color:#feb2b2">מחק הכל</button>
+    </div>
+  </div>
+  <div style="padding:4px 16px 6px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f0f4ff">
+    <input type="checkbox" id="mcSelectAll" onchange="mcToggleSelectAll(this)" style="width:16px;height:16px;cursor:pointer">
+    <label for="mcSelectAll" style="font-size:12px;font-weight:700;color:#718096;cursor:pointer">בחר הכל</label>
+    <span id="mcCount" style="font-size:11px;color:#a0aec0;font-weight:700;margin-right:auto"></span>
+  </div>
+  <div id="messageCenterList" style="overflow-y:auto;flex:1;padding:8px 16px"></div>
+</div>
+
 <!-- ADMIN PANEL -->
 <div id="adminPanel" class="hidden">
   <div class="mgmt-header">
@@ -279,6 +297,10 @@
         <div class="header-greeting" id="headerGreeting"></div>
       </div>
       <div class="header-btns">
+        <button class="notif-bell-btn" id="notifBellBtn" onclick="openMessageCenter()" title="מרכז הודעות">
+          🔔
+          <span class="notif-bell-badge hidden" id="notifBellBadge"></span>
+        </button>
         <button class="menu-btn" onclick="toggleMenu(this)">☰</button>
       </div>
     </div>
