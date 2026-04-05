@@ -683,7 +683,11 @@ function stopPresence() {
   if (_presenceInterval) { clearInterval(_presenceInterval); _presenceInterval = null; }
   if (S.uid && S.user && fbDb) {
     const docId = S.uid + '_' + S.user;
-    return fbDb.collection('presence').doc(docId).delete().catch(() => {});
+    // Set lastSeen to epoch so the 4-min threshold marks them offline immediately
+    // (avoids needing delete permission in security rules)
+    return fbDb.collection('presence').doc(docId)
+      .update({ lastSeen: new firebase.firestore.Timestamp(0, 0) })
+      .catch(() => {});
   }
   return Promise.resolve();
 }
