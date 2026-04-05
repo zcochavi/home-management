@@ -1311,7 +1311,10 @@ async function mgmtAddMember() {
     const school   = el('mgmtEditSchoolName_new')?.value.trim() || '';
     const grade    = el('mgmtEditGrade_new')?.value             || '';
     const classNum = el('mgmtEditClassNum_new')?.value.trim()   || '';
-    if (city || school) newMember.school = { city, name: school, grade, classNum };
+    if (!city)   { el('mgmtEditCity_new')?.focus();       return; }
+    if (!school) { el('mgmtEditSchoolName_new')?.focus(); return; }
+    if (!grade)  { el('mgmtEditGrade_new')?.focus();      return; }
+    newMember.school = { city, name: school, grade, classNum };
   }
   const members = [...getMembers(), newMember];
   if (familyData) familyData.members = members;
@@ -1330,8 +1333,8 @@ async function mgmtAddMember() {
   el('mgmtNewMemberName').value = '';
   if (el('mgmtEditCity_new'))       el('mgmtEditCity_new').value = '';
   if (el('mgmtEditSchoolName_new')) el('mgmtEditSchoolName_new').value = '';
-  if (el('mgmtEditGrade_new'))      { el('mgmtEditGrade_new').value = ''; el('mgmtEditGrade_new').disabled = true; }
-  if (el('mgmtEditClassNum_new'))   { el('mgmtEditClassNum_new').value = ''; el('mgmtEditClassNum_new').disabled = true; }
+  if (el('mgmtEditGrade_new'))      el('mgmtEditGrade_new').value = '';
+  if (el('mgmtEditClassNum_new'))   el('mgmtEditClassNum_new').value = '';
   _mgmtNewEmoji = EMOJI_OPTIONS[0]; _mgmtNewRole = 'parent';
   el('mgmtAddMemberForm').classList.remove('open');
   renderMgmtMembers();
