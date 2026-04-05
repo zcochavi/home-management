@@ -681,6 +681,10 @@ function getAuthError(code) {
 
 function stopPresence() {
   if (_presenceInterval) { clearInterval(_presenceInterval); _presenceInterval = null; }
+  if (S.uid && S.user && fbDb) {
+    const docId = S.uid + '_' + S.user;
+    fbDb.collection('presence').doc(docId).delete().catch(() => {});
+  }
 }
 
 async function initPresence() {
