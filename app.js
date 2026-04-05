@@ -686,8 +686,7 @@ function stopPresence() {
 async function initPresence() {
   stopPresence();
   if (!S.uid || !S.user || !fbDb) return;
-  const slug  = S.user.replace(/[^\w\u0590-\u05FF]/g, '_');
-  const docId = S.uid + '_' + slug;
+  const docId = S.uid + '_' + S.user;
   const ref   = fbDb.collection('presence').doc(docId);
   const write = () => ref.set({
     familyUid:  S.uid,
@@ -695,7 +694,7 @@ async function initPresence() {
     familyName: familyData?.familyName || '',
     role:       isParent() ? 'parent' : 'kid',
     lastSeen:   firebase.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true }).catch(() => {});
+  }, { merge: true }).catch(e => console.warn('[presence] write failed:', e.code, e.message));
   write();
   _presenceInterval = setInterval(write, 2 * 60 * 1000);
 }
