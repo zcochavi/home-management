@@ -353,8 +353,9 @@ let S = {
   lockedMember: null,
 };
 let gcal = { gapiReady:false, gisReady:false, tokenClient:null, accessToken:null, events:[], syncing:false };
-let fbUnsubscribe = null;
-let _presenceInterval = null;
+let fbUnsubscribe       = null;
+let _presenceInterval   = null;
+let _notifUnsubscribe   = null;
 
 const isParent    = () => getParents().includes(S.user);
 const isKid       = () => getKids().includes(S.user);
@@ -682,6 +683,52 @@ function getAuthError(code) {
 let _sessionRef      = null;
 let _sessionStartMs  = null;
 
+// ── In-app notification banners ──────────────────────────────
+function initNotifBanners() {
+  if (_notifUnsubscribe) { _notifUnsubscribe(); _notifUnsubscribe = null; }
+  if (!S.uid || !fbDb) return;
+  _notifUnsubscribe = fbDb
+    .collection('families').doc(S.uid)
+    .collection('notifications')
+    .where('dismissed', '==', false)
+    .orderBy('createdAt', 'asc')
+    .onSnapshot(snap => renderNotifBanners(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+}
+
+function stopNotifBanners() {
+  if (_notifUnsubscribe) { _notifUnsubscribe(); _notifUnsubscribe = null; }
+  const c = el('notifBanners'); if (c) c.innerHTML = '';
+}
+
+function renderNotifBanners(notifs) {
+  const container = el('notifBanners');
+  if (!container) return;
+  if (!notifs.length) { container.innerHTML = ''; return; }
+  container.innerHTML = notifs.map((n, idx) => {
+    const isGood = n.type === 'school_approved' || n.type === 'city_approved';
+    const bg     = isGood ? '#f0fff4' : '#fff5f5';
+    const border = isGood ? '#9ae6b4' : '#feb2b2';
+    const color  = isGood ? '#276749' : '#c53030';
+    const icon   = isGood ? '✅' : '❌';
+    return `<div class="notif-banner notif-banner-in" id="notifBanner_${n.id}"
+      style="background:${bg};border-color:${border};color:${color}">
+      <span class="notif-banner-icon">${icon}</span>
+      <span class="notif-banner-text">${esc(n.message)}</span>
+      <button class="notif-banner-dismiss" onclick="dismissNotifBanner('${n.id}',this)" title="סגור">×</button>
+    </div>`;
+  }).join('');
+}
+
+async function dismissNotifBanner(id, btn) {
+  btn?.closest('.notif-banner')?.classList.replace('notif-banner-in', 'notif-banner-out');
+  await new Promise(r => setTimeout(r, 300));
+  try {
+    await fbDb.collection('families').doc(S.uid)
+      .collection('notifications').doc(id)
+      .update({ dismissed: true, dismissedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  } catch(e) { console.warn('dismissNotifBanner:', e); }
+}
+
 async function stopPresence() {
   if (_presenceInterval) { clearInterval(_presenceInterval); _presenceInterval = null; }
   // Close open session
@@ -730,6 +777,7 @@ async function initPresence() {
 }
 
 async function authSignOut() {
+  stopNotifBanners();
   await stopPresence();
   unsubscribeAllComm(); _commCache = {};
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
@@ -896,7 +944,7 @@ function afterLoad() {
     // Locked device: auto-login as locked member, no choice
     login(S.lockedMember);
   } else if (S.user && getAllMemberNames().includes(S.user)) {
-    renderAll(); tryAutoConnectGCal(); initPresence();
+    renderAll(); tryAutoConnectGCal(); initPresence(); initNotifBanners();
   } else {
     const saved = localStorage.getItem('familyhub_member_' + S.uid);
     if (saved && getAllMemberNames().includes(saved)) {
@@ -1078,10 +1126,12 @@ function login(name) {
   initFCM();
   refreshHomeUpcoming();
   initPresence();
+  initNotifBanners();
 }
 
 async function switchUser() {
   if (S.lockedMember) return; // locked devices can't switch members
+  stopNotifBanners();
   await stopPresence();
   unsubscribeAllComm(); _commCache = {};
   S.user = null; S.filter = 'All';

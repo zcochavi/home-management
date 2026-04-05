@@ -664,6 +664,16 @@ exports.migrateCommitteeRoles = functions.https.onCall(async (data, context) => 
   return { migrated, skipped, errors };
 });
 
+async function writeNotif(familyUid, type, message) {
+  await db.collection('families').doc(familyUid)
+    .collection('notifications').add({
+      type,
+      message,
+      dismissed: false,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+}
+
 // Resolve one part ('city' or 'school') of a type:'city' pending request
 exports.resolveSchoolPart = functions.https.onCall(async (data, context) => {
   if (context.auth?.uid !== ADMIN_UID)
@@ -706,14 +716,14 @@ exports.resolveSchoolPart = functions.https.onCall(async (data, context) => {
           m.name === pf.kidName ? (({ schoolPending, ...rest }) => rest)(m) : m
         );
         await db.collection('families').doc(pf.familyUid).update({ members });
+        const msg = `בקשת הצטרפות של ${pf.kidName} לבית הספר ${req.schoolName} אושרה`;
         const tokens = await getTokens(pf.familyUid);
-        await sendToTokens(tokens, '✅ בית הספר אושר',
-          `בקשת הצטרפות של ${pf.kidName} לבית הספר ${req.schoolName} אושרה`);
+        await sendToTokens(tokens, '✅ בית הספר אושר', msg);
+        await writeNotif(pf.familyUid, 'school_approved', msg);
       } catch(e) { console.error('resolveSchoolPart approve family:', e); }
     }
     await ref.update({ status: 'approved' });
   } else if (anyDenied) {
-    // At least one denied — clear school data & notify about what was denied
     const deniedPart = cityStatus === 'denied' ? `העיר "${req.city}"` : `בית הספר "${req.schoolName}"`;
     for (const pf of (req.pendingFamilies || [])) {
       try {
@@ -724,9 +734,10 @@ exports.resolveSchoolPart = functions.https.onCall(async (data, context) => {
           const u = { ...m }; delete u.school; delete u.schoolPending; return u;
         });
         await db.collection('families').doc(pf.familyUid).update({ members });
+        const msg = `${deniedPart} שהוגשה עבור ${pf.kidName} נדחתה — יש לעדכן את פרטי בית הספר בניהול המשפחה`;
         const tokens = await getTokens(pf.familyUid);
-        await sendToTokens(tokens, '❌ בקשת בית הספר נדחתה',
-          `${deniedPart} שהוגשה עבור ${pf.kidName} נדחתה — יש לעדכן את פרטי בית הספר בניהול המשפחה`);
+        await sendToTokens(tokens, '❌ בקשת בית הספר נדחתה', msg);
+        await writeNotif(pf.familyUid, 'school_denied', msg);
       } catch(e) { console.error('resolveSchoolPart deny family:', e); }
     }
     await ref.update({ status: 'denied' });
@@ -753,13 +764,11 @@ exports.approveSchoolRequest = functions.https.onCall(async (data, context) => {
       );
       await db.collection('families').doc(pf.familyUid).update({ members });
 
-      // Notify the family
-      const tokens = await getTokens(pf.familyUid);
       const schoolLabel = req.schoolName || req.city || '';
-      await sendToTokens(tokens,
-        '✅ בית הספר אושר',
-        `בקשת הצטרפות של ${pf.kidName} לבית הספר ${schoolLabel} אושרה`
-      );
+      const msg = `בקשת הצטרפות של ${pf.kidName} לבית הספר ${schoolLabel} אושרה`;
+      const tokens = await getTokens(pf.familyUid);
+      await sendToTokens(tokens, '✅ בית הספר אושר', msg);
+      await writeNotif(pf.familyUid, 'school_approved', msg);
     } catch(e) { console.error('approveSchoolRequest family:', e); }
   }
 
@@ -794,12 +803,11 @@ exports.denySchoolRequest = functions.https.onCall(async (data, context) => {
       await db.collection('families').doc(pf.familyUid).update({ members });
 
       // Notify the family
-      const tokens = await getTokens(pf.familyUid);
       const schoolLabel = req.schoolName || req.city || '';
-      await sendToTokens(tokens,
-        '❌ בקשת בית הספר נדחתה',
-        `בקשת הצטרפות של ${pf.kidName} לבית הספר ${schoolLabel} נדחתה — יש לעדכן את פרטי בית הספר בניהול המשפחה`
-      );
+      const msg = `בקשת הצטרפות של ${pf.kidName} לבית הספר ${schoolLabel} נדחתה — יש לעדכן את פרטי בית הספר בניהול המשפחה`;
+      const tokens = await getTokens(pf.familyUid);
+      await sendToTokens(tokens, '❌ בקשת בית הספר נדחתה', msg);
+      await writeNotif(pf.familyUid, 'school_denied', msg);
     } catch(e) { console.error('denySchoolRequest family:', e); }
   }
 
