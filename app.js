@@ -684,7 +684,7 @@ function stopPresence() {
   if (S.uid && S.user && fbDb) {
     const docId = S.uid + '_' + S.user;
     return fbDb.collection('presence').doc(docId)
-      .update({ online: false, lastSeen: new firebase.firestore.Timestamp(0, 0) })
+      .update({ online: false })
       .catch(e => console.warn('[presence] stopPresence failed:', e.code, e.message));
   }
   return Promise.resolve();
