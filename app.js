@@ -1311,9 +1311,10 @@ async function mgmtAddMember() {
     const school   = el('mgmtEditSchoolName_new')?.value.trim() || '';
     const grade    = el('mgmtEditGrade_new')?.value             || '';
     const classNum = el('mgmtEditClassNum_new')?.value.trim()   || '';
-    if (!city)   { el('mgmtEditCity_new')?.focus();       return; }
-    if (!school) { el('mgmtEditSchoolName_new')?.focus(); return; }
-    if (!grade)  { el('mgmtEditGrade_new')?.focus();      return; }
+    if (!city)     { el('mgmtEditCity_new')?.focus();       return; }
+    if (!school)   { el('mgmtEditSchoolName_new')?.focus(); return; }
+    if (!grade)    { el('mgmtEditGrade_new')?.focus();      return; }
+    if (!classNum) { el('mgmtEditClassNum_new')?.focus();   return; }
     newMember.school = { city, name: school, grade, classNum };
   }
   const members = [...getMembers(), newMember];
