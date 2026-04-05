@@ -475,7 +475,7 @@ exports.getPresence = functions.https.onCall(async (data, context) => {
     const p = d.data();
     const key = (p.familyUid || '') + '_' + (p.memberName || '');
     presenceMap[key] = {
-      online:      p.lastSeen?.toMillis?.() > now - ONLINE_THRESHOLD,
+      online:      p.online === true && (p.lastSeen?.toMillis?.() || 0) > now - ONLINE_THRESHOLD,
       lastSeenMs:  p.lastSeen?.toMillis?.() || 0,
     };
   });
@@ -574,6 +574,48 @@ exports.getAnalytics = functions.https.onCall(async (data, context) => {
   const schoolsApproved = schools.filter(s=>s.status==='approved').length;
   const schoolsDenied   = schools.filter(s=>s.status==='denied').length;
 
+  // Leaderboard
+  let leaderboardDays = 30, topSchool = null, topCity = null, topUser = null;
+  try {
+    const lbConfigSnap = await db.collection('appConfig').doc('leaderboard').get();
+    if (lbConfigSnap.exists) leaderboardDays = lbConfigSnap.data().days || 30;
+    const lbCutoffMs = Date.now() - leaderboardDays * 24 * 3600 * 1000;
+
+    // Top city & school — from family members (kids)
+    const schoolToCity = {};
+    classesSnap.docs.forEach(d => {
+      const c = d.data();
+      if (c.schoolName && c.city) schoolToCity[c.schoolName] = c.city;
+    });
+    const schoolCount = {}, cityCount = {};
+    families.forEach(fam => {
+      (fam.members||[]).filter(m => m.role === 'kid').forEach(kid => {
+        const school = (kid.school || '').trim();
+        const city   = schoolToCity[school] || '';
+        if (school) schoolCount[school] = (schoolCount[school]||0) + 1;
+        if (city)   cityCount[city]     = (cityCount[city]||0)   + 1;
+      });
+    });
+    topSchool = Object.entries(schoolCount).sort((a,b)=>b[1]-a[1])[0] || null;
+    topCity   = Object.entries(cityCount).sort((a,b)=>b[1]-a[1])[0]   || null;
+
+    // Top user by session duration — fetch all, filter in-memory (no index needed)
+    const sessionsSnap = await db.collection('sessions').get();
+    const userDuration = {};
+    sessionsSnap.docs.forEach(d => {
+      const s = d.data();
+      if (!s.durationMs) return;
+      const startMs = s.startTime?.toMillis?.() || 0;
+      if (startMs < lbCutoffMs) return;
+      const key = (s.familyUid||'') + '_' + (s.memberName||'');
+      if (!userDuration[key]) userDuration[key] = { memberName: s.memberName||'', familyName: s.familyName||'', durationMs: 0 };
+      userDuration[key].durationMs += s.durationMs;
+    });
+    topUser = Object.values(userDuration).sort((a,b)=>b.durationMs-a.durationMs)[0] || null;
+  } catch(e) {
+    console.error('[getAnalytics] leaderboard error:', e);
+  }
+
   return {
     familyCount, parentCount, kidCount, classCount,
     approvedCount, rejectedCount,
@@ -581,6 +623,7 @@ exports.getAnalytics = functions.https.onCall(async (data, context) => {
     recentLog,
     appsPending, appsApproved, appsDenied,
     schoolsPending, schoolsApproved, schoolsDenied,
+    leaderboardDays, topSchool, topCity, topUser,
   };
 });
 
