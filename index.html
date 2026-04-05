@@ -573,6 +573,8 @@
       <span id="adminPendingCount" class="comm-count" style="background:#fef3c7;color:#92400e"></span>
     </div>
     <div id="adminPendingList" style="margin-bottom:24px"></div>
+    <div class="comm-section-label" style="margin-top:4px">🏫 בתי ספר ממתינים לאישור</div>
+    <div id="adminSchoolsList" style="margin-bottom:24px"></div>
     <div class="comm-section-label" style="margin-top:4px">👤 מועמדויות לוועד</div>
     <div id="adminAppsList" style="margin-bottom:24px"></div>
     <div class="comm-section-label">✅ היסטוריית אישורים</div>
@@ -1755,7 +1757,7 @@ function renderMgmtMembers() {
       <div class="mgmt-member-info">
         <div class="mgmt-member-name">${esc(m.name)}</div>
         <div class="mgmt-member-role">${m.role==='parent'?'הורה':'ילד/ה'}</div>
-        ${m.role==='kid'&&m.school?.city ? `<div class="mgmt-school-info">🏫 ${esc(m.school.city)}${m.school.name?', '+esc(m.school.name):''}${m.school.grade?', כיתה '+esc(m.school.grade)+(m.school.classNum?'\''+esc(m.school.classNum):''):''}</div>` : ''}
+        ${m.role==='kid'&&m.school?.city ? `<div class="mgmt-school-info">🏫 ${esc(m.school.city)}${m.school.name?', '+esc(m.school.name):''}${m.school.grade?', כיתה '+esc(m.school.grade)+(m.school.classNum?'\''+esc(m.school.classNum):''):''} ${m.schoolPending?'<span style="background:#fef3c7;color:#92400e;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:700">⏳ ממתין</span>':''}</div>` : ''}
       </div>
       <button class="mgmt-icon-btn purple" onclick="toggleMgmtEdit(${i})" title="ערוך">✏️</button>
       ${canDel ? `<button class="mgmt-icon-btn red" onclick="mgmtRemoveMember('${esc(m.name)}')" title="הסר">🗑</button>` : '<span style="width:26px"></span>'}
@@ -1960,6 +1962,62 @@ async function loadSchoolsFor(city) {
     _cachedSchools[key] = snap.exists ? (snap.data().schools||[]) : [];
   } catch(e) { _cachedSchools[key] = []; }
 }
+function isNewCity(city) {
+  if (!city?.trim() || !_cachedCities) return false;
+  const norm = city.trim().toLowerCase();
+  return !_cachedCities.some(c => c.trim().toLowerCase() === norm);
+}
+function isNewSchool(city, schoolName) {
+  if (!city?.trim() || !schoolName?.trim()) return false;
+  const key = normCityId(city);
+  const list = _cachedSchools[key];
+  if (!list) return true; // not loaded yet = treat as new
+  const norm = schoolName.trim().toLowerCase();
+  return !list.some(s => s.trim().toLowerCase() === norm);
+}
+
+async function requestNewSchool(kidName, school, requestType) {
+  // requestType: 'city' | 'school'
+  // Check if a pending request already exists for this city+school combo
+  const q = await fbDb.collection('pendingSchools')
+    .where('city', '==', school.city.trim())
+    .where('schoolName', '==', (school.name||'').trim())
+    .where('status', '==', 'pending')
+    .get();
+
+  const newFamily = { familyUid: S.uid, kidName, school };
+  let pendingId;
+
+  if (!q.empty) {
+    // Add this family to existing pending request
+    pendingId = q.docs[0].id;
+    await fbDb.collection('pendingSchools').doc(pendingId).update({
+      pendingFamilies: firebase.firestore.FieldValue.arrayUnion(newFamily),
+    });
+  } else {
+    // Create new pending request
+    const ref = await fbDb.collection('pendingSchools').add({
+      type: requestType,
+      city: school.city.trim(),
+      schoolName: (school.name || '').trim(),
+      requestedBy: { familyUid: S.uid, familyName: familyData?.familyName || '' },
+      pendingFamilies: [newFamily],
+      status: 'pending',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    pendingId = ref.id;
+  }
+
+  // Mark schoolPending on the member in the family doc
+  const members = getMembers().map(m => {
+    if (m.name !== kidName) return m;
+    return { ...m, schoolPending: pendingId };
+  });
+  if (familyData) familyData.members = members;
+  await fbDb.collection('families').doc(S.uid).update({ members });
+  return pendingId;
+}
+
 async function updateSchoolIndex(city, schoolName) {
   if (!city?.trim()) return;
   try {
@@ -2136,7 +2194,20 @@ async function syncKidClass(kidName, newSchool, oldSchool, newRole) {
   const oldId = classIdFor(oldSchool);
   const newId = classIdFor(newSchool);
   if (oldId && oldId !== newId) await unregisterFromClass(kidName, oldSchool);
-  if (newRole === 'kid' && newId)  await registerInClass(kidName, newSchool);
+  if (newRole === 'kid' && newId) {
+    // Ensure city cache is loaded before checking
+    if (!_cachedCities) await loadCities();
+    if (newSchool?.city) await loadSchoolsFor(newSchool.city);
+
+    const cityNew   = newSchool.city   && isNewCity(newSchool.city);
+    const schoolNew = newSchool.name   && !cityNew && isNewSchool(newSchool.city, newSchool.name);
+
+    if (cityNew || schoolNew) {
+      await requestNewSchool(kidName, newSchool, cityNew ? 'city' : 'school');
+    } else {
+      await registerInClass(kidName, newSchool);
+    }
+  }
 }
 
 async function fetchClassmates(school) {
@@ -2701,13 +2772,15 @@ async function nudgePendingNow(type) {
 }
 
 async function renderAdminPanel() {
-  el('adminPendingList').innerHTML = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
-  el('adminLogList').innerHTML     = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
+  el('adminPendingList').innerHTML  = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
+  el('adminLogList').innerHTML      = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
+  el('adminSchoolsList').innerHTML  = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
   try {
-    const [pendingSnap, logSnap, appsSnap] = await Promise.all([
+    const [pendingSnap, logSnap, appsSnap, schoolsSnap] = await Promise.all([
       fbDb.collectionGroup('pendingEvents').get(),
       fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get(),
       fbDb.collection('committeeApplications').where('status','==','pending').get(),
+      fbDb.collection('pendingSchools').where('status','==','pending').get(),
     ]);
 
     // Pending
@@ -2746,6 +2819,28 @@ async function renderAdminPanel() {
         }).join('')
       : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין מועמדויות ממתינות</div>';
     el('adminAppsList').innerHTML = appsHtml;
+
+    // Pending schools
+    const schoolsList = schoolsSnap.docs.map(d=>({id:d.id,...d.data()}));
+    el('adminSchoolsList').innerHTML = schoolsList.length
+      ? schoolsList.map(req => {
+          const label = req.type === 'city'
+            ? `עיר חדשה: ${esc(req.city)}`
+            : `בית ספר חדש: ${esc(req.schoolName)} (${esc(req.city)})`;
+          const reqBy = req.requestedBy?.familyName || '';
+          const count = (req.pendingFamilies||[]).length;
+          return `<div class="pending-event-row">
+            <div class="pending-event-info">
+              <span class="pending-event-title">${label}</span>
+              <span class="pending-event-meta">${reqBy ? 'הוגש על ידי: ' + esc(reqBy) + ' · ' : ''}${count} משפחה/ות ממתינות</span>
+            </div>
+            <div class="pending-event-actions">
+              <button class="pending-approve-btn" onclick="approveSchool('${req.id}')">${t('pendingApprove')}</button>
+              <button class="pending-reject-btn"  onclick="denySchool('${req.id}')">${t('pendingReject')}</button>
+            </div>
+          </div>`;
+        }).join('')
+      : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין בקשות ממתינות</div>';
 
     // Log
     const log = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -2844,6 +2939,75 @@ async function adminDenyApplication(appId, cid) {
     if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
     await renderCommunity();
   } catch(e) { console.error('adminDenyApplication:', e); }
+}
+
+async function approveSchool(id) {
+  try {
+    const docSnap = await fbDb.collection('pendingSchools').doc(id).get();
+    if (!docSnap.exists) return;
+    const req = docSnap.data();
+
+    // 1. Add to school index
+    await updateSchoolIndex(req.city, req.schoolName);
+
+    // 2. Register each waiting family's kid in class
+    for (const pf of (req.pendingFamilies || [])) {
+      await registerInClass(pf.kidName, pf.school);
+      // Clear schoolPending from member
+      try {
+        const famSnap = await fbDb.collection('families').doc(pf.familyUid).get();
+        if (famSnap.exists) {
+          const members = famSnap.data().members.map(m =>
+            m.name === pf.kidName ? (({ schoolPending, ...rest }) => rest)(m) : m
+          );
+          await fbDb.collection('families').doc(pf.familyUid).update({ members });
+        }
+      } catch(e) { console.error('approveSchool clear pending:', e); }
+    }
+
+    // 3. Mark as approved
+    await fbDb.collection('pendingSchools').doc(id).update({
+      status: 'approved',
+      approvedBy: { familyUid: S.uid, familyName: familyData?.familyName || '' },
+      approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await renderAdminPanel();
+  } catch(e) { console.error('approveSchool:', e); alert('שגיאה: ' + e.message); }
+}
+
+async function denySchool(id) {
+  try {
+    const docSnap = await fbDb.collection('pendingSchools').doc(id).get();
+    if (!docSnap.exists) return;
+    const req = docSnap.data();
+
+    // Clear school data from each waiting family's kid
+    for (const pf of (req.pendingFamilies || [])) {
+      try {
+        const famSnap = await fbDb.collection('families').doc(pf.familyUid).get();
+        if (famSnap.exists) {
+          const members = famSnap.data().members.map(m => {
+            if (m.name !== pf.kidName) return m;
+            const u = { ...m };
+            delete u.school;
+            delete u.schoolPending;
+            return u;
+          });
+          await fbDb.collection('families').doc(pf.familyUid).update({ members });
+        }
+      } catch(e) { console.error('denySchool clear:', e); }
+    }
+
+    // Mark as denied
+    await fbDb.collection('pendingSchools').doc(id).update({
+      status: 'denied',
+      deniedBy: { familyUid: S.uid, familyName: familyData?.familyName || '' },
+      deniedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+
+    await renderAdminPanel();
+  } catch(e) { console.error('denySchool:', e); alert('שגיאה: ' + e.message); }
 }
 
 async function refreshCommunity() {

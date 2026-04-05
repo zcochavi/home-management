@@ -287,6 +287,56 @@ exports.onApplicationUpdated = functions.firestore
     }
   });
 
+exports.onPendingSchoolCreated = functions.firestore
+  .document('pendingSchools/{reqId}')
+  .onCreate(async (snap, ctx) => {
+    const req = snap.data();
+    const label = req.type === 'city'
+      ? `עיר חדשה: ${req.city}`
+      : `בית ספר חדש: ${req.schoolName} (${req.city})`;
+    const requester = req.requestedBy?.familyName || '';
+    console.log(`onPendingSchoolCreated: ${label} by ${requester}`);
+
+    const targets = ADMIN_UID ? [ADMIN_UID] : [];
+    if (!targets.length) return;
+
+    const tokenArrays = await Promise.all(targets.map(getTokens));
+    await sendToTokens(tokenArrays.flat(),
+      `🏫 בקשה חדשה: ${label}`,
+      requester ? `הוגש על ידי ${requester}` : '',
+      { type: 'pendingSchool', reqId: ctx.params.reqId }
+    );
+  });
+
+exports.onPendingSchoolUpdated = functions.firestore
+  .document('pendingSchools/{reqId}')
+  .onUpdate(async (change, ctx) => {
+    const before = change.before.data();
+    const after  = change.after.data();
+    if (before.status === after.status) return;
+
+    const label = after.type === 'city'
+      ? `עיר: ${after.city}`
+      : `בית ספר: ${after.schoolName} (${after.city})`;
+
+    for (const pf of (after.pendingFamilies || [])) {
+      const tokens = await getTokens(pf.familyUid);
+      if (after.status === 'approved') {
+        await sendToTokens(tokens,
+          `✅ הבקשה שלך אושרה`,
+          `${label} · ${pf.kidName} שויך/ה לכיתה`,
+          { type: 'schoolApproved', reqId: ctx.params.reqId }
+        );
+      } else if (after.status === 'denied') {
+        await sendToTokens(tokens,
+          `❌ הבקשה שלך נדחתה`,
+          label,
+          { type: 'schoolDenied', reqId: ctx.params.reqId }
+        );
+      }
+    }
+  });
+
 exports.dailyNotificationJobs = functions.pubsub
   .schedule('every 24 hours')
   .onRun(async () => {
