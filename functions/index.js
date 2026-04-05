@@ -89,6 +89,13 @@ async function notifyFamilies(familyUids, posterUid, title, body, data) {
   await sendToTokens(tokenArrays.flat(), title, body, data);
 }
 
+function personFullName(obj) {
+  if (!obj) return '';
+  const first = obj.firstName || '';
+  const last  = obj.familyName || '';
+  return (first && last) ? first + ' ' + last : last || first;
+}
+
 // Same UID as ADMIN_UID in index.html — paste yours here
 const ADMIN_UID = 'TirsqoPeWHfpB3kIULJh4UM3e2r1';
 
@@ -135,9 +142,13 @@ exports.onPendingEventCreated = functions.firestore
       familyUids.map(uid => db.collection('families').doc(uid).get().catch(() => null))
     );
     const posterUid = ev.postedBy?.familyUid;
-    // Committee members + admin, never the poster themselves
+    // Committee members for this class + admin, never the poster themselves
     const targetUids = familyDocs
-      .filter(d => d?.exists && d.data().role === 'committee' && d.id !== posterUid)
+      .filter(d => {
+        if (!d?.exists || d.id === posterUid) return false;
+        const fd = d.data();
+        return (fd.committeeClasses||[]).includes(cid) || fd.role === 'committee';
+      })
       .map(d => d.id);
     if (ADMIN_UID && !targetUids.includes(ADMIN_UID) && ADMIN_UID !== posterUid)
       targetUids.push(ADMIN_UID);
@@ -145,7 +156,7 @@ exports.onPendingEventCreated = functions.firestore
     if (!targetUids.length) return;
 
     const tokenArrays = await Promise.all(targetUids.map(getTokens));
-    const poster = ev.postedBy?.familyName || '';
+    const poster = personFullName(ev.postedBy);
     await sendToTokens(tokenArrays.flat(),
       `⏳ ממתין לאישור: ${ev.title}`,
       `${poster ? poster + ' · ' : ''}${classLabel(cid)}`,
@@ -165,7 +176,7 @@ exports.onClassEventCreated = functions.firestore
     const cid = ctx.params.classId;
     console.log(`onClassEventCreated: classId=${cid}, title="${ev.title}", posterUid=${ev.postedBy?.familyUid}`);
     const uids = await getClassFamilyUids(cid, ev.genderFilter);
-    const poster = ev.postedBy?.familyName || '';
+    const poster = personFullName(ev.postedBy);
     const body   = poster ? `${poster} · ${classLabel(cid)}` : classLabel(cid);
     await notifyFamilies(uids, ev.postedBy?.familyUid, ev.title, body,
       { type: 'classEvent', classId: cid, eventId: ctx.params.eventId });
@@ -174,7 +185,7 @@ exports.onClassEventCreated = functions.firestore
     if (ev.approvedBy && ev.postedBy?.familyUid) {
       const cfg = await getNotificationConfig();
       if (cfg.pendingEvents.notifyOnDecision) {
-        const approverName = ev.approvedBy.familyName || '';
+        const approverName = personFullName(ev.approvedBy);
         const posterTokens = await getTokens(ev.postedBy.familyUid);
         await sendToTokens(posterTokens,
           `✅ האירוע שלך אושר: ${ev.title}`,
@@ -193,7 +204,7 @@ exports.onGradeEventCreated = functions.firestore
     const [city, school, grade] = gid.split('~~');
     console.log(`onGradeEventCreated: gradeId=${gid}, title="${ev.title}"`);
     const uids = await getFamilyUidsByPrefix(gid);
-    const poster = ev.postedBy?.familyName || '';
+    const poster = personFullName(ev.postedBy);
     const body   = `${poster ? poster + ' · ' : ''}${school || city} · שכבה ${grade || ''}`;
     await notifyFamilies(uids, ev.postedBy?.familyUid, ev.title, body,
       { type: 'gradeEvent', gradeId: gid, eventId: ctx.params.eventId });
@@ -207,7 +218,7 @@ exports.onSchoolEventCreated = functions.firestore
     const [city, school] = sid.split('~~');
     console.log(`onSchoolEventCreated: schoolId=${sid}, title="${ev.title}"`);
     const uids = await getFamilyUidsByPrefix(sid);
-    const poster = ev.postedBy?.familyName || '';
+    const poster = personFullName(ev.postedBy);
     const body   = `${poster ? poster + ' · ' : ''}${school || city}`;
     await notifyFamilies(uids, ev.postedBy?.familyUid, ev.title, body,
       { type: 'schoolEvent', schoolId: sid, eventId: ctx.params.eventId });
@@ -253,9 +264,11 @@ exports.onApplicationUpdated = functions.firestore
     const cfg = await getNotificationConfig();
 
     if (after.status === 'approved') {
-      // Grant committee role (unconditional)
+      // Grant committee role for the specific class
+      const classId = after.classId;
       await db.collection('families').doc(applicantUid)
-        .update({ role: 'committee' }).catch(e => console.error('grant role:', e));
+        .update({ committeeClasses: admin.firestore.FieldValue.arrayUnion(classId) })
+        .catch(e => console.error('grant committeeClasses:', e));
 
       // Notify applicant
       if (cfg.committeeApplications.notifyOnDecision) {
@@ -294,7 +307,7 @@ exports.onPendingSchoolCreated = functions.firestore
     const label = req.type === 'city'
       ? `עיר חדשה: ${req.city}`
       : `בית ספר חדש: ${req.schoolName} (${req.city})`;
-    const requester = req.requestedBy?.familyName || '';
+    const requester = personFullName(req.requestedBy);
     console.log(`onPendingSchoolCreated: ${label} by ${requester}`);
 
     const targets = ADMIN_UID ? [ADMIN_UID] : [];
@@ -423,7 +436,11 @@ exports.dailyNotificationJobs = functions.pubsub
           uids.map(uid => db.collection('families').doc(uid).get().catch(() => null))
         );
         const targets = familyDocs
-          .filter(d => d?.exists && d.data().role === 'committee')
+          .filter(d => {
+            if (!d?.exists) return false;
+            const fd = d.data();
+            return (fd.committeeClasses||[]).includes(classId) || fd.role === 'committee';
+          })
           .map(d => d.id);
         if (ADMIN_UID && !targets.includes(ADMIN_UID)) targets.push(ADMIN_UID);
         if (targets.length) {
@@ -442,6 +459,225 @@ exports.dailyNotificationJobs = functions.pubsub
 
     return null;
   });
+
+exports.getPresence = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID) {
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  }
+
+  const ONLINE_THRESHOLD = 4 * 60 * 1000; // 4 min (2 min heartbeat + 2 min buffer)
+  const now = Date.now();
+
+  // Presence records
+  const presenceSnap = await db.collection('presence').get();
+  const presenceMap  = {};
+  presenceSnap.docs.forEach(d => {
+    const p = d.data();
+    const key = (p.familyUid || '') + '_' + (p.memberName || '');
+    presenceMap[key] = {
+      online:      p.lastSeen?.toMillis?.() > now - ONLINE_THRESHOLD,
+      lastSeenMs:  p.lastSeen?.toMillis?.() || 0,
+    };
+  });
+
+  // All family members
+  const familiesSnap = await db.collection('families').get();
+  const members = [];
+  familiesSnap.docs.forEach(famDoc => {
+    const fam = famDoc.data();
+    (fam.members || []).forEach(m => {
+      const key      = famDoc.id + '_' + (m.name || '');
+      const presence = presenceMap[key] || { online: false, lastSeenMs: 0 };
+      members.push({
+        familyUid:  famDoc.id,
+        memberName: m.name || '',
+        familyName: fam.familyName || '',
+        role:       m.role || 'parent',
+        online:     presence.online,
+        lastSeenMs: presence.lastSeenMs,
+      });
+    });
+  });
+
+  // Online first, then by lastSeen descending
+  members.sort((a, b) =>
+    (b.online ? 1 : 0) - (a.online ? 1 : 0) || b.lastSeenMs - a.lastSeenMs
+  );
+
+  return { members };
+});
+
+exports.getAnalytics = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID) {
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  }
+
+  // Families & members
+  const familiesSnap = await db.collection('families').get();
+  const families = familiesSnap.docs.map(d => d.data());
+  const familyCount = families.length;
+  const parentCount = families.reduce((n,f) => n + (f.members||[]).filter(m=>m.role==='parent').length, 0);
+  const kidCount    = families.reduce((n,f) => n + (f.members||[]).filter(m=>m.role==='kid').length, 0);
+
+  // Active classes
+  const classesSnap = await db.collection('schoolClasses').get();
+  const classCount  = classesSnap.size;
+  const classNames  = {};
+  classesSnap.docs.forEach(d => {
+    const c = d.data();
+    classNames[d.id] = (c.schoolName || c.city || '') + ' · כיתה ' + (c.grade||'') + (c.classNum ? "'" + c.classNum : '');
+  });
+
+  // Admin log — events approved/rejected
+  const logSnap    = await db.collection('adminLog').orderBy('actionAt','desc').get();
+  const logEntries = logSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+
+  const approvedCount  = logEntries.filter(e=>e.action==='approved').length;
+  const rejectedCount  = logEntries.filter(e=>e.action==='rejected').length;
+
+  // Events by month (last 6 months)
+  const sixMonthsAgo = Date.now() - 180*24*3600*1000;
+  const byMonth = {};
+  logEntries.forEach(e => {
+    const ms = e.actionAt?.toMillis?.() || 0;
+    if (ms < sixMonthsAgo) return;
+    const dt  = new Date(ms);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}`;
+    byMonth[key] = (byMonth[key]||0) + 1;
+  });
+  const eventsByMonth = Object.entries(byMonth).sort();
+
+  // Events by class (top 8)
+  const byClass = {};
+  logEntries.forEach(e => { if (e.classId) byClass[e.classId] = (byClass[e.classId]||0)+1; });
+  const eventsByClass = Object.entries(byClass).sort((a,b)=>b[1]-a[1]).slice(0,8);
+
+  // Recent log (last 10, with class name)
+  const recentLog = logEntries.slice(0,10).map(e => ({
+    action:     e.action,
+    eventTitle: e.eventTitle || '',
+    className:  classNames[e.classId] || e.classId || '',
+    actionAt:   e.actionAt?.toMillis?.() || null,
+  }));
+
+  // Committee applications
+  const appsSnap  = await db.collection('committeeApplications').get();
+  const apps = appsSnap.docs.map(d=>d.data());
+  const appsPending  = apps.filter(a=>a.status==='pending').length;
+  const appsApproved = apps.filter(a=>a.status==='approved').length;
+  const appsDenied   = apps.filter(a=>a.status==='denied').length;
+
+  // Pending schools
+  const schoolsSnap = await db.collection('pendingSchools').get();
+  const schools = schoolsSnap.docs.map(d=>d.data());
+  const schoolsPending  = schools.filter(s=>s.status==='pending').length;
+  const schoolsApproved = schools.filter(s=>s.status==='approved').length;
+  const schoolsDenied   = schools.filter(s=>s.status==='denied').length;
+
+  return {
+    familyCount, parentCount, kidCount, classCount,
+    approvedCount, rejectedCount,
+    eventsByMonth, eventsByClass,
+    recentLog,
+    appsPending, appsApproved, appsDenied,
+    schoolsPending, schoolsApproved, schoolsDenied,
+  };
+});
+
+exports.migrateCommitteeRoles = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID) {
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  }
+
+  const familiesSnap = await db.collection('families').where('role', '==', 'committee').get();
+  let migrated = 0, skipped = 0, errors = 0;
+
+  for (const famDoc of familiesSnap.docs) {
+    const famData = famDoc.data();
+    if ((famData.committeeClasses || []).length > 0) { skipped++; continue; }
+
+    const n = s => (s||'').trim().replace(/\s+/g,' ').replace(/\//g,'-').replace(/~/g,'');
+    const members = famData.members || [];
+    const classIds = [...new Set(
+      members
+        .filter(m => m.role === 'kid' && m.school?.city && m.school?.grade)
+        .map(m => [n(m.school.city), n(m.school.name||''), m.school.grade, n(m.school.classNum||'')].join('~~'))
+    )];
+
+    if (!classIds.length) { skipped++; continue; }
+
+    try {
+      await db.collection('families').doc(famDoc.id).update({
+        committeeClasses: classIds,
+        role: admin.firestore.FieldValue.delete(),
+      });
+      migrated++;
+    } catch(e) {
+      console.error(`migrateCommitteeRoles: ${famDoc.id}:`, e);
+      errors++;
+    }
+  }
+
+  return { migrated, skipped, errors };
+});
+
+exports.migrateKidCodes = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID) {
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  }
+
+  const JOIN_DOMAIN = 'fh.familyhub';
+  function generateCode() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+  }
+
+  const familiesSnap = await db.collection('families').get();
+  let generated = 0, skipped = 0, errors = 0;
+
+  for (const famDoc of familiesSnap.docs) {
+    const data = famDoc.data();
+    const members = data.members || [];
+    const kidsNeedingCode = members.filter(m => m.role === 'kid' && !m.joinCode);
+    if (!kidsNeedingCode.length) { skipped++; continue; }
+
+    const updatedMembers = [...members];
+    let changed = false;
+
+    for (let i = 0; i < updatedMembers.length; i++) {
+      const m = updatedMembers[i];
+      if (m.role !== 'kid' || m.joinCode) continue;
+      try {
+        // Generate a unique code
+        let code, attempts = 0;
+        do {
+          code = generateCode();
+          attempts++;
+          const existing = await db.collection('joinCodes').doc(code).get();
+          if (!existing.exists) break;
+        } while (attempts < 10);
+
+        const inviteEmail = code + '@' + JOIN_DOMAIN;
+        await admin.auth().createUser({ email: inviteEmail, password: code });
+        await db.collection('joinCodes').doc(code).set({ ownerUid: famDoc.id, memberName: m.name });
+        updatedMembers[i] = { ...m, joinCode: code };
+        generated++;
+        changed = true;
+      } catch(e) {
+        console.error(`migrateKidCodes: ${famDoc.id} / ${m.name}:`, e);
+        errors++;
+      }
+    }
+
+    if (changed) {
+      await db.collection('families').doc(famDoc.id).update({ members: updatedMembers });
+    }
+  }
+
+  return { generated, skipped, errors };
+});
 
 exports.nudgePending = functions.https.onCall(async (data, context) => {
   if (context.auth?.uid !== ADMIN_UID) {
@@ -482,7 +718,11 @@ exports.nudgePending = functions.https.onCall(async (data, context) => {
         uids.map(uid => db.collection('families').doc(uid).get().catch(() => null))
       );
       const targets = familyDocs
-        .filter(d => d?.exists && d.data().role === 'committee')
+        .filter(d => {
+          if (!d?.exists) return false;
+          const fd = d.data();
+          return (fd.committeeClasses||[]).includes(classId) || fd.role === 'committee';
+        })
         .map(d => d.id);
       if (ADMIN_UID && !targets.includes(ADMIN_UID)) targets.push(ADMIN_UID);
       if (targets.length) {

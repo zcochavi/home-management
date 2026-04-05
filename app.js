@@ -41,7 +41,7 @@ const STRINGS = {
     parentRole:'הורה', kidRole:'ילד/ה', roleAdmin:'🔑 מנהל', roleParent:'הורה', roleKid:'ילד/ה',
     greetMorning:'בוקר טוב', greetAfternoon:'צהריים טובים', greetEvening:'ערב טוב',
     switchUser:'החלף משתמש', langToggle:'EN',
-    tabs:['בית','משימות','קניות','שיעורים','לוח שנה','קהילה'],
+    tabs:['בית','משימות','קניות','שיעורים','לוח שנה','קהילה','דשבורד'],
     all:'כולם',
     todayChores:'⚡ משימות היום',
     personChores: n => `⚡ משימות של ${n}`,
@@ -119,7 +119,7 @@ const STRINGS = {
     parentRole:'Parent', kidRole:'Kid', roleAdmin:'🔑 Admin', roleParent:'Parent', roleKid:'Kid',
     greetMorning:'Good morning', greetAfternoon:'Good afternoon', greetEvening:'Good evening',
     switchUser:'Switch user', langToggle:'עב',
-    tabs:['Home','Chores','Grocery','Homework','Calendar','Community'],
+    tabs:['Home','Chores','Grocery','Homework','Calendar','Community','Dashboard'],
     all:'All',
     todayChores:"⚡ Today's Chores",
     personChores: n => `⚡ ${n}'s Chores`,
@@ -354,34 +354,73 @@ let S = {
 };
 let gcal = { gapiReady:false, gisReady:false, tokenClient:null, accessToken:null, events:[], syncing:false };
 let fbUnsubscribe = null;
+let _presenceInterval = null;
 
 const isParent    = () => getParents().includes(S.user);
 const isKid       = () => getKids().includes(S.user);
 const isAdmin     = () => !!ADMIN_UID && S.uid === ADMIN_UID;
-const isCommittee = () => isAdmin() || familyData?.role === 'committee';
+const isCommittee    = () => isAdmin() || (familyData?.committeeClasses||[]).length > 0 || familyData?.role === 'committee';
+const isCommitteeFor = (cid) => isAdmin() || (familyData?.committeeClasses||[]).includes(cid) || familyData?.role === 'committee';
+
+// Returns 'all' | 'some' | 'none' — how many of the family's kid-classes this family is committee for.
+// 'all' also covers legacy role:'committee' (treated as committee for everything).
+function parentCommitteeStatus() {
+  const commClasses = familyData?.committeeClasses || [];
+  const isLegacy    = familyData?.role === 'committee';
+  if (isLegacy || commClasses.includes('*')) return 'all';
+  if (!commClasses.length) return 'none';
+
+  const kidClassIds = getKids()
+    .map(name => getMembers().find(m => m.name === name))
+    .filter(m => m?.school?.city && m?.school?.grade)
+    .map(m => classIdFor(m.school))
+    .filter(Boolean);
+
+  if (!kidClassIds.length) return commClasses.length > 0 ? 'all' : 'none';
+  const matching = kidClassIds.filter(cid => commClasses.includes(cid));
+  if (matching.length === 0)            return 'none';
+  if (matching.length === kidClassIds.length) return 'all';
+  return 'some';
+}
+
+function _committeeBadge(status) {
+  if (status === 'all')  return `<span class="role-badge role-badge-committee">${t('roleCommittee')}</span>`;
+  if (status === 'some') return `<span class="role-badge role-badge-committee" style="opacity:0.75">${t('roleCommittee')} / ${t('roleParent')}</span>`;
+  return null;
+}
 
 function roleBadgeHtml(memberRole, familyUidForAdmin) {
   // memberRole: 'parent' | 'kid'
   // familyUidForAdmin: optional, to check if this member's family is admin
   const isThisAdmin = familyUidForAdmin && ADMIN_UID && familyUidForAdmin === ADMIN_UID;
-  const isThisComm  = familyData?.role === 'committee';
   if (memberRole === 'kid')
     return `<span class="role-badge role-badge-kid">${t('roleKid')}</span>`;
   if (isThisAdmin)
     return `<span class="role-badge role-badge-admin">${t('roleAdmin')}</span>`;
-  if (isThisComm)
-    return `<span class="role-badge role-badge-committee">${t('roleCommittee')}</span>`;
+  const commBadge = _committeeBadge(parentCommitteeStatus());
+  if (commBadge) return commBadge;
   return `<span class="role-badge role-badge-parent">${t('roleParent')}</span>`;
 }
 
 function currentUserRoleBadge() {
   if (isKid())   return `<span class="role-badge role-badge-kid">${t('roleKid')}</span>`;
   if (isAdmin()) return `<span class="role-badge role-badge-admin">${t('roleAdmin')}</span>`;
-  if (isCommittee()) return `<span class="role-badge role-badge-committee">${t('roleCommittee')}</span>`;
+  const commBadge = _committeeBadge(parentCommitteeStatus());
+  if (commBadge) return commBadge;
   return `<span class="role-badge role-badge-parent">${t('roleParent')}</span>`;
 }
+// Returns "firstName familyName" from a person-reference object {firstName?, familyName}
+function personFullName(obj) {
+  if (!obj) return '';
+  const first = obj.firstName || '';
+  const last  = obj.familyName || '';
+  return (first && last) ? first + ' ' + last : last || first;
+}
+// My own full display name (current logged-in member)
+const myFullName = () => (S.user && familyData?.familyName) ? S.user + ' ' + familyData.familyName : S.user || familyData?.familyName || '';
+
 // Committee members and admin publish immediately; regular parents need approval
-const canPublishDirectly = () => isParent() && isCommittee();
+const canPublishDirectly = (cid) => isParent() && isCommitteeFor(cid);
 const gcalReady   = () => gcal.gapiReady && gcal.gisReady && !GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID');
 const gcalConnected = () => !!gcal.accessToken;
 
@@ -640,7 +679,30 @@ function getAuthError(code) {
   return m[code] || 'שגיאה: ' + code;
 }
 
+function stopPresence() {
+  if (_presenceInterval) { clearInterval(_presenceInterval); _presenceInterval = null; }
+}
+
+async function initPresence() {
+  stopPresence();
+  if (!S.uid || !S.user || !fbDb) return;
+  const slug  = S.user.replace(/[^\w\u0590-\u05FF]/g, '_');
+  const docId = S.uid + '_' + slug;
+  const ref   = fbDb.collection('presence').doc(docId);
+  const write = () => ref.set({
+    familyUid:  S.uid,
+    memberName: S.user,
+    familyName: familyData?.familyName || '',
+    role:       isParent() ? 'parent' : 'kid',
+    lastSeen:   firebase.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true }).catch(() => {});
+  write();
+  _presenceInterval = setInterval(write, 2 * 60 * 1000);
+}
+
 function authSignOut() {
+  stopPresence();
+  unsubscribeAllComm(); _commCache = {};
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
   const firebaseUid = fbAuth?.currentUser?.uid;
   if (firebaseUid) localStorage.removeItem('familyhub_family_uid_' + firebaseUid);
@@ -805,7 +867,7 @@ function afterLoad() {
     // Locked device: auto-login as locked member, no choice
     login(S.lockedMember);
   } else if (S.user && getAllMemberNames().includes(S.user)) {
-    renderAll(); tryAutoConnectGCal();
+    renderAll(); tryAutoConnectGCal(); initPresence();
   } else {
     const saved = localStorage.getItem('familyhub_member_' + S.uid);
     if (saved && getAllMemberNames().includes(saved)) {
@@ -986,10 +1048,13 @@ function login(name) {
   applyDir(); renderAll(); tryAutoConnectGCal();
   initFCM();
   refreshHomeUpcoming();
+  initPresence();
 }
 
 function switchUser() {
   if (S.lockedMember) return; // locked devices can't switch members
+  stopPresence();
+  unsubscribeAllComm(); _commCache = {};
   S.user = null; S.filter = 'All';
   localStorage.removeItem('familyhub_member_' + S.uid);
   el('app').classList.remove('visible');
@@ -1349,7 +1414,7 @@ async function requestNewSchool(kidName, school, requestType) {
       type: requestType,
       city: school.city.trim(),
       schoolName: (school.name || '').trim(),
-      requestedBy: { familyUid: S.uid, familyName: familyData?.familyName || '' },
+      requestedBy: { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName || '' },
       pendingFamilies: [newFamily],
       status: 'pending',
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -1648,15 +1713,63 @@ function fmtEventDate(dateStr) {
   return date.toLocaleDateString(t('locale'), {month:'short', day:'numeric'});
 }
 
-let _commCache   = {}; // { [classId]: { classmates, events, loadedAt, error? } }
-let _commAddOpen = {}; // { [classId]: bool }
+let _commCache     = {}; // { [classId]: { classmates, events, loadedAt, error? } }
+let _commListeners = {}; // { [classId]: [unsubFn, ...] }
+let _commAddOpen   = {}; // { [classId]: bool }
+
+function _unsubCommClass(cid) {
+  (_commListeners[cid] || []).forEach(fn => fn());
+  delete _commListeners[cid];
+}
+function unsubscribeAllComm() {
+  Object.keys(_commListeners).forEach(_unsubCommClass);
+}
+
+function subscribeToCommClass(cid) {
+  if (_commListeners[cid]) return; // already subscribed
+  _commListeners[cid] = [];
+  const rerender = () => { if (S.tab === 'community') renderCommunity(); };
+
+  // Live: class events
+  _commListeners[cid].push(
+    fbDb.collection('schoolClasses').doc(cid).collection('events').orderBy('date')
+      .onSnapshot(snap => {
+        if (!_commCache[cid]) return;
+        _commCache[cid].events = snap.docs.map(d => ({id:d.id,...d.data(),scope:'class',scopeId:cid}));
+        rerender();
+      }, e => console.warn('[community] events:', e.code))
+  );
+
+  // Live: pending events (committee / admin)
+  if (isCommitteeFor(cid)) {
+    _commListeners[cid].push(
+      fbDb.collection('schoolClasses').doc(cid).collection('pendingEvents')
+        .onSnapshot(snap => {
+          if (!_commCache[cid]) return;
+          _commCache[cid].pendingEvents = snap.docs.map(d => ({id:d.id,...d.data()}))
+            .sort((a,b) => (a.createdAt?.toMillis?.()||0) - (b.createdAt?.toMillis?.()||0));
+          rerender();
+        }, e => console.warn('[community] pendingEvents:', e.code))
+    );
+  }
+
+  // Live: committee applications
+  _commListeners[cid].push(
+    fbDb.collection('committeeApplications')
+      .where('classId','==',cid).where('status','==','pending')
+      .onSnapshot(snap => {
+        if (!_commCache[cid]) return;
+        _commCache[cid].applications = snap.docs.map(d => ({id:d.id,...d.data()}));
+        rerender();
+      }, e => console.warn('[community] applications:', e.code))
+  );
+}
 
 async function loadCommunityData(kidsWithSchool) {
+  // Only load classes that don't have an active listener yet
   const toLoad = kidsWithSchool.filter(kid => {
     const cid = classIdFor(kid.school);
-    if (!cid) return false;
-    const c = _commCache[cid];
-    return !c || c.error || (Date.now() - c.loadedAt) > 120000;
+    return cid && !_commListeners[cid];
   });
   await Promise.all(toLoad.map(async kid => {
     const cid = classIdFor(kid.school);
@@ -1664,33 +1777,39 @@ async function loadCommunityData(kidsWithSchool) {
     const sid = schoolIdFor(kid.school);
     const safeGet = q => q.get().catch(() => ({docs:[]}));
     try {
-      const [membersSnap, eventsSnap, gradeSnap, schoolSnap, pendingSnap, appsSnap] = await Promise.all([
+      // Fetch static data once (classmates, grade events, school events rarely change)
+      const [membersSnap, gradeSnap, schoolSnap] = await Promise.all([
         fbDb.collection('schoolClasses').doc(cid).collection('members').get(),
-        fbDb.collection('schoolClasses').doc(cid).collection('events').orderBy('date').get(),
         gid ? safeGet(fbDb.collection('schoolGrades').doc(gid).collection('events').orderBy('date')) : Promise.resolve({docs:[]}),
         sid ? safeGet(fbDb.collection('schools').doc(sid).collection('events').orderBy('date')) : Promise.resolve({docs:[]}),
-        isCommittee() ? safeGet(fbDb.collection('schoolClasses').doc(cid).collection('pendingEvents')) : Promise.resolve({docs:[]}),
-        safeGet(fbDb.collection('committeeApplications').where('classId','==',cid).where('status','==','pending')),
       ]);
       const classmates = membersSnap.docs.map(d=>d.data()).filter(m=>m.familyUid!==S.uid);
-      // Fetch roles for classmates (admin-only, to show/manage committee assignments)
+      // Fetch classmate roles (admin-only)
       const classmateRoles = {};
       if (isAdmin() && classmates.length) {
         const roleDocs = await Promise.all(
           classmates.map(c => fbDb.collection('families').doc(c.familyUid).get().catch(()=>null))
         );
-        roleDocs.forEach(d => { if (d?.exists) classmateRoles[d.id] = d.data().role || 'parent'; });
+        roleDocs.forEach(d => {
+          if (d?.exists) {
+            const fd = d.data();
+            classmateRoles[d.id] = fd.committeeClasses || (fd.role === 'committee' ? ['*'] : []);
+          }
+        });
       }
+      // Seed cache with static data; live fields start empty — onSnapshot fills them
       _commCache[cid] = {
         classmates,
         classmateRoles,
-        events:        eventsSnap.docs.map(d=>({id:d.id,...d.data(),scope:'class',scopeId:cid})),
+        events:        [],
         gradeEvents:   gradeSnap.docs.map(d=>({id:d.id,...d.data(),scope:'grade',scopeId:gid})),
         schoolEvents:  schoolSnap.docs.map(d=>({id:d.id,...d.data(),scope:'school',scopeId:sid})),
-        pendingEvents: pendingSnap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.createdAt?.toMillis?.()||0)-(b.createdAt?.toMillis?.()||0)),
-        applications: appsSnap.docs.map(d=>({id:d.id,...d.data()})),
-        loadedAt: Date.now(),
+        pendingEvents: [],
+        applications:  [],
+        loadedAt:      Date.now(),
       };
+      // Start live listeners for events / pending events / applications
+      subscribeToCommClass(cid);
     } catch(e) {
       console.error('loadCommunityData error (classId=' + cid + '):', e);
       _commCache[cid] = { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[], applications:[], loadedAt:Date.now(), error: e.code||e.message };
@@ -1713,7 +1832,7 @@ function renderEventRow(ev, cid, isPast) {
       <div class="comm-event-title">${esc(ev.title)}${scopeBadge(ev.scope)}</div>
       <div class="comm-event-meta">
         <span class="comm-event-date">${fmtEventDate(ev.date)}</span>
-        ${ev.postedBy?.familyName ? ` · ${esc(ev.postedBy.familyName)}` : ''}
+        ${ev.postedBy ? ` · ${esc(personFullName(ev.postedBy))}` : ''}
       </div>
       ${ev.note ? `<div class="comm-event-note">${esc(ev.note)}</div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
@@ -1756,7 +1875,7 @@ function renderCommCard(kid) {
       ? upcoming.map(ev=>renderEventRow(ev,cid,false)).join('')
       : `<div style="font-size:13px;color:#a0aec0;padding:6px 0;font-weight:600">${t('commNoEvents')}</div>`}
 
-    ${isCommittee() && cache.pendingEvents?.length ? `
+    ${isCommitteeFor(cid) && cache.pendingEvents?.length ? `
     <div class="comm-section-label" style="margin-top:16px;display:flex;align-items:center;gap:8px;color:#92400e">
       <span>${t('pendingSection')}</span>
       <span class="comm-count" style="background:#fef3c7;color:#92400e">${cache.pendingEvents.length}</span>
@@ -1765,7 +1884,7 @@ function renderCommCard(kid) {
       <div class="pending-event-row">
         <div class="pending-event-info">
           <span class="pending-event-title">${esc(ev.title)}</span>
-          <span class="pending-event-meta">${esc(ev.postedBy?.familyName||'')}${ev.date ? ' · ' + ev.date : ''}</span>
+          <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + ev.date : ''}</span>
         </div>
         <div class="pending-event-actions">
           <button class="pending-approve-btn" onclick="approveEvent('${cid}','${ev.id}')">${t('pendingApprove')}</button>
@@ -1775,16 +1894,15 @@ function renderCommCard(kid) {
 
     ${(() => {
   const apps = cache.applications || [];
-  if (!apps.length && (isCommittee() || isAdmin())) return '';
-  if (!apps.length && !isCommittee()) {
-    // Show apply button if this parent hasn't applied yet and isn't committee
-    const alreadyApplied = false; // no pending apps in cache
-    if (!isParent() || isCommittee()) return '';
+  if (!apps.length && (isCommitteeFor(cid) || isAdmin())) return '';
+  if (!apps.length && !isCommitteeFor(cid)) {
+    // Show apply button if this parent hasn't applied yet and isn't committee for this class
+    if (!isParent() || isCommitteeFor(cid)) return '';
     return `<button class="apply-committee-btn" onclick="applyForCommittee('${cid}')">${t('commApplyCommittee')}</button>`;
   }
   const myApp = apps.find(a => a.applicantUid === S.uid);
   const otherApps = apps.filter(a => a.applicantUid !== S.uid);
-  const canApply = isParent() && !isCommittee() && !myApp;
+  const canApply = isParent() && !isCommitteeFor(cid) && !myApp;
   let html = `<div class="comm-section-label" style="margin-top:16px">${t('commApplicationsTitle')}</div>`;
   if (myApp) {
     const pct = Math.min(100, Math.round((myApp.voteCount||0)/15*100));
@@ -1802,7 +1920,7 @@ function renderCommCard(kid) {
     const pct = Math.min(100, Math.round((app.voteCount||0)/15*100));
     const exp = app.expiresAt?.toDate ? fmtDate(app.expiresAt.toDate().toISOString().slice(0,10)) : '';
     const approveBtn = isAdmin() ? `<button class="pending-approve-btn" onclick="adminApproveApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationApprove')}</button><button class="pending-reject-btn" onclick="adminDenyApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationDeny')}</button>` : '';
-    const voteBtn = !isAdmin() && !isCommittee() && isParent()
+    const voteBtn = !isAdmin() && !isCommitteeFor(cid) && isParent()
       ? (voted
           ? `<span style="font-size:12px;font-weight:800;color:#48bb78">${t('commApplicationVoted')}</span>`
           : `<button class="pending-approve-btn" onclick="voteForApplication('${app.id}','${cid}')">${t('commApplicationVote')}</button>`)
@@ -1840,7 +1958,7 @@ function renderCommCard(kid) {
           <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" value="girls"> 👧 בנות בלבד</label>
         </div>
       </div>
-      ${canPublishDirectly() ? `
+      ${canPublishDirectly(cid) ? `
       <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center">
         <span style="font-size:12px;font-weight:700;color:#718096;white-space:nowrap">${t('commScopeLabel')}:</span>
         <select class="auth-input" id="commEvScope_${cid}" style="flex:1">
@@ -1871,13 +1989,13 @@ function renderCommCard(kid) {
       ? `<div style="font-size:12px;color:#e53e3e;padding:6px 0;font-weight:700">⚠ שגיאת Firestore: ${esc(cache.error)}<br><span style="opacity:0.6;font-weight:600">יש לעדכן את חוקי האבטחה ב-Firebase Console</span></div>`
       : cache.classmates.length
         ? cache.classmates.map(c => {
-            const role = (cache.classmateRoles||{})[c.familyUid] || c.role || 'parent';
-            const isComm = role === 'committee';
+            const commClasses = (cache.classmateRoles||{})[c.familyUid] || [];
+            const isComm = Array.isArray(commClasses) && (commClasses.includes(cid) || commClasses.includes('*'));
             return `<div class="comm-mate" data-name="${esc((c.kidName+' '+(c.familyName||'')).toLowerCase())}">
               <span style="font-size:18px">👨‍👩‍👧</span>
               <span class="comm-mate-name">${esc(c.kidName)} ${esc(c.familyName||'')}</span>
               ${isComm ? `<span class="role-badge-committee">${t('roleCommittee')}</span>` : ''}
-              ${isAdmin() ? `<button class="role-toggle-btn" onclick="setCommitteeRole('${c.familyUid}',${!isComm})">${isComm ? t('revokeCommittee') : t('grantCommittee')}</button>` : ''}
+              ${isAdmin() ? `<button class="role-toggle-btn" onclick="setCommitteeRole('${c.familyUid}',${!isComm},'${cid}')">${isComm ? t('revokeCommittee') : t('grantCommittee')}</button>` : ''}
             </div>`;
           }).join('')
         : `<div style="font-size:12px;color:#a0aec0;padding:4px 0;font-weight:600">אין עדיין ילדים מהכיתה ב-FamilyHub</div>`}
@@ -1957,7 +2075,7 @@ async function submitClassEvent(cid) {
     : 'all';
   if (!title || !date) return;
   const docData = { title, date, type, note, scope,
-    postedBy: { familyUid: S.uid, familyName: familyData?.familyName||'' },
+    postedBy: { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName||'' },
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     genderFilter,
   };
@@ -1970,16 +2088,15 @@ async function submitClassEvent(cid) {
   if (scope === 'school') { collName = 'schools'; docId = schoolIdFor(kid?.school) || cid; }
 
   try {
-    if (canPublishDirectly()) {
+    if (canPublishDirectly(cid)) {
       await fbDb.collection(collName).doc(docId).collection('events').add(docData);
     } else {
       // Regular parent: send to pending queue for committee/admin approval (class scope only)
       await fbDb.collection('schoolClasses').doc(cid).collection('pendingEvents').add({ ...docData, status: 'pending' });
       alert(t('pendingSubmitted'));
     }
-    delete _commCache[cid];
     _commAddOpen[cid] = false;
-    await renderCommunity();
+    // onSnapshot will update the cache and re-render automatically
   } catch(e) { console.error('submitClassEvent:', e); }
 }
 
@@ -1987,13 +2104,12 @@ async function deleteClassEvent(scope, scopeId, eventId) {
   const collName = scope === 'grade' ? 'schoolGrades' : scope === 'school' ? 'schools' : 'schoolClasses';
   try {
     await fbDb.collection(collName).doc(scopeId).collection('events').doc(eventId).delete();
-    if (scope === 'class') {
-      delete _commCache[scopeId];
-    } else {
-      // grade/school events are cached inside each classId entry — clear all
-      _commCache = {};
+    if (scope !== 'class') {
+      // grade/school events are static-fetched; force full reload
+      unsubscribeAllComm(); _commCache = {};
+      await renderCommunity();
     }
-    await renderCommunity();
+    // class events: onSnapshot handles the re-render automatically
   } catch(e) { console.error('deleteClassEvent:', e); }
 }
 
@@ -2004,7 +2120,7 @@ async function approveEvent(cid, pendingId) {
     if (!doc.exists) return;
     const data = { ...doc.data() };
     delete data.status;
-    const approver = { familyUid: S.uid, familyName: familyData?.familyName || '' };
+    const approver = { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName || '' };
     data.approvedBy = approver;
     data.approvedAt = firebase.firestore.FieldValue.serverTimestamp();
     await fbDb.collection('schoolClasses').doc(cid).collection('events').add(data);
@@ -2016,9 +2132,8 @@ async function approveEvent(cid, pendingId) {
       actionAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
     await ref.delete();
-    delete _commCache[cid];
     if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
-    await renderCommunity();
+    // onSnapshot handles community re-render
   } catch(e) { console.error('approveEvent:', e); }
 }
 
@@ -2032,13 +2147,12 @@ async function rejectEvent(cid, pendingId) {
       action: 'rejected', classId: cid,
       eventTitle: evData.title || '', eventDate: evData.date || '',
       submittedBy: evData.postedBy || {},
-      actionBy: { familyUid: S.uid, familyName: familyData?.familyName || '' },
+      actionBy: { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName || '' },
       actionAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
     await ref.delete();
-    delete _commCache[cid];
     if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
-    await renderCommunity();
+    // onSnapshot handles community re-render
   } catch(e) { console.error('rejectEvent:', e); }
 }
 
@@ -2127,6 +2241,12 @@ function renderMaintenanceTools() {
       <div style="font-size:13px;color:#4a5568;margin-bottom:10px">הפק קודי הצטרפות אישיים לכל ילד שעדיין אין לו קוד (משפחות קיימות).</div>
       <button class="admin-btn" id="migrateKidCodesBtn" onclick="migrateKidCodes()" style="width:100%;padding:9px;font-size:13px">הפק קודים חסרים ◀</button>
       <div id="migrateKidCodesResult" style="font-size:12px;margin-top:8px;color:#276749"></div>
+    </div>
+    <div class="card" style="margin-bottom:12px;padding:12px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px">👥 ניוד תפקידי ועד לפי כיתה</div>
+      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">המר משפחות עם <code>role:'committee'</code> ישן ל-<code>committeeClasses</code> לפי כיתות ילדיהן.</div>
+      <button class="admin-btn" id="migrateCommitteeBtn" onclick="migrateCommitteeRoles()" style="width:100%;padding:9px;font-size:13px">נרמל תפקידי ועד ◀</button>
+      <div id="migrateCommitteeResult" style="font-size:12px;margin-top:8px;color:#276749"></div>
     </div>`;
 }
 
@@ -2134,44 +2254,35 @@ async function migrateKidCodes() {
   const btn = el('migrateKidCodesBtn');
   const res = el('migrateKidCodesResult');
   btn.disabled = true;
-  res.textContent = 'סורק משפחות...';
+  res.textContent = 'מריץ... (עשוי לקחת כמה שניות)';
 
   try {
-    const familiesSnap = await fbDb.collection('families').get();
-    let generated = 0, skipped = 0, errors = 0;
-
-    for (const famDoc of familiesSnap.docs) {
-      const data = famDoc.data();
-      const members = data.members || [];
-      const kidsNeedingCode = members.filter(m => m.role === 'kid' && !m.joinCode);
-      if (!kidsNeedingCode.length) { skipped++; continue; }
-
-      res.textContent = `מעבד משפחה ${famDoc.id.slice(0,6)}… (${generated} קודים נוצרו עד כה)`;
-
-      const updatedMembers = [...members];
-      let changed = false;
-      for (let i = 0; i < updatedMembers.length; i++) {
-        const m = updatedMembers[i];
-        if (m.role !== 'kid' || m.joinCode) continue;
-        try {
-          const code = await createKidCode(famDoc.id, m.name);
-          updatedMembers[i] = { ...m, joinCode: code };
-          generated++;
-          changed = true;
-        } catch(e) {
-          console.error(`migrateKidCodes: ${famDoc.id} / ${m.name}:`, e);
-          errors++;
-        }
-      }
-      if (changed) {
-        await fbDb.collection('families').doc(famDoc.id).update({ members: updatedMembers });
-      }
-    }
-
+    const fn = firebase.functions().httpsCallable('migrateKidCodes');
+    const result = await fn();
+    const { generated, skipped, errors } = result.data;
     res.textContent = `✓ הושלם: ${generated} קודים נוצרו, ${skipped} משפחות דולגו${errors ? ', ' + errors + ' שגיאות' : ''}.`;
   } catch(e) {
-    res.textContent = 'שגיאה: ' + e.message;
+    res.textContent = 'שגיאה: ' + (e.message || String(e));
     console.error('migrateKidCodes:', e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function migrateCommitteeRoles() {
+  const btn = el('migrateCommitteeBtn');
+  const res = el('migrateCommitteeResult');
+  btn.disabled = true;
+  res.textContent = 'מריץ... (עשוי לקחת כמה שניות)';
+
+  try {
+    const fn = firebase.functions().httpsCallable('migrateCommitteeRoles');
+    const result = await fn();
+    const { migrated, skipped, errors } = result.data;
+    res.textContent = `✓ הושלם: ${migrated} משפחות עודכנו, ${skipped} דולגו${errors ? ', ' + errors + ' שגיאות' : ''}.`;
+  } catch(e) {
+    res.textContent = 'שגיאה: ' + (e.message || String(e));
+    console.error('migrateCommitteeRoles:', e);
   } finally {
     btn.disabled = false;
   }
@@ -2197,7 +2308,7 @@ async function renderAdminPanel() {
           <div class="pending-event-row">
             <div class="pending-event-info">
               <span class="pending-event-title">${esc(ev.title)}</span>
-              <span class="pending-event-meta">${esc(ev.postedBy?.familyName||'')}${ev.date ? ' · ' + ev.date : ''} · ${esc(classLabelFromId(ev.classId))}</span>
+              <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + ev.date : ''} · ${esc(classLabelFromId(ev.classId))}</span>
             </div>
             <div class="pending-event-actions">
               <button class="pending-approve-btn" onclick="approveEvent('${ev.classId}','${ev.id}')">${t('pendingApprove')}</button>
@@ -2233,7 +2344,7 @@ async function renderAdminPanel() {
           const label = req.type === 'city'
             ? `עיר חדשה: ${esc(req.city)}`
             : `בית ספר חדש: ${esc(req.schoolName)} (${esc(req.city)})`;
-          const reqBy = req.requestedBy?.familyName || '';
+          const reqBy = personFullName(req.requestedBy);
           const count = (req.pendingFamilies||[]).length;
           return `<div class="pending-event-row">
             <div class="pending-event-info">
@@ -2258,7 +2369,7 @@ async function renderAdminPanel() {
             <div class="admin-log-title">
               <span class="admin-log-badge ${approved ? 'approved' : 'rejected'}">${approved ? '✓ אושר' : '✕ נדחה'}</span>${esc(entry.eventTitle)}
             </div>
-            <div class="admin-log-meta">הוגש על ידי: ${esc(entry.submittedBy?.familyName||'?')} · ${approved ? 'אושר' : 'נדחה'} על ידי: ${esc(entry.actionBy?.familyName||'?')} · ${dt}</div>
+            <div class="admin-log-meta">הוגש על ידי: ${esc(personFullName(entry.submittedBy)||'?')} · ${approved ? 'אושר' : 'נדחה'} על ידי: ${esc(personFullName(entry.actionBy)||'?')} · ${dt}</div>
             <div class="admin-log-meta">כיתה: ${esc(classLabelFromId(entry.classId||''))}</div>
           </div>`;
         }).join('')
@@ -2272,10 +2383,14 @@ async function renderAdminPanel() {
   }
 }
 
-async function setCommitteeRole(targetUid, grant) {
+async function setCommitteeRole(targetUid, grant, cid) {
   try {
-    await fbDb.collection('families').doc(targetUid).update({ role: grant ? 'committee' : 'parent' });
-    _commCache = {};
+    const update = grant
+      ? { committeeClasses: firebase.firestore.FieldValue.arrayUnion(cid) }
+      : { committeeClasses: firebase.firestore.FieldValue.arrayRemove(cid) };
+    await fbDb.collection('families').doc(targetUid).update(update);
+    // classmateRoles are static-fetched; force full reload so badges update
+    unsubscribeAllComm(); _commCache = {};
     await renderCommunity();
   } catch(e) { console.error('setCommitteeRole:', e); }
 }
@@ -2285,15 +2400,14 @@ async function applyForCommittee(cid) {
   try {
     await fbDb.collection('committeeApplications').add({
       applicantUid: S.uid,
-      applicantName: familyData?.familyName || '',
+      applicantName: myFullName(),
       classId: cid,
       appliedAt: firebase.firestore.FieldValue.serverTimestamp(),
       status: 'pending',
       votes: [],
       voteCount: 0,
     });
-    delete _commCache[cid];
-    await renderCommunity();
+    // onSnapshot handles re-render
   } catch(e) { console.error('applyForCommittee:', e); }
 }
 
@@ -2315,8 +2429,7 @@ async function voteForApplication(appId, cid) {
       }
       tx.update(ref, update);
     });
-    delete _commCache[cid];
-    await renderCommunity();
+    // onSnapshot handles re-render
   } catch(e) { console.error('voteForApplication:', e); }
 }
 
@@ -2328,9 +2441,8 @@ async function adminApproveApplication(appId, cid) {
       decidedBy: S.uid,
       decidedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
-    delete _commCache[cid];
     if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
-    await renderCommunity();
+    // onSnapshot handles community re-render
   } catch(e) { console.error('adminApproveApplication:', e); }
 }
 
@@ -2342,9 +2454,8 @@ async function adminDenyApplication(appId, cid) {
       decisionReason: 'admin',
       decidedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
-    delete _commCache[cid];
     if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
-    await renderCommunity();
+    // onSnapshot handles community re-render
   } catch(e) { console.error('adminDenyApplication:', e); }
 }
 
@@ -2375,7 +2486,7 @@ async function approveSchool(id) {
     // 3. Mark as approved
     await fbDb.collection('pendingSchools').doc(id).update({
       status: 'approved',
-      approvedBy: { familyUid: S.uid, familyName: familyData?.familyName || '' },
+      approvedBy: { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName || '' },
       approvedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -2409,7 +2520,7 @@ async function denySchool(id) {
     // Mark as denied
     await fbDb.collection('pendingSchools').doc(id).update({
       status: 'denied',
-      deniedBy: { familyUid: S.uid, familyName: familyData?.familyName || '' },
+      deniedBy: { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName || '' },
       deniedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
 
@@ -2418,6 +2529,7 @@ async function denySchool(id) {
 }
 
 async function refreshCommunity() {
+  unsubscribeAllComm();
   _commCache = {};
   await renderCommunity();
 }
@@ -3424,20 +3536,22 @@ const ALL_TABS = [
   { id:'homework',  icon:'📚' },
   { id:'calendar',  icon:'📅' },
   { id:'community', icon:'🏫' },
+  { id:'analytics', icon:'📊', adminOnly: true },
 ];
-const TAB_IDX = { home:0, chores:1, grocery:2, homework:3, calendar:4, community:5 };
+const TAB_IDX = { home:0, chores:1, grocery:2, homework:3, calendar:4, community:5, analytics:6 };
 function tabLabel(id) { return t('tabs')[TAB_IDX[id]] || id; }
 
 function getActiveTabs() {
-  if (!S.uid || !S.user) return ALL_TABS.map(t => t.id);
+  const visible = ALL_TABS.filter(t => !t.adminOnly || isAdmin());
+  if (!S.uid || !S.user) return visible.map(t => t.id);
   try {
     const saved = localStorage.getItem('familyhub_tabs_' + S.uid + '_' + S.user);
     if (saved) {
-      const ids = JSON.parse(saved).filter(id => ALL_TABS.find(t => t.id === id));
+      const ids = JSON.parse(saved).filter(id => visible.find(t => t.id === id));
       if (ids.length > 0) return ids;
     }
   } catch(e) {}
-  return ALL_TABS.map(t => t.id);
+  return visible.map(t => t.id);
 }
 function saveActiveTabs(ids) {
   if (!S.uid || !S.user) return;
@@ -3469,6 +3583,313 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
   el('tab-' + tab).classList.add('active');
   if (tab === 'community') renderCommunity();
+  if (tab === 'analytics') renderAnalytics();
+  // Stop presence auto-refresh when leaving analytics
+  if (tab !== 'analytics' && _presenceRefreshTimer) {
+    clearInterval(_presenceRefreshTimer);
+    _presenceRefreshTimer = null;
+  }
+}
+
+// ════════════════════════════════════════
+//  ANALYTICS DASHBOARD (admin only)
+// ════════════════════════════════════════
+
+let _analyticsCharts = {};
+let _presenceRefreshTimer = null;
+
+function _destroyCharts() {
+  Object.values(_analyticsCharts).forEach(c => { try { c.destroy(); } catch(e){} });
+  _analyticsCharts = {};
+}
+
+function _presenceTimeAgo(ms) {
+  if (!ms) return 'מעולם';
+  const diff = Date.now() - ms;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1)  return 'הרגע';
+  if (mins < 60) return `לפני ${mins} דק׳`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `לפני ${hours} שע׳`;
+  return `לפני ${Math.floor(hours/24)} ימים`;
+}
+
+async function loadPresenceSection() {
+  const list = el('presenceGrid');
+  if (!list) return;
+  try {
+    const fn = firebase.functions().httpsCallable('getPresence');
+    const { data } = await fn();
+    const members = data.members || [];
+    const onlineCount = members.filter(m => m.online).length;
+    const countEl = el('presenceOnlineCount');
+    if (countEl) countEl.textContent = `${onlineCount} מחוברים מתוך ${members.length}`;
+    list.innerHTML = members.map(m => {
+      const isKidRole = m.role === 'kid';
+      const badgeClass = isKidRole ? 'role-badge-kid' : 'role-badge-parent';
+      const badgeLabel = isKidRole ? t('roleKid') : t('roleParent');
+      const timeLabel  = m.online ? 'מחובר/ת' : _presenceTimeAgo(m.lastSeenMs);
+      return `<div class="presence-card">
+        <div class="presence-dot ${m.online ? 'online' : 'offline'}"></div>
+        <div class="presence-name">${esc(m.memberName)}<br><span style="font-weight:700;color:#718096">${esc(m.familyName)}</span></div>
+        <span class="role-badge ${badgeClass}" style="font-size:9px;padding:1px 6px">${badgeLabel}</span>
+        <div class="presence-time ${m.online ? 'online' : ''}">${timeLabel}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    const list2 = el('presenceGrid');
+    if (list2) list2.innerHTML = `<div style="color:#e53e3e;font-size:12px;padding:8px">${esc(e.message)}</div>`;
+  }
+}
+
+function _loadChartJs() {
+  return new Promise(resolve => {
+    if (window.Chart) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js';
+    s.onload = resolve;
+    document.head.appendChild(s);
+  });
+}
+
+async function renderAnalytics(forceRefresh) {
+  if (!isAdmin()) return;
+  const container = el('analyticsContent');
+  if (!container) return;
+
+  container.innerHTML = `<div style="color:#a0aec0;text-align:center;padding:60px 0;font-size:14px;font-weight:700">טוען נתונים...</div>`;
+  _destroyCharts();
+  if (_presenceRefreshTimer) { clearInterval(_presenceRefreshTimer); _presenceRefreshTimer = null; }
+
+  try {
+    await _loadChartJs();
+    const fn = firebase.functions().httpsCallable('getAnalytics');
+    const result = await fn();
+    const d = result.data;
+    _renderAnalyticsUI(container, d);
+    // Load presence section and start auto-refresh every 30s
+    await loadPresenceSection();
+    _presenceRefreshTimer = setInterval(loadPresenceSection, 30 * 1000);
+  } catch(e) {
+    console.error('renderAnalytics:', e);
+    container.innerHTML = `<div class="card" style="color:#e53e3e;padding:20px;text-align:center;font-size:13px;font-weight:700">שגיאה בטעינת נתונים: ${esc(e.message||String(e))}</div>`;
+  }
+}
+
+function _renderAnalyticsUI(container, d) {
+  const HE_MONTHS = ['ינו','פבר','מרץ','אפר','מאי','יוני','יולי','אוג','ספט','אוק','נוב','דצמ'];
+
+  // Build month labels for the last 6 months
+  const monthLabels = d.eventsByMonth.map(([key]) => {
+    const [y, m] = key.split('-');
+    return HE_MONTHS[parseInt(m,10)-1] + ' ' + y.slice(2);
+  });
+  const monthValues = d.eventsByMonth.map(([,v]) => v);
+
+  // Class labels (shorten)
+  const classLabels = d.eventsByClass.map(([cid]) => {
+    const parts = cid.split('~~');
+    return (parts[1] || parts[0]) + ' · כיתה ' + (parts[2]||'') + (parts[3] ? "'" + parts[3] : '');
+  });
+  const classValues = d.eventsByClass.map(([,v]) => v);
+
+  container.innerHTML = `
+    <div style="padding:0 0 8px;display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:15px;font-weight:900;color:#1a202c">📊 לוח מחוונים</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <a href="https://console.firebase.google.com/project/familyhub-7fdd5/usage" target="_blank" rel="noopener noreferrer"
+           style="font-size:11px;font-weight:800;color:#6a11cb;text-decoration:none;background:#f0e8ff;padding:3px 9px;border-radius:8px">📈 שימוש</a>
+        <a href="https://console.firebase.google.com/project/familyhub-7fdd5/settings/billing" target="_blank" rel="noopener noreferrer"
+           style="font-size:11px;font-weight:800;color:#276749;text-decoration:none;background:#e6f4ea;padding:3px 9px;border-radius:8px">💳 חיוב</a>
+        <button class="analytics-refresh-btn" onclick="renderAnalytics(true)" title="רענן">↻</button>
+      </div>
+    </div>
+
+    <div class="analytics-cards">
+      <div class="analytics-card">
+        <div class="analytics-card-icon">🏠</div>
+        <div class="analytics-card-value">${d.familyCount}</div>
+        <div class="analytics-card-label">משפחות</div>
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-icon">👨‍👩‍👧</div>
+        <div class="analytics-card-value">${d.parentCount + d.kidCount}</div>
+        <div class="analytics-card-label">${d.parentCount} הורים · ${d.kidCount} ילדים</div>
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-icon">🏫</div>
+        <div class="analytics-card-value">${d.classCount}</div>
+        <div class="analytics-card-label">כיתות פעילות</div>
+      </div>
+      <div class="analytics-card">
+        <div class="analytics-card-icon">✅</div>
+        <div class="analytics-card-value">${d.approvedCount}</div>
+        <div class="analytics-card-label">אירועים אושרו</div>
+      </div>
+    </div>
+
+    <div class="analytics-section">
+      <div class="analytics-section-title">
+        🟢 נוכחות משתמשים
+        <span id="presenceOnlineCount" style="margin-right:auto;font-size:10px;color:#a0aec0;font-weight:700"></span>
+        <button class="analytics-refresh-btn" onclick="loadPresenceSection()" title="רענן">↻</button>
+      </div>
+      <div id="presenceGrid" class="presence-grid">
+        <div style="color:#a0aec0;font-size:12px;padding:8px">טוען...</div>
+      </div>
+    </div>
+
+    <div class="analytics-charts-row">
+      <div class="analytics-section">
+        <div class="analytics-section-title">📈 אירועים שאושרו לפי חודש</div>
+        <div class="chart-wrap"><canvas id="chartMonthly"></canvas></div>
+      </div>
+      <div class="analytics-section">
+        <div class="analytics-section-title">🏫 כיתות הכי פעילות</div>
+        <div class="chart-wrap"><canvas id="chartClasses"></canvas></div>
+      </div>
+    </div>
+
+    <div class="analytics-charts-row">
+      <div class="analytics-section">
+        <div class="analytics-section-title">👥 מועמדויות ועד</div>
+        <div class="chart-wrap" style="height:140px"><canvas id="chartApps"></canvas></div>
+        <div style="text-align:center;font-size:11px;color:#718096;margin-top:6px;font-weight:700">
+          ${d.appsPending} ממתינות · ${d.appsApproved} אושרו · ${d.appsDenied} נדחו
+        </div>
+      </div>
+      <div class="analytics-section">
+        <div class="analytics-section-title">🏫 בקשות בתי ספר</div>
+        <div class="chart-wrap" style="height:140px"><canvas id="chartSchools"></canvas></div>
+        <div style="text-align:center;font-size:11px;color:#718096;margin-top:6px;font-weight:700">
+          ${d.schoolsPending} ממתינות · ${d.schoolsApproved} אושרו · ${d.schoolsDenied} נדחו
+        </div>
+      </div>
+    </div>
+
+    ${d.recentLog.length ? `
+    <div class="analytics-section">
+      <div class="analytics-section-title">🕓 פעילות אחרונה</div>
+      ${d.recentLog.map(e => {
+        const approved = e.action === 'approved';
+        const dt = e.actionAt ? new Date(e.actionAt).toLocaleDateString('he-IL',{day:'numeric',month:'short'}) : '';
+        return `<div class="analytics-log-row">
+          <span class="analytics-log-action ${approved?'approved':'rejected'}">${approved?'אושר':'נדחה'}</span>
+          <div>
+            <div style="font-weight:800;color:#1a202c">${esc(e.eventTitle||'אירוע')}</div>
+            <div class="analytics-log-meta">${esc(e.className||'')}${dt ? ' · ' + dt : ''}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>` : ''}
+  `;
+
+  // Chart 1: Monthly events (line)
+  if (monthLabels.length) {
+    _analyticsCharts.monthly = new Chart(el('chartMonthly'), {
+      type: 'line',
+      data: {
+        labels: monthLabels,
+        datasets: [{
+          label: 'אירועים',
+          data: monthValues,
+          borderColor: '#6a11cb',
+          backgroundColor: 'rgba(106,17,203,0.08)',
+          borderWidth: 2.5,
+          pointBackgroundColor: '#6a11cb',
+          pointRadius: 4,
+          fill: true,
+          tension: 0.35,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { font: { size: 10, family: 'Heebo' } }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } },
+        },
+      },
+    });
+  } else {
+    el('chartMonthly').parentElement.innerHTML = '<div style="text-align:center;padding:40px 0;color:#a0aec0;font-size:13px;font-weight:700">אין נתונים עדיין</div>';
+  }
+
+  // Chart 2: Events per class (horizontal bar)
+  if (classLabels.length) {
+    _analyticsCharts.classes = new Chart(el('chartClasses'), {
+      type: 'bar',
+      data: {
+        labels: classLabels,
+        datasets: [{
+          label: 'אירועים',
+          data: classValues,
+          backgroundColor: 'rgba(106,17,203,0.75)',
+          borderRadius: 6,
+          maxBarThickness: 28,
+        }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { beginAtZero: true, ticks: { precision: 0, font: { size: 10 } } },
+          y: { ticks: { font: { size: 10, family: 'Heebo' } } },
+        },
+      },
+    });
+  } else {
+    el('chartClasses').parentElement.innerHTML = '<div style="text-align:center;padding:40px 0;color:#a0aec0;font-size:13px;font-weight:700">אין נתונים עדיין</div>';
+  }
+
+  // Chart 3: Applications doughnut
+  const appTotal = d.appsPending + d.appsApproved + d.appsDenied;
+  if (appTotal > 0) {
+    _analyticsCharts.apps = new Chart(el('chartApps'), {
+      type: 'doughnut',
+      data: {
+        labels: ['ממתינות', 'אושרו', 'נדחו'],
+        datasets: [{
+          data: [d.appsPending, d.appsApproved, d.appsDenied],
+          backgroundColor: ['#fef3c7', '#d1fae5', '#fee2e2'],
+          borderColor: ['#f59e0b', '#10b981', '#f87171'],
+          borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        cutout: '65%',
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11, family: 'Heebo' }, boxWidth: 12 } } },
+      },
+    });
+  } else {
+    el('chartApps').parentElement.innerHTML = '<div style="text-align:center;padding:30px 0;color:#a0aec0;font-size:13px;font-weight:700">אין מועמדויות</div>';
+  }
+
+  // Chart 4: School requests doughnut
+  const schoolTotal = d.schoolsPending + d.schoolsApproved + d.schoolsDenied;
+  if (schoolTotal > 0) {
+    _analyticsCharts.schools = new Chart(el('chartSchools'), {
+      type: 'doughnut',
+      data: {
+        labels: ['ממתינות', 'אושרו', 'נדחו'],
+        datasets: [{
+          data: [d.schoolsPending, d.schoolsApproved, d.schoolsDenied],
+          backgroundColor: ['#fef3c7', '#d1fae5', '#fee2e2'],
+          borderColor: ['#f59e0b', '#10b981', '#f87171'],
+          borderWidth: 2,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        cutout: '65%',
+        plugins: { legend: { position: 'bottom', labels: { font: { size: 11, family: 'Heebo' }, boxWidth: 12 } } },
+      },
+    });
+  } else {
+    el('chartSchools').parentElement.innerHTML = '<div style="text-align:center;padding:30px 0;color:#a0aec0;font-size:13px;font-weight:700">אין בקשות</div>';
+  }
 }
 
 // ════════════════════════════════════════
@@ -3478,8 +3899,9 @@ function openTabEditor() { renderTabEditor(); el('tabEditorScreen').classList.re
 function closeTabEditor() { el('tabEditorScreen').classList.add('hidden'); }
 
 function renderTabEditor() {
+  const visible  = ALL_TABS.filter(t => !t.adminOnly || isAdmin());
   const active   = getActiveTabs();
-  const inactive = ALL_TABS.map(t => t.id).filter(id => !active.includes(id));
+  const inactive = visible.map(t => t.id).filter(id => !active.includes(id));
 
   el('tabEditorActive').innerHTML = active.map((id, i) => {
     const tab = ALL_TABS.find(t => t.id === id);
