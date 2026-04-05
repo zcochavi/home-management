@@ -1475,23 +1475,57 @@ async function save() {
 // ════════════════════════════════════════
 //  PUSH NOTIFICATIONS (FCM)
 // ════════════════════════════════════════
+function vapidKeyToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw     = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
 async function initFCM() {
   if (!FB_CONFIGURED || !fbDb || !S.uid) { console.log('[FCM] skipped: not configured'); return; }
   if (!('serviceWorker' in navigator) || !('Notification' in window) || !('PushManager' in window)) return;
   if (typeof firebase.messaging.isSupported === 'function' && !firebase.messaging.isSupported()) {
     console.log('[FCM] not supported in this browser'); return;
   }
+  const ua       = navigator.userAgent;
+  const platform = ua.includes('Firefox') ? 'firefox' : ua.includes('Edg') ? 'edge' : 'chrome';
   try {
     await navigator.serviceWorker.register('./firebase-messaging-sw.js');
-    // Wait for SW to be fully active before subscribing — required in Firefox
+    // Wait for SW to be fully active — required in Firefox
     const swReg = await navigator.serviceWorker.ready;
+
+    // Firefox: explicitly manage the push subscription to avoid stale-subscription errors
+    if (platform === 'firefox') {
+      try {
+        const existing = await swReg.pushManager.getSubscription();
+        if (existing) {
+          // Verify the existing subscription's applicationServerKey matches our VAPID key
+          const existingKey = existing.options?.applicationServerKey;
+          const newKey = vapidKeyToUint8Array(VAPID_KEY);
+          const keyMatches = existingKey && new Uint8Array(existingKey).join() === newKey.join();
+          if (!keyMatches) {
+            console.log('[FCM] Firefox: stale subscription detected, unsubscribing');
+            await existing.unsubscribe();
+          }
+        }
+        // Pre-create the subscription explicitly so Firebase can use it
+        const sub = await swReg.pushManager.getSubscription() ||
+          await swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKeyToUint8Array(VAPID_KEY) });
+        console.log('[FCM] Firefox push subscription ready:', sub.endpoint.slice(0, 40) + '…');
+      } catch(e) {
+        console.warn('[FCM] Firefox push subscription failed:', e.message,
+          '\n→ Check Firefox settings: about:preferences#privacy → Notifications must not be blocked,',
+          '\n→ and about:config → dom.push.enabled must be true');
+        return;
+      }
+    }
+
     fbMessaging = firebase.messaging();
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') { console.log('[FCM] permission not granted'); return; }
     const token = await fbMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
     if (token) {
-      const ua = navigator.userAgent;
-      const platform = ua.includes('Firefox') ? 'firefox' : ua.includes('Edg') ? 'edge' : 'chrome';
       await fbDb.collection('families').doc(S.uid)
         .collection('fcmTokens').doc(token.slice(0, 20))
         .set({ token, platform, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
