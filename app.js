@@ -683,8 +683,9 @@ function stopPresence() {
   if (_presenceInterval) { clearInterval(_presenceInterval); _presenceInterval = null; }
   if (S.uid && S.user && fbDb) {
     const docId = S.uid + '_' + S.user;
-    fbDb.collection('presence').doc(docId).delete().catch(() => {});
+    return fbDb.collection('presence').doc(docId).delete().catch(() => {});
   }
+  return Promise.resolve();
 }
 
 async function initPresence() {
@@ -703,8 +704,8 @@ async function initPresence() {
   _presenceInterval = setInterval(write, 2 * 60 * 1000);
 }
 
-function authSignOut() {
-  stopPresence();
+async function authSignOut() {
+  await stopPresence();
   unsubscribeAllComm(); _commCache = {};
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
   const firebaseUid = fbAuth?.currentUser?.uid;
@@ -1054,9 +1055,9 @@ function login(name) {
   initPresence();
 }
 
-function switchUser() {
+async function switchUser() {
   if (S.lockedMember) return; // locked devices can't switch members
-  stopPresence();
+  await stopPresence();
   unsubscribeAllComm(); _commCache = {};
   S.user = null; S.filter = 'All';
   localStorage.removeItem('familyhub_member_' + S.uid);
