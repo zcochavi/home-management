@@ -1816,8 +1816,8 @@ async function requestNewSchool(kidName, school, requestType) {
   if (familyData) familyData.members = members;
   await fbDb.collection('families').doc(S.uid).update({ members });
 
-  // Notify admin via their message center
-  if (ADMIN_UID && fbDb) {
+  // Notify admin via their message center (only if submitter is not the admin)
+  if (ADMIN_UID && fbDb && ADMIN_UID !== S.uid) {
     const whatPending = requestType === 'city'
       ? `עיר ובית ספר חדשים (${school.city} / ${school.name})`
       : `בית ספר חדש (${school.name} בעיר ${school.city})`;
