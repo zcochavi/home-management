@@ -754,9 +754,9 @@ function stopNotifBanners() {
 function _updateBellBadge() {
   const badge = el('notifBellBadge');
   if (!badge) return;
-  const count = _allNotifs.filter(n => !n.dismissed && (
-    !['school_pending','event_pending','application_pending'].includes(n.type) || n.recipientUid === S.uid
-  )).length;
+  const count = _allNotifs.filter(n => !n.dismissed &&
+    !['school_pending','event_pending','application_pending'].includes(n.type)
+  ).length;
   badge.textContent = count > 9 ? '9+' : count;
   badge.classList.toggle('hidden', count === 0);
 }
