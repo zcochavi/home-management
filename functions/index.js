@@ -1107,3 +1107,32 @@ exports.getClassParents = functions.https.onCall(async (data, context) => {
   });
   return result;
 });
+
+exports.getFamilyDetails = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID) {
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  }
+  const { familyUid } = data;
+  if (!familyUid) throw new functions.https.HttpsError('invalid-argument', 'Missing familyUid');
+
+  const famDoc = await db.collection('families').doc(familyUid).get();
+  if (!famDoc.exists) throw new functions.https.HttpsError('not-found', 'Family not found');
+
+  const fd = famDoc.data();
+  const legacyComm = fd.committeeClasses || (fd.role === 'committee' ? ['*'] : []);
+
+  const members = (fd.members || []).map(m => {
+    const base = { name: m.name, emoji: m.emoji || '👤', role: m.role || 'parent' };
+    if (m.role === 'kid') {
+      base.school = m.school || null;  // { city, name, grade, classNum }
+      base.schoolPending = m.schoolPending || null;
+    } else {
+      // For parents, include per-member committeeClasses (with legacy fallback)
+      const perMember = m.committeeClasses;
+      base.committeeClasses = perMember !== undefined ? perMember : legacyComm;
+    }
+    return base;
+  });
+
+  return { familyName: fd.familyName || '', members };
+});

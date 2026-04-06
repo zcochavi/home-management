@@ -2450,31 +2450,10 @@ function renderCommCard(kid) {
             const familyInfo = (cache.classmateRoles||{})[c.familyUid] || { parents: [] };
             const anyComm = familyInfo.parents.some(p => p.isCommittee)
               || (familyInfo.legacyComm||[]).includes(cid);
-            let parentsHtml = '';
-            if (isAdmin()) {
-              if (familyInfo.parents.length) {
-                parentsHtml = `<div class="comm-mate-parents">${familyInfo.parents.map(p => `
-                    <span class="comm-mate-parent">
-                      <span>${esc(p.emoji)} ${esc(p.name)}</span>
-                      ${p.isCommittee ? `<span class="role-badge-committee" style="font-size:10px;padding:1px 6px">${t('roleCommittee')}</span>` : ''}
-                      <button class="role-toggle-btn" onclick="setCommitteeRole('${c.familyUid}','${esc(p.name)}',${!p.isCommittee},'${cid}')">${p.isCommittee ? t('revokeCommittee') : t('grantCommittee')}</button>
-                    </span>`).join('')}
-                  </div>`;
-              } else {
-                // Family doc unreadable or has no adult members — fall back to family-level toggle
-                const legacyIsComm = (familyInfo.legacyComm||[]).includes(cid);
-                parentsHtml = `<div class="comm-mate-parents" style="opacity:0.6;font-style:italic;font-size:11px">
-                    <button class="role-toggle-btn" onclick="setCommitteeRoleLegacy('${c.familyUid}',${!legacyIsComm},'${cid}')">${legacyIsComm ? t('revokeCommittee') : t('grantCommittee')}</button>
-                  </div>`;
-              }
-            }
             return `<div class="comm-mate" data-name="${esc((c.kidName+' '+(c.familyName||'')).toLowerCase())}">
-              <div class="comm-mate-main">
-                <span style="font-size:18px">👨‍👩‍👧</span>
-                <span class="comm-mate-name">${esc(c.kidName)} ${esc(c.familyName||'')}</span>
-                ${!isAdmin() && anyComm ? `<span class="role-badge-committee">${t('roleCommittee')}</span>` : ''}
-              </div>
-              ${isAdmin() ? parentsHtml : ''}
+              <span style="font-size:18px">👨‍👩‍👧</span>
+              <span class="comm-mate-name">${esc(c.kidName)} ${esc(c.familyName||'')}</span>
+              ${anyComm ? `<span class="role-badge-committee">${t('roleCommittee')}</span>` : ''}
             </div>`;
           }).join('')
         : `<div style="font-size:12px;color:#a0aec0;padding:4px 0;font-weight:600">אין עדיין ילדים מהכיתה ב-FamilyHub</div>`}
@@ -4073,7 +4052,9 @@ function _renderPresenceGroups() {
       const badgeClass = isKidRole ? 'role-badge-kid' : 'role-badge-parent';
       const badgeLabel = isKidRole ? t('roleKid') : t('roleParent');
       const timeLabel  = m.online ? 'מחובר/ת' : _presenceTimeAgo(m.lastSeenMs);
-      return `<div class="presence-card${justOnline ? ' just-online' : ''}">
+      const clickable = isAdmin() && m.role !== 'kid';
+      return `<div class="presence-card${justOnline ? ' just-online' : ''}${clickable ? ' presence-card-clickable' : ''}"
+        ${clickable ? `onclick="openFamilyDetails('${m.familyUid}','${esc(m.memberName)}')"` : ''}>
         <div class="presence-dot ${m.online ? 'online' : 'offline'}"></div>
         <div class="presence-name">${esc(m.memberName)}<br><span style="font-weight:700;color:#718096">${esc(m.familyName)}</span></div>
         <span class="role-badge ${badgeClass}" style="font-size:9px;padding:1px 6px">${badgeLabel}</span>
@@ -4099,6 +4080,115 @@ function _renderPresenceGroups() {
     groupHtml('kid',    'ילדים',  kids,    kOnline);
 
   _presencePrevOnline = newOnline;
+}
+
+// ── Family Details Panel (admin) ─────────────────────────
+
+async function openFamilyDetails(familyUid, clickedMemberName) {
+  const panel = el('familyDetailsPanel');
+  if (!panel) return;
+  panel.classList.remove('hidden');
+  panel.classList.add('mc-open');
+  el('familyDetailsBody').innerHTML = '<div style="color:#a0aec0;font-size:13px;padding:16px">טוען...</div>';
+  try {
+    const { data } = await fbFunctions.httpsCallable('getFamilyDetails')({ familyUid });
+    el('familyDetailsPanelTitle').textContent = `👨‍👩‍👧 משפחת ${data.familyName || ''}`;
+    renderFamilyDetails(data, familyUid, clickedMemberName);
+  } catch(e) {
+    el('familyDetailsBody').innerHTML = `<div style="color:#e53e3e;font-size:13px">${esc(e.message)}</div>`;
+  }
+}
+
+function closeFamilyDetails() {
+  const panel = el('familyDetailsPanel');
+  panel.classList.add('mc-closing');
+  setTimeout(() => { panel.classList.add('hidden'); panel.classList.remove('mc-open','mc-closing'); }, 280);
+}
+
+function renderFamilyDetails(data, familyUid, clickedMemberName) {
+  const members = data.members || [];
+  const parents = members.filter(m => m.role !== 'kid');
+  const kids    = members.filter(m => m.role === 'kid');
+
+  // Build class ID → label map from kids' schools
+  function classIdForSchool(s) {
+    if (!s?.city?.trim() || !s?.grade) return null;
+    const n = v => (v||'').trim().replace(/\s+/g,' ').replace(/\//g,'-').replace(/~/g,'');
+    return [n(s.city), n(s.name||''), s.grade, n(s.classNum||'')].join('~~');
+  }
+  function classLabel(s) {
+    if (!s) return '';
+    return [s.city, s.name, s.grade ? 'כיתה ' + s.grade + (s.classNum ? "'" + s.classNum : '') : ''].filter(Boolean).join(' · ');
+  }
+
+  const kidRows = kids.map(k => {
+    const cid = classIdForSchool(k.school);
+    const schoolInfo = k.school?.city ? classLabel(k.school) : 'אין בית ספר';
+    const pendingTag = k.schoolPending ? `<span style="background:#fef3c7;color:#92400e;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:700;margin-right:4px">⏳ ממתין</span>` : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f4ff">
+      <span style="font-size:20px">${esc(k.emoji)}</span>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700;color:#2d3748">${esc(k.name)}</div>
+        <div style="font-size:11px;color:#718096;margin-top:2px">🏫 ${esc(schoolInfo)}${pendingTag}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // For each parent, show their committee classes with toggle per kid class
+  const parentRows = parents.map(p => {
+    const isClicked = p.name === clickedMemberName;
+    const commClasses = p.committeeClasses || [];
+    const kidClasses = kids
+      .map(k => ({ kid: k, cid: classIdForSchool(k.school), label: classLabel(k.school) }))
+      .filter(x => x.cid);
+
+    const committeeRows = kidClasses.length
+      ? kidClasses.map(({ kid, cid, label }) => {
+          const isComm = commClasses.includes(cid) || commClasses.includes('*');
+          return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px">
+            <span style="font-size:11px;color:#718096">${esc(label)}</span>
+            <button class="role-toggle-btn${isComm ? ' active' : ''}"
+              onclick="toggleCommitteeFromPanel('${familyUid}','${esc(p.name)}',${!isComm},'${cid}',this)">
+              ${isComm ? t('revokeCommittee') : t('grantCommittee')}
+            </button>
+          </div>`;
+        }).join('')
+      : `<div style="font-size:11px;color:#a0aec0;margin-top:4px">אין ילדים עם בית ספר משויך</div>`;
+
+    return `<div style="padding:10px 0;border-bottom:1px solid #f0f4ff${isClicked ? ';background:#f7f0ff;border-radius:10px;padding:10px' : ''}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="font-size:20px">${esc(p.emoji)}</span>
+        <span style="font-size:13px;font-weight:800;color:#2d3748">${esc(p.name)}</span>
+        ${commClasses.length ? `<span class="role-badge-committee" style="font-size:10px;padding:1px 6px">ועד</span>` : ''}
+        ${isClicked ? `<span style="font-size:10px;color:#6a11cb;font-weight:700">◀ נבחר</span>` : ''}
+      </div>
+      <div style="padding-right:28px">${committeeRows}</div>
+    </div>`;
+  }).join('');
+
+  el('familyDetailsBody').innerHTML = `
+    ${kids.length ? `
+      <div class="comm-section-label" style="margin-bottom:4px">👶 ילדים</div>
+      ${kidRows}` : ''}
+    ${parents.length ? `
+      <div class="comm-section-label" style="margin-top:16px;margin-bottom:4px">👨‍👩 הורים וועד</div>
+      ${parentRows}` : '<div style="font-size:13px;color:#a0aec0;padding:16px 0">לא נמצאו הורים במשפחה זו</div>'}
+  `;
+}
+
+async function toggleCommitteeFromPanel(familyUid, memberName, grant, cid, btn) {
+  btn.disabled = true;
+  btn.textContent = '...';
+  try {
+    await setCommitteeRole(familyUid, memberName, grant, cid);
+    // Re-fetch and re-render the panel with updated data
+    const { data } = await fbFunctions.httpsCallable('getFamilyDetails')({ familyUid });
+    renderFamilyDetails(data, familyUid, memberName);
+  } catch(e) {
+    console.error('toggleCommitteeFromPanel:', e);
+    btn.disabled = false;
+    btn.textContent = grant ? t('grantCommittee') : t('revokeCommittee');
+  }
 }
 
 function _loadChartJs() {
