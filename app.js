@@ -1,4 +1,3 @@
-console.log('%c[FamilyHub] app.js version: 20260406o', 'color:cyan;font-weight:bold');
 // ════════════════════════════════════════
 //  FIREBASE CONFIG
 //  → Replace placeholder values with your Firebase project config
@@ -1123,11 +1122,9 @@ async function stopPresence() {
 }
 
 async function initPresence() {
-  console.log('[presence] initPresence called', { uid: S.uid, user: S.user, hasDb: !!fbDb, hasFn: !!fbFunctions });
   await stopPresence();
-  if (!S.uid || !S.user || !fbDb) { console.warn('[presence] early return - missing:', { uid: !!S.uid, user: !!S.user, db: !!fbDb }); return; }
+  if (!S.uid || !S.user || !fbDb) return;
   const write = () => {
-    console.log('[presence] write attempt', S.user, !!fbFunctions);
     if (!fbFunctions) return;
     try {
       fbFunctions.httpsCallable('updatePresence')({
@@ -1136,8 +1133,7 @@ async function initPresence() {
         familyName: familyData?.familyName || '',
         role:       isParent() ? 'parent' : 'kid',
         online:     true,
-      }).then(() => console.log('[presence] heartbeat OK', S.user))
-        .catch(e => console.warn('[presence] write FAILED:', e.message, e.code));
+      }).catch(e => console.warn('[presence] write FAILED:', e.message, e.code));
     } catch(e) { console.error('[presence] sync error:', e.message); }
   };
   write();
@@ -4148,13 +4144,6 @@ async function loadPresenceSection() {
     const fn = firebase.functions().httpsCallable('getPresence');
     const { data } = await fn();
     _presenceCachedData = data.members || [];
-    if (data._rawDocs) console.log('[presence] rawDocs:', JSON.stringify(data._rawDocs));
-    const now = Date.now();
-    console.log('[presence] total members:', _presenceCachedData.length,
-      '| online:', _presenceCachedData.filter(m=>m.online).length,
-      '| raw:', _presenceCachedData.map(m=>`${m.memberName}(${m.online?'ON':'off'})`).join(', '));
-    _presenceCachedData.filter(m=>!m.online && m.lastSeenMs > 0).forEach(m =>
-      console.log('[presence] offline detail:', m.memberName, '| lastSeenMs ago:', Math.round((now - m.lastSeenMs)/1000)+'s', '| online flag:', m.online));
     _renderPresenceGroups();
   } catch(e) {
     const c = el('presenceGrid');
