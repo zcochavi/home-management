@@ -1118,8 +1118,9 @@ async function stopPresence() {
 }
 
 async function initPresence() {
+  console.log('[presence] initPresence called', { uid: S.uid, user: S.user, hasDb: !!fbDb, hasFn: !!fbFunctions });
   await stopPresence();
-  if (!S.uid || !S.user || !fbDb) return;
+  if (!S.uid || !S.user || !fbDb) { console.warn('[presence] early return - missing:', { uid: !!S.uid, user: !!S.user, db: !!fbDb }); return; }
   const write = () => {
     console.log('[presence] write attempt', S.user, !!fbFunctions);
     if (!fbFunctions) return;

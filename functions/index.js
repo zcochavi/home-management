@@ -315,7 +315,7 @@ exports.onPendingSchoolCreated = functions.firestore
 
     // Bell notification for admin
     const bellMsg = `${label}${requester ? ` · הוגש על ידי ${requester}` : ''}`;
-    await writeNotif(ADMIN_UID, 'school_pending', bellMsg, { recipientUid: ADMIN_UID });
+    await writeNotif(ADMIN_UID, 'school_pending', bellMsg, { recipientUid: ADMIN_UID, reqId: ctx.params.reqId });
 
     // Push notification for admin
     const tokens = await getTokens(ADMIN_UID);
@@ -464,6 +464,19 @@ exports.dailyNotificationJobs = functions.pubsub
 
     return null;
   });
+
+exports.updatePresence = functions.https.onCall(async (data, context) => {
+  if (!context.auth?.uid) throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  const { familyUid, memberName, familyName, role, online } = data;
+  if (!familyUid || !memberName) throw new functions.https.HttpsError('invalid-argument', 'Missing fields');
+  const docId = familyUid + '_' + memberName;
+  await db.collection('presence').doc(docId).set({
+    familyUid, memberName, familyName: familyName || '', role: role || 'parent',
+    online: online !== false,
+    lastSeen: admin.firestore.FieldValue.serverTimestamp(),
+  }, { merge: true });
+  return { ok: true };
+});
 
 exports.getPresence = functions.https.onCall(async (data, context) => {
   if (context.auth?.uid !== ADMIN_UID) {
