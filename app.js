@@ -1854,20 +1854,6 @@ async function requestNewSchool(kidName, school, requestType) {
   if (familyData) familyData.members = members;
   await fbDb.collection('families').doc(S.uid).update({ members });
 
-  // Notify admin via their message center (only if submitter is not the admin)
-  if (ADMIN_UID && fbDb && ADMIN_UID !== S.uid) {
-    const whatPending = requestType === 'city'
-      ? `עיר ובית ספר חדשים (${school.city} / ${school.name})`
-      : `בית ספר חדש (${school.name} בעיר ${school.city})`;
-    const requesterName = [S.user, familyData?.familyName].filter(Boolean).join(' ');
-    fbDb.collection('families').doc(ADMIN_UID).collection('notifications').add({
-      type: 'school_pending',
-      message: `בקשה חדשה לאישור ${whatPending} הוגשה על ידי ${requesterName} עבור ${kidName}`,
-      dismissed: false,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-    }).catch(() => {});
-  }
-
   // Show inline toast to the parent (not a bell notification)
   const toastMsg = requestType === 'city'
     ? `הבקשה לאישור עיר ובית ספר חדשים נשלחה — נודיע לך בהקדם 👍`
