@@ -736,12 +736,13 @@ function initNotifBanners() {
       // Request-type notifs only show if explicitly addressed to this user (recipientUid match)
       const _visibleNotif = n => !n.dismissed && (
         !['school_pending','event_pending','application_pending'].includes(n.type) ||
-        n.recipientUid === S.uid
+        (n.recipientUid === S.uid && n.requestedByUid !== S.uid)
       );
       renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
       // Patch old school_pending notifications that are missing reqId
       if (isAdmin()) _patchMissingReqIds(_allNotifs);
       _updateBellBadge();
+      if (isCommittee()) _fetchPendingBadge();
       if (!el('messageCenterPanel')?.classList.contains('hidden')) renderMessageCenter();
     }, err => console.error('[notif] onSnapshot error:', err.code, err.message));
 }
