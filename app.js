@@ -1120,14 +1120,20 @@ async function stopPresence() {
 async function initPresence() {
   await stopPresence();
   if (!S.uid || !S.user || !fbDb) return;
-  const write = () => fbFunctions.httpsCallable('updatePresence')({
-    familyUid:  S.uid,
-    memberName: S.user,
-    familyName: familyData?.familyName || '',
-    role:       isParent() ? 'parent' : 'kid',
-    online:     true,
-  }).then(() => console.log('[presence] heartbeat OK', S.user))
-    .catch(e => console.warn('[presence] write FAILED:', e.message, e.code));
+  const write = () => {
+    console.log('[presence] write attempt', S.user, !!fbFunctions);
+    if (!fbFunctions) return;
+    try {
+      fbFunctions.httpsCallable('updatePresence')({
+        familyUid:  S.uid,
+        memberName: S.user,
+        familyName: familyData?.familyName || '',
+        role:       isParent() ? 'parent' : 'kid',
+        online:     true,
+      }).then(() => console.log('[presence] heartbeat OK', S.user))
+        .catch(e => console.warn('[presence] write FAILED:', e.message, e.code));
+    } catch(e) { console.error('[presence] sync error:', e.message); }
+  };
   write();
   _presenceInterval = setInterval(write, 2 * 60 * 1000);
   // Force heartbeat when tab becomes visible again (handles browser throttling)
