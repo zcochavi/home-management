@@ -2849,9 +2849,7 @@ async function approveSchool(id) {
     if (!docSnap.exists) return;
     const req = docSnap.data();
     await updateSchoolIndex(req.city, req.schoolName);
-    for (const pf of (req.pendingFamilies || [])) {
-      await registerInClass(pf.kidName, pf.school);
-    }
+    // registerInClass is now handled by the Cloud Function with the correct familyUid
     await fbFunctions.httpsCallable('approveSchoolRequest')({ id, adminName: myFullName() });
     await renderPendingPanel();
   } catch(e) { console.error('approveSchool:', e); alert('שגיאה: ' + e.message); }
