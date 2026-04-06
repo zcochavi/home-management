@@ -701,7 +701,7 @@ function _applyAdminUI() {
 }
 
 // ── Toast (temporary on-screen info, no bell) ────────────────
-function showToast(msg, type = 'info') {
+function showToast(msg, type = 'info', duration = 4000) {
   let wrap = el('toastWrap');
   if (!wrap) {
     wrap = document.createElement('div');
@@ -718,7 +718,7 @@ function showToast(msg, type = 'info') {
   setTimeout(() => {
     t.style.opacity = '0';
     setTimeout(() => t.remove(), 280);
-  }, 4000);
+  }, duration);
 }
 
 // ── Notification system (banners + message center) ───────────
@@ -3187,6 +3187,8 @@ async function removePhoto(name) {
 //  HAMBURGER MENU
 // ════════════════════════════════════════
 let _menuOpen = false;
+let _installPrompt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _installPrompt = e; });
 function toggleMenu(btn) { _menuOpen ? closeMenu() : openMenu(btn); }
 function openMenu(btn) {
   _menuOpen = true;
@@ -3231,6 +3233,11 @@ function openMenu(btn) {
       <span>${isHe ? 'החלף משתמש' : 'Switch member'}</span>
     </div>` : ''}
     <div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();installApp()">
+      <span class="menu-item-icon">📲</span>
+      <span>${isHe ? 'הוסף לדף הבית' : 'Add to home screen'}</span>
+    </div>
+    <div class="menu-sep"></div>
     <div class="menu-item" onclick="closeMenu();authSignOut()" style="color:#e53e3e">
       <span class="menu-item-icon">🚪</span>
       <span>${isHe ? 'יציאה מהחשבון' : 'Sign out'}</span>
@@ -3257,6 +3264,40 @@ function closeMenu() {
   _menuOpen = false;
   el('menuDropdown').style.display = 'none';
   el('menuOverlay').style.display  = 'none';
+}
+
+async function installApp() {
+  const isHe = getLang() === 'he';
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+
+  if (isStandalone) {
+    showToast(isHe ? 'האפליקציה כבר מותקנת 👍' : 'App is already installed 👍', 'info');
+    return;
+  }
+  if (_installPrompt) {
+    _installPrompt.prompt();
+    const { outcome } = await _installPrompt.userChoice;
+    if (outcome === 'accepted') _installPrompt = null;
+    return;
+  }
+  // iOS — no install prompt API, show manual instructions
+  if (isIos) {
+    showToast(
+      isHe
+        ? 'כדי להוסיף לדף הבית: לחץ על כפתור השיתוף ⎋ ואז "הוסף למסך הבית"'
+        : 'To install: tap the Share button ⎋ then "Add to Home Screen"',
+      'info', 7000
+    );
+    return;
+  }
+  // Chrome desktop / other — guide to address bar
+  showToast(
+    isHe
+      ? 'לחץ על סמל ההתקנה בשורת הכתובת של הדפדפן'
+      : 'Click the install icon in your browser\'s address bar',
+    'info', 5000
+  );
 }
 
 function renderStatic() {

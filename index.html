@@ -5,19 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>FamilyHub 🏠</title>
   <link id="favicon" rel="icon" type="image/png">
+  <link id="appleTouchIcon" rel="apple-touch-icon">
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FamilyHub">
+  <meta name="theme-color" content="#6a11cb">
   <script>
     (function(){
-      const c=document.createElement('canvas');c.width=c.height=64;
-      const x=c.getContext('2d');
-      // Purple gradient background
-      const g=x.createLinearGradient(0,0,64,64);
-      g.addColorStop(0,'#6a11cb');g.addColorStop(1,'#f5576c');
-      x.fillStyle=g;x.beginPath();
-      x.roundRect(0,0,64,64,14);x.fill();
-      // House emoji
-      x.font='38px serif';x.textAlign='center';x.textBaseline='middle';
-      x.fillText('🏠',32,34);
-      document.getElementById('favicon').href=c.toDataURL();
+      function makeIcon(size) {
+        const c=document.createElement('canvas');c.width=c.height=size;
+        const x=c.getContext('2d');
+        const g=x.createLinearGradient(0,0,size,size);
+        g.addColorStop(0,'#6a11cb');g.addColorStop(1,'#f5576c');
+        x.fillStyle=g;x.beginPath();
+        x.roundRect(0,0,size,size,size*0.2);x.fill();
+        x.font=(size*0.6)+'px serif';x.textAlign='center';x.textBaseline='middle';
+        x.fillText('🏠',size/2,size*0.54);
+        return c.toDataURL();
+      }
+      document.getElementById('favicon').href=makeIcon(64);
+      document.getElementById('appleTouchIcon').href=makeIcon(180);
     })();
   </script>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
