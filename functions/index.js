@@ -546,7 +546,16 @@ exports.getPresence = functions.https.onCall(async (data, context) => {
     (b.online ? 1 : 0) - (a.online ? 1 : 0) || b.lastSeenMs - a.lastSeenMs
   );
 
-  return { members };
+  // DEBUG: raw presence docs for diagnosis
+  const rawDocs = presenceSnap.docs.map(d => ({
+    docId: d.id,
+    familyUid: d.data().familyUid,
+    memberName: d.data().memberName,
+    online: d.data().online,
+    lastSeenMs: d.data().lastSeen?.toMillis?.() || 0,
+  }));
+
+  return { members, _rawDocs: rawDocs };
 });
 
 exports.getAnalytics = functions.https.onCall(async (data, context) => {

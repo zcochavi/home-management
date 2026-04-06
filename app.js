@@ -1,4 +1,4 @@
-console.log('%c[FamilyHub] app.js version: 20260406m', 'color:cyan;font-weight:bold');
+console.log('%c[FamilyHub] app.js version: 20260406n', 'color:cyan;font-weight:bold');
 // ════════════════════════════════════════
 //  FIREBASE CONFIG
 //  → Replace placeholder values with your Firebase project config
@@ -4140,6 +4140,7 @@ async function loadPresenceSection() {
     const fn = firebase.functions().httpsCallable('getPresence');
     const { data } = await fn();
     _presenceCachedData = data.members || [];
+    if (data._rawDocs) console.log('[presence] rawDocs:', JSON.stringify(data._rawDocs));
     const now = Date.now();
     console.log('[presence] total members:', _presenceCachedData.length,
       '| online:', _presenceCachedData.filter(m=>m.online).length,
