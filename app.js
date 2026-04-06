@@ -4085,8 +4085,8 @@ function saveActiveTabs(ids) {
   localStorage.setItem('familyhub_tabs_' + S.uid + '_' + S.user, JSON.stringify(ids));
   // Persist to Firestore so other devices pick it up
   fbDb.collection('families').doc(S.uid)
-    .update({ [`tabPrefs.${S.user}`]: ids })
-    .catch(e => console.warn('[tabs] saveActiveTabs failed:', e.message));
+    .update(new firebase.firestore.FieldPath('tabPrefs', S.user), ids)
+    .catch(e => console.error('[tabs] Firestore write failed — tabs will not sync to other devices:', e.message, e.code));
 }
 
 function renderTabBar() {
