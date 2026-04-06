@@ -1,4 +1,4 @@
-console.log('%c[FamilyHub] app.js version: 20260406l', 'color:cyan;font-weight:bold');
+console.log('%c[FamilyHub] app.js version: 20260406m', 'color:cyan;font-weight:bold');
 // ════════════════════════════════════════
 //  FIREBASE CONFIG
 //  → Replace placeholder values with your Firebase project config
@@ -2330,7 +2330,7 @@ async function loadCommunityData(kidsWithSchool) {
             classmateRoles[familyUid] = {
               parents: (info.parents || []).map(m => {
                 const perMember = m.committeeClasses;
-                const isComm = perMember !== undefined
+                const isComm = Array.isArray(perMember)
                   ? (perMember.includes(cid) || perMember.includes('*'))
                   : (legacyComm.includes(cid) || legacyComm.includes('*'));
                 return { name: m.name, emoji: m.emoji || '👤', isCommittee: isComm };
