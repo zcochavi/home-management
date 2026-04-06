@@ -1106,11 +1106,13 @@ async function stopPresence() {
     }).catch(() => {});
     _sessionRef = null; _sessionStartMs = null;
   }
-  if (S.uid && S.user && fbDb) {
-    const docId = S.uid + '_' + S.user;
-    return fbDb.collection('presence').doc(docId)
-      .update({ online: false })
-      .catch(e => console.warn('[presence] stopPresence failed:', e.code, e.message));
+  if (S.uid && S.user && fbFunctions) {
+    return fbFunctions.httpsCallable('updatePresence')({
+      familyUid: S.uid, memberName: S.user,
+      familyName: familyData?.familyName || '',
+      role: isParent() ? 'parent' : 'kid',
+      online: false,
+    }).catch(e => console.warn('[presence] stopPresence failed:', e.message));
   }
   return Promise.resolve();
 }
@@ -1118,16 +1120,13 @@ async function stopPresence() {
 async function initPresence() {
   await stopPresence();
   if (!S.uid || !S.user || !fbDb) return;
-  const docId = S.uid + '_' + S.user;
-  const ref   = fbDb.collection('presence').doc(docId);
-  const write = () => ref.set({
+  const write = () => fbFunctions.httpsCallable('updatePresence')({
     familyUid:  S.uid,
     memberName: S.user,
     familyName: familyData?.familyName || '',
     role:       isParent() ? 'parent' : 'kid',
     online:     true,
-    lastSeen:   firebase.firestore.FieldValue.serverTimestamp(),
-  }, { merge: true }).catch(e => console.warn('[presence] write failed:', e.code, e.message));
+  }).catch(e => console.warn('[presence] write failed:', e.message));
   write();
   _presenceInterval = setInterval(write, 2 * 60 * 1000);
   // Force heartbeat when tab becomes visible again (handles browser throttling)
