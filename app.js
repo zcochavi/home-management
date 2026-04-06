@@ -1,4 +1,4 @@
-console.log('%c[FamilyHub] app.js version: 20260406k', 'color:cyan;font-weight:bold');
+console.log('%c[FamilyHub] app.js version: 20260406l', 'color:cyan;font-weight:bold');
 // ════════════════════════════════════════
 //  FIREBASE CONFIG
 //  → Replace placeholder values with your Firebase project config
@@ -4140,9 +4140,12 @@ async function loadPresenceSection() {
     const fn = firebase.functions().httpsCallable('getPresence');
     const { data } = await fn();
     _presenceCachedData = data.members || [];
+    const now = Date.now();
     console.log('[presence] total members:', _presenceCachedData.length,
       '| online:', _presenceCachedData.filter(m=>m.online).length,
       '| raw:', _presenceCachedData.map(m=>`${m.memberName}(${m.online?'ON':'off'})`).join(', '));
+    _presenceCachedData.filter(m=>!m.online && m.lastSeenMs > 0).forEach(m =>
+      console.log('[presence] offline detail:', m.memberName, '| lastSeenMs ago:', Math.round((now - m.lastSeenMs)/1000)+'s', '| online flag:', m.online));
     _renderPresenceGroups();
   } catch(e) {
     const c = el('presenceGrid');
