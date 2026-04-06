@@ -1859,7 +1859,7 @@ async function requestNewSchool(kidName, school, requestType) {
     const whatPending = requestType === 'city'
       ? `עיר ובית ספר חדשים (${school.city} / ${school.name})`
       : `בית ספר חדש (${school.name} בעיר ${school.city})`;
-    const requesterName = familyData?.familyName || S.user || '';
+    const requesterName = [S.user, familyData?.familyName].filter(Boolean).join(' ');
     fbDb.collection('families').doc(ADMIN_UID).collection('notifications').add({
       type: 'school_pending',
       message: `בקשה חדשה לאישור ${whatPending} הוגשה על ידי ${requesterName} עבור ${kidName}`,
