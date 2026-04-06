@@ -777,19 +777,18 @@ function renderNotifBanners(undismissed) {
   // Add new ones
   undismissed.forEach(n => {
     if (existing.has('notifBanner_' + n.id)) return;
+    const REQUEST_TYPES = ['school_pending','event_pending','application_pending'];
+    const isRequest = REQUEST_TYPES.includes(n.type);
     const isGood    = n.type?.includes('approved');
     const isDenied  = n.type?.includes('denied') || n.type?.includes('rejected');
-    const isPending = !isGood && !isDenied;
     const bg     = isGood ? '#f0fff4' : isDenied ? '#fff5f5' : '#ebf8ff';
     const border = isGood ? '#9ae6b4' : isDenied ? '#feb2b2' : '#90cdf4';
     const color  = isGood ? '#276749' : isDenied ? '#c53030' : '#2b6cb0';
-    const icon   = isGood ? '✅'      : isDenied ? '❌'      : '🔔';
+    const icon   = isGood ? '✅' : isDenied ? '❌' : isRequest ? '📋' : '🔔';
     const div = document.createElement('div');
     div.className = 'notif-banner notif-banner-in';
     div.id = 'notifBanner_' + n.id;
     div.style.cssText = `background:${bg};border-color:${border};color:${color}`;
-    const REQUEST_TYPES = ['school_pending','event_pending','application_pending'];
-    const isRequest = REQUEST_TYPES.includes(n.type);
     div.innerHTML = `<span class="notif-banner-icon">${icon}</span>
       <span class="notif-banner-text">${esc(n.message)}</span>
       ${isRequest ? '' : `<button class="notif-banner-dismiss" onclick="dismissNotifBanner('${n.id}',this)" title="סגור">×</button>`}`;
