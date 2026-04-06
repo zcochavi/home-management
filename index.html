@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260406p') location.reload(true);
+        if (v !== '20260406q') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -326,7 +326,7 @@
 
 <!-- APP -->
 <div id="app">
-  <div class="header">
+  <div class="header" id="appHeader">
     <div class="header-top">
       <div>
         <div class="header-title">🏠 FamilyHub</div>
@@ -344,9 +344,12 @@
         <button class="menu-btn" onclick="toggleMenu(this)">☰</button>
       </div>
     </div>
-    <div class="header-date" id="headerDate"></div>
-    <div id="notifBanners"></div>
-    <div class="avatar-row" id="avatarRow"></div>
+    <div class="header-body" id="headerBody">
+      <div class="header-date" id="headerDate"></div>
+      <div id="notifBanners"></div>
+      <div class="avatar-row" id="avatarRow"></div>
+    </div>
+    <button class="header-collapse-btn" id="headerCollapseBtn" onclick="toggleHeaderCollapse()" aria-label="הסתר/הצג כותרת">▾</button>
   </div>
 
   <div class="tab-bar" id="tabBar"></div>
@@ -462,7 +465,7 @@
   </div>
 </div>
 
-<script src="app.js?v=20260406p"></script>
+<script src="app.js?v=20260406q"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>

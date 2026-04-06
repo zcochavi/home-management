@@ -1326,7 +1326,7 @@ function afterLoad() {
     // Locked device: auto-login as locked member, no choice
     login(S.lockedMember);
   } else if (S.user && getAllMemberNames().includes(S.user)) {
-    renderAll(); tryAutoConnectGCal(); initPresence(); initNotifBanners(); _applyAdminUI();
+    renderAll(); tryAutoConnectGCal(); initPresence(); initNotifBanners(); _applyAdminUI(); _initHeaderCollapse();
   } else {
     const saved = localStorage.getItem('familyhub_member_' + S.uid);
     if (saved && getAllMemberNames().includes(saved)) {
@@ -1510,6 +1510,7 @@ function login(name) {
   initPresence();
   initNotifBanners();
   _applyAdminUI();
+  _initHeaderCollapse();
 }
 
 async function switchUser() {
@@ -3227,6 +3228,24 @@ async function removePhoto(name) {
 //  HAMBURGER MENU
 // ════════════════════════════════════════
 let _menuOpen = false;
+
+// ── Header collapse (mobile) ─────────────────────────────────
+function toggleHeaderCollapse() {
+  const body = el('headerBody');
+  const btn  = el('headerCollapseBtn');
+  if (!body) return;
+  const collapsed = body.classList.toggle('collapsed');
+  if (btn) btn.classList.toggle('collapsed', collapsed);
+  localStorage.setItem('familyhub_header_collapsed', collapsed ? '1' : '');
+}
+function _initHeaderCollapse() {
+  if (localStorage.getItem('familyhub_header_collapsed')) {
+    const body = el('headerBody');
+    const btn  = el('headerCollapseBtn');
+    if (body) body.classList.add('collapsed');
+    if (btn)  btn.classList.add('collapsed');
+  }
+}
 let _installPrompt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _installPrompt = e; });
 function toggleMenu(btn) { _menuOpen ? closeMenu() : openMenu(btn); }
