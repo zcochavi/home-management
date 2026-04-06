@@ -261,6 +261,13 @@
     .notif-banner-text { flex:1; }
     .notif-banner-dismiss { background:none;border:none;font-size:18px;font-weight:900;cursor:pointer;opacity:0.55;padding:0 2px;line-height:1;flex-shrink:0;color:inherit; }
     .notif-banner-dismiss:hover { opacity:1; }
+    .notif-banner-actions { display:flex;gap:5px;flex-shrink:0; }
+    .notif-banner-act { border:none;border-radius:6px;font-size:13px;font-weight:900;cursor:pointer;padding:3px 8px;line-height:1; }
+    .notif-banner-act.approve { background:#c6f6d5;color:#276749; }
+    .notif-banner-act.approve:hover { background:#9ae6b4; }
+    .notif-banner-act.deny { background:#fed7d7;color:#c53030; }
+    .notif-banner-act.deny:hover { background:#feb2b2; }
+    .notif-banner-act:disabled { opacity:0.4;cursor:default; }
     .notif-banner-in  { animation:banner-drop .4s cubic-bezier(.34,1.56,.64,1) both; }
     .notif-banner-out { animation:banner-fade .3s ease forwards; }
     @keyframes banner-drop { from{opacity:0;transform:translateY(-14px) scaleY(.85)} to{opacity:1;transform:none} }

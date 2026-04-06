@@ -789,8 +789,15 @@ function renderNotifBanners(undismissed) {
     div.className = 'notif-banner notif-banner-in';
     div.id = 'notifBanner_' + n.id;
     div.style.cssText = `background:${bg};border-color:${border};color:${color}`;
+    const requestActions = isRequest && isAdmin() && n.reqId
+      ? `<div class="notif-banner-actions">
+           <button class="notif-banner-act approve" onclick="quickApproveReq('${n.id}','${n.type}','${n.reqId}',this)" title="אישור">✓</button>
+           <button class="notif-banner-act deny"    onclick="quickDenyReq('${n.id}','${n.type}','${n.reqId}',this)"    title="דחייה">✗</button>
+         </div>`
+      : '';
     div.innerHTML = `<span class="notif-banner-icon">${icon}</span>
       <span class="notif-banner-text">${esc(n.message)}</span>
+      ${requestActions}
       ${isRequest ? '' : `<button class="notif-banner-dismiss" onclick="dismissNotifBanner('${n.id}',this)" title="סגור">×</button>`}`;
     container.appendChild(div);
   });
@@ -803,6 +810,48 @@ async function dismissNotifBanner(id, btn) {
       .collection('notifications').doc(id)
       .update({ dismissed: true, dismissedAt: firebase.firestore.FieldValue.serverTimestamp() });
   } catch(e) { console.warn('dismissNotifBanner:', e); }
+}
+
+async function _dismissNotifById(id) {
+  await fbDb.collection('families').doc(S.uid)
+    .collection('notifications').doc(id)
+    .update({ dismissed: true, dismissedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .catch(() => {});
+}
+
+async function quickApproveReq(notifId, type, reqId, btn) {
+  btn.closest('.notif-banner-actions').querySelectorAll('button').forEach(b => b.disabled = true);
+  try {
+    if (type === 'school_pending') {
+      const docSnap = await fbDb.collection('pendingSchools').doc(reqId).get();
+      if (docSnap.exists) await updateSchoolIndex(docSnap.data().city, docSnap.data().schoolName);
+      await fbFunctions.httpsCallable('approveSchoolRequest')({ id: reqId, adminName: myFullName() });
+    } else if (type === 'event_pending') {
+      const parts = reqId.split('|');
+      await fbFunctions.httpsCallable('approveEvent')({ cid: parts[0], pendingId: parts[1] });
+    } else if (type === 'application_pending') {
+      const parts = reqId.split('|');
+      await fbFunctions.httpsCallable('adminApproveApplication')({ applicationId: parts[0], classId: parts[1] });
+    }
+    await _dismissNotifById(notifId);
+  } catch(e) { console.error('quickApproveReq:', e); showToast('שגיאה: ' + e.message, 'error'); }
+}
+
+async function quickDenyReq(notifId, type, reqId, btn) {
+  if (!confirm('לדחות את הבקשה?')) return;
+  btn.closest('.notif-banner-actions').querySelectorAll('button').forEach(b => b.disabled = true);
+  try {
+    if (type === 'school_pending') {
+      await fbFunctions.httpsCallable('denySchoolRequest')({ id: reqId, adminName: myFullName() });
+    } else if (type === 'event_pending') {
+      const parts = reqId.split('|');
+      await fbFunctions.httpsCallable('rejectEvent')({ cid: parts[0], pendingId: parts[1] });
+    } else if (type === 'application_pending') {
+      const parts = reqId.split('|');
+      await fbFunctions.httpsCallable('adminDenyApplication')({ applicationId: parts[0], classId: parts[1] });
+    }
+    await _dismissNotifById(notifId);
+  } catch(e) { console.error('quickDenyReq:', e); showToast('שגיאה: ' + e.message, 'error'); }
 }
 
 // ── Message center ────────────────────────────────────────────
