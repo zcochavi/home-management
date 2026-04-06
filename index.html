@@ -135,6 +135,22 @@
   </div>
 </div>
 
+<!-- PENDING REQUESTS PANEL (admin only) -->
+<div id="pendingPanel" class="message-center-panel hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closePendingPanel()">×</button>
+    <div class="mgmt-header-title">📋 בקשות ממתינות</div>
+  </div>
+  <div style="overflow-y:auto;flex:1;padding:16px">
+    <div class="comm-section-label" style="color:#92400e;margin-bottom:6px">⚡ אירועים</div>
+    <div id="ppEventsList" style="margin-bottom:20px"></div>
+    <div class="comm-section-label" style="margin-bottom:6px">👤 מועמדויות לוועד</div>
+    <div id="ppAppsList" style="margin-bottom:20px"></div>
+    <div class="comm-section-label" style="margin-bottom:6px">🏫 בתי ספר</div>
+    <div id="ppSchoolsList"></div>
+  </div>
+</div>
+
 <!-- MESSAGE CENTER -->
 <div id="messageCenterPanel" class="message-center-panel hidden">
   <div class="mgmt-header">
@@ -160,15 +176,6 @@
     <div class="mgmt-header-title">🔧 ניהול אירועים</div>
   </div>
   <div style="padding:16px">
-    <div class="comm-section-label" style="display:flex;align-items:center;gap:8px;color:#92400e">
-      <span>⏳ ממתינים לאישור</span>
-      <span id="adminPendingCount" class="comm-count" style="background:#fef3c7;color:#92400e"></span>
-    </div>
-    <div id="adminPendingList" style="margin-bottom:24px"></div>
-    <div class="comm-section-label" style="margin-top:4px">🏫 בתי ספר ממתינים לאישור</div>
-    <div id="adminSchoolsList" style="margin-bottom:24px"></div>
-    <div class="comm-section-label" style="margin-top:4px">👤 מועמדויות לוועד</div>
-    <div id="adminAppsList" style="margin-bottom:24px"></div>
     <div class="comm-section-label">✅ היסטוריית אישורים</div>
     <div id="adminLogList"></div>
     <div class="comm-section-label" style="margin-top:4px">⚙️ הגדרות התראות</div>
@@ -297,6 +304,10 @@
         <div class="header-greeting" id="headerGreeting"></div>
       </div>
       <div class="header-btns">
+        <button class="notif-bell-btn hidden" id="pendingReqBtn" onclick="openPendingPanel()" title="בקשות ממתינות">
+          📋
+          <span class="notif-bell-badge hidden" id="pendingReqBadge"></span>
+        </button>
         <button class="notif-bell-btn" id="notifBellBtn" onclick="openMessageCenter()" title="מרכז הודעות">
           🔔
           <span class="notif-bell-badge hidden" id="notifBellBadge"></span>

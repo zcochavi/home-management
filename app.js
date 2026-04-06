@@ -791,6 +791,131 @@ function closeMessageCenter() {
   setTimeout(() => { panel.classList.add('hidden'); panel.classList.remove('mc-open','mc-closing'); }, 280);
 }
 
+// ── Pending Requests Panel (admin only) ──────────────────────
+function openPendingPanel() {
+  const panel = el('pendingPanel');
+  panel.classList.remove('hidden');
+  panel.classList.add('mc-open');
+  renderPendingPanel();
+}
+function closePendingPanel() {
+  const panel = el('pendingPanel');
+  panel.classList.add('mc-closing');
+  setTimeout(() => { panel.classList.add('hidden'); panel.classList.remove('mc-open','mc-closing'); }, 280);
+}
+async function renderPendingPanel() {
+  const loading = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
+  el('ppEventsList').innerHTML = loading;
+  el('ppAppsList').innerHTML   = loading;
+  el('ppSchoolsList').innerHTML = loading;
+  try {
+    const [pendingSnap, appsSnap, schoolsSnap] = await Promise.all([
+      fbDb.collectionGroup('pendingEvents').get(),
+      fbDb.collection('committeeApplications').where('status','==','pending').get(),
+      fbDb.collection('pendingSchools').where('status','==','pending').get(),
+    ]);
+
+    // Events
+    const pending = pendingSnap.docs.map(d => ({ id: d.id, classId: d.ref.parent.parent.id, ...d.data() }));
+    el('ppEventsList').innerHTML = pending.length
+      ? pending.map(ev => `
+          <div class="pending-event-row">
+            <div class="pending-event-info">
+              <span class="pending-event-title">${esc(ev.title)}</span>
+              <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + ev.date : ''} · ${esc(classLabelFromId(ev.classId))}</span>
+            </div>
+            <div class="pending-event-actions">
+              <button class="pending-approve-btn" onclick="approveEvent('${ev.classId}','${ev.id}')">${t('pendingApprove')}</button>
+              <button class="pending-reject-btn"  onclick="rejectEvent('${ev.classId}','${ev.id}')">${t('pendingReject')}</button>
+            </div>
+          </div>`).join('')
+      : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין בקשות ממתינות</div>';
+
+    // Committee applications
+    const appsList = appsSnap.docs.map(d=>({id:d.id,...d.data()}));
+    el('ppAppsList').innerHTML = appsList.length
+      ? appsList.map(app => {
+          const pct = Math.min(100,Math.round((app.voteCount||0)/15*100));
+          return `<div class="application-row">
+            <div class="application-info">
+              <div class="application-name">👤 ${esc(app.applicantName||'')}</div>
+              <div class="application-meta">${app.voteCount||0}/15 תמיכות · ${esc(classLabelFromId(app.classId||''))}</div>
+              <div class="application-progress"><div class="application-progress-fill" style="width:${pct}%"></div></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+              <button class="pending-approve-btn" onclick="adminApproveApplication('${app.id}','${app.classId||''}')">${t('commApplicationApprove')}</button>
+              <button class="pending-reject-btn"  onclick="adminDenyApplication('${app.id}','${app.classId||''}')">${t('commApplicationDeny')}</button>
+            </div>
+          </div>`;
+        }).join('')
+      : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין מועמדויות ממתינות</div>';
+
+    // Schools
+    const schoolsList = schoolsSnap.docs.map(d=>({id:d.id,...d.data()}));
+    el('ppSchoolsList').innerHTML = schoolsList.length
+      ? schoolsList.map(req => {
+          const reqBy = personFullName(req.requestedBy);
+          const count = (req.pendingFamilies||[]).length;
+          const meta  = `${reqBy ? 'הוגש על ידי: ' + esc(reqBy) + ' · ' : ''}${count} משפחה/ות ממתינות`;
+          if (req.type === 'city') {
+            const cityStatus   = req.cityStatus   || 'pending';
+            const schoolStatus = req.schoolStatus || 'pending';
+            const statusBadge = s => s === 'approved'
+              ? '<span style="color:#276749;font-size:11px;font-weight:700">✅ אושר</span>'
+              : s === 'denied'
+              ? '<span style="color:#c53030;font-size:11px;font-weight:700">❌ נדחה</span>'
+              : '';
+            return `<div class="pending-event-row" style="flex-direction:column;align-items:stretch;gap:8px">
+              <div style="font-size:12px;color:#718096;font-weight:700">${meta}</div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span class="pending-event-title" style="flex:1">🏙️ עיר: ${esc(req.city)}</span>
+                ${statusBadge(cityStatus)}
+                ${cityStatus==='pending' ? `<button class="pending-approve-btn" onclick="approveSchoolPart('${req.id}','city')">אשר עיר</button>
+                <button class="pending-reject-btn" onclick="denySchoolPart('${req.id}','city')">דחה עיר</button>` : ''}
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span class="pending-event-title" style="flex:1">🏫 בית ספר: ${esc(req.schoolName)}</span>
+                ${statusBadge(schoolStatus)}
+                ${schoolStatus==='pending' && cityStatus==='approved' ? `<button class="pending-approve-btn" onclick="approveSchoolPart('${req.id}','school')">אשר ב"ס</button>
+                <button class="pending-reject-btn" onclick="denySchoolPart('${req.id}','school')">דחה ב"ס</button>` : ''}
+                ${schoolStatus==='pending' && cityStatus==='pending' ? `<button class="pending-approve-btn" disabled title="יש לאשר את העיר תחילה" style="opacity:0.4;cursor:not-allowed">אשר ב"ס</button>` : ''}
+                ${schoolStatus==='pending' && cityStatus==='denied'  ? `<button class="pending-reject-btn" onclick="denySchoolPart('${req.id}','school')">דחה ב"ס</button>` : ''}
+              </div>
+            </div>`;
+          }
+          return `<div class="pending-event-row">
+            <div class="pending-event-info">
+              <span class="pending-event-title">🏫 ${esc(req.schoolName)} (${esc(req.city)})</span>
+              <span class="pending-event-meta">${meta}</span>
+            </div>
+            <div class="pending-event-actions">
+              <button class="pending-approve-btn" onclick="approveSchool('${req.id}')">${t('pendingApprove')}</button>
+              <button class="pending-reject-btn"  onclick="denySchool('${req.id}')">${t('pendingReject')}</button>
+            </div>
+          </div>`;
+        }).join('')
+      : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין בקשות ממתינות</div>';
+
+    // Update badge
+    const total = pending.length + appsList.length + schoolsList.length;
+    const badge = el('pendingReqBadge');
+    if (badge) { badge.textContent = total || ''; badge.classList.toggle('hidden', !total); }
+  } catch(e) { console.error('renderPendingPanel:', e); }
+}
+async function _fetchPendingBadge() {
+  if (!isAdmin() || !fbDb) return;
+  try {
+    const [ev, apps, schools] = await Promise.all([
+      fbDb.collectionGroup('pendingEvents').get(),
+      fbDb.collection('committeeApplications').where('status','==','pending').get(),
+      fbDb.collection('pendingSchools').where('status','==','pending').get(),
+    ]);
+    const total = ev.size + apps.size + schools.size;
+    const badge = el('pendingReqBadge');
+    if (badge) { badge.textContent = total || ''; badge.classList.toggle('hidden', !total); }
+  } catch(e) {}
+}
+
 function renderMessageCenter() {
   const list = el('messageCenterList');
   if (!list) return;
@@ -1242,6 +1367,9 @@ function login(name) {
   refreshHomeUpcoming();
   initPresence();
   initNotifBanners();
+  const pendingBtn = el('pendingReqBtn');
+  if (pendingBtn) pendingBtn.classList.toggle('hidden', !isAdmin());
+  if (isAdmin()) _fetchPendingBadge();
 }
 
 async function switchUser() {
@@ -2411,7 +2539,7 @@ async function approveEvent(cid, pendingId) {
       actionAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
     await ref.delete();
-    if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
+    await renderPendingPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('approveEvent:', e); }
 }
@@ -2430,7 +2558,7 @@ async function rejectEvent(cid, pendingId) {
       actionAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
     await ref.delete();
-    if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
+    await renderPendingPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('rejectEvent:', e); }
 }
@@ -2592,101 +2720,9 @@ async function migrateCommitteeRoles() {
 }
 
 async function renderAdminPanel() {
-  el('adminPendingList').innerHTML  = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
-  el('adminLogList').innerHTML      = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
-  el('adminSchoolsList').innerHTML  = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
+  el('adminLogList').innerHTML = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
   try {
-    const [pendingSnap, logSnap, appsSnap, schoolsSnap] = await Promise.all([
-      fbDb.collectionGroup('pendingEvents').get(),
-      fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get(),
-      fbDb.collection('committeeApplications').where('status','==','pending').get(),
-      fbDb.collection('pendingSchools').where('status','==','pending').get(),
-    ]);
-
-    // Pending
-    const pending = pendingSnap.docs.map(d => ({ id: d.id, classId: d.ref.parent.parent.id, ...d.data() }));
-    el('adminPendingCount').textContent = pending.length || '';
-    el('adminPendingList').innerHTML = pending.length
-      ? pending.map(ev => `
-          <div class="pending-event-row">
-            <div class="pending-event-info">
-              <span class="pending-event-title">${esc(ev.title)}</span>
-              <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + ev.date : ''} · ${esc(classLabelFromId(ev.classId))}</span>
-            </div>
-            <div class="pending-event-actions">
-              <button class="pending-approve-btn" onclick="approveEvent('${ev.classId}','${ev.id}')">${t('pendingApprove')}</button>
-              <button class="pending-reject-btn"  onclick="rejectEvent('${ev.classId}','${ev.id}')">${t('pendingReject')}</button>
-            </div>
-          </div>`).join('')
-      : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין בקשות ממתינות</div>';
-
-    // Committee applications section
-    const appsList = appsSnap.docs.map(d=>({id:d.id,...d.data()}));
-    const appsHtml = appsList.length
-      ? appsList.map(app => {
-          const pct = Math.min(100,Math.round((app.voteCount||0)/15*100));
-          return `<div class="application-row">
-        <div class="application-info">
-          <div class="application-name">👤 ${esc(app.applicantName||'')}</div>
-          <div class="application-meta">${app.voteCount||0}/15 תמיכות · ${esc(classLabelFromId(app.classId||''))}</div>
-          <div class="application-progress"><div class="application-progress-fill" style="width:${pct}%"></div></div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
-          <button class="pending-approve-btn" onclick="adminApproveApplication('${app.id}','${app.classId||''}')">${t('commApplicationApprove')}</button>
-          <button class="pending-reject-btn"  onclick="adminDenyApplication('${app.id}','${app.classId||''}')">${t('commApplicationDeny')}</button>
-        </div>
-      </div>`;
-        }).join('')
-      : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין מועמדויות ממתינות</div>';
-    el('adminAppsList').innerHTML = appsHtml;
-
-    // Pending schools
-    const schoolsList = schoolsSnap.docs.map(d=>({id:d.id,...d.data()}));
-    el('adminSchoolsList').innerHTML = schoolsList.length
-      ? schoolsList.map(req => {
-          const reqBy = personFullName(req.requestedBy);
-          const count = (req.pendingFamilies||[]).length;
-          const meta  = `${reqBy ? 'הוגש על ידי: ' + esc(reqBy) + ' · ' : ''}${count} משפחה/ות ממתינות`;
-          if (req.type === 'city') {
-            // City + school are separate decisions
-            const cityStatus   = req.cityStatus   || 'pending';
-            const schoolStatus = req.schoolStatus || 'pending';
-            const statusBadge = s => s === 'approved'
-              ? '<span style="color:#276749;font-size:11px;font-weight:700">✅ אושר</span>'
-              : s === 'denied'
-              ? '<span style="color:#c53030;font-size:11px;font-weight:700">❌ נדחה</span>'
-              : '';
-            return `<div class="pending-event-row" style="flex-direction:column;align-items:stretch;gap:8px">
-              <div style="font-size:12px;color:#718096;font-weight:700">${meta}</div>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                <span class="pending-event-title" style="flex:1">🏙️ עיר: ${esc(req.city)}</span>
-                ${statusBadge(cityStatus)}
-                ${cityStatus==='pending' ? `<button class="pending-approve-btn" onclick="approveSchoolPart('${req.id}','city')">אשר עיר</button>
-                <button class="pending-reject-btn" onclick="denySchoolPart('${req.id}','city')">דחה עיר</button>` : ''}
-              </div>
-              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                <span class="pending-event-title" style="flex:1">🏫 בית ספר: ${esc(req.schoolName)}</span>
-                ${statusBadge(schoolStatus)}
-                ${schoolStatus==='pending' && cityStatus==='approved' ? `<button class="pending-approve-btn" onclick="approveSchoolPart('${req.id}','school')">אשר ב"ס</button>
-                <button class="pending-reject-btn" onclick="denySchoolPart('${req.id}','school')">דחה ב"ס</button>` : ''}
-                ${schoolStatus==='pending' && cityStatus==='pending' ? `<button class="pending-approve-btn" disabled title="יש לאשר את העיר תחילה" style="opacity:0.4;cursor:not-allowed">אשר ב"ס</button>` : ''}
-                ${schoolStatus==='pending' && cityStatus==='denied'  ? `<button class="pending-reject-btn" onclick="denySchoolPart('${req.id}','school')">דחה ב"ס</button>` : ''}
-              </div>
-            </div>`;
-          }
-          // type:'school' — just school, single approve/deny
-          return `<div class="pending-event-row">
-            <div class="pending-event-info">
-              <span class="pending-event-title">🏫 בית ספר חדש: ${esc(req.schoolName)} (${esc(req.city)})</span>
-              <span class="pending-event-meta">${meta}</span>
-            </div>
-            <div class="pending-event-actions">
-              <button class="pending-approve-btn" onclick="approveSchool('${req.id}')">${t('pendingApprove')}</button>
-              <button class="pending-reject-btn"  onclick="denySchool('${req.id}')">${t('pendingReject')}</button>
-            </div>
-          </div>`;
-        }).join('')
-      : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין בקשות ממתינות</div>';
+    const logSnap = await fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get();
 
     // Log
     const log = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -2709,7 +2745,7 @@ async function renderAdminPanel() {
     renderMaintenanceTools();
   } catch(e) {
     console.error('renderAdminPanel:', e);
-    el('adminPendingList').innerHTML = `<div style="color:#e53e3e;font-size:12px">${e.message}</div>`;
+    el('adminLogList').innerHTML = `<div style="color:#e53e3e;font-size:12px">${e.message}</div>`;
   }
 }
 
@@ -2771,7 +2807,7 @@ async function adminApproveApplication(appId, cid) {
       decidedBy: S.uid,
       decidedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
-    if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
+    await renderPendingPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('adminApproveApplication:', e); }
 }
@@ -2784,7 +2820,7 @@ async function adminDenyApplication(appId, cid) {
       decisionReason: 'admin',
       decidedAt: firebase.firestore.FieldValue.serverTimestamp(),
     });
-    if (!el('adminPanel').classList.contains('hidden')) await renderAdminPanel();
+    await renderPendingPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('adminDenyApplication:', e); }
 }
@@ -2792,25 +2828,23 @@ async function adminDenyApplication(appId, cid) {
 async function approveSchoolPart(id, part) {
   try {
     if (part === 'city') {
-      // Also update local school index for city
       const docSnap = await fbDb.collection('pendingSchools').doc(id).get();
       if (docSnap.exists) await updateSchoolIndex(docSnap.data().city, null);
     }
     await fbFunctions.httpsCallable('resolveSchoolPart')({ id, part, action: 'approved', adminName: myFullName() });
-    await renderAdminPanel();
+    await renderPendingPanel();
   } catch(e) { console.error('approveSchoolPart:', e); alert('שגיאה: ' + e.message); }
 }
 
 async function denySchoolPart(id, part) {
   try {
     await fbFunctions.httpsCallable('resolveSchoolPart')({ id, part, action: 'denied', adminName: myFullName() });
-    await renderAdminPanel();
+    await renderPendingPanel();
   } catch(e) { console.error('denySchoolPart:', e); alert('שגיאה: ' + e.message); }
 }
 
 async function approveSchool(id) {
   try {
-    // Register kids in class locally (needs client-side school index update)
     const docSnap = await fbDb.collection('pendingSchools').doc(id).get();
     if (!docSnap.exists) return;
     const req = docSnap.data();
@@ -2818,23 +2852,15 @@ async function approveSchool(id) {
     for (const pf of (req.pendingFamilies || [])) {
       await registerInClass(pf.kidName, pf.school);
     }
-    // Cloud Function handles family updates + notification
-    await fbFunctions.httpsCallable('approveSchoolRequest')({
-      id,
-      adminName: myFullName(),
-    });
-    await renderAdminPanel();
+    await fbFunctions.httpsCallable('approveSchoolRequest')({ id, adminName: myFullName() });
+    await renderPendingPanel();
   } catch(e) { console.error('approveSchool:', e); alert('שגיאה: ' + e.message); }
 }
 
 async function denySchool(id) {
   try {
-    // Cloud Function clears school data, marks denied, and notifies parents
-    await fbFunctions.httpsCallable('denySchoolRequest')({
-      id,
-      adminName: myFullName(),
-    });
-    await renderAdminPanel();
+    await fbFunctions.httpsCallable('denySchoolRequest')({ id, adminName: myFullName() });
+    await renderPendingPanel();
   } catch(e) { console.error('denySchool:', e); alert('שגיאה: ' + e.message); }
 }
 
