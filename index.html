@@ -8,7 +8,7 @@
       try {
         const r = await fetch('version.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260406i') location.reload(true);
+        if (v !== '20260406j') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -462,7 +462,7 @@
   </div>
 </div>
 
-<script src="app.js?v=20260406i"></script>
+<script src="app.js?v=20260406j"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
