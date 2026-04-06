@@ -310,11 +310,16 @@ exports.onPendingSchoolCreated = functions.firestore
     const requester = personFullName(req.requestedBy);
     console.log(`onPendingSchoolCreated: ${label} by ${requester}`);
 
-    const targets = ADMIN_UID ? [ADMIN_UID] : [];
-    if (!targets.length) return;
+    const reqUid = req.requestedBy?.familyUid;
+    if (!ADMIN_UID || reqUid === ADMIN_UID) return;
 
-    const tokenArrays = await Promise.all(targets.map(getTokens));
-    await sendToTokens(tokenArrays.flat(),
+    // Bell notification for admin
+    const bellMsg = `${label}${requester ? ` · הוגש על ידי ${requester}` : ''}`;
+    await writeNotif(ADMIN_UID, 'school_pending', bellMsg);
+
+    // Push notification for admin
+    const tokens = await getTokens(ADMIN_UID);
+    await sendToTokens(tokens,
       `🏫 בקשה חדשה: ${label}`,
       requester ? `הוגש על ידי ${requester}` : '',
       { type: 'pendingSchool', reqId: ctx.params.reqId }

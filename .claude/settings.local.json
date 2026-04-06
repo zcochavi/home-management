@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude --version)",
+      "Read(//c/Users/zoharazi/.claude/**)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(k\\) for k in d]\")",
+      "Bash(git --version)",
+      "Bash(curl:*)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('private:', d['private']\\); print\\('visibility:', d['visibility']\\)\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('visibility:', d['visibility']\\)\")"
+    ]
+  }
+}

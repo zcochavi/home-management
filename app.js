@@ -4157,7 +4157,7 @@ function renderFamilyDetails(data, familyUid, clickedMemberName) {
   const N = kids.length;
   const branchLine = N > 1
     ? (() => {
-        const nodeW = 90, gap = 12;
+        const nodeW = 116, gap = 18;
         const totalW = N * nodeW + (N - 1) * gap;
         const pct = (nodeW / 2 / totalW * 100).toFixed(1);
         return `<div class="ftree-branch-hline" style="left:${pct}%;right:${pct}%"></div>`;
