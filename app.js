@@ -1355,7 +1355,7 @@ function renderMgmtMembers() {
       <button class="mgmt-icon-btn purple" onclick="toggleMgmtEdit(${i})" title="ערוך">✏️</button>
       ${canDel ? `<button class="mgmt-icon-btn red" onclick="mgmtRemoveMember('${esc(m.name)}')" title="הסר">🗑</button>` : '<span style="width:26px"></span>'}
     </div>
-    <div class="mgmt-edit-panel" id="mgmtEditPanel_${i}" data-role="${m.role}" data-emoji="${m.emoji}">
+    <div class="mgmt-edit-panel" id="mgmtEditPanel_${i}" data-role="${m.role}" data-emoji="${m.emoji}" data-gender="${m.gender||''}">
       <span class="mgmt-edit-label">אימוג'י</span>
       <div class="emoji-row" id="mgmtEditEmojiRow_${i}"></div>
       <span class="mgmt-edit-label">שם</span>
