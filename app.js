@@ -1368,7 +1368,7 @@ function login(name) {
   initPresence();
   initNotifBanners();
   const pendingBtn = el('pendingReqBtn');
-  if (pendingBtn) pendingBtn.classList.toggle('hidden', !isAdmin());
+  if (pendingBtn) pendingBtn.style.display = isAdmin() ? '' : 'none';
   if (isAdmin()) _fetchPendingBadge();
 }
 
