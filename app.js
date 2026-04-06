@@ -683,6 +683,12 @@ function getAuthError(code) {
 let _sessionRef      = null;
 let _sessionStartMs  = null;
 
+function _applyAdminUI() {
+  const btn = el('pendingReqBtn');
+  if (btn) btn.style.display = isAdmin() ? '' : 'none';
+  if (isAdmin()) _fetchPendingBadge();
+}
+
 // ── Toast (temporary on-screen info, no bell) ────────────────
 function showToast(msg, type = 'info') {
   let wrap = el('toastWrap');
@@ -1184,7 +1190,7 @@ function afterLoad() {
     // Locked device: auto-login as locked member, no choice
     login(S.lockedMember);
   } else if (S.user && getAllMemberNames().includes(S.user)) {
-    renderAll(); tryAutoConnectGCal(); initPresence(); initNotifBanners();
+    renderAll(); tryAutoConnectGCal(); initPresence(); initNotifBanners(); _applyAdminUI();
   } else {
     const saved = localStorage.getItem('familyhub_member_' + S.uid);
     if (saved && getAllMemberNames().includes(saved)) {
@@ -1367,13 +1373,12 @@ function login(name) {
   refreshHomeUpcoming();
   initPresence();
   initNotifBanners();
-  const pendingBtn = el('pendingReqBtn');
-  if (pendingBtn) pendingBtn.style.display = isAdmin() ? '' : 'none';
-  if (isAdmin()) _fetchPendingBadge();
+  _applyAdminUI();
 }
 
 async function switchUser() {
   if (S.lockedMember) return; // locked devices can't switch members
+  const btn = el('pendingReqBtn'); if (btn) btn.style.display = 'none';
   stopNotifBanners();
   await stopPresence();
   unsubscribeAllComm(); _commCache = {};
