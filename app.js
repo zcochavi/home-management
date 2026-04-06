@@ -733,7 +733,12 @@ function initNotifBanners() {
     .orderBy('createdAt', 'desc')
     .onSnapshot(snap => {
       _allNotifs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      renderNotifBanners(_allNotifs.filter(n => !n.dismissed).reverse());
+      // Request-type notifs only show if explicitly addressed to this user (recipientUid match)
+      const _visibleNotif = n => !n.dismissed && (
+        !['school_pending','event_pending','application_pending'].includes(n.type) ||
+        n.recipientUid === S.uid
+      );
+      renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
       _updateBellBadge();
       if (!el('messageCenterPanel')?.classList.contains('hidden')) renderMessageCenter();
     }, err => console.error('[notif] onSnapshot error:', err.code, err.message));
@@ -749,7 +754,9 @@ function stopNotifBanners() {
 function _updateBellBadge() {
   const badge = el('notifBellBadge');
   if (!badge) return;
-  const count = _allNotifs.filter(n => !n.dismissed).length;
+  const count = _allNotifs.filter(n => !n.dismissed && (
+    !['school_pending','event_pending','application_pending'].includes(n.type) || n.recipientUid === S.uid
+  )).length;
   badge.textContent = count > 9 ? '9+' : count;
   badge.classList.toggle('hidden', count === 0);
 }
@@ -781,9 +788,11 @@ function renderNotifBanners(undismissed) {
     div.className = 'notif-banner notif-banner-in';
     div.id = 'notifBanner_' + n.id;
     div.style.cssText = `background:${bg};border-color:${border};color:${color}`;
+    const REQUEST_TYPES = ['school_pending','event_pending','application_pending'];
+    const isRequest = REQUEST_TYPES.includes(n.type);
     div.innerHTML = `<span class="notif-banner-icon">${icon}</span>
       <span class="notif-banner-text">${esc(n.message)}</span>
-      <button class="notif-banner-dismiss" onclick="dismissNotifBanner('${n.id}',this)" title="סגור">×</button>`;
+      ${isRequest ? '' : `<button class="notif-banner-dismiss" onclick="dismissNotifBanner('${n.id}',this)" title="סגור">×</button>`}`;
     container.appendChild(div);
   });
 }
@@ -958,7 +967,7 @@ async function _fetchPendingBadge() {
 function renderMessageCenter() {
   const list = el('messageCenterList');
   if (!list) return;
-  const notifs = _allNotifs; // already sorted desc by createdAt
+  const notifs = _allNotifs.filter(n => !['school_pending','event_pending','application_pending'].includes(n.type));
   el('mcCount').textContent = notifs.length ? `${notifs.length} הודעות` : '';
   el('mcDeleteAllBtn').style.display = notifs.length ? '' : 'none';
   const toolbar = el('mcSelectAllRow');
@@ -1003,9 +1012,11 @@ async function deleteSelectedNotifs() {
   el('mcDeleteSelectedBtn').style.display = 'none';
 }
 async function deleteAllNotifs() {
-  await Promise.all(_allNotifs.map(n =>
-    fbDb.collection('families').doc(S.uid).collection('notifications').doc(n.id).delete().catch(()=>{})
-  ));
+  const REQUEST_TYPES = ['school_pending','event_pending','application_pending'];
+  await Promise.all(_allNotifs
+    .filter(n => !REQUEST_TYPES.includes(n.type))
+    .map(n => fbDb.collection('families').doc(S.uid).collection('notifications').doc(n.id).delete().catch(()=>{}))
+  );
 }
 
 async function stopPresence() {
@@ -1043,6 +1054,10 @@ async function initPresence() {
   }, { merge: true }).catch(e => console.warn('[presence] write failed:', e.code, e.message));
   write();
   _presenceInterval = setInterval(write, 2 * 60 * 1000);
+  // Force heartbeat when tab becomes visible again (handles browser throttling)
+  const onVisible = () => { if (document.visibilityState === 'visible') write(); };
+  document.removeEventListener('visibilitychange', onVisible);
+  document.addEventListener('visibilitychange', onVisible);
   // Start session
   _sessionStartMs = Date.now();
   _sessionRef = fbDb.collection('sessions').doc();
@@ -3901,18 +3916,28 @@ function tabLabel(id) { return t('tabs')[TAB_IDX[id]] || id; }
 function getActiveTabs() {
   const visible = ALL_TABS.filter(t => !t.adminOnly || isAdmin());
   if (!S.uid || !S.user) return visible.map(t => t.id);
-  try {
-    const saved = localStorage.getItem('familyhub_tabs_' + S.uid + '_' + S.user);
-    if (saved) {
-      const ids = JSON.parse(saved).filter(id => visible.find(t => t.id === id));
-      if (ids.length > 0) return ids;
-    }
-  } catch(e) {}
+  // Prefer Firestore-synced prefs (available after familyData loads)
+  const firestorePrefs = familyData?.tabPrefs?.[S.user];
+  const raw = firestorePrefs
+    || (() => { try { return JSON.parse(localStorage.getItem('familyhub_tabs_' + S.uid + '_' + S.user)); } catch(e) { return null; } })();
+  if (raw) {
+    const ids = raw.filter(id => visible.find(t => t.id === id));
+    if (ids.length > 0) return ids;
+  }
   return visible.map(t => t.id);
 }
 function saveActiveTabs(ids) {
-  if (!S.uid || !S.user) return;
+  if (!S.uid || !S.user || !fbDb) return;
+  // Update local cache immediately
+  if (familyData) {
+    if (!familyData.tabPrefs) familyData.tabPrefs = {};
+    familyData.tabPrefs[S.user] = ids;
+  }
   localStorage.setItem('familyhub_tabs_' + S.uid + '_' + S.user, JSON.stringify(ids));
+  // Persist to Firestore so other devices pick it up
+  fbDb.collection('families').doc(S.uid)
+    .update({ [`tabPrefs.${S.user}`]: ids })
+    .catch(e => console.warn('[tabs] saveActiveTabs failed:', e.message));
 }
 
 function renderTabBar() {

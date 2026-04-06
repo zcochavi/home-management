@@ -315,7 +315,7 @@ exports.onPendingSchoolCreated = functions.firestore
 
     // Bell notification for admin
     const bellMsg = `${label}${requester ? ` · הוגש על ידי ${requester}` : ''}`;
-    await writeNotif(ADMIN_UID, 'school_pending', bellMsg);
+    await writeNotif(ADMIN_UID, 'school_pending', bellMsg, { recipientUid: ADMIN_UID });
 
     // Push notification for admin
     const tokens = await getTokens(ADMIN_UID);
@@ -470,39 +470,63 @@ exports.getPresence = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('permission-denied', 'Admins only');
   }
 
-  const ONLINE_THRESHOLD = 4 * 60 * 1000; // 4 min (2 min heartbeat + 2 min buffer)
+  const ONLINE_THRESHOLD = 8 * 60 * 1000; // 8 min (2 min heartbeat + generous buffer for throttled browsers)
   const now = Date.now();
 
-  // Presence records
-  const presenceSnap = await db.collection('presence').get();
-  const presenceMap  = {};
-  presenceSnap.docs.forEach(d => {
-    const p = d.data();
-    const key = (p.familyUid || '') + '_' + (p.memberName || '');
-    presenceMap[key] = {
-      online:      p.online === true && (p.lastSeen?.toMillis?.() || 0) > now - ONLINE_THRESHOLD,
-      lastSeenMs:  p.lastSeen?.toMillis?.() || 0,
-    };
+  // Read both collections in parallel
+  const [presenceSnap, familiesSnap] = await Promise.all([
+    db.collection('presence').get(),
+    db.collection('families').get(),
+  ]);
+
+  // Build family lookup: familyUid -> { familyName, members[] }
+  const familyMap = {};
+  familiesSnap.docs.forEach(d => {
+    familyMap[d.id] = { familyName: d.data().familyName || '', members: d.data().members || [] };
   });
 
-  // All family members
-  const familiesSnap = await db.collection('families').get();
-  const members = [];
+  // Build member list keyed by "familyUid_memberName" from families
+  const memberMap = {}; // key -> member entry
   familiesSnap.docs.forEach(famDoc => {
-    const fam = famDoc.data();
+    const fam = familyMap[famDoc.id];
     (fam.members || []).forEach(m => {
-      const key      = famDoc.id + '_' + (m.name || '');
-      const presence = presenceMap[key] || { online: false, lastSeenMs: 0 };
-      members.push({
+      const key = famDoc.id + '_' + (m.name || '');
+      memberMap[key] = {
         familyUid:  famDoc.id,
         memberName: m.name || '',
-        familyName: fam.familyName || '',
+        familyName: fam.familyName,
         role:       m.role || 'parent',
-        online:     presence.online,
-        lastSeenMs: presence.lastSeenMs,
-      });
+        online:     false,
+        lastSeenMs: 0,
+      };
     });
   });
+
+  // Apply presence records — match by key, or create orphan entry if no family match
+  presenceSnap.docs.forEach(d => {
+    const p = d.data();
+    if (!p.familyUid || !p.memberName) return;
+    const key       = p.familyUid + '_' + p.memberName;
+    const lastSeenMs = p.lastSeen?.toMillis?.() || 0;
+    const online    = p.online === true && lastSeenMs > now - ONLINE_THRESHOLD;
+    if (memberMap[key]) {
+      memberMap[key].online     = online;
+      memberMap[key].lastSeenMs = lastSeenMs;
+    } else {
+      // Presence record exists but no matching family member — include anyway
+      const fam = familyMap[p.familyUid];
+      memberMap[key] = {
+        familyUid:  p.familyUid,
+        memberName: p.memberName,
+        familyName: fam?.familyName || p.familyName || '',
+        role:       p.role || 'parent',
+        online,
+        lastSeenMs,
+      };
+    }
+  });
+
+  const members = Object.values(memberMap);
 
   // Online first, then by lastSeen descending
   members.sort((a, b) =>
@@ -696,13 +720,14 @@ async function registerKidInClass(pf, school, familyName, gender, dob) {
     .collection('members').doc(classMemberDocId(pf.familyUid, pf.kidName)).set(memberDoc);
 }
 
-async function writeNotif(familyUid, type, message) {
+async function writeNotif(familyUid, type, message, extra = {}) {
   await db.collection('families').doc(familyUid)
     .collection('notifications').add({
       type,
       message,
       dismissed: false,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      ...extra,
     });
 }
 
