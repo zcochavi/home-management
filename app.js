@@ -1268,8 +1268,18 @@ async function initFCM() {
     if (permission !== 'granted') { console.log('[FCM] permission not granted'); return; }
     const token = await fbMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
     if (token) {
+      const tokenKey = token.slice(0, 20);
+      const prevFamily = localStorage.getItem('familyhub_fcm_family_' + tokenKey);
+      if (prevFamily && prevFamily !== S.uid) {
+        // Token was registered under a different family — remove the stale entry so
+        // pushes to that family don't land on this device anymore.
+        fbDb.collection('families').doc(prevFamily)
+          .collection('fcmTokens').doc(tokenKey)
+          .delete().catch(() => {});
+      }
+      localStorage.setItem('familyhub_fcm_family_' + tokenKey, S.uid);
       await fbDb.collection('families').doc(S.uid)
-        .collection('fcmTokens').doc(token.slice(0, 20))
+        .collection('fcmTokens').doc(tokenKey)
         .set({ token, platform, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
       console.log('[FCM] registered on', platform);
     }
