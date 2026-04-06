@@ -4096,70 +4096,86 @@ function renderFamilyDetails(data, familyUid, clickedMemberName) {
   const parents = members.filter(m => m.role !== 'kid');
   const kids    = members.filter(m => m.role === 'kid');
 
-  // Build class ID → label map from kids' schools
-  function classIdForSchool(s) {
+  function _classId(s) {
     if (!s?.city?.trim() || !s?.grade) return null;
     const n = v => (v||'').trim().replace(/\s+/g,' ').replace(/\//g,'-').replace(/~/g,'');
     return [n(s.city), n(s.name||''), s.grade, n(s.classNum||'')].join('~~');
   }
-  function classLabel(s) {
-    if (!s) return '';
-    return [s.city, s.name, s.grade ? 'כיתה ' + s.grade + (s.classNum ? "'" + s.classNum : '') : ''].filter(Boolean).join(' · ');
+  function _classLabel(s) {
+    if (!s?.city) return '';
+    const grade = s.grade ? 'כיתה ' + s.grade + (s.classNum ? "'" + s.classNum : '') : '';
+    return [s.name || s.city, grade].filter(Boolean).join(' · ');
   }
 
-  const kidRows = kids.map(k => {
-    const cid = classIdForSchool(k.school);
-    const schoolInfo = k.school?.city ? classLabel(k.school) : 'אין בית ספר';
-    const pendingTag = k.schoolPending ? `<span style="background:#fef3c7;color:#92400e;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:700;margin-right:4px">⏳ ממתין</span>` : '';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0f4ff">
-      <span style="font-size:20px">${esc(k.emoji)}</span>
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:700;color:#2d3748">${esc(k.name)}</div>
-        <div style="font-size:11px;color:#718096;margin-top:2px">🏫 ${esc(schoolInfo)}${pendingTag}</div>
-      </div>
-    </div>`;
-  }).join('');
+  // ── Parent nodes ───────────────────────────────────
+  const kidClassIds = kids.map(k => ({ cid: _classId(k.school), label: _classLabel(k.school) })).filter(x => x.cid);
 
-  // For each parent, show their committee classes with toggle per kid class
-  const parentRows = parents.map(p => {
-    const isClicked = p.name === clickedMemberName;
+  const parentNodes = parents.map(p => {
+    const isClicked   = p.name === clickedMemberName;
     const commClasses = p.committeeClasses || [];
-    const kidClasses = kids
-      .map(k => ({ kid: k, cid: classIdForSchool(k.school), label: classLabel(k.school) }))
-      .filter(x => x.cid);
+    const anyComm     = commClasses.length > 0;
 
-    const committeeRows = kidClasses.length
-      ? kidClasses.map(({ kid, cid, label }) => {
-          const isComm = commClasses.includes(cid) || commClasses.includes('*');
-          return `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:4px">
-            <span style="font-size:11px;color:#718096">${esc(label)}</span>
-            <button class="role-toggle-btn${isComm ? ' active' : ''}"
-              onclick="toggleCommitteeFromPanel('${familyUid}','${esc(p.name)}',${!isComm},'${cid}',this)">
-              ${isComm ? t('revokeCommittee') : t('grantCommittee')}
+    const committeeSection = isAdmin() && kidClassIds.length ? `
+      <div class="ftree-node-committee">
+        ${kidClassIds.map(({ cid, label }) => {
+          const on = commClasses.includes(cid) || commClasses.includes('*');
+          return `<div class="ftree-node-comm-row">
+            <span class="ftree-node-comm-class">${esc(label)}</span>
+            <button class="ftree-comm-toggle${on ? ' on' : ''}"
+              onclick="toggleCommitteeFromPanel('${familyUid}','${esc(p.name)}',${!on},'${cid}',this)">
+              ${on ? '✓ ועד' : '+ ועד'}
             </button>
           </div>`;
-        }).join('')
-      : `<div style="font-size:11px;color:#a0aec0;margin-top:4px">אין ילדים עם בית ספר משויך</div>`;
+        }).join('')}
+      </div>` : '';
 
-    return `<div style="padding:10px 0;border-bottom:1px solid #f0f4ff${isClicked ? ';background:#f7f0ff;border-radius:10px;padding:10px' : ''}">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-        <span style="font-size:20px">${esc(p.emoji)}</span>
-        <span style="font-size:13px;font-weight:800;color:#2d3748">${esc(p.name)}</span>
-        ${commClasses.length ? `<span class="role-badge-committee" style="font-size:10px;padding:1px 6px">ועד</span>` : ''}
-        ${isClicked ? `<span style="font-size:10px;color:#6a11cb;font-weight:700">◀ נבחר</span>` : ''}
-      </div>
-      <div style="padding-right:28px">${committeeRows}</div>
+    return `<div class="ftree-node${isClicked ? ' highlighted' : ''}">
+      <div class="ftree-node-emoji">${esc(p.emoji)}</div>
+      <div class="ftree-node-name">${esc(p.name)}</div>
+      ${anyComm ? `<span class="role-badge-committee" style="font-size:8px;padding:1px 5px;margin-top:1px">ועד</span>` : ''}
+      ${committeeSection}
     </div>`;
   }).join('');
 
-  el('familyDetailsBody').innerHTML = `
-    ${kids.length ? `
-      <div class="comm-section-label" style="margin-bottom:4px">👶 ילדים</div>
-      ${kidRows}` : ''}
-    ${parents.length ? `
-      <div class="comm-section-label" style="margin-top:16px;margin-bottom:4px">👨‍👩 הורים וועד</div>
-      ${parentRows}` : '<div style="font-size:13px;color:#a0aec0;padding:16px 0">לא נמצאו הורים במשפחה זו</div>'}
-  `;
+  // ── Kid nodes ───────────────────────────────────
+  const kidNodes = kids.map(k => {
+    const school = k.school?.city ? _classLabel(k.school) || k.school.city : null;
+    return `<div class="ftree-kid-col">
+      <div class="ftree-node">
+        <div class="ftree-node-emoji">${esc(k.emoji)}</div>
+        <div class="ftree-node-name">${esc(k.name)}</div>
+        ${school ? `<div class="ftree-node-school">🏫 ${esc(school)}</div>` : ''}
+        ${k.schoolPending ? `<span class="ftree-node-pending">⏳ ממתין</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // ── Connecting lines ─────────────────────────────
+  // Horizontal branch spans from center of first kid to center of last kid.
+  // Each kid node is 90px wide + 12px gap. With N kids:
+  // line left = 45/(N*90+(N-1)*12)*100%, right = same (symmetric)
+  const N = kids.length;
+  const branchLine = N > 1
+    ? (() => {
+        const nodeW = 90, gap = 12;
+        const totalW = N * nodeW + (N - 1) * gap;
+        const pct = (nodeW / 2 / totalW * 100).toFixed(1);
+        return `<div class="ftree-branch-hline" style="left:${pct}%;right:${pct}%"></div>`;
+      })()
+    : '';
+
+  const treeSection = (parents.length || kids.length) ? `
+    <div class="ftree">
+      ${parents.length ? `<div class="ftree-row">${parentNodes}</div>` : ''}
+      ${parents.length && kids.length ? `<div class="ftree-trunk"></div>` : ''}
+      ${kids.length ? `
+        <div class="ftree-branch" style="width:${Math.min(kids.length * 102, 400)}px">
+          ${branchLine}
+          <div class="ftree-kids-row">${kidNodes}</div>
+        </div>` : ''}
+    </div>` : `<div style="font-size:13px;color:#a0aec0;padding:24px;text-align:center">אין נתונים למשפחה זו</div>`;
+
+  el('familyDetailsBody').innerHTML = treeSection;
 }
 
 async function toggleCommitteeFromPanel(familyUid, memberName, grant, cid, btn) {
