@@ -3289,16 +3289,6 @@ function renderHome() {
 
   renderStarChart();
 
-  // Invite card — visible only for parents
-  const inviteCard = el('inviteCard');
-  if (inviteCard) {
-    if (isParent() && familyData?.familyCode) {
-      inviteCard.style.display = '';
-      el('inviteCodeDisplay').textContent = familyData.familyCode;
-    } else {
-      inviteCard.style.display = 'none';
-    }
-  }
 
   let hw = S.homework.filter(h=>!h.done);
   if (isKid()) hw = hw.filter(h=>h.child===S.user);
