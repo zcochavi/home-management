@@ -475,6 +475,13 @@ exports.updatePresence = functions.https.onCall(async (data, context) => {
     online: online !== false,
     lastSeen: admin.firestore.FieldValue.serverTimestamp(),
   }, { merge: true });
+  // Delete any stale duplicate docs for this member with a different document ID
+  const dupes = await db.collection('presence')
+    .where('familyUid', '==', familyUid)
+    .where('memberName', '==', memberName)
+    .get();
+  const deletes = dupes.docs.filter(d => d.id !== docId).map(d => d.ref.delete());
+  if (deletes.length) await Promise.all(deletes);
   return { ok: true };
 });
 
@@ -515,16 +522,19 @@ exports.getPresence = functions.https.onCall(async (data, context) => {
     });
   });
 
-  // Apply presence records — match by key, or create orphan entry if no family match
+  // Apply presence records — use most recent record when multiple docs share the same key
   presenceSnap.docs.forEach(d => {
     const p = d.data();
     if (!p.familyUid || !p.memberName) return;
-    const key       = p.familyUid + '_' + p.memberName;
+    const key        = p.familyUid + '_' + p.memberName;
     const lastSeenMs = p.lastSeen?.toMillis?.() || 0;
-    const online    = p.online === true && lastSeenMs > now - ONLINE_THRESHOLD;
+    const online     = p.online === true && lastSeenMs > now - ONLINE_THRESHOLD;
     if (memberMap[key]) {
-      memberMap[key].online     = online;
-      memberMap[key].lastSeenMs = lastSeenMs;
+      // Only update if this record is more recent
+      if (lastSeenMs >= memberMap[key].lastSeenMs) {
+        memberMap[key].online     = online;
+        memberMap[key].lastSeenMs = lastSeenMs;
+      }
     } else {
       // Presence record exists but no matching family member — include anyway
       const fam = familyMap[p.familyUid];

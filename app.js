@@ -1,4 +1,4 @@
-console.log('%c[FamilyHub] app.js version: 20260406n', 'color:cyan;font-weight:bold');
+console.log('%c[FamilyHub] app.js version: 20260406o', 'color:cyan;font-weight:bold');
 // ════════════════════════════════════════
 //  FIREBASE CONFIG
 //  → Replace placeholder values with your Firebase project config
@@ -1113,7 +1113,11 @@ async function stopPresence() {
       familyName: familyData?.familyName || '',
       role: isParent() ? 'parent' : 'kid',
       online: false,
-    }).catch(e => console.warn('[presence] stopPresence failed:', e.message));
+    }).catch(e => {
+      // Suppress known Firebase Messaging SW registration error (harmless — FCM still works via explicit registration)
+      if (e.code?.startsWith('messaging/') || e.message?.includes('service-worker')) return;
+      console.warn('[presence] stopPresence failed:', e.message);
+    });
   }
   return Promise.resolve();
 }
@@ -1230,9 +1234,10 @@ async function initFCM() {
   const ua       = navigator.userAgent;
   const platform = ua.includes('Firefox') ? 'firefox' : ua.includes('Edg') ? 'edge' : 'chrome';
   try {
-    await navigator.serviceWorker.register('./firebase-messaging-sw.js');
-    // Wait for SW to be fully active — required in Firefox
-    const swReg = await navigator.serviceWorker.ready;
+    const swReg = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+    // Wait for SW to be fully active — required in Firefox and prevents Firebase
+    // from trying to register a default SW at the root (which would 404 in subdirectory deploys)
+    await navigator.serviceWorker.ready;
 
     // Firefox: explicitly manage the push subscription to avoid stale-subscription errors
     if (platform === 'firefox') {
@@ -1259,6 +1264,9 @@ async function initFCM() {
     }
 
     fbMessaging = firebase.messaging();
+    // Prevent Firebase from trying to register a default SW at the root domain
+    // (which 404s when app is deployed in a subdirectory). Use our explicit registration.
+    if (typeof fbMessaging.useServiceWorker === 'function') fbMessaging.useServiceWorker(swReg);
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') { console.log('[FCM] permission not granted'); return; }
     const token = await fbMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
