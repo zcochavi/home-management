@@ -739,9 +739,33 @@ function initNotifBanners() {
         n.recipientUid === S.uid
       );
       renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
+      // Patch old school_pending notifications that are missing reqId
+      if (isAdmin()) _patchMissingReqIds(_allNotifs);
       _updateBellBadge();
       if (!el('messageCenterPanel')?.classList.contains('hidden')) renderMessageCenter();
     }, err => console.error('[notif] onSnapshot error:', err.code, err.message));
+}
+
+async function _patchMissingReqIds(notifs) {
+  const needsPatch = notifs.filter(n => n.type === 'school_pending' && !n.reqId && !n.dismissed);
+  if (!needsPatch.length) return;
+  try {
+    const snap = await fbDb.collection('pendingSchools').where('status', '==', 'pending').get();
+    for (const n of needsPatch) {
+      const match = snap.docs.find(d => {
+        const req = d.data();
+        const label = req.type === 'city'
+          ? `עיר חדשה: ${req.city}`
+          : `בית ספר חדש: ${req.schoolName} (${req.city})`;
+        return n.message.startsWith(label);
+      });
+      if (match) {
+        fbDb.collection('families').doc(S.uid)
+          .collection('notifications').doc(n.id)
+          .update({ reqId: match.id }).catch(() => {});
+      }
+    }
+  } catch(e) { console.warn('_patchMissingReqIds:', e); }
 }
 
 function stopNotifBanners() {
