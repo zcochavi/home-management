@@ -1,4 +1,4 @@
-console.log('%c[FamilyHub] app.js version: 20260406j', 'color:cyan;font-weight:bold');
+console.log('%c[FamilyHub] app.js version: 20260406k', 'color:cyan;font-weight:bold');
 // ════════════════════════════════════════
 //  FIREBASE CONFIG
 //  → Replace placeholder values with your Firebase project config
