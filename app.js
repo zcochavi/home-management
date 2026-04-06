@@ -789,11 +789,15 @@ function renderNotifBanners(undismissed) {
     div.className = 'notif-banner notif-banner-in';
     div.id = 'notifBanner_' + n.id;
     div.style.cssText = `background:${bg};border-color:${border};color:${color}`;
-    const requestActions = isRequest && isAdmin() && n.reqId
-      ? `<div class="notif-banner-actions">
-           <button class="notif-banner-act approve" onclick="quickApproveReq('${n.id}','${n.type}','${n.reqId}',this)" title="אישור">✓</button>
-           <button class="notif-banner-act deny"    onclick="quickDenyReq('${n.id}','${n.type}','${n.reqId}',this)"    title="דחייה">✗</button>
-         </div>`
+    const requestActions = isRequest && isAdmin()
+      ? (n.reqId
+          ? `<div class="notif-banner-actions">
+               <button class="notif-banner-act approve" onclick="quickApproveReq('${n.id}','${n.type}','${n.reqId}',this)" title="אישור">✓</button>
+               <button class="notif-banner-act deny"    onclick="quickDenyReq('${n.id}','${n.type}','${n.reqId}',this)"    title="דחייה">✗</button>
+             </div>`
+          : `<div class="notif-banner-actions">
+               <button class="notif-banner-act approve" onclick="closeMenu();openPendingPanel()" title="פתח בקשות">📋</button>
+             </div>`)
       : '';
     div.innerHTML = `<span class="notif-banner-icon">${icon}</span>
       <span class="notif-banner-text">${esc(n.message)}</span>
