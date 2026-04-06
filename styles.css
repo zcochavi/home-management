@@ -142,9 +142,12 @@
     .application-progress-fill { height:100%;background:linear-gradient(90deg,#6a11cb,#f093fb);border-radius:2px;transition:width 0.3s; }
     .apply-committee-btn { width:100%;background:#f0f4ff;color:#6a11cb;border:1.5px dashed #b794f4;border-radius:12px;font-family:inherit;font-size:13px;font-weight:800;padding:10px;cursor:pointer;margin-top:8px; }
     .apply-committee-btn:hover { background:#e9d8fd; }
-    .comm-mate { display:flex;align-items:center;gap:8px;padding:6px 0 6px 6px;border-bottom:1px solid #f8faff; }
+    .comm-mate { display:flex;flex-direction:column;gap:4px;padding:6px 0 6px 6px;border-bottom:1px solid #f8faff; }
     .comm-mate:last-child { border-bottom:none; }
+    .comm-mate-main { display:flex;align-items:center;gap:8px; }
     .comm-mate-name { font-size:13px;font-weight:700;color:#2d3748; }
+    .comm-mate-parents { display:flex;flex-direction:column;gap:3px;padding-right:26px; }
+    .comm-mate-parent { display:flex;align-items:center;gap:6px;font-size:12px;color:#4a5568; }
     /* Custom autocomplete dropdown */
     #acDropdown { display:none;background:white;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,0.14);border:1.5px solid #e8edf5;overflow:hidden;max-height:200px;overflow-y:auto; }
     .ac-item { padding:11px 14px;font-size:14px;font-weight:700;color:#2d3748;cursor:pointer;transition:background 0.12s;user-select:none; }

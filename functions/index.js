@@ -664,6 +664,33 @@ exports.migrateCommitteeRoles = functions.https.onCall(async (data, context) => 
   return { migrated, skipped, errors };
 });
 
+function classIdFor(school) {
+  if (!school?.city?.trim() || !school?.grade) return null;
+  const n = s => (s||'').trim().replace(/\s+/g,' ').replace(/\//g,'-').replace(/~/g,'');
+  return [n(school.city), n(school.name||''), school.grade, n(school.classNum||'')].join('~~');
+}
+function classMemberDocId(familyUid, kidName) {
+  return familyUid + '__' + kidName.replace(/[^a-z0-9א-תA-Z\u0590-\u05FF]/gi,'_');
+}
+async function registerKidInClass(pf, school, familyName, gender, dob) {
+  const classId = classIdFor(school);
+  if (!classId || !pf.familyUid) return;
+  await db.collection('schoolClasses').doc(classId).set(
+    { city: school.city, schoolName: school.name||'', grade: school.grade, classNum: school.classNum||'' },
+    { merge: true }
+  );
+  const memberDoc = {
+    kidName: pf.kidName,
+    familyUid: pf.familyUid,
+    familyName: familyName || '',
+    addedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (gender) memberDoc.gender = gender;
+  if (dob)    memberDoc.dob    = dob;
+  await db.collection('schoolClasses').doc(classId)
+    .collection('members').doc(classMemberDocId(pf.familyUid, pf.kidName)).set(memberDoc);
+}
+
 async function writeNotif(familyUid, type, message) {
   await db.collection('families').doc(familyUid)
     .collection('notifications').add({
@@ -695,9 +722,11 @@ exports.resolveSchoolPart = functions.https.onCall(async (data, context) => {
   const schoolStatus  = updated.schoolStatus || 'pending';
   const bothResolved  = cityStatus !== 'pending' && schoolStatus !== 'pending';
   const bothApproved  = cityStatus === 'approved' && schoolStatus === 'approved';
+  // City denied => whole request is denied immediately (school can't exist without a city)
   const anyDenied     = cityStatus === 'denied'   || schoolStatus === 'denied';
 
-  if (!bothResolved) return { ok: true, state: 'partial' };
+  // Still waiting: city approved but school not yet decided
+  if (!bothResolved && !anyDenied) return { ok: true, state: 'partial' };
 
   // Both parts decided — finalise
   if (bothApproved) {
@@ -712,10 +741,13 @@ exports.resolveSchoolPart = functions.https.onCall(async (data, context) => {
       try {
         const famSnap = await db.collection('families').doc(pf.familyUid).get();
         if (!famSnap.exists) continue;
-        const members = famSnap.data().members.map(m =>
+        const famData = famSnap.data();
+        const kidMember = (famData.members||[]).find(m => m.name === pf.kidName);
+        const members = famData.members.map(m =>
           m.name === pf.kidName ? (({ schoolPending, ...rest }) => rest)(m) : m
         );
         await db.collection('families').doc(pf.familyUid).update({ members });
+        await registerKidInClass(pf, pf.school || { city: req.city, name: req.schoolName, grade: kidMember?.school?.grade, classNum: kidMember?.school?.classNum }, famData.familyName, kidMember?.gender, kidMember?.dob);
         const msg = `בקשת הצטרפות של ${pf.kidName} לבית הספר ${req.schoolName} אושרה`;
         const tokens = await getTokens(pf.familyUid);
         await sendToTokens(tokens, '✅ בית הספר אושר', msg);
@@ -724,20 +756,35 @@ exports.resolveSchoolPart = functions.https.onCall(async (data, context) => {
     }
     await ref.update({ status: 'approved' });
   } else if (anyDenied) {
-    const deniedPart = cityStatus === 'denied' ? `העיר "${req.city}"` : `בית הספר "${req.schoolName}"`;
+    // Build a clear message about exactly what was approved/denied
+    let msg;
+    if (cityStatus === 'denied') {
+      msg = `בקשת העיר "${req.city}" עבור ${'{KID}'} נדחתה — יש לבחור עיר ובית ספר מחדש בניהול המשפחה`;
+    } else {
+      // city approved, school denied
+      msg = `העיר "${req.city}" אושרה, אך בית הספר "${req.schoolName}" עבור ${'{KID}'} נדחה — יש לבחור בית ספר אחר בניהול המשפחה`;
+    }
     for (const pf of (req.pendingFamilies || [])) {
       try {
         const famSnap = await db.collection('families').doc(pf.familyUid).get();
         if (!famSnap.exists) continue;
         const members = famSnap.data().members.map(m => {
           if (m.name !== pf.kidName) return m;
-          const u = { ...m }; delete u.school; delete u.schoolPending; return u;
+          const u = { ...m };
+          delete u.schoolPending;
+          // If city was approved, keep city on the member; only clear school name/pending
+          if (cityStatus === 'approved') {
+            u.school = { city: req.city, name: '', grade: m.school?.grade || '', classNum: m.school?.classNum || '' };
+          } else {
+            delete u.school;
+          }
+          return u;
         });
         await db.collection('families').doc(pf.familyUid).update({ members });
-        const msg = `${deniedPart} שהוגשה עבור ${pf.kidName} נדחתה — יש לעדכן את פרטי בית הספר בניהול המשפחה`;
+        const finalMsg = msg.replace('{KID}', pf.kidName);
         const tokens = await getTokens(pf.familyUid);
-        await sendToTokens(tokens, '❌ בקשת בית הספר נדחתה', msg);
-        await writeNotif(pf.familyUid, 'school_denied', msg);
+        await sendToTokens(tokens, '⚠️ עדכון בקשת בית הספר', finalMsg);
+        await writeNotif(pf.familyUid, 'school_denied', finalMsg);
       } catch(e) { console.error('resolveSchoolPart deny family:', e); }
     }
     await ref.update({ status: 'denied' });
@@ -759,11 +806,14 @@ exports.approveSchoolRequest = functions.https.onCall(async (data, context) => {
     try {
       const famSnap = await db.collection('families').doc(pf.familyUid).get();
       if (!famSnap.exists) continue;
-      const members = famSnap.data().members.map(m =>
+      const famData = famSnap.data();
+      const kidMember = (famData.members||[]).find(m => m.name === pf.kidName);
+      const members = famData.members.map(m =>
         m.name === pf.kidName ? (({ schoolPending, ...rest }) => rest)(m) : m
       );
       await db.collection('families').doc(pf.familyUid).update({ members });
-
+      const school = pf.school || { city: req.city, name: req.schoolName, grade: kidMember?.school?.grade, classNum: kidMember?.school?.classNum };
+      await registerKidInClass(pf, school, famData.familyName, kidMember?.gender, kidMember?.dob);
       const schoolLabel = req.schoolName || req.city || '';
       const msg = `בקשת הצטרפות של ${pf.kidName} לבית הספר ${schoolLabel} אושרה`;
       const tokens = await getTokens(pf.familyUid);
@@ -939,4 +989,121 @@ exports.nudgePending = functions.https.onCall(async (data, context) => {
   }
 
   return { sent };
+});
+
+// ── Admin-guarded callable functions ──────────────────────
+
+exports.approveEvent = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID) {
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  }
+  const { cid, pendingId } = data;
+  if (!cid || !pendingId) throw new functions.https.HttpsError('invalid-argument', 'Missing cid or pendingId');
+
+  const ref = db.collection('schoolClasses').doc(cid).collection('pendingEvents').doc(pendingId);
+  const doc = await ref.get();
+  if (!doc.exists) throw new functions.https.HttpsError('not-found', 'Pending event not found');
+
+  const evData = { ...doc.data() };
+  delete evData.status;
+  const approver = { familyUid: ADMIN_UID };
+  evData.approvedBy = approver;
+  evData.approvedAt = admin.firestore.FieldValue.serverTimestamp();
+
+  await db.collection('schoolClasses').doc(cid).collection('events').add(evData);
+  await db.collection('adminLog').add({
+    action: 'approved', classId: cid,
+    eventTitle: evData.title || '', eventDate: evData.date || '',
+    submittedBy: evData.postedBy || {},
+    actionBy: approver,
+    actionAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  await ref.delete();
+  return { ok: true };
+});
+
+exports.rejectEvent = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID) {
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  }
+  const { cid, pendingId } = data;
+  if (!cid || !pendingId) throw new functions.https.HttpsError('invalid-argument', 'Missing cid or pendingId');
+
+  const ref = db.collection('schoolClasses').doc(cid).collection('pendingEvents').doc(pendingId);
+  const doc = await ref.get();
+  const evData = doc.exists ? doc.data() : {};
+
+  await db.collection('adminLog').add({
+    action: 'rejected', classId: cid,
+    eventTitle: evData.title || '', eventDate: evData.date || '',
+    submittedBy: evData.postedBy || {},
+    actionBy: { familyUid: ADMIN_UID },
+    actionAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  await ref.delete();
+  return { ok: true };
+});
+
+exports.adminApproveApplication = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID) {
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  }
+  const { appId } = data;
+  if (!appId) throw new functions.https.HttpsError('invalid-argument', 'Missing appId');
+
+  await db.collection('committeeApplications').doc(appId).update({
+    status: 'approved',
+    decisionReason: 'admin',
+    decidedBy: ADMIN_UID,
+    decidedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
+});
+
+exports.adminDenyApplication = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID) {
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  }
+  const { appId } = data;
+  if (!appId) throw new functions.https.HttpsError('invalid-argument', 'Missing appId');
+
+  await db.collection('committeeApplications').doc(appId).update({
+    status: 'denied',
+    decisionReason: 'admin',
+    decidedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+  return { ok: true };
+});
+
+exports.getClassParents = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID) {
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  }
+  const { classId } = data;
+  if (!classId) throw new functions.https.HttpsError('invalid-argument', 'Missing classId');
+
+  const membersSnap = await db.collection('schoolClasses').doc(classId).collection('members').get();
+  const familyUids = [...new Set(membersSnap.docs.map(d => d.data().familyUid).filter(Boolean))];
+
+  const familyDocs = await Promise.all(
+    familyUids.map(uid => db.collection('families').doc(uid).get().catch(() => null))
+  );
+
+  const result = {};
+  familyDocs.forEach(d => {
+    if (!d?.exists) return;
+    const fd = d.data();
+    const legacyComm = fd.committeeClasses || (fd.role === 'committee' ? ['*'] : []);
+    result[d.id] = {
+      parents: (fd.members || [])
+        .filter(m => m.role !== 'kid')
+        .map(m => ({
+          name: m.name,
+          emoji: m.emoji || '👤',
+          committeeClasses: m.committeeClasses,  // undefined = no per-member data yet
+        })),
+      legacyComm,
+    };
+  });
+  return result;
 });

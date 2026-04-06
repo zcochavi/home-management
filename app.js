@@ -360,15 +360,26 @@ let _notifUnsubscribe   = null;
 const isParent    = () => getParents().includes(S.user);
 const isKid       = () => getKids().includes(S.user);
 const isAdmin     = () => !!ADMIN_UID && S.uid === ADMIN_UID;
-const isCommittee    = () => isAdmin() || (familyData?.committeeClasses||[]).length > 0 || familyData?.role === 'committee';
-const isCommitteeFor = (cid) => isAdmin() || (familyData?.committeeClasses||[]).includes(cid) || familyData?.role === 'committee';
 
-// Returns 'all' | 'some' | 'none' — how many of the family's kid-classes this family is committee for.
-// 'all' also covers legacy role:'committee' (treated as committee for everything).
+// Committee helpers — per-member (not per-family)
+const _myMember = () => getMembers().find(m => m.name === S.user);
+const _memberCommitteeClasses = (m) => {
+  // Per-member data takes precedence; fall back to family-level for legacy data
+  if (m?.committeeClasses !== undefined) return m.committeeClasses;
+  return familyData?.committeeClasses || [];
+};
+const isCommittee    = () => isAdmin() || _memberCommitteeClasses(_myMember()).length > 0 || familyData?.role === 'committee';
+const isCommitteeFor = (cid) => {
+  if (isAdmin() || familyData?.role === 'committee') return true;
+  const cls = _memberCommitteeClasses(_myMember());
+  return cls.includes(cid) || cls.includes('*');
+};
+
+// Returns 'all' | 'some' | 'none' — how many of the family's kid-classes this member is committee for.
 function parentCommitteeStatus() {
-  const commClasses = familyData?.committeeClasses || [];
-  const isLegacy    = familyData?.role === 'committee';
-  if (isLegacy || commClasses.includes('*')) return 'all';
+  if (familyData?.role === 'committee') return 'all';
+  const commClasses = _memberCommitteeClasses(_myMember());
+  if (commClasses.includes('*')) return 'all';
   if (!commClasses.length) return 'none';
 
   const kidClassIds = getKids()
@@ -685,8 +696,8 @@ let _sessionStartMs  = null;
 
 function _applyAdminUI() {
   const btn = el('pendingReqBtn');
-  if (btn) btn.style.display = isAdmin() ? '' : 'none';
-  if (isAdmin()) _fetchPendingBadge();
+  if (btn) btn.style.display = isCommittee() ? '' : 'none';
+  if (isCommittee()) _fetchPendingBadge();
 }
 
 // ── Toast (temporary on-screen info, no bell) ────────────────
@@ -759,11 +770,13 @@ function renderNotifBanners(undismissed) {
   // Add new ones
   undismissed.forEach(n => {
     if (existing.has('notifBanner_' + n.id)) return;
-    const isGood = n.type?.includes('approved');
-    const bg     = isGood ? '#f0fff4' : '#fff5f5';
-    const border = isGood ? '#9ae6b4' : '#feb2b2';
-    const color  = isGood ? '#276749' : '#c53030';
-    const icon   = isGood ? '✅' : '❌';
+    const isGood    = n.type?.includes('approved');
+    const isDenied  = n.type?.includes('denied') || n.type?.includes('rejected');
+    const isPending = !isGood && !isDenied;
+    const bg     = isGood ? '#f0fff4' : isDenied ? '#fff5f5' : '#ebf8ff';
+    const border = isGood ? '#9ae6b4' : isDenied ? '#feb2b2' : '#90cdf4';
+    const color  = isGood ? '#276749' : isDenied ? '#c53030' : '#2b6cb0';
+    const icon   = isGood ? '✅'      : isDenied ? '❌'      : '🔔';
     const div = document.createElement('div');
     div.className = 'notif-banner notif-banner-in';
     div.id = 'notifBanner_' + n.id;
@@ -810,19 +823,31 @@ function closePendingPanel() {
   setTimeout(() => { panel.classList.add('hidden'); panel.classList.remove('mc-open','mc-closing'); }, 280);
 }
 async function renderPendingPanel() {
+  const admin = isAdmin();
+  // Show/hide admin-only sections
+  const adminSec = el('ppAdminSections');
+  if (adminSec) adminSec.style.display = admin ? '' : 'none';
+
   const loading = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
   el('ppEventsList').innerHTML = loading;
-  el('ppAppsList').innerHTML   = loading;
-  el('ppSchoolsList').innerHTML = loading;
+  if (admin) {
+    el('ppAppsList').innerHTML    = loading;
+    el('ppSchoolsList').innerHTML = loading;
+  }
   try {
-    const [pendingSnap, appsSnap, schoolsSnap] = await Promise.all([
-      fbDb.collectionGroup('pendingEvents').get(),
-      fbDb.collection('committeeApplications').where('status','==','pending').get(),
-      fbDb.collection('pendingSchools').where('status','==','pending').get(),
-    ]);
+    const fetches = [fbDb.collectionGroup('pendingEvents').get()];
+    if (admin) {
+      fetches.push(
+        fbDb.collection('committeeApplications').where('status','==','pending').get(),
+        fbDb.collection('pendingSchools').where('status','==','pending').get(),
+      );
+    }
+    const [pendingSnap, appsSnap, schoolsSnap] = await Promise.all(fetches);
 
-    // Events
-    const pending = pendingSnap.docs.map(d => ({ id: d.id, classId: d.ref.parent.parent.id, ...d.data() }));
+    // Events — admin sees all, committee parent sees only their classes
+    const committeeClasses = familyData?.committeeClasses || [];
+    const allPending = pendingSnap.docs.map(d => ({ id: d.id, classId: d.ref.parent.parent.id, ...d.data() }));
+    const pending = admin ? allPending : allPending.filter(ev => isCommitteeFor(ev.classId));
     el('ppEventsList').innerHTML = pending.length
       ? pending.map(ev => `
           <div class="pending-event-row">
@@ -903,20 +928,28 @@ async function renderPendingPanel() {
       : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין בקשות ממתינות</div>';
 
     // Update badge
-    const total = pending.length + appsList.length + schoolsList.length;
+    const adminCount = admin ? ((appsSnap?.docs.length || 0) + (schoolsSnap?.docs.length || 0)) : 0;
+    const total = pending.length + adminCount;
     const badge = el('pendingReqBadge');
     if (badge) { badge.textContent = total || ''; badge.classList.toggle('hidden', !total); }
   } catch(e) { console.error('renderPendingPanel:', e); }
 }
 async function _fetchPendingBadge() {
-  if (!isAdmin() || !fbDb) return;
+  if (!isCommittee() || !fbDb) return;
   try {
-    const [ev, apps, schools] = await Promise.all([
-      fbDb.collectionGroup('pendingEvents').get(),
-      fbDb.collection('committeeApplications').where('status','==','pending').get(),
-      fbDb.collection('pendingSchools').where('status','==','pending').get(),
-    ]);
-    const total = ev.size + apps.size + schools.size;
+    const admin = isAdmin();
+    const fetches = [fbDb.collectionGroup('pendingEvents').get()];
+    if (admin) {
+      fetches.push(
+        fbDb.collection('committeeApplications').where('status','==','pending').get(),
+        fbDb.collection('pendingSchools').where('status','==','pending').get(),
+      );
+    }
+    const [evSnap, appsSnap, schoolsSnap] = await Promise.all(fetches);
+    const evCount = admin
+      ? evSnap.size
+      : evSnap.docs.filter(d => isCommitteeFor(d.ref.parent.parent.id)).length;
+    const total = evCount + (appsSnap?.size || 0) + (schoolsSnap?.size || 0);
     const badge = el('pendingReqBadge');
     if (badge) { badge.textContent = total || ''; badge.classList.toggle('hidden', !total); }
   } catch(e) {}
@@ -1963,10 +1996,8 @@ function setClassFieldsEnabled(idx, enabled) {
   const classNum = el('mgmtEditClassNum_' + idx);
   if (grade)    grade.disabled    = !enabled;
   if (classNum) classNum.disabled = !enabled;
-  if (!enabled) {
-    if (grade)    grade.value    = '';
-    if (classNum) classNum.value = '';
-  }
+  // Do NOT clear values when disabling — if the parent changes school name,
+  // the previously chosen grade/classNum should be preserved.
 }
 
 // ── School Community ─────────────────────
@@ -2017,22 +2048,29 @@ async function unregisterFromClass(kidName, school) {
 }
 
 async function syncKidClass(kidName, newSchool, oldSchool, newRole) {
+  // Check for new city/school FIRST — before classIdFor, which requires grade.
+  // A parent can change school name without grade being re-entered.
+  if (newRole === 'kid' && newSchool?.city) {
+    if (!_cachedCities) await loadCities();
+    await loadSchoolsFor(newSchool.city);
+
+    const cityNew   = isNewCity(newSchool.city);
+    const schoolNew = newSchool.name && !cityNew && isNewSchool(newSchool.city, newSchool.name);
+
+    if (cityNew || schoolNew) {
+      const oldId = classIdFor(oldSchool);
+      const newId = classIdFor(newSchool);
+      if (oldId && oldId !== newId) await unregisterFromClass(kidName, oldSchool);
+      await requestNewSchool(kidName, newSchool, cityNew ? 'city' : 'school');
+      return;
+    }
+  }
+
   const oldId = classIdFor(oldSchool);
   const newId = classIdFor(newSchool);
   if (oldId && oldId !== newId) await unregisterFromClass(kidName, oldSchool);
   if (newRole === 'kid' && newId) {
-    // Ensure city cache is loaded before checking
-    if (!_cachedCities) await loadCities();
-    if (newSchool?.city) await loadSchoolsFor(newSchool.city);
-
-    const cityNew   = newSchool.city   && isNewCity(newSchool.city);
-    const schoolNew = newSchool.name   && !cityNew && isNewSchool(newSchool.city, newSchool.name);
-
-    if (cityNew || schoolNew) {
-      await requestNewSchool(kidName, newSchool, cityNew ? 'city' : 'school');
-    } else {
-      await registerInClass(kidName, newSchool);
-    }
+    await registerInClass(kidName, newSchool);
   }
 }
 
@@ -2197,17 +2235,25 @@ async function loadCommunityData(kidsWithSchool) {
       ]);
       const classmates = membersSnap.docs.map(d=>d.data()).filter(m=>m.familyUid!==S.uid);
       // Fetch classmate roles (admin-only)
+      // classmateRoles: { [familyUid]: { parents: [{name, emoji, isCommittee}], legacyComm } }
       const classmateRoles = {};
       if (isAdmin() && classmates.length) {
-        const roleDocs = await Promise.all(
-          classmates.map(c => fbDb.collection('families').doc(c.familyUid).get().catch(()=>null))
-        );
-        roleDocs.forEach(d => {
-          if (d?.exists) {
-            const fd = d.data();
-            classmateRoles[d.id] = fd.committeeClasses || (fd.role === 'committee' ? ['*'] : []);
-          }
-        });
+        try {
+          const raw = await fbFunctions.httpsCallable('getClassParents')({ classId: cid });
+          Object.entries(raw.data || {}).forEach(([familyUid, info]) => {
+            const legacyComm = info.legacyComm || [];
+            classmateRoles[familyUid] = {
+              parents: (info.parents || []).map(m => {
+                const perMember = m.committeeClasses;
+                const isComm = perMember !== undefined
+                  ? (perMember.includes(cid) || perMember.includes('*'))
+                  : (legacyComm.includes(cid) || legacyComm.includes('*'));
+                return { name: m.name, emoji: m.emoji || '👤', isCommittee: isComm };
+              }),
+              legacyComm,
+            };
+          });
+        } catch(e) { console.warn('getClassParents failed:', e.message); }
       }
       // Seed cache with static data; live fields start empty — onSnapshot fills them
       _commCache[cid] = {
@@ -2401,13 +2447,34 @@ function renderCommCard(kid) {
       ? `<div style="font-size:12px;color:#e53e3e;padding:6px 0;font-weight:700">⚠ שגיאת Firestore: ${esc(cache.error)}<br><span style="opacity:0.6;font-weight:600">יש לעדכן את חוקי האבטחה ב-Firebase Console</span></div>`
       : cache.classmates.length
         ? cache.classmates.map(c => {
-            const commClasses = (cache.classmateRoles||{})[c.familyUid] || [];
-            const isComm = Array.isArray(commClasses) && (commClasses.includes(cid) || commClasses.includes('*'));
+            const familyInfo = (cache.classmateRoles||{})[c.familyUid] || { parents: [] };
+            const anyComm = familyInfo.parents.some(p => p.isCommittee)
+              || (familyInfo.legacyComm||[]).includes(cid);
+            let parentsHtml = '';
+            if (isAdmin()) {
+              if (familyInfo.parents.length) {
+                parentsHtml = `<div class="comm-mate-parents">${familyInfo.parents.map(p => `
+                    <span class="comm-mate-parent">
+                      <span>${esc(p.emoji)} ${esc(p.name)}</span>
+                      ${p.isCommittee ? `<span class="role-badge-committee" style="font-size:10px;padding:1px 6px">${t('roleCommittee')}</span>` : ''}
+                      <button class="role-toggle-btn" onclick="setCommitteeRole('${c.familyUid}','${esc(p.name)}',${!p.isCommittee},'${cid}')">${p.isCommittee ? t('revokeCommittee') : t('grantCommittee')}</button>
+                    </span>`).join('')}
+                  </div>`;
+              } else {
+                // Family doc unreadable or has no adult members — fall back to family-level toggle
+                const legacyIsComm = (familyInfo.legacyComm||[]).includes(cid);
+                parentsHtml = `<div class="comm-mate-parents" style="opacity:0.6;font-style:italic;font-size:11px">
+                    <button class="role-toggle-btn" onclick="setCommitteeRoleLegacy('${c.familyUid}',${!legacyIsComm},'${cid}')">${legacyIsComm ? t('revokeCommittee') : t('grantCommittee')}</button>
+                  </div>`;
+              }
+            }
             return `<div class="comm-mate" data-name="${esc((c.kidName+' '+(c.familyName||'')).toLowerCase())}">
-              <span style="font-size:18px">👨‍👩‍👧</span>
-              <span class="comm-mate-name">${esc(c.kidName)} ${esc(c.familyName||'')}</span>
-              ${isComm ? `<span class="role-badge-committee">${t('roleCommittee')}</span>` : ''}
-              ${isAdmin() ? `<button class="role-toggle-btn" onclick="setCommitteeRole('${c.familyUid}',${!isComm},'${cid}')">${isComm ? t('revokeCommittee') : t('grantCommittee')}</button>` : ''}
+              <div class="comm-mate-main">
+                <span style="font-size:18px">👨‍👩‍👧</span>
+                <span class="comm-mate-name">${esc(c.kidName)} ${esc(c.familyName||'')}</span>
+                ${!isAdmin() && anyComm ? `<span class="role-badge-committee">${t('roleCommittee')}</span>` : ''}
+              </div>
+              ${isAdmin() ? parentsHtml : ''}
             </div>`;
           }).join('')
         : `<div style="font-size:12px;color:#a0aec0;padding:4px 0;font-weight:600">אין עדיין ילדים מהכיתה ב-FamilyHub</div>`}
@@ -2527,23 +2594,7 @@ async function deleteClassEvent(scope, scopeId, eventId) {
 
 async function approveEvent(cid, pendingId) {
   try {
-    const ref = fbDb.collection('schoolClasses').doc(cid).collection('pendingEvents').doc(pendingId);
-    const doc = await ref.get();
-    if (!doc.exists) return;
-    const data = { ...doc.data() };
-    delete data.status;
-    const approver = { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName || '' };
-    data.approvedBy = approver;
-    data.approvedAt = firebase.firestore.FieldValue.serverTimestamp();
-    await fbDb.collection('schoolClasses').doc(cid).collection('events').add(data);
-    await fbDb.collection('adminLog').add({
-      action: 'approved', classId: cid,
-      eventTitle: data.title, eventDate: data.date || '',
-      submittedBy: data.postedBy || {},
-      actionBy: approver,
-      actionAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
-    await ref.delete();
+    await fbFunctions.httpsCallable('approveEvent')({ cid, pendingId });
     await renderPendingPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('approveEvent:', e); }
@@ -2552,17 +2603,7 @@ async function approveEvent(cid, pendingId) {
 async function rejectEvent(cid, pendingId) {
   if (!confirm('לדחות את הבקשה?')) return;
   try {
-    const ref = fbDb.collection('schoolClasses').doc(cid).collection('pendingEvents').doc(pendingId);
-    const doc = await ref.get();
-    const evData = doc.exists ? doc.data() : {};
-    await fbDb.collection('adminLog').add({
-      action: 'rejected', classId: cid,
-      eventTitle: evData.title || '', eventDate: evData.date || '',
-      submittedBy: evData.postedBy || {},
-      actionBy: { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName || '' },
-      actionAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
-    await ref.delete();
+    await fbFunctions.httpsCallable('rejectEvent')({ cid, pendingId });
     await renderPendingPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('rejectEvent:', e); }
@@ -2754,16 +2795,47 @@ async function renderAdminPanel() {
   }
 }
 
-async function setCommitteeRole(targetUid, grant, cid) {
+async function setCommitteeRole(familyUid, memberName, grant, cid) {
   try {
-    const update = grant
-      ? { committeeClasses: firebase.firestore.FieldValue.arrayUnion(cid) }
-      : { committeeClasses: firebase.firestore.FieldValue.arrayRemove(cid) };
-    await fbDb.collection('families').doc(targetUid).update(update);
+    const famDoc = await fbDb.collection('families').doc(familyUid).get();
+    if (!famDoc.exists) return;
+    const fd = famDoc.data();
+    // Update per-member committeeClasses
+    const updatedMembers = (fd.members||[]).map(m => {
+      if (m.name !== memberName || m.role !== 'parent') return m;
+      // Seed from legacy family-level if member has no per-member data yet
+      const current = m.committeeClasses ?? (
+        (fd.committeeClasses||[]).includes(cid) || fd.role === 'committee' ? [cid] : []
+      );
+      const newClasses = grant
+        ? [...new Set([...current, cid])]
+        : current.filter(c => c !== cid);
+      return { ...m, committeeClasses: newClasses };
+    });
+    // Rebuild family-level union so Cloud Functions still work
+    const familyCommitteeClasses = [...new Set(
+      updatedMembers.flatMap(m => m.committeeClasses || [])
+    )];
+    await fbDb.collection('families').doc(familyUid).update({
+      members: updatedMembers,
+      committeeClasses: familyCommitteeClasses,
+    });
     // classmateRoles are static-fetched; force full reload so badges update
     unsubscribeAllComm(); _commCache = {};
     await renderCommunity();
   } catch(e) { console.error('setCommitteeRole:', e); }
+}
+
+// Fallback for families whose member list couldn't be read — sets committee at family level
+async function setCommitteeRoleLegacy(familyUid, grant, cid) {
+  try {
+    const update = grant
+      ? { committeeClasses: firebase.firestore.FieldValue.arrayUnion(cid) }
+      : { committeeClasses: firebase.firestore.FieldValue.arrayRemove(cid) };
+    await fbDb.collection('families').doc(familyUid).update(update);
+    unsubscribeAllComm(); _commCache = {};
+    await renderCommunity();
+  } catch(e) { console.error('setCommitteeRoleLegacy:', e); }
 }
 
 async function applyForCommittee(cid) {
@@ -2806,12 +2878,7 @@ async function voteForApplication(appId, cid) {
 
 async function adminApproveApplication(appId, cid) {
   try {
-    await fbDb.collection('committeeApplications').doc(appId).update({
-      status: 'approved',
-      decisionReason: 'admin',
-      decidedBy: S.uid,
-      decidedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
+    await fbFunctions.httpsCallable('adminApproveApplication')({ appId });
     await renderPendingPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('adminApproveApplication:', e); }
@@ -2820,11 +2887,7 @@ async function adminApproveApplication(appId, cid) {
 async function adminDenyApplication(appId, cid) {
   if (!confirm('לדחות מועמדות זו?')) return;
   try {
-    await fbDb.collection('committeeApplications').doc(appId).update({
-      status: 'denied',
-      decisionReason: 'admin',
-      decidedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    });
+    await fbFunctions.httpsCallable('adminDenyApplication')({ appId });
     await renderPendingPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('adminDenyApplication:', e); }
@@ -3117,7 +3180,7 @@ function openMenu(btn) {
     <div class="menu-sep"></div>
     <div class="menu-item" onclick="closeMenu();openAdminPanel()">
       <span class="menu-item-icon">🔧</span>
-      <span>${isHe ? 'ניהול מערכת' : 'Admin panel'}</span>
+      <span>${isHe ? 'הגדרות מערכת' : 'System settings'}</span>
     </div>` : '';
   el('menuDropdown').innerHTML = parentItems + gcalItem + `
     <div class="menu-item" onclick="closeMenu();openPhotoModal()">
@@ -4020,7 +4083,7 @@ function _renderPresenceGroups() {
     return `
       <div class="presence-group">
         <div class="presence-group-header" onclick="togglePresenceGroup('${role}')">
-          <span class="presence-group-chevron">${expanded ? '▾' : '▸'}</span>
+          <span class="presence-group-chevron">${expanded ? '▾' : '◂'}</span>
           <span class="presence-group-label">${label}</span>
           <span class="presence-group-count">
             <span style="color:${onlineCount > 0 ? '#48bb78' : '#a0aec0'};font-weight:800">${onlineCount}</span>
