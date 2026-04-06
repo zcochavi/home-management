@@ -1305,7 +1305,6 @@ function subscribeToFamily(uid) {
       return;
     }
     const d = snap.data();
-    console.log('[tabs:dbg] snapshot fired, tabPrefs:', JSON.stringify(d.tabPrefs), 'S.user:', S.user);
     familyData = d;
     S.chores   = d.chores   || [];
     S.grocery  = d.grocery  || [];
@@ -4068,7 +4067,6 @@ function getActiveTabs() {
   if (!S.uid || !S.user) return visible.map(t => t.id);
   // Prefer Firestore-synced prefs (available after familyData loads)
   const firestorePrefs = familyData?.tabPrefs?.[S.user];
-  console.log('[tabs:dbg] getActiveTabs user=' + S.user + ' firestorePrefs=' + JSON.stringify(firestorePrefs));
   const raw = firestorePrefs
     || (() => { try { return JSON.parse(localStorage.getItem('familyhub_tabs_' + S.uid + '_' + S.user)); } catch(e) { return null; } })();
   if (raw) {
@@ -4088,7 +4086,6 @@ function saveActiveTabs(ids) {
   // Persist to Firestore so other devices pick it up
   fbDb.collection('families').doc(S.uid)
     .update(new firebase.firestore.FieldPath('tabPrefs', S.user), ids)
-    .then(() => console.log('[tabs:dbg] Firestore write OK, tabPrefs.' + S.user, ids))
     .catch(e => console.error('[tabs] Firestore write failed — tabs will not sync to other devices:', e.message, e.code));
 }
 
