@@ -5189,9 +5189,9 @@ function _renderPresenceGroups() {
     return `<div class="presence-card${justOnline ? ' just-online' : ''}${clickable ? ' presence-card-clickable' : ''}"
       ${clickable ? `onclick="openFamilyDetails('${m.familyUid}','${esc(m.memberName)}')"` : ''}>
       <div class="presence-dot ${m.online ? 'online' : 'offline'}"></div>
-      <div class="presence-name">${esc(m.memberName)}<br><span style="font-weight:700;color:#718096">${esc(m.familyName)}</span></div>
-      <span class="role-badge ${badgeClass}" style="font-size:9px;padding:1px 6px">${badgeLabel}</span>
-      <div class="presence-time ${m.online ? 'online' : ''}">${timeLabel}</div>
+      <div class="presence-name">${esc(m.memberName)}<span>${esc(m.familyName)}</span></div>
+      <span class="role-badge ${badgeClass}" style="font-size:9px;padding:1px 6px;flex-shrink:0">${badgeLabel}</span>
+      <div class="presence-time ${m.online ? 'online' : ''}" style="font-size:11px;flex-shrink:0">${timeLabel}</div>
     </div>`;
   }
 
@@ -5222,7 +5222,7 @@ function _renderPresenceGroups() {
   const onlineExp = _presenceExpanded.online;
   const onlineBody = onlineExp
     ? (_presenceOnline.length === 0
-        ? `<div style="color:#a0aec0;font-size:12px;padding:6px 10px 10px">אין משתמשים מחוברים כרגע</div>`
+        ? `<div style="color:#a0aec0;font-size:12px;padding:10px 14px">אין משתמשים מחוברים כרגע</div>`
         : `<div class="presence-cards-grid">${_presenceOnline.map(memberCard).join('')}</div>`)
     : '';
 
