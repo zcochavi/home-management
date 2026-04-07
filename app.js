@@ -3291,17 +3291,13 @@ function renderMgmtSubjects() {
     <div>
       <div class="mgmt-item-row">
         <span class="badge" style="${subjectBadgeStyle(s.name)};flex-shrink:0">${esc(s.nameHe || s.name)}</span>
-        ${s.nameHe ? `<span style="font-size:12px;color:#a0aec0;font-weight:600;direction:ltr">${esc(s.name)}</span>` : ''}
         <div class="mgmt-item-label"></div>
         <button class="mgmt-icon-btn purple" onclick="toggleMgmtSubjectEdit(${i})" title="ערוך">✏️</button>
         <button class="mgmt-icon-btn red" onclick="mgmtRemoveSubject('${esc(s.name)}')">🗑</button>
       </div>
       <div class="mgmt-edit-panel" id="mgmtSubjectPanel_${i}">
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-          <input class="mgmt-input" id="mgmtSubjectNameHe_${i}" value="${esc(s.nameHe || '')}" placeholder="שם בעברית"
-            onkeydown="if(event.key==='Enter')saveMgmtSubjectEdit(${i},'${esc(s.name)}')">
-          <input class="mgmt-input" id="mgmtSubjectName_${i}" value="${esc(s.name)}" placeholder="English name"
-            style="direction:ltr"
+          <input class="mgmt-input" id="mgmtSubjectNameHe_${i}" value="${esc(s.nameHe || s.name)}" placeholder="שם הנושא"
             onkeydown="if(event.key==='Enter')saveMgmtSubjectEdit(${i},'${esc(s.name)}')">
         </div>
         <div style="display:flex;gap:8px;align-items:center">
@@ -3321,34 +3317,26 @@ function toggleMgmtSubjectEdit(i) {
 }
 
 async function saveMgmtSubjectEdit(i, originalName) {
-  const newName   = el(`mgmtSubjectName_${i}`).value.trim();
   const newNameHe = el(`mgmtSubjectNameHe_${i}`).value.trim();
-  if (!newName) return;
-  const subs = getSubjects().map((s, si) => si === i ? { ...s, name: newName, nameHe: newNameHe || undefined } : s);
+  if (!newNameHe) return;
+  // Keep internal name key unchanged; only update the display label
+  const subs = getSubjects().map((s, si) => si === i ? { ...s, nameHe: newNameHe } : s);
   if (familyData) familyData.subjects = subs;
-  if (newName !== originalName) {
-    S.homework = S.homework.map(h => h.subject === originalName ? { ...h, subject: newName } : h);
-    await fbDb.collection('families').doc(S.uid).update({ subjects: subs, homework: S.homework });
-  } else {
-    await fbDb.collection('families').doc(S.uid).update({ subjects: subs });
-  }
+  await fbDb.collection('families').doc(S.uid).update({ subjects: subs });
   el(`mgmtSubjectPanel_${i}`).classList.remove('open');
   renderMgmtSubjects(); renderStatic(); renderHomework();
 }
 
 async function mgmtAddSubject() {
-  const name   = el('mgmtNewSubjectName').value.trim();
   const nameHe = el('mgmtNewSubjectNameHe').value.trim();
-  if (!name && !nameHe) { el('mgmtNewSubjectNameHe').focus(); return; }
-  const effectiveName = name || nameHe;
+  if (!nameHe) { el('mgmtNewSubjectNameHe').focus(); return; }
   const subs = getSubjects();
   const { bg, color } = SUBJECT_COLOR_POOL[subs.length % SUBJECT_COLOR_POOL.length];
-  const entry = { name: effectiveName, bg, color };
-  if (nameHe) entry.nameHe = nameHe;
+  // Use Hebrew name as the internal key too (guaranteed unique by UI)
+  const entry = { name: nameHe, nameHe, bg, color };
   const updated = [...subs, entry];
   if (familyData) familyData.subjects = updated;
   await fbDb.collection('families').doc(S.uid).update({ subjects: updated });
-  el('mgmtNewSubjectName').value = '';
   el('mgmtNewSubjectNameHe').value = '';
   renderMgmtSubjects(); renderStatic();
 }
