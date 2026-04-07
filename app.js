@@ -389,7 +389,7 @@ let _notifUnsubscribe   = null;
 
 const isParent    = () => getParents().includes(S.user);
 const isKid       = () => getKids().includes(S.user);
-const isAdmin     = () => !!ADMIN_UID && S.uid === ADMIN_UID;
+const isAdmin     = () => !!ADMIN_UID && S.uid === ADMIN_UID && _isOwner();
 
 // Committee helpers — per-member (not per-family)
 const _myMember = () => getMembers().find(m => m.name === S.user);
