@@ -5485,18 +5485,21 @@ function _renderAnalyticsUI(container, d) {
       <div class="analytics-section-title">🏆 לוח מובילים <span style="font-size:10px;color:#a0aec0;font-weight:700;margin-right:auto">${d.leaderboardDays} ימים אחרונים</span></div>
       <div class="leaderboard-cards">
         <div class="leaderboard-card">
+          <div class="lb-info">i<span class="lb-tooltip">העיר עם הכי הרבה ילדים רשומים באפליקציה</span></div>
           <div class="leaderboard-icon">🏙️</div>
           <div class="leaderboard-title">עיר מובילה</div>
           <div class="leaderboard-value">${d.topCity ? esc(d.topCity[0]) : '—'}</div>
           <div class="leaderboard-sub">${d.topCity ? d.topCity[1] + ' ילדים' : ''}</div>
         </div>
         <div class="leaderboard-card">
+          <div class="lb-info">i<span class="lb-tooltip">בית הספר עם הכי הרבה ילדים רשומים באפליקציה</span></div>
           <div class="leaderboard-icon">🏫</div>
           <div class="leaderboard-title">בית ספר מוביל</div>
           <div class="leaderboard-value">${d.topSchool ? esc(d.topSchool[0]) : '—'}</div>
           <div class="leaderboard-sub">${d.topSchool ? d.topSchool[1] + ' ילדים' : ''}</div>
         </div>
         <div class="leaderboard-card">
+          <div class="lb-info">i<span class="lb-tooltip">המשתמש שבילה הכי הרבה זמן באפליקציה ב-${d.leaderboardDays} הימים האחרונים</span></div>
           <div class="leaderboard-icon">⭐</div>
           <div class="leaderboard-title">משתמש פעיל ביותר</div>
           <div class="leaderboard-value">${d.topUser ? esc(d.topUser.memberName) : '—'}</div>
