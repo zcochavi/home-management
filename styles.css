@@ -540,7 +540,9 @@
     .analytics-section-title { font-size:12px;font-weight:900;color:#4a5568;margin-bottom:10px;display:flex;align-items:center;gap:6px; }
     .analytics-charts-row { display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:12px; }
     @media(min-width:560px){ .analytics-charts-row { grid-template-columns:1fr 1fr; } }
-    .chart-wrap { position:relative;height:150px; }
+    .analytics-charts-row > * { min-width:0; overflow:hidden; }
+    .chart-wrap { position:relative;height:150px;width:100%; }
+    body { overflow-x:hidden; }
     .analytics-log-row { display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid #f0f4ff;font-size:12px; }
     /* Presence */
     .leaderboard-cards { display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:2px; }
