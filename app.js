@@ -487,18 +487,23 @@ function generateFamilyCode() {
   return code;
 }
 
-async function createKidCode(ownerUid, kidName) {
+async function createMemberCode(ownerUid, memberName) {
   const code = generateFamilyCode();
   const inviteEmail = code + '@' + JOIN_DOMAIN;
-  const app2 = firebase.initializeApp(FIREBASE_CONFIG, 'kid_' + Date.now());
+  const app2 = firebase.initializeApp(FIREBASE_CONFIG, 'inv_' + Date.now());
   try {
-    await app2.auth().createUserWithEmailAndPassword(inviteEmail, code);
+    const uc = await app2.auth().createUserWithEmailAndPassword(inviteEmail, code);
+    // Store ownerUid|memberName in displayName so doJoin() can read it without Firestore rules
+    await uc.user.updateProfile({ displayName: ownerUid + '|' + (memberName || '') });
   } finally {
     await app2.delete();
   }
-  await fbDb.collection('joinCodes').doc(code).set({ ownerUid, memberName: kidName });
+  // Also write to Firestore as a fallback / audit trail
+  await fbDb.collection('joinCodes').doc(code).set({ ownerUid, memberName: memberName || null });
   return code;
 }
+// Keep old name as alias for existing callers
+const createKidCode = (ownerUid, kidName) => createMemberCode(ownerUid, kidName);
 
 function initEmojiRow() {
   el('emojiRow').innerHTML = EMOJI_OPTIONS.map(e =>
@@ -673,19 +678,31 @@ async function doJoin() {
     el('joinError').textContent = '⏳ שלב 1/3: מתחבר...';
     const inviteEmail = code + '@' + JOIN_DOMAIN;
     const cred = await fbAuth.signInWithEmailAndPassword(inviteEmail, code);
-    // Now authenticated — look up ownerUid
+    // Now authenticated — look up ownerUid + memberName
+    // Primary: read from Firebase Auth displayName (set at code creation, no Firestore rules needed)
+    // Fallback: read from Firestore joinCodes collection
     el('joinError').textContent = '⏳ שלב 2/3: בודק קוד...';
-    const snap = await fbDb.collection('joinCodes').doc(code).get();
-    if (!snap.exists) {
-      _joining = false;
-      setAuthLoading(false);
-      el('joinError').textContent = 'קוד לא נמצא. בדוק שהעתקת נכון.';
-      return;
+    let ownerUid = null, memberName = null;
+    const profile = cred.user.displayName || '';
+    if (profile.includes('|')) {
+      const pipeIdx = profile.indexOf('|');
+      ownerUid   = profile.slice(0, pipeIdx) || null;
+      memberName = profile.slice(pipeIdx + 1) || null;
     }
-    const ownerUid = snap.data().ownerUid;
+    if (!ownerUid) {
+      // Fallback for codes created before this fix
+      const snap = await fbDb.collection('joinCodes').doc(code).get();
+      if (!snap.exists) {
+        _joining = false;
+        setAuthLoading(false);
+        el('joinError').textContent = 'קוד לא נמצא. בדוק שהעתקת נכון.';
+        return;
+      }
+      ownerUid   = snap.data().ownerUid;
+      memberName = snap.data().memberName || null;
+    }
     // Store mapping before subscribing
     localStorage.setItem('familyhub_family_uid_' + cred.user.uid, ownerUid);
-    const memberName = snap.data().memberName;
     if (memberName) {
       localStorage.setItem('familyhub_locked_member_' + cred.user.uid, memberName);
     }
@@ -1253,15 +1270,7 @@ async function generateSpouseCode(memberName) {
   const btn = document.querySelector(`[data-spouse-gen="${CSS.escape(memberName)}"]`);
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   try {
-    const code = generateFamilyCode();
-    const inviteEmail = code + '@' + JOIN_DOMAIN;
-    const app2 = firebase.initializeApp(FIREBASE_CONFIG, 'spouse_' + Date.now());
-    try {
-      await app2.auth().createUserWithEmailAndPassword(inviteEmail, code);
-    } finally {
-      await app2.delete();
-    }
-    await fbDb.collection('joinCodes').doc(code).set({ ownerUid: S.uid, memberName });
+    const code = await createMemberCode(S.uid, memberName);
     const members = getMembers().map(m => m.name === memberName ? { ...m, joinCode: code } : m);
     if (familyData) familyData.members = members;
     await fbDb.collection('families').doc(S.uid).update({ members });
