@@ -3730,7 +3730,8 @@ function renderHomeUpcoming() {
 // ════════════════════════════════════════
 //  WEATHER WIDGET
 // ════════════════════════════════════════
-let _weatherCache = null; // { ts, temp, code, isDay, city }
+let _weatherCache = null;   // { ts, temp, code, isDay, city }
+let _weatherLoading = false;
 
 function _wxInfo(code, isDay) {
   if (code === 0)                                   return isDay ? {type:'sunny',  desc:'שמש מלאה'}   : {type:'night',  desc:'לילה בהיר'};
@@ -3790,11 +3791,15 @@ function _wxSceneHTML(type) {
 }
 
 async function _getWeatherCoords() {
-  try {
-    const pos = await new Promise((res, rej) =>
-      navigator.geolocation.getCurrentPosition(res, rej, {timeout:6000}));
-    return {lat: pos.coords.latitude, lon: pos.coords.longitude, city: null};
-  } catch(_) {}
+  // 1. Browser geolocation
+  if (navigator.geolocation) {
+    try {
+      const pos = await new Promise((res, rej) =>
+        navigator.geolocation.getCurrentPosition(res, rej, {timeout:5000}));
+      return {lat: pos.coords.latitude, lon: pos.coords.longitude, city: null};
+    } catch(_) {}
+  }
+  // 2. Kid's school city → geocode
   const kid = getMembers().find(m => m.role==='kid' && m.school?.city);
   if (kid) {
     try {
@@ -3803,19 +3808,39 @@ async function _getWeatherCoords() {
       if (j.results?.[0]) return {lat: j.results[0].latitude, lon: j.results[0].longitude, city: kid.school.city};
     } catch(_) {}
   }
+  // 3. IP-based fallback (no key required)
+  try {
+    const r = await fetch('https://ipapi.co/json/');
+    const j = await r.json();
+    if (j.latitude && j.longitude) return {lat: j.latitude, lon: j.longitude, city: j.city || null};
+  } catch(_) {}
   return null;
 }
 
 async function loadWeather() {
+  if (_weatherLoading) return;
   if (_weatherCache && Date.now() - _weatherCache.ts < 30*60*1000) { renderWeatherWidget(); return; }
+  _weatherLoading = true;
+  _showWeatherLoading();
   try {
     const coords = await _getWeatherCoords();
-    if (!coords) { el('weatherWidget') && (el('weatherWidget').innerHTML = ''); return; }
+    if (!coords) { _weatherLoading = false; const wx = el('weatherWidget'); if (wx) wx.innerHTML = ''; return; }
     const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&current=temperature_2m,weathercode,is_day&timezone=auto`);
     const j = await r.json();
     _weatherCache = {ts:Date.now(), temp:Math.round(j.current.temperature_2m), code:j.current.weathercode, isDay:j.current.is_day===1, city:coords.city||null};
   } catch(e) { console.warn('[weather]', e); }
+  _weatherLoading = false;
   renderWeatherWidget();
+}
+
+function _showWeatherLoading() {
+  const wx = el('weatherWidget');
+  if (!wx) return;
+  const allHidden = HOME_SECTIONS.every(s => getHomePrefs().hidden.includes(s.id));
+  wx.innerHTML = `<div class="wx-card wx-partly${allHidden?' hero':''}">
+    <div class="wx-scene"><div style="font-size:36px;animation:wx-spin 2s linear infinite;display:inline-block;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)">🌀</div></div>
+    <div class="wx-info"><div class="wx-desc" style="opacity:0.8">טוען מזג אוויר...</div></div>
+  </div>`;
 }
 
 function renderWeatherWidget() {
