@@ -3760,6 +3760,11 @@ let _choreHistOpen   = false;
 let _choreHistSearch = '';
 
 function renderChores() {
+  // Show assignee dropdown only when no specific member is focused
+  if (isParent()) {
+    const assigneeEl = el('newChoreAssignee');
+    if (assigneeEl) assigneeEl.style.display = S.filter === 'All' ? '' : 'none';
+  }
   let items = S.filter==='All' ? S.chores : S.chores.filter(c=>c.assignee===S.filter);
   const active = items.filter(c=>!c.done);
   const showAssignee = S.filter==='All';
@@ -3881,7 +3886,9 @@ function deleteChore(id){
 }
 function addChore(){
   const text=el('newChoreText').value.trim();if(!text)return;
-  const assignee=isParent()?el('newChoreAssignee').value:S.user;
+  const assignee=isParent()
+    ?(S.filter!=='All'?S.filter:el('newChoreAssignee').value)
+    :S.user;
   S.chores.push({id:Date.now(),text,assignee,priority:el('newChorePriority').value,done:false});
   el('newChoreText').value='';save();renderHome();renderChores();
 }
