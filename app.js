@@ -1522,7 +1522,7 @@ function afterLoad() {
     // Locked device: auto-login as locked member, no choice
     login(S.lockedMember);
   } else if (S.user && getAllMemberNames().includes(S.user)) {
-    renderAll(); tryAutoConnectGCal(); initPresence(); initNotifBanners(); _applyAdminUI(); _initHeaderCollapse();
+    renderAll(); tryAutoConnectGCal(); initPresence(); initNotifBanners(); _applyAdminUI(); _initHeaderCollapse(); loadWeather();
   } else {
     const saved = localStorage.getItem('familyhub_member_' + S.uid);
     if (saved && getAllMemberNames().includes(saved)) {
@@ -1701,6 +1701,7 @@ function login(name) {
   el('app').classList.add('visible');
   loadSyncedClassEvents();
   applyDir(); renderAll(); tryAutoConnectGCal();
+  loadWeather(); setInterval(loadWeather, 30*60*1000);
   initFCM();
   refreshHomeUpcoming();
   initPresence();
@@ -3726,6 +3727,115 @@ function renderHomeUpcoming() {
   }).join('');
 }
 
+// ════════════════════════════════════════
+//  WEATHER WIDGET
+// ════════════════════════════════════════
+let _weatherCache = null; // { ts, temp, code, isDay, city }
+
+function _wxInfo(code, isDay) {
+  if (code === 0)                                   return isDay ? {type:'sunny',  desc:'שמש מלאה'}   : {type:'night',  desc:'לילה בהיר'};
+  if (code <= 3)                                    return isDay ? {type:'partly', desc:'מעונן חלקית'} : {type:'cloudy', desc:'מעונן'};
+  if (code <= 48)                                   return {type:'foggy',   desc:'ערפל'};
+  if (code <= 55)                                   return {type:'drizzle', desc:'טפטוף קל'};
+  if (code <= 67 || (code >= 80 && code <= 82))     return {type:'rainy',   desc:'גשם'};
+  if (code <= 77)                                   return {type:'snowy',   desc:'שלג'};
+  if (code >= 95)                                   return {type:'stormy',  desc:'סופה ורעמים'};
+  return {type:'cloudy', desc:'מעונן'};
+}
+
+function _wxSceneHTML(type) {
+  if (type === 'sunny') {
+    const rays = [0,45,90,135,180,225,270,315].map(deg =>
+      `<div class="wx-ray" style="transform-origin:50% 36px;transform:rotate(${deg}deg) translateY(-30px)"></div>`
+    ).join('');
+    return `<div class="wx-rays-wrap">${rays}</div><div class="wx-sun-circle"></div>`;
+  }
+  if (type === 'night') {
+    const stars = [{w:4,t:8,l:12,d:'0s'},{w:3,t:18,l:60,d:'0.6s'},{w:5,t:5,l:45,d:'1.1s'},{w:3,t:30,l:28,d:'0.3s'}]
+      .map(({w,t,l,d}) => `<div class="wx-star-dot" style="width:${w}px;height:${w}px;top:${t}px;left:${l}px;animation-delay:${d}"></div>`).join('');
+    return `${stars}<div class="wx-moon"></div>`;
+  }
+  if (type === 'partly') {
+    return `<div class="wx-sun-circle" style="width:32px;height:32px;top:10px;left:8px;transform:none;position:absolute"></div>
+            <div class="wx-cloud" style="width:50px;height:19px;top:34px;left:14px;animation:wx-drift 3s ease-in-out infinite"></div>`;
+  }
+  if (type === 'cloudy') {
+    return `<div class="wx-cloud" style="width:44px;height:17px;top:12px;left:6px;opacity:0.7;animation:wx-drift 4s ease-in-out infinite"></div>
+            <div class="wx-cloud" style="width:52px;height:20px;top:32px;left:16px;animation:wx-drift2 3.2s ease-in-out infinite"></div>
+            <div class="wx-cloud" style="width:36px;height:15px;top:50px;left:4px;opacity:0.55;animation:wx-drift 5s ease-in-out infinite"></div>`;
+  }
+  if (type === 'drizzle' || type === 'rainy') {
+    const h = type === 'rainy' ? 16 : 10;
+    const durs = [0.75, 0.9, 0.7, 0.85, 0.8];
+    const drops = [{l:14,d:'0s'},{l:26,d:'0.25s'},{l:40,d:'0.5s'},{l:54,d:'0.15s'},{l:66,d:'0.4s'}]
+      .map(({l,d},i) => `<div class="wx-drop" style="left:${l}px;top:36px;height:${h}px;animation-duration:${durs[i]}s;animation-delay:${d}"></div>`).join('');
+    return `<div class="wx-cloud" style="width:52px;height:19px;top:8px;left:10px;animation:wx-drift 3.5s ease-in-out infinite"></div>${drops}`;
+  }
+  if (type === 'snowy') {
+    const sizes = [5,6,4,6,4,5], durs = [1.5,1.8,1.4,1.7,1.6,1.9];
+    const flakes = [{l:12,d:'0s'},{l:28,d:'0.4s'},{l:42,d:'0.9s'},{l:56,d:'0.2s'},{l:68,d:'0.65s'},{l:20,d:'1.1s'}]
+      .map(({l,d},i) => `<div class="wx-flake" style="width:${sizes[i]}px;height:${sizes[i]}px;left:${l}px;top:24px;animation-duration:${durs[i]}s;animation-delay:${d}"></div>`).join('');
+    return `<div class="wx-cloud" style="width:52px;height:19px;top:6px;left:10px;animation:wx-drift 4s ease-in-out infinite"></div>${flakes}`;
+  }
+  if (type === 'stormy') {
+    const drops = [{l:10,d:'0s'},{l:24,d:'0.3s'},{l:38,d:'0.6s'},{l:52,d:'0.15s'},{l:64,d:'0.45s'}]
+      .map(({l,d}) => `<div class="wx-drop" style="left:${l}px;top:36px;height:14px;background:rgba(150,180,255,0.7);animation-duration:0.65s;animation-delay:${d}"></div>`).join('');
+    return `<div class="wx-cloud" style="width:54px;height:21px;top:6px;left:8px;background:#888;animation:wx-drift2 4s ease-in-out infinite"></div>${drops}<div class="wx-lightning">⚡</div>`;
+  }
+  if (type === 'foggy') {
+    return [{w:'76%',l:'6%',t:20,d:'0s'},{w:'58%',l:'18%',t:38,d:'0.8s'},{w:'70%',l:'8%',t:54,d:'0.4s'}]
+      .map(({w,l,t,d}) => `<div class="wx-fog-bar" style="width:${w};left:${l};top:${t}px;animation-delay:${d}"></div>`).join('');
+  }
+  return `<div class="wx-cloud" style="width:52px;height:19px;top:30px;left:10px"></div>`;
+}
+
+async function _getWeatherCoords() {
+  try {
+    const pos = await new Promise((res, rej) =>
+      navigator.geolocation.getCurrentPosition(res, rej, {timeout:6000}));
+    return {lat: pos.coords.latitude, lon: pos.coords.longitude, city: null};
+  } catch(_) {}
+  const kid = getMembers().find(m => m.role==='kid' && m.school?.city);
+  if (kid) {
+    try {
+      const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(kid.school.city)}&count=1`);
+      const j = await r.json();
+      if (j.results?.[0]) return {lat: j.results[0].latitude, lon: j.results[0].longitude, city: kid.school.city};
+    } catch(_) {}
+  }
+  return null;
+}
+
+async function loadWeather() {
+  if (_weatherCache && Date.now() - _weatherCache.ts < 30*60*1000) { renderWeatherWidget(); return; }
+  try {
+    const coords = await _getWeatherCoords();
+    if (!coords) { el('weatherWidget') && (el('weatherWidget').innerHTML = ''); return; }
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lon}&current=temperature_2m,weathercode,is_day&timezone=auto`);
+    const j = await r.json();
+    _weatherCache = {ts:Date.now(), temp:Math.round(j.current.temperature_2m), code:j.current.weathercode, isDay:j.current.is_day===1, city:coords.city||null};
+  } catch(e) { console.warn('[weather]', e); }
+  renderWeatherWidget();
+}
+
+function renderWeatherWidget() {
+  const wx = el('weatherWidget');
+  if (!wx || !_weatherCache) return;
+  const {temp, code, isDay, city} = _weatherCache;
+  const {type, desc} = _wxInfo(code, isDay);
+  const allHidden = HOME_SECTIONS.every(s => getHomePrefs().hidden.includes(s.id));
+  const heroClass = allHidden ? ' hero' : '';
+  const cityHtml = city ? `<div class="wx-city">${esc(city)}</div>` : '';
+  wx.innerHTML = `<div class="wx-card wx-${type}${heroClass}">
+    <div class="wx-scene">${_wxSceneHTML(type)}</div>
+    <div class="wx-info">
+      <div class="wx-temp">${temp}°</div>
+      <div class="wx-desc">${desc}</div>
+      ${cityHtml}
+    </div>
+  </div>`;
+}
+
 function renderHome() {
   const bannerEl = el('welcomeBanner');
   if (isKid()) {
@@ -3736,6 +3846,8 @@ function renderHome() {
       <div class="wb-name">${t('wbHi',S.user)}</div>
       <div class="wb-sub">${t('wbStars',n)}</div></div>`;
   } else { bannerEl.innerHTML = ''; }
+
+  renderWeatherWidget();
 
   el('homeChoresTitle').textContent = S.filter==='All'?t('todayChores'):t('personChores',S.filter);
   let tasks = S.chores.filter(c=>!c.done);

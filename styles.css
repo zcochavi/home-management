@@ -609,3 +609,52 @@
     ::-webkit-scrollbar { width:4px;height:4px; }
     ::-webkit-scrollbar-track { background:transparent; }
     ::-webkit-scrollbar-thumb { background:#c8d3e8;border-radius:4px; }
+
+    /* ── Weather Widget ──────────────────────────── */
+    #welcomeBanner { order:-2; }
+    #weatherWidget { order:-1; margin-bottom:14px; }
+    .wx-card { border-radius:18px;padding:14px 16px;display:flex;align-items:center;gap:14px;min-height:110px;box-shadow:0 4px 18px rgba(0,0,0,0.13);overflow:hidden;position:relative; }
+    .wx-card.hero { min-height:180px;flex-direction:column;justify-content:center;text-align:center;gap:12px;margin:auto;max-width:360px; }
+    .wx-scene { width:80px;height:80px;flex-shrink:0;position:relative; }
+    .wx-card.hero .wx-scene { width:120px;height:120px; }
+    .wx-info { flex:1;color:white; }
+    .wx-temp { font-size:36px;font-weight:900;line-height:1; }
+    .wx-card.hero .wx-temp { font-size:56px; }
+    .wx-desc { font-size:14px;font-weight:700;opacity:0.9;margin-top:3px; }
+    .wx-city { font-size:11px;font-weight:600;opacity:0.65;margin-top:4px; }
+    .wx-sunny  { background:linear-gradient(135deg,#f9d423,#f5a623); }
+    .wx-night  { background:linear-gradient(135deg,#1a1a3e,#2d2d6e); }
+    .wx-partly { background:linear-gradient(135deg,#56ccf2,#2f80ed); }
+    .wx-cloudy { background:linear-gradient(135deg,#636e8a,#8e9daf); }
+    .wx-rainy  { background:linear-gradient(135deg,#3a7bd5,#2c3e7a); }
+    .wx-drizzle{ background:linear-gradient(135deg,#5c9ec4,#3a6e8f); }
+    .wx-snowy  { background:linear-gradient(135deg,#b8cce8,#7ba7cc); }
+    .wx-stormy { background:linear-gradient(135deg,#2c2c3e,#4a4060); }
+    .wx-foggy  { background:linear-gradient(135deg,#9aa5b4,#c3cdd6); }
+    /* Sun */
+    .wx-sun-circle { width:46px;height:46px;border-radius:50%;background:radial-gradient(circle,#ffe44d,#ffa500);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);box-shadow:0 0 18px 6px rgba(255,220,0,0.5);animation:wx-pulse 2.4s ease-in-out infinite; }
+    .wx-rays-wrap { position:absolute;width:100%;height:100%;top:0;left:0;animation:wx-spin 10s linear infinite; }
+    .wx-ray { position:absolute;width:4px;height:14px;background:#ffe44d;border-radius:2px;top:50%;left:50%;transform-origin:50% 36px;opacity:0.85; }
+    /* Moon */
+    .wx-moon { width:38px;height:38px;border-radius:50%;background:#e8e0c8;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);box-shadow:-10px -4px 0 0 #1a1a3e inset; }
+    .wx-star-dot { position:absolute;border-radius:50%;background:white;animation:wx-twinkle 1.8s ease-in-out infinite; }
+    /* Clouds */
+    .wx-cloud { position:absolute;background:white;border-radius:50px;box-shadow:-18px 0 0 -3px white,16px 4px 0 -5px white,0 -14px 0 -4px white,18px -10px 0 -6px white; }
+    /* Rain */
+    .wx-drop { position:absolute;width:2.5px;border-radius:2px;background:rgba(180,220,255,0.9);animation:wx-fall linear infinite; }
+    /* Snow */
+    .wx-flake { position:absolute;border-radius:50%;background:rgba(255,255,255,0.9);animation:wx-snow linear infinite; }
+    /* Lightning */
+    .wx-lightning { position:absolute;font-size:26px;bottom:2px;right:6px;animation:wx-flash 3s ease-in-out infinite; }
+    /* Fog */
+    .wx-fog-bar { position:absolute;height:6px;border-radius:3px;background:rgba(255,255,255,0.55);animation:wx-fogwave 3s ease-in-out infinite; }
+    /* Keyframes */
+    @keyframes wx-pulse  { 0%,100%{transform:translate(-50%,-50%) scale(1)}   50%{transform:translate(-50%,-50%) scale(1.13)} }
+    @keyframes wx-spin   { to{transform:rotate(360deg)} }
+    @keyframes wx-twinkle{ 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.15;transform:scale(0.4)} }
+    @keyframes wx-drift  { 0%,100%{transform:translateX(0)} 50%{transform:translateX(6px)} }
+    @keyframes wx-drift2 { 0%,100%{transform:translateX(0)} 50%{transform:translateX(-5px)} }
+    @keyframes wx-fall   { 0%{transform:translateY(-10px) rotate(18deg);opacity:1} 100%{transform:translateY(80px) rotate(18deg);opacity:0} }
+    @keyframes wx-snow   { 0%{transform:translateY(-10px) rotate(0deg);opacity:1} 100%{transform:translateY(82px) rotate(180deg);opacity:0} }
+    @keyframes wx-flash  { 0%,82%,100%{opacity:0} 86%,94%{opacity:1} 90%,98%{opacity:0.2} }
+    @keyframes wx-fogwave{ 0%,100%{opacity:0.3;transform:translateX(0)} 50%{opacity:0.75;transform:translateX(9px)} }
