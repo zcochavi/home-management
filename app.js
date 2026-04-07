@@ -5568,25 +5568,40 @@ const HOME_SECTIONS = [
   { id:'upcoming', icon:'📅', labelHe:'אירועים קרובים', labelEn:'Upcoming events' },
 ];
 
+function _normaliseHomePrefs(p) {
+  const allIds = HOME_SECTIONS.map(s => s.id);
+  allIds.forEach(id => { if (!p.order.includes(id)) p.order.push(id); });
+  p.order  = p.order.filter(id => allIds.includes(id));
+  p.hidden = (p.hidden || []).filter(id => allIds.includes(id));
+  return p;
+}
+
 function getHomePrefs() {
   const allIds = HOME_SECTIONS.map(s => s.id);
   const def = { order: [...allIds], hidden: [] };
   if (!S.uid || !S.user) return def;
   try {
-    const raw = localStorage.getItem('familyhub_home_prefs_' + S.uid + '_' + S.user);
+    // Prefer Firestore-synced prefs (available after familyData loads)
+    const firestorePrefs = familyData?.homePrefs?.[S.user];
+    const raw = firestorePrefs
+      || (() => { try { return JSON.parse(localStorage.getItem('familyhub_home_prefs_' + S.uid + '_' + S.user)); } catch(e) { return null; } })();
     if (!raw) return def;
-    const p = JSON.parse(raw);
-    // Ensure all section ids are present
-    allIds.forEach(id => { if (!p.order.includes(id)) p.order.push(id); });
-    p.order = p.order.filter(id => allIds.includes(id));
-    p.hidden = (p.hidden || []).filter(id => allIds.includes(id));
-    return p;
+    return _normaliseHomePrefs({ order: [...(raw.order||[])], hidden: [...(raw.hidden||[])] });
   } catch(e) { return def; }
 }
 
 function saveHomePrefs(prefs) {
   if (!S.uid || !S.user) return;
+  // Update local cache immediately
+  if (familyData) {
+    if (!familyData.homePrefs) familyData.homePrefs = {};
+    familyData.homePrefs[S.user] = prefs;
+  }
   localStorage.setItem('familyhub_home_prefs_' + S.uid + '_' + S.user, JSON.stringify(prefs));
+  // Persist to Firestore so other devices pick it up
+  if (fbDb) fbDb.collection('families').doc(S.uid)
+    .update(new firebase.firestore.FieldPath('homePrefs', S.user), prefs)
+    .catch(e => console.error('[homePrefs] Firestore write failed:', e.message));
   applyHomePrefs();
 }
 
