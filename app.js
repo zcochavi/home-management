@@ -678,12 +678,15 @@ async function doJoin() {
   const _failJoin = async (msg) => {
     _joining = true;
     await fbAuth.signOut().catch(() => {});
-    _joining = false;
+    // Keep _joining=true while we paint the error, so any deferred onAuthStateChanged(null)
+    // callback (which calls setAuthMode → clears joinError) is suppressed.
     setAuthLoading(false);
     el('authScreen').classList.remove('hidden');
     setAuthMode('join');
     el('joinCode').value = code;
     el('joinError').textContent = msg;
+    // Release the flag after one macrotask — all deferred Firebase callbacks will have fired
+    setTimeout(() => { _joining = false; }, 300);
   };
 
   try {
@@ -738,7 +741,7 @@ async function doJoin() {
       .catch(() => clearTimeout(loadTimeout));
   } catch(e) {
     const invalidCode = ['auth/user-not-found','auth/wrong-password','auth/invalid-credential'].includes(e.code);
-    await _failJoin(invalidCode ? 'קוד לא נמצא. בדוק שהעתקת נכון.' : ('שגיאה: ' + (e.code || e.message)));
+    await _failJoin(invalidCode ? 'קוד לא תקין — בדוק שהעתקת נכון.' : ('שגיאה [' + (e.code || e.message) + ']'));
   }
 }
 
