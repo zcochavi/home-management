@@ -671,41 +671,54 @@ async function doJoin() {
   if (code.length < 4) { el('joinError').textContent = 'הזן קוד הצטרפות תקין'; return; }
   setAuthLoading(true);
   _joining = true;
-  const _setLoadingTxt = txt => { const e = el('loadingScreen'); if (e) { e.querySelector('.loading-txt').textContent = txt; } };
+
+  // Sign out the invite account (if any) while keeping _joining=true so onAuthStateChanged
+  // is suppressed throughout — prevents the race where Firebase re-emits auth state and
+  // triggers subscribeToFamily with the invite UID before we've stored the ownerUid mapping.
+  const _failJoin = async (msg) => {
+    _joining = true;
+    await fbAuth.signOut().catch(() => {});
+    _joining = false;
+    setAuthLoading(false);
+    el('authScreen').classList.remove('hidden');
+    setAuthMode('join');
+    el('joinCode').value = code;
+    el('joinError').textContent = msg;
+  };
+
   try {
-    // Sign in as the invite account first (it was pre-created during registration)
-    // _joining suppresses onAuthStateChanged until we've set up localStorage correctly
-    el('joinError').textContent = '⏳ שלב 1/3: מתחבר...';
+    el('joinError').textContent = '⏳ מתחבר...';
     const inviteEmail = code + '@' + JOIN_DOMAIN;
     const cred = await fbAuth.signInWithEmailAndPassword(inviteEmail, code);
-    // Now authenticated — look up ownerUid + memberName
-    // Primary: read from Firebase Auth displayName (set at code creation, no Firestore rules needed)
-    // Fallback: read from Firestore joinCodes collection
-    el('joinError').textContent = '⏳ שלב 2/3: בודק קוד...';
+
+    el('joinError').textContent = '⏳ בודק קוד...';
     let ownerUid = null, memberName = null;
+
+    // Primary: read ownerUid|memberName from Firebase Auth displayName (no Firestore rules needed)
     const profile = cred.user.displayName || '';
     if (profile.includes('|')) {
       const pipeIdx = profile.indexOf('|');
       ownerUid   = profile.slice(0, pipeIdx) || null;
       memberName = profile.slice(pipeIdx + 1) || null;
     }
+    // Fallback: Firestore joinCodes (for codes created before the displayName fix)
     if (!ownerUid) {
-      // Fallback for codes created before this fix
-      const snap = await fbDb.collection('joinCodes').doc(code).get();
-      if (!snap.exists) {
-        _joining = false;
-        setAuthLoading(false);
-        el('joinError').textContent = 'קוד לא נמצא. בדוק שהעתקת נכון.';
-        return;
-      }
-      ownerUid   = snap.data().ownerUid;
-      memberName = snap.data().memberName || null;
+      try {
+        const snap = await fbDb.collection('joinCodes').doc(code).get();
+        if (snap.exists) {
+          ownerUid   = snap.data().ownerUid || null;
+          memberName = snap.data().memberName || null;
+        }
+      } catch (_) {}
     }
-    // Store mapping before subscribing
+
+    if (!ownerUid) {
+      await _failJoin('קוד לא נמצא או פג תוקפו. בקש קוד חדש ממי שהזמין אותך.');
+      return;
+    }
+
     localStorage.setItem('familyhub_family_uid_' + cred.user.uid, ownerUid);
-    if (memberName) {
-      localStorage.setItem('familyhub_locked_member_' + cred.user.uid, memberName);
-    }
+    if (memberName) localStorage.setItem('familyhub_locked_member_' + cred.user.uid, memberName);
     S.uid = ownerUid;
     S.lockedMember = memberName || null;
     _joining = false;
@@ -713,25 +726,19 @@ async function doJoin() {
     el('joinError').textContent = '';
     el('authScreen').classList.add('hidden');
     el('loadingScreen').classList.remove('hidden');
-    _setLoadingTxt('⏳ שלב 3/3: טוען נתוני משפחה...');
-    // Timeout: if Firestore doesn't respond in 15s, show a helpful error
+    el('loadingScreen').querySelector('.loading-txt').textContent = '⏳ טוען נתוני משפחה...';
     const loadTimeout = setTimeout(() => {
       el('loadingScreen').classList.add('hidden');
       el('authScreen').classList.remove('hidden');
-      el('joinError').textContent = 'הגישה לנתוני המשפחה נכשלה. ייתכן בעיית הרשאות — פנה למי שהזמין אותך.';
+      el('joinError').textContent = 'הגישה לנתוני המשפחה נכשלה. ייתכן בעיית הרשאות ב-Firestore.';
     }, 15000);
-    const _origSubscribe = fbUnsubscribe;
     subscribeToFamily(ownerUid);
-    // Clear timeout once family loads (afterLoad will be called)
-    const _clearOnLoad = fbDb.collection('families').doc(ownerUid).get()
+    fbDb.collection('families').doc(ownerUid).get()
       .then(() => clearTimeout(loadTimeout))
       .catch(() => clearTimeout(loadTimeout));
   } catch(e) {
-    _joining = false;
-    setAuthLoading(false);
-    el('joinError').textContent = '';
     const invalidCode = ['auth/user-not-found','auth/wrong-password','auth/invalid-credential'].includes(e.code);
-    el('joinError').textContent = invalidCode ? 'קוד לא נמצא. בדוק שהעתקת נכון.' : ('שגיאה בשלב ההתחברות: ' + (e.code || e.message));
+    await _failJoin(invalidCode ? 'קוד לא נמצא. בדוק שהעתקת נכון.' : ('שגיאה: ' + (e.code || e.message)));
   }
 }
 
@@ -1281,6 +1288,21 @@ async function generateSpouseCode(memberName) {
   }
 }
 
+async function regenSpouseCode(memberName) {
+  const btn = document.querySelector(`[data-spouse-regen="${CSS.escape(memberName)}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const code = await createMemberCode(S.uid, memberName);
+    const members = getMembers().map(m => m.name === memberName ? { ...m, joinCode: code } : m);
+    if (familyData) familyData.members = members;
+    await fbDb.collection('families').doc(S.uid).update({ members });
+    renderMgmtMembers();
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '🔄'; }
+    alert('שגיאה: ' + e.message);
+  }
+}
+
 function shareSpouseCode(name, code) {
   const url  = location.origin + location.pathname + '?join=' + code;
   const text = `הצטרפ/י כ-${name} למשפחת ${familyData?.familyName || ''} ב-FamilyHub!\nקוד כניסה אישי: ${code}\n${url}`;
@@ -1737,6 +1759,7 @@ function renderMgmtMembers() {
             <span style="font-size:10px;color:#718096;margin-left:2px">🔑</span>
             <span style="font-size:11px;color:#276749;font-weight:700;background:#c6f6d5;padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
             <button style="background:none;border:none;font-size:13px;cursor:pointer;padding:2px 4px" onclick="shareSpouseCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד">📤</button>
+            <button data-spouse-regen="${esc(m.name)}" style="font-size:11px;background:#fff5f5;color:#c53030;border:1px solid #fed7d7;border-radius:8px;padding:2px 8px;cursor:pointer;font-family:inherit" onclick="regenSpouseCode('${esc(m.name)}')" title="צור קוד חדש">🔄</button>
           </div>` : `
           <div style="margin-top:4px">
             <button data-spouse-gen="${esc(m.name)}" style="font-size:11px;background:#ebf8ff;color:#2b6cb0;border:1px solid #bee3f8;border-radius:8px;padding:2px 10px;cursor:pointer;font-family:inherit" onclick="generateSpouseCode('${esc(m.name)}')">🔑 צור קוד כניסה</button>
