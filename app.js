@@ -5040,6 +5040,7 @@ let _presenceSearchData   = [];
 let _presenceSearchTotal  = 0;
 let _presenceSearchPage   = 0;
 let _presenceLoadingMore  = false;
+let _presenceExpanded     = { online: true, offline: true };
 let _presenceSearchTimer  = null;
 
 function _destroyCharts() {
@@ -5159,6 +5160,11 @@ async function loadMorePresence() {
   }
 }
 
+function togglePresenceGroup(group) {
+  _presenceExpanded[group] = !_presenceExpanded[group];
+  _renderPresenceGroups();
+}
+
 function _renderPresenceGroups() {
   const container = el('presenceGrid');
   if (!container) return;
@@ -5213,33 +5219,38 @@ function _renderPresenceGroups() {
   }
 
   // ── Normal mode ──────────────────────────────────────────
-  const onlineSection = _presenceOnline.length === 0
-    ? `<div style="color:#a0aec0;font-size:12px;padding:6px 0 10px">אין משתמשים מחוברים כרגע</div>`
-    : `<div class="presence-cards-grid">${_presenceOnline.map(memberCard).join('')}</div>`;
+  const onlineExp = _presenceExpanded.online;
+  const onlineBody = onlineExp
+    ? (_presenceOnline.length === 0
+        ? `<div style="color:#a0aec0;font-size:12px;padding:6px 10px 10px">אין משתמשים מחוברים כרגע</div>`
+        : `<div class="presence-cards-grid">${_presenceOnline.map(memberCard).join('')}</div>`)
+    : '';
 
+  const offlineExp = _presenceExpanded.offline;
   const offlineRemaining = _presenceOfflineTotal - _presenceOffline.length;
   const offlineSection = _presenceOfflineTotal === 0 ? '' : `
     <div class="presence-group" style="margin-top:12px">
-      <div class="presence-group-header" style="cursor:default">
+      <div class="presence-group-header presence-group-header-clickable" onclick="togglePresenceGroup('offline')">
+        <span class="presence-group-chevron">${offlineExp ? '▾' : '◂'}</span>
         <span class="presence-group-label" style="color:#718096">לא מחוברים</span>
         <span class="presence-group-count">
           <span style="color:#a0aec0;font-weight:800">${_presenceOfflineTotal}</span>
           ${_presenceOffline.length < _presenceOfflineTotal ? `<span style="color:#a0aec0"> · מוצגים ${_presenceOffline.length}</span>` : ''}
         </span>
       </div>
-      <div class="presence-cards-grid">${_presenceOffline.map(memberCard).join('')}</div>
-      ${loadMoreBtn(offlineRemaining)}
+      ${offlineExp ? `<div class="presence-cards-grid">${_presenceOffline.map(memberCard).join('')}</div>${loadMoreBtn(offlineRemaining)}` : ''}
     </div>`;
 
   container.innerHTML = `
     <div class="presence-group">
-      <div class="presence-group-header" style="cursor:default">
+      <div class="presence-group-header presence-group-header-clickable" onclick="togglePresenceGroup('online')">
+        <span class="presence-group-chevron">${onlineExp ? '▾' : '◂'}</span>
         <span class="presence-group-label">מחוברים עכשיו</span>
         <span class="presence-group-count">
           <span style="color:${_presenceOnline.length > 0 ? '#48bb78' : '#a0aec0'};font-weight:800">${_presenceOnline.length}</span>
         </span>
       </div>
-      ${onlineSection}
+      ${onlineBody}
     </div>
     ${offlineSection}`;
 
