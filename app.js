@@ -5224,7 +5224,7 @@ function _renderPresenceGroups() {
         <span class="presence-group-label" style="color:#718096">לא מחוברים</span>
         <span class="presence-group-count">
           <span style="color:#a0aec0;font-weight:800">${_presenceOfflineTotal}</span>
-          <span style="color:#a0aec0"> · מוצגים ${_presenceOffline.length}</span>
+          ${_presenceOffline.length < _presenceOfflineTotal ? `<span style="color:#a0aec0"> · מוצגים ${_presenceOffline.length}</span>` : ''}
         </span>
       </div>
       <div class="presence-cards-grid">${_presenceOffline.map(memberCard).join('')}</div>
