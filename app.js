@@ -402,16 +402,17 @@ const _memberCommitteeClasses = (m) => {
   if (anyPerMember) return [];
   return familyData?.committeeClasses || [];
 };
-const isCommittee    = () => isAdmin() || _memberCommitteeClasses(_myMember()).length > 0 || familyData?.role === 'committee';
+const _isOwner       = () => fbAuth.currentUser?.uid === S.uid;
+const isCommittee    = () => isAdmin() || _memberCommitteeClasses(_myMember()).length > 0 || (_isOwner() && familyData?.role === 'committee');
 const isCommitteeFor = (cid) => {
-  if (isAdmin() || familyData?.role === 'committee') return true;
+  if (isAdmin() || (_isOwner() && familyData?.role === 'committee')) return true;
   const cls = _memberCommitteeClasses(_myMember());
   return cls.includes(cid) || cls.includes('*');
 };
 
 // Returns 'all' | 'some' | 'none' — how many of the family's kid-classes this member is committee for.
 function parentCommitteeStatus() {
-  if (familyData?.role === 'committee') return 'all';
+  if (_isOwner() && familyData?.role === 'committee') return 'all';
   const commClasses = _memberCommitteeClasses(_myMember());
   if (commClasses.includes('*')) return 'all';
   if (!commClasses.length) return 'none';
@@ -4401,7 +4402,10 @@ function fmtDoneAt(ts) {
 
 function renderHomework(){
   const kids = isParent() ? getKids() : getKids().filter(k=>k===S.user);
-  el('childTabsContainer').innerHTML = kids.map(k =>
+  const filterActive = getKids().includes(S.filter);
+  const childTabsEl = el('childTabsContainer');
+  childTabsEl.style.display = filterActive ? 'none' : '';
+  childTabsEl.innerHTML = kids.map(k =>
     `<div class="child-tab ${S.child===k?'active':''}" onclick="switchChild('${esc(k)}')">${getEmoji(k)} ${k}</div>`
   ).join('');
 
@@ -4792,6 +4796,7 @@ function switchTab(tab) {
   el('tab-' + tab).classList.add('active');
   if (tab === 'community') renderCommunity();
   if (tab === 'analytics') renderAnalytics();
+  if (tab === 'homework' && getKids().includes(S.filter)) S.child = S.filter;
   // Stop presence auto-refresh when leaving analytics
   if (tab !== 'analytics' && _presenceRefreshTimer) {
     clearInterval(_presenceRefreshTimer);
@@ -5474,7 +5479,9 @@ function tabAdd(id) {
 }
 function setFilter(name){
   S.filter=(S.filter===name&&name!=='All')?'All':name;
+  if (S.tab==='homework' && getKids().includes(S.filter)) S.child=S.filter;
   renderHeader();renderHome();renderChores();
+  if (S.tab==='homework') renderHomework();
 }
 
 // ════════════════════════════════════════
