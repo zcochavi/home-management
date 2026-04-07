@@ -689,7 +689,9 @@ async function doJoin() {
     S.uid = ownerUid;
     S.lockedMember = memberName || null;
     _joining = false;
+    setAuthLoading(false);
     el('authScreen').classList.add('hidden');
+    el('loadingScreen').classList.remove('hidden');
     subscribeToFamily(ownerUid);
   } catch(e) {
     _joining = false;
