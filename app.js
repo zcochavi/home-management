@@ -3502,6 +3502,11 @@ function openMenu(btn) {
     <div class="menu-item" onclick="closeMenu();openTabEditor()">
       <span class="menu-item-icon">🗂</span>
       <span>${isHe ? 'התאמת לשוניות' : 'Customize tabs'}</span>
+    </div>
+    <div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();openHomeEditor()">
+      <span class="menu-item-icon">✏️</span>
+      <span>${isHe ? 'התאמת דף הבית' : 'Customize home'}</span>
     </div>` + adminItem + `
     <div class="menu-sep"></div>
     <div class="menu-item" onclick="closeMenu();toggleLang()">
@@ -3752,6 +3757,7 @@ function renderHome() {
     : t('noPendingHw');
 
   renderHomeUpcoming();
+  applyHomePrefs();
 }
 
 // ════════════════════════════════════════
@@ -5537,6 +5543,106 @@ function tabAdd(id) {
   saveActiveTabs([...active, id]);
   renderTabBar(); renderTabEditor();
 }
+// ════════════════════════════════════════
+//  HOME EDITOR
+// ════════════════════════════════════════
+const HOME_SECTIONS = [
+  { id:'chores',   icon:'✅', labelKey:'todayChores' },
+  { id:'stars',    icon:'⭐', labelKey:'starChart'   },
+  { id:'homework', icon:'📚', labelKey:'hwDueSoon'   },
+  { id:'upcoming', icon:'📅', labelHe:'אירועים קרובים', labelEn:'Upcoming events' },
+];
+
+function getHomePrefs() {
+  const allIds = HOME_SECTIONS.map(s => s.id);
+  const def = { order: [...allIds], hidden: [] };
+  if (!S.uid || !S.user) return def;
+  try {
+    const raw = localStorage.getItem('familyhub_home_prefs_' + S.uid + '_' + S.user);
+    if (!raw) return def;
+    const p = JSON.parse(raw);
+    // Ensure all section ids are present
+    allIds.forEach(id => { if (!p.order.includes(id)) p.order.push(id); });
+    p.order = p.order.filter(id => allIds.includes(id));
+    p.hidden = (p.hidden || []).filter(id => allIds.includes(id));
+    return p;
+  } catch(e) { return def; }
+}
+
+function saveHomePrefs(prefs) {
+  if (!S.uid || !S.user) return;
+  localStorage.setItem('familyhub_home_prefs_' + S.uid + '_' + S.user, JSON.stringify(prefs));
+  applyHomePrefs();
+}
+
+function applyHomePrefs() {
+  const { order, hidden } = getHomePrefs();
+  order.forEach((id, i) => {
+    const sec = el('homeSection-' + id);
+    if (!sec) return;
+    sec.style.order = i;
+    if (id === 'stars' && !getKids().length) { sec.style.display = 'none'; return; }
+    sec.style.display = hidden.includes(id) ? 'none' : '';
+  });
+}
+
+function openHomeEditor()  { renderHomeEditor(); el('homeEditorScreen').classList.remove('hidden'); }
+function closeHomeEditor() { el('homeEditorScreen').classList.add('hidden'); }
+
+function _homeSectionLabel(s) {
+  if (s.labelKey) return t(s.labelKey) || s.labelHe || s.id;
+  return getLang() === 'he' ? (s.labelHe || s.id) : (s.labelEn || s.id);
+}
+
+function renderHomeEditor() {
+  const { order, hidden } = getHomePrefs();
+  const visible = HOME_SECTIONS.filter(s => s.id !== 'stars' || getKids().length > 0);
+  const active   = order.filter(id => !hidden.includes(id) && visible.find(s => s.id === id));
+  const inactive = order.filter(id =>  hidden.includes(id) && visible.find(s => s.id === id));
+  el('homeEditorActive').innerHTML = active.length ? active.map((id, i) => {
+    const s = HOME_SECTIONS.find(x => x.id === id);
+    const first = i === 0, last = i === active.length - 1;
+    return `<div class="tab-ed-row">
+      <span class="tab-ed-icon">${s.icon}</span>
+      <span class="tab-ed-label">${_homeSectionLabel(s)}</span>
+      <div class="tab-ed-btns">
+        <button class="tab-ed-arrow" onclick="homeSectionMoveUp('${id}')"   ${first?'disabled':''}>↑</button>
+        <button class="tab-ed-arrow" onclick="homeSectionMoveDown('${id}')" ${last ?'disabled':''}>↓</button>
+        <button class="tab-ed-remove" onclick="homeSectionHide('${id}')">×</button>
+      </div></div>`;
+  }).join('') : `<div style="padding:12px 0;color:#a0aec0;font-size:13px;font-weight:700;text-align:center">הכל מוסתר</div>`;
+  el('homeEditorHidden').innerHTML = inactive.length ? inactive.map(id => {
+    const s = HOME_SECTIONS.find(x => x.id === id);
+    return `<div class="tab-ed-row">
+      <span class="tab-ed-icon">${s.icon}</span>
+      <span class="tab-ed-label">${_homeSectionLabel(s)}</span>
+      <button class="tab-ed-add" onclick="homeSectionShow('${id}')">+ הצג</button></div>`;
+  }).join('') : `<div style="padding:12px 0;color:#a0aec0;font-size:13px;font-weight:700;text-align:center">כל הסקציות מוצגות ✓</div>`;
+}
+
+function homeSectionMoveUp(id) {
+  const p = getHomePrefs(); const i = p.order.indexOf(id);
+  if (i <= 0) return;
+  [p.order[i-1], p.order[i]] = [p.order[i], p.order[i-1]];
+  saveHomePrefs(p); renderHomeEditor();
+}
+function homeSectionMoveDown(id) {
+  const p = getHomePrefs(); const i = p.order.indexOf(id);
+  if (i < 0 || i >= p.order.length - 1) return;
+  [p.order[i], p.order[i+1]] = [p.order[i+1], p.order[i]];
+  saveHomePrefs(p); renderHomeEditor();
+}
+function homeSectionHide(id) {
+  const p = getHomePrefs();
+  if (!p.hidden.includes(id)) p.hidden.push(id);
+  saveHomePrefs(p); renderHomeEditor();
+}
+function homeSectionShow(id) {
+  const p = getHomePrefs();
+  p.hidden = p.hidden.filter(x => x !== id);
+  saveHomePrefs(p); renderHomeEditor();
+}
+
 function setFilter(name){
   S.filter=(S.filter===name&&name!=='All')?'All':name;
   if (S.tab==='homework' && getKids().includes(S.filter)) S.child=S.filter;

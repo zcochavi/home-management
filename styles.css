@@ -82,8 +82,9 @@
     .tab-ed-row { transition:transform 0.12s ease; }
     .tab-ed-row.tab-ed-dragging { background:white;box-shadow:0 6px 24px rgba(106,17,203,0.18);border-radius:12px;z-index:10;position:relative;transition:none !important; }
     /* Management + Tab editor screens */
-    #mgmtScreen, #tabEditorScreen, #adminPanel { position:fixed;inset:0;background:#f0f4ff;z-index:900;overflow-y:auto; }
-    #mgmtScreen.hidden, #tabEditorScreen.hidden, #adminPanel.hidden { display:none; }
+    #mgmtScreen, #tabEditorScreen, #adminPanel, #homeEditorScreen { position:fixed;inset:0;background:#f0f4ff;z-index:900;overflow-y:auto; }
+    #mgmtScreen.hidden, #tabEditorScreen.hidden, #adminPanel.hidden, #homeEditorScreen.hidden { display:none; }
+    #tab-home { display:flex;flex-direction:column; }
     .admin-log-row { padding:10px 0;border-bottom:1px solid #f0f4ff;display:flex;flex-direction:column;gap:3px; }
     .admin-log-row:last-child { border-bottom:none; }
     .admin-log-title { font-size:13px;font-weight:700;color:#1a202c; }

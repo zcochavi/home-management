@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260408o') location.reload(true);
+        if (v !== '20260408p') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260408o">
+  <link rel="stylesheet" href="styles.css?v=20260408p">
 </head>
 <body>
 
@@ -149,6 +149,25 @@
     <div class="card">
       <div class="card-title">הוסף לשונית</div>
       <div id="tabEditorPool"></div>
+    </div>
+  </div>
+</div>
+
+<!-- HOME EDITOR SCREEN -->
+<div id="homeEditorScreen" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeHomeEditor()">×</button>
+    <div class="mgmt-header-title">✏️ התאמת דף הבית</div>
+  </div>
+  <div class="mgmt-content">
+    <div class="card">
+      <div class="card-title">סקציות מוצגות</div>
+      <div class="mgmt-section-hint">שנה סדר עם החצים · לחץ × להסתרה</div>
+      <div id="homeEditorActive"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">סקציות מוסתרות</div>
+      <div id="homeEditorHidden"></div>
     </div>
   </div>
 </div>
@@ -372,12 +391,20 @@
     <!-- HOME -->
     <div id="tab-home" class="tab-content active">
       <div id="welcomeBanner"></div>
-      <div class="card"><div class="card-title" id="homeChoresTitle"></div><div id="homeTasks"></div></div>
-      <div class="card"><div class="card-title" id="starChartTitle"></div><div class="star-chart" id="starChart"></div></div>
-      <div class="card"><div class="card-title" id="hwDueSoonTitle"></div><div id="hwSummary"></div></div>
-      <div class="card" id="homeUpcomingCard" style="display:none">
-        <div class="card-title">📅 קרוב לפניך</div>
-        <div id="homeUpcoming"></div>
+      <div id="homeSection-chores">
+        <div class="card"><div class="card-title" id="homeChoresTitle"></div><div id="homeTasks"></div></div>
+      </div>
+      <div id="homeSection-stars">
+        <div class="card"><div class="card-title" id="starChartTitle"></div><div class="star-chart" id="starChart"></div></div>
+      </div>
+      <div id="homeSection-homework">
+        <div class="card"><div class="card-title" id="hwDueSoonTitle"></div><div id="hwSummary"></div></div>
+      </div>
+      <div id="homeSection-upcoming" style="display:none">
+        <div class="card" id="homeUpcomingCard" style="display:none">
+          <div class="card-title">📅 קרוב לפניך</div>
+          <div id="homeUpcoming"></div>
+        </div>
       </div>
     </div>
 
@@ -511,7 +538,7 @@
   </div>
 </div>
 
-<script src="app.js?v=20260408o"></script>
+<script src="app.js?v=20260408p"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
