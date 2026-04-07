@@ -835,7 +835,7 @@ function initNotifBanners() {
       const _visibleNotif = n => !n.dismissed && (
         !['school_pending','event_pending','application_pending'].includes(n.type) ||
         (n.recipientUid === S.uid && n.requestedByUid !== S.uid)
-      );
+      ) && (n.type !== 'member_joined' || isParent());
       renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
       // Patch old school_pending notifications that are missing reqId
       if (isAdmin()) _patchMissingReqIds(_allNotifs);
@@ -878,7 +878,8 @@ function _updateBellBadge() {
   const badge = el('notifBellBadge');
   if (!badge) return;
   const count = _allNotifs.filter(n => !n.dismissed &&
-    !['school_pending','event_pending','application_pending'].includes(n.type)
+    !['school_pending','event_pending','application_pending'].includes(n.type) &&
+    (n.type !== 'member_joined' || isParent())
   ).length;
   badge.textContent = count > 9 ? '9+' : count;
   badge.classList.toggle('hidden', count === 0);
@@ -903,7 +904,7 @@ function renderNotifBanners(undismissed) {
     const REQUEST_TYPES = ['school_pending','event_pending','application_pending'];
     const isRequest  = REQUEST_TYPES.includes(n.type);
     const isInfo     = n.type === 'shopping_done';
-    const isGood     = n.type?.includes('approved');
+    const isGood     = n.type?.includes('approved') || n.type === 'member_joined';
     const isDenied   = n.type?.includes('denied') || n.type?.includes('rejected');
     const bg     = isInfo ? '#fffbeb' : isGood ? '#f0fff4' : isDenied ? '#fff5f5' : '#ebf8ff';
     const border = isInfo ? '#f6e05e' : isGood ? '#9ae6b4' : isDenied ? '#feb2b2' : '#90cdf4';
@@ -1476,11 +1477,43 @@ function subscribeToFamily(uid) {
   });
 }
 
+let _firstJoinNotified = false;
+
+async function _notifyFirstJoin(memberName) {
+  try {
+    // Mark member as joined so this never fires again
+    const members = getMembers().map(m =>
+      m.name === memberName ? { ...m, joinedAt: Date.now() } : m
+    );
+    if (familyData) familyData.members = members;
+    await fbDb.collection('families').doc(S.uid).update({ members });
+    // Write green notification to the family (visible to parents only via filter)
+    const member = getMembers().find(m => m.name === memberName);
+    const emoji  = member?.emoji || '👤';
+    await fbDb.collection('families').doc(S.uid).collection('notifications').add({
+      type: 'member_joined',
+      message: `${emoji} ${memberName} הצטרף/ה למשפחה!`,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      dismissed: false,
+    });
+  } catch(e) {
+    console.warn('[firstJoin]', e);
+  }
+}
+
 function afterLoad() {
   const kids = getKids();
   if (!S.child || !kids.includes(S.child)) S.child = kids[0] || null;
   el('loadingScreen').classList.add('hidden');
   if (S.lockedMember && getAllMemberNames().includes(S.lockedMember)) {
+    // First-join detection: if member has no joinedAt, this is their first time
+    if (!_firstJoinNotified) {
+      const m = getMembers().find(x => x.name === S.lockedMember);
+      if (m && !m.joinedAt) {
+        _firstJoinNotified = true;
+        _notifyFirstJoin(S.lockedMember);
+      }
+    }
     // Locked device: auto-login as locked member, no choice
     login(S.lockedMember);
   } else if (S.user && getAllMemberNames().includes(S.user)) {
