@@ -5040,7 +5040,7 @@ let _presenceSearchData   = [];
 let _presenceSearchTotal  = 0;
 let _presenceSearchPage   = 0;
 let _presenceLoadingMore  = false;
-let _presenceExpanded     = { online: true, offline: true };
+let _presenceExpanded     = { online: false, offline: false };
 let _presenceSearchTimer  = null;
 
 function _destroyCharts() {
