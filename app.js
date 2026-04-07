@@ -666,12 +666,15 @@ async function doJoin() {
   if (code.length < 4) { el('joinError').textContent = 'הזן קוד הצטרפות תקין'; return; }
   setAuthLoading(true);
   _joining = true;
+  const _setLoadingTxt = txt => { const e = el('loadingScreen'); if (e) { e.querySelector('.loading-txt').textContent = txt; } };
   try {
     // Sign in as the invite account first (it was pre-created during registration)
     // _joining suppresses onAuthStateChanged until we've set up localStorage correctly
+    el('joinError').textContent = '⏳ שלב 1/3: מתחבר...';
     const inviteEmail = code + '@' + JOIN_DOMAIN;
     const cred = await fbAuth.signInWithEmailAndPassword(inviteEmail, code);
     // Now authenticated — look up ownerUid
+    el('joinError').textContent = '⏳ שלב 2/3: בודק קוד...';
     const snap = await fbDb.collection('joinCodes').doc(code).get();
     if (!snap.exists) {
       _joining = false;
@@ -690,14 +693,28 @@ async function doJoin() {
     S.lockedMember = memberName || null;
     _joining = false;
     setAuthLoading(false);
+    el('joinError').textContent = '';
     el('authScreen').classList.add('hidden');
     el('loadingScreen').classList.remove('hidden');
+    _setLoadingTxt('⏳ שלב 3/3: טוען נתוני משפחה...');
+    // Timeout: if Firestore doesn't respond in 15s, show a helpful error
+    const loadTimeout = setTimeout(() => {
+      el('loadingScreen').classList.add('hidden');
+      el('authScreen').classList.remove('hidden');
+      el('joinError').textContent = 'הגישה לנתוני המשפחה נכשלה. ייתכן בעיית הרשאות — פנה למי שהזמין אותך.';
+    }, 15000);
+    const _origSubscribe = fbUnsubscribe;
     subscribeToFamily(ownerUid);
+    // Clear timeout once family loads (afterLoad will be called)
+    const _clearOnLoad = fbDb.collection('families').doc(ownerUid).get()
+      .then(() => clearTimeout(loadTimeout))
+      .catch(() => clearTimeout(loadTimeout));
   } catch(e) {
     _joining = false;
     setAuthLoading(false);
+    el('joinError').textContent = '';
     const invalidCode = ['auth/user-not-found','auth/wrong-password','auth/invalid-credential'].includes(e.code);
-    el('joinError').textContent = invalidCode ? 'קוד לא נמצא. בדוק שהעתקת נכון.' : getAuthError(e.code);
+    el('joinError').textContent = invalidCode ? 'קוד לא נמצא. בדוק שהעתקת נכון.' : ('שגיאה בשלב ההתחברות: ' + (e.code || e.message));
   }
 }
 
