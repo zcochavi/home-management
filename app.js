@@ -3058,7 +3058,7 @@ function renderShoppingHistorySettings() {
         <input type="number" min="0" max="365" value="${ttl}" id="adminHistoryTtlInput"
           style="width:72px;text-align:center;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px;font-size:14px;font-family:inherit">
         <span style="font-size:13px;color:#4a5568;line-height:1">ימים</span>
-        <button class="admin-btn" onclick="adminSaveHistoryTtl()" style="padding:6px 14px;font-size:13px;line-height:1">שמור</button>
+        <button class="admin-btn" onclick="adminSaveHistoryTtl()" style="padding:6px 14px;font-size:13px;line-height:1;margin-bottom:0">שמור</button>
         <span id="adminHistoryTtlMsg" style="font-size:12px;color:#38a169;min-width:40px"></span>
       </div>
     </div>`;
