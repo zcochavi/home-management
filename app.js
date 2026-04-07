@@ -3765,6 +3765,13 @@ function renderChores() {
     const assigneeEl = el('newChoreAssignee');
     if (assigneeEl) assigneeEl.style.display = S.filter === 'All' ? '' : 'none';
   }
+  // Update add-chore title to reflect focused member
+  const choreTitleEl = el('addChoreTitle');
+  if (choreTitleEl) {
+    choreTitleEl.textContent = S.filter === 'All'
+      ? t('addChoreTitle')
+      : `➕ הוסף משימה ל${S.filter}`;
+  }
   let items = S.filter==='All' ? S.chores : S.chores.filter(c=>c.assignee===S.filter);
   const active = items.filter(c=>!c.done);
   const showAssignee = S.filter==='All';
