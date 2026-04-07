@@ -2761,7 +2761,9 @@ async function renderCommunity() {
   const container = el('communityContent');
   if (!container) return;
 
-  const kidsWithSchool = getKids()
+  const filteredKids = (S.filter !== 'All' && getKids().includes(S.filter))
+    ? [S.filter] : getKids();
+  const kidsWithSchool = filteredKids
     .map(name => getMembers().find(m => m.name === name))
     .filter(m => m?.school?.city && m?.school?.grade);
 
@@ -5678,6 +5680,7 @@ function setFilter(name){
   if (S.tab==='homework' && getKids().includes(S.filter)) S.child=S.filter;
   renderHeader();renderHome();renderChores();
   if (S.tab==='homework') renderHomework();
+  if (S.tab==='community') renderCommunity();
 }
 
 // ════════════════════════════════════════
