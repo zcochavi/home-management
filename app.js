@@ -393,8 +393,12 @@ const isAdmin     = () => !!ADMIN_UID && S.uid === ADMIN_UID;
 // Committee helpers — per-member (not per-family)
 const _myMember = () => getMembers().find(m => m.name === S.user);
 const _memberCommitteeClasses = (m) => {
-  // Per-member data takes precedence; fall back to family-level for legacy data
+  // Per-member data takes precedence
   if (m?.committeeClasses !== undefined) return m.committeeClasses;
+  // Fall back to family-level ONLY if no member has per-member data yet (legacy migration)
+  // Once any member has explicit committeeClasses, unlisted members get none
+  const anyPerMember = getMembers().some(x => x.committeeClasses !== undefined);
+  if (anyPerMember) return [];
   return familyData?.committeeClasses || [];
 };
 const isCommittee    = () => isAdmin() || _memberCommitteeClasses(_myMember()).length > 0 || familyData?.role === 'committee';
