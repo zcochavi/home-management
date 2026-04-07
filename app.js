@@ -4377,7 +4377,7 @@ function renderShoppingHistory() {
     html += `<div class="hist-date-header" data-datekey="${esc(key)}" onclick="toggleHistoryDate(this)">
       <span class="cat-chevron">${expanded ? '▾' : '◀'}</span>
       <span class="hist-date-label">${key}</span>
-      <span class="hist-date-count">${count} קנייה${count > 1 ? 'ות' : ''}</span>
+      <span class="hist-date-count">${count} ${count > 1 ? 'קניות' : 'קנייה'}</span>
     </div>`;
     if (expanded) html += entries.map(e => _histEntryHtml(e, '')).join('');
   });
