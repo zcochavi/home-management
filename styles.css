@@ -557,7 +557,7 @@
     .presence-group-chevron { font-size:11px;color:#718096;flex-shrink:0; }
     .presence-group-label { flex:1; }
     .presence-group-count { font-size:12px;font-weight:700; }
-    .presence-cards-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;padding:10px; }
+    .presence-cards-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:8px;padding:10px; }
     .presence-card { display:flex;flex-direction:column;align-items:center;gap:5px;padding:10px 8px;border-radius:12px;background:#f8f9ff;text-align:center; }
     .presence-card-clickable { cursor:pointer;transition:background .15s,transform .1s; }
     .presence-card-clickable:hover { background:#ede9fe;transform:translateY(-1px); }
