@@ -289,16 +289,17 @@ const DEFAULT_GROCERY_CATS = [
   { name:'Meat & Fish', emoji:'🥩' },
 ];
 const DEFAULT_SUBJECTS = [
-  { name:'Maths',   nameHe:'מתמטיקה', bg:'#ebf4ff', color:'#2b6cb0' },
-  { name:'English', nameHe:'אנגלית',  bg:'#f0fff4', color:'#276749' },
-  { name:'Science', nameHe:'מדעים',   bg:'#faf5ff', color:'#6b46c1' },
-  { name:'History', nameHe:'היסטוריה',bg:'#fffaf0', color:'#c05621' },
-  { name:'Art',     nameHe:'אמנות',   bg:'#fff5f7', color:'#b83280' },
+  { name:'Maths',   nameHe:'מתמטיקה', bg:'#3b82f6', color:'#ffffff' },
+  { name:'English', nameHe:'אנגלית',  bg:'#10b981', color:'#ffffff' },
+  { name:'Science', nameHe:'מדעים',   bg:'#8b5cf6', color:'#ffffff' },
+  { name:'History', nameHe:'היסטוריה',bg:'#f59e0b', color:'#ffffff' },
+  { name:'Art',     nameHe:'אמנות',   bg:'#ec4899', color:'#ffffff' },
 ];
 const SUBJECT_COLOR_POOL = [
-  { bg:'#fef3c7', color:'#92400e' },{ bg:'#e0f2fe', color:'#0369a1' },
-  { bg:'#d1fae5', color:'#065f46' },{ bg:'#fce7f3', color:'#9d174d' },
-  { bg:'#ede9fe', color:'#5b21b6' },{ bg:'#fee2e2', color:'#991b1b' },
+  { bg:'#ef4444', color:'#ffffff' },{ bg:'#14b8a6', color:'#ffffff' },
+  { bg:'#f97316', color:'#ffffff' },{ bg:'#6366f1', color:'#ffffff' },
+  { bg:'#84cc16', color:'#ffffff' },{ bg:'#06b6d4', color:'#ffffff' },
+  { bg:'#a855f7', color:'#ffffff' },{ bg:'#0ea5e9', color:'#ffffff' },
 ];
 
 // Keyword → emoji suggestions for grocery category names
@@ -3451,7 +3452,7 @@ function openMenu(btn) {
   const parentItems = isParent() ? `
     <div class="menu-item" onclick="closeMenu();openMgmt()">
       <span class="menu-item-icon">⚙️</span>
-      <span>${isHe ? 'ניהול המשפחה' : 'Family management'}</span>
+      <span>${isHe ? 'ניהול' : 'Management'}</span>
     </div>
     <div class="menu-sep"></div>` : '';
   const gcalItem = (gcalConnected() || gcalWasConnected()) ? `

@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260408d') location.reload(true);
+        if (v !== '20260408f') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260408d">
+  <link rel="stylesheet" href="styles.css?v=20260408f">
 </head>
 <body>
 
@@ -220,7 +220,7 @@
 <div id="mgmtScreen" class="hidden">
   <div class="mgmt-header">
     <button class="mgmt-back-btn" onclick="closeMgmt()">×</button>
-    <div class="mgmt-header-title">⚙️ ניהול המשפחה</div>
+    <div class="mgmt-header-title">⚙️ ניהול</div>
   </div>
   <div class="mgmt-content">
 
@@ -495,7 +495,7 @@
   </div>
 </div>
 
-<script src="app.js?v=20260408d"></script>
+<script src="app.js?v=20260408f"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>

@@ -315,7 +315,7 @@ exports.onPendingSchoolCreated = functions.firestore
 
     // Bell notification for admin
     const bellMsg = `${label}${requester ? ` · הוגש על ידי ${requester}` : ''}`;
-    await writeNotif(ADMIN_UID, 'school_pending', bellMsg, { recipientUid: ADMIN_UID, reqId: ctx.params.reqId });
+    await writeNotif(ADMIN_UID, 'school_pending', bellMsg, { recipientUid: ADMIN_UID, requestedByUid: reqUid, reqId: ctx.params.reqId });
 
     // Push notification for admin
     const tokens = await getTokens(ADMIN_UID);
