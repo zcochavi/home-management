@@ -400,6 +400,8 @@ const _memberCommitteeClasses = (m) => {
   // Once any member has explicit committeeClasses, unlisted members get none
   const anyPerMember = getMembers().some(x => x.committeeClasses !== undefined);
   if (anyPerMember) return [];
+  // Family-level committeeClasses only apply to the account owner, not joined members
+  if (!_isOwner()) return [];
   return familyData?.committeeClasses || [];
 };
 const _isOwner       = () => fbAuth.currentUser?.uid === S.uid;
