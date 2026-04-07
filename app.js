@@ -2883,9 +2883,11 @@ async function rejectEvent(cid, pendingId) {
   } catch(e) { console.error('rejectEvent:', e); }
 }
 
-function openAdminPanel() {
+function openAdminPanel(showLog = true) {
   el('adminPanel').classList.remove('hidden');
-  renderAdminPanel();
+  const logSection = el('adminLogSection');
+  if (logSection) logSection.style.display = showLog ? '' : 'none';
+  renderAdminPanel(showLog);
 }
 function closeAdminPanel() { el('adminPanel').classList.add('hidden'); }
 
@@ -3039,7 +3041,13 @@ async function migrateCommitteeRoles() {
   }
 }
 
-async function renderAdminPanel() {
+async function renderAdminPanel(showLog = true) {
+  if (!showLog) {
+    await renderNotifSettings();
+    await renderLeaderboardSettings();
+    renderMaintenanceTools();
+    return;
+  }
   el('adminLogList').innerHTML = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
   try {
     const logSnap = await fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get();
@@ -3466,7 +3474,7 @@ function openMenu(btn) {
     <div class="menu-sep"></div>` : '';
   const adminItem = isAdmin() ? `
     <div class="menu-sep"></div>
-    <div class="menu-item" onclick="closeMenu();openAdminPanel()">
+    <div class="menu-item" onclick="closeMenu();openAdminPanel(false)">
       <span class="menu-item-icon">🔧</span>
       <span>${isHe ? 'הגדרות מערכת' : 'System settings'}</span>
     </div>` : '';
