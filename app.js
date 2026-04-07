@@ -2796,7 +2796,7 @@ async function renderCommunity() {
   await loadCommunityData(kidsWithSchool);
   renderHomeUpcoming();
   const adminBtn = isAdmin()
-    ? `<button class="admin-btn" onclick="openAdminPanel()">🔧 ניהול אירועים</button>`
+    ? `<button class="admin-btn" onclick="openAdminPanel(true, true)">📋 היסטוריית אירועים</button>`
     : '';
   container.innerHTML = adminBtn + kidsWithSchool.map(kid => renderCommCard(kid)).join('');
 }
@@ -2894,10 +2894,14 @@ async function rejectEvent(cid, pendingId) {
   } catch(e) { console.error('rejectEvent:', e); }
 }
 
-function openAdminPanel(showLog = true) {
+function openAdminPanel(showLog = true, historyOnly = false) {
   el('adminPanel').classList.remove('hidden');
   const logSection = el('adminLogSection');
+  const settingsSection = el('adminSettingsSection');
   if (logSection) logSection.style.display = showLog ? '' : 'none';
+  if (settingsSection) settingsSection.style.display = historyOnly ? 'none' : '';
+  const titleEl = el('adminPanel').querySelector('.mgmt-header-title');
+  if (titleEl) titleEl.textContent = historyOnly ? '📋 היסטוריית אירועים' : '⚙️ הגדרות מערכת';
   renderAdminPanel(showLog);
 }
 function closeAdminPanel() { el('adminPanel').classList.add('hidden'); }
