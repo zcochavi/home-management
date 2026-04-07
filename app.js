@@ -1794,16 +1794,6 @@ function renderMgmt() {
   renderMgmtCats();
   renderMgmtSubjects();
   renderMgmtCommunity();
-  const ttlEl = el('mgmtHistoryTtl');
-  if (ttlEl) ttlEl.value = getShoppingHistoryTtlDays();
-}
-
-async function mgmtSaveHistoryTtl() {
-  const val = parseInt(el('mgmtHistoryTtl').value, 10);
-  if (isNaN(val) || val < 0) return;
-  await saveShoppingHistoryTtl(val);
-  const msg = el('mgmtHistoryTtlMsg');
-  if (msg) { msg.style.color = '#38a169'; msg.textContent = 'נשמר ✓'; setTimeout(() => { msg.textContent = ''; }, 2000); }
 }
 
 // ── Members ──────────────────────────────
@@ -3056,10 +3046,34 @@ async function migrateCommitteeRoles() {
   }
 }
 
+function renderShoppingHistorySettings() {
+  const ttl = getShoppingHistoryTtlDays();
+  el('adminShoppingHistorySettings').innerHTML = `
+    <div style="padding:8px 0">
+      <div style="font-size:13px;color:#4a5568;margin-bottom:8px">כמה ימים לשמור היסטוריית קניות (0 = ללא הגבלה)</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="number" min="0" max="365" value="${ttl}" id="adminHistoryTtlInput"
+          style="width:72px;text-align:center;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px;font-size:14px;font-family:inherit">
+        <span style="font-size:13px;color:#4a5568">ימים</span>
+        <button class="admin-btn" onclick="adminSaveHistoryTtl()" style="padding:6px 14px;font-size:13px">שמור</button>
+        <span id="adminHistoryTtlMsg" style="font-size:12px;color:#38a169;min-width:40px"></span>
+      </div>
+    </div>`;
+}
+
+async function adminSaveHistoryTtl() {
+  const val = parseInt(el('adminHistoryTtlInput').value, 10);
+  if (isNaN(val) || val < 0) return;
+  await saveShoppingHistoryTtl(val);
+  const msg = el('adminHistoryTtlMsg');
+  if (msg) { msg.textContent = 'נשמר ✓'; setTimeout(() => { msg.textContent = ''; }, 2000); }
+}
+
 async function renderAdminPanel(showLog = true) {
   if (!showLog) {
     await renderNotifSettings();
     await renderLeaderboardSettings();
+    renderShoppingHistorySettings();
     renderMaintenanceTools();
     return;
   }
@@ -3085,6 +3099,7 @@ async function renderAdminPanel(showLog = true) {
 
     await renderNotifSettings();
     await renderLeaderboardSettings();
+    renderShoppingHistorySettings();
     renderMaintenanceTools();
   } catch(e) {
     console.error('renderAdminPanel:', e);

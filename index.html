@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260408p') location.reload(true);
+        if (v !== '20260408q') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260408p">
+  <link rel="stylesheet" href="styles.css?v=20260408q">
 </head>
 <body>
 
@@ -233,6 +233,8 @@
       <div id="adminNotifSettings"></div>
       <div class="comm-section-label" style="margin-top:4px">📊 הגדרות לוח מובילים</div>
       <div id="adminLeaderboardSettings"></div>
+      <div class="comm-section-label" style="margin-top:4px">🛒 היסטוריית קניות</div>
+      <div id="adminShoppingHistorySettings"></div>
       <div class="comm-section-label" style="margin-top:4px">🔧 כלי תחזוקה</div>
       <div id="adminMaintenance"></div>
     </div>
@@ -323,17 +325,6 @@
       <div id="mgmtCommunityList"></div>
     </div>
 
-    <!-- ── Shopping History TTL ── -->
-    <div class="card">
-      <div class="card-title">🛒 היסטוריית קניות</div>
-      <div class="mgmt-section-hint">כמה ימים לשמור היסטוריית קניות (0 = ללא הגבלה)</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
-        <input class="mgmt-input" id="mgmtHistoryTtl" type="number" min="0" max="365" style="width:80px;text-align:center">
-        <span style="font-size:13px;color:#4a5568">ימים</span>
-        <button class="mgmt-add-btn" onclick="mgmtSaveHistoryTtl()">שמור</button>
-      </div>
-      <div id="mgmtHistoryTtlMsg" style="font-size:12px;margin-top:6px;min-height:16px"></div>
-    </div>
 
   </div>
 </div>
@@ -538,7 +529,7 @@
   </div>
 </div>
 
-<script src="app.js?v=20260408p"></script>
+<script src="app.js?v=20260408q"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
