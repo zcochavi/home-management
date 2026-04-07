@@ -1472,6 +1472,7 @@ function subscribeToFamily(uid) {
     S.shoppingList     = d.shoppingList     || [];
     S.inCart           = d.inCart           || [];
     S.shoppingHistory  = d.shoppingHistory  || [];
+    pruneShoppingHistory();
     migrateGroceryIfNeeded();
     afterLoad();
   }, err => {
@@ -1793,6 +1794,16 @@ function renderMgmt() {
   renderMgmtCats();
   renderMgmtSubjects();
   renderMgmtCommunity();
+  const ttlEl = el('mgmtHistoryTtl');
+  if (ttlEl) ttlEl.value = getShoppingHistoryTtlDays();
+}
+
+async function mgmtSaveHistoryTtl() {
+  const val = parseInt(el('mgmtHistoryTtl').value, 10);
+  if (isNaN(val) || val < 0) return;
+  await saveShoppingHistoryTtl(val);
+  const msg = el('mgmtHistoryTtlMsg');
+  if (msg) { msg.style.color = '#38a169'; msg.textContent = 'נשמר ✓'; setTimeout(() => { msg.textContent = ''; }, 2000); }
 }
 
 // ── Members ──────────────────────────────
@@ -3987,6 +3998,26 @@ async function saveShoppingHistory() {
   } catch(e) { console.error('saveShoppingHistory error:', e); }
 }
 
+function getShoppingHistoryTtlDays() {
+  return familyData?.shoppingHistoryTtlDays ?? 60;
+}
+
+function pruneShoppingHistory() {
+  const ttl = getShoppingHistoryTtlDays();
+  if (!ttl || ttl <= 0) return; // 0 = keep forever
+  const cutoff = Date.now() - ttl * 24 * 60 * 60 * 1000;
+  const before = S.shoppingHistory.length;
+  S.shoppingHistory = S.shoppingHistory.filter(e => e.ts >= cutoff);
+  if (S.shoppingHistory.length < before) saveShoppingHistory();
+}
+
+async function saveShoppingHistoryTtl(days) {
+  if (!S.uid || !fbDb) return;
+  await fbDb.collection('families').doc(S.uid).update({ shoppingHistoryTtlDays: days });
+  if (familyData) familyData.shoppingHistoryTtlDays = days;
+  pruneShoppingHistory();
+}
+
 function switchGrocerySection(sec) {
   _grocerySection = sec;
   ['pool','shopping','history'].forEach(s => {
@@ -4320,7 +4351,8 @@ async function doneShopping() {
     bought: S.inCart.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' })),
     missed: missed.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' })),
   };
-  S.shoppingHistory = [entry, ...S.shoppingHistory].slice(0, 50);
+  const ttlCutoff = Date.now() - getShoppingHistoryTtlDays() * 24 * 60 * 60 * 1000;
+  S.shoppingHistory = [entry, ...S.shoppingHistory.filter(e => e.ts >= ttlCutoff)].slice(0, 50);
   S.shoppingList = [];
   S.inCart = [];
   saveGrocery();
