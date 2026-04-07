@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260406v') location.reload(true);
+        if (v !== '20260407r') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260406c">
+  <link rel="stylesheet" href="styles.css?v=20260407r">
 </head>
 <body>
 
@@ -384,17 +384,49 @@
       <div id="choreHistoryWrap"></div>
     </div>
 
-    <!-- GROCERY -->
+    <!-- GROCERY / SUPERMARKET -->
     <div id="tab-grocery" class="tab-content">
-      <div class="card">
-        <div class="card-title" id="shoppingListTitle"></div>
-        <div class="grocery-add" id="groceryAddForm">
-          <input class="g-input" id="groceryItem" type="text" onkeydown="if(event.key==='Enter')addGrocery()">
-          <select class="g-cat" id="groceryCat"></select>
-          <button class="btn" onclick="addGrocery()">＋</button>
+      <div class="grocery-subtabs">
+        <button class="grocery-subtab active" id="gtab-pool"     onclick="switchGrocerySection('pool')">🏪 מאגר</button>
+        <button class="grocery-subtab"        id="gtab-shopping" onclick="switchGrocerySection('shopping')">🛒 קניות</button>
+        <button class="grocery-subtab"        id="gtab-history"  onclick="switchGrocerySection('history')">📋 היסטוריה</button>
+      </div>
+
+      <!-- POOL -->
+      <div id="grocerySec-pool">
+        <div class="card">
+          <div class="card-title" id="poolTitle"></div>
+          <div class="pool-search-wrap">
+            <input class="pool-search" id="poolSearch" type="search" placeholder="🔍" oninput="onPoolSearch(this.value)">
+          </div>
+          <div class="grocery-add" id="poolAddForm">
+            <input class="g-input" id="poolItemInput" type="text" onkeydown="if(event.key==='Enter')addPoolItem()">
+            <select class="g-cat" id="poolCatSelect"></select>
+            <button class="unit-toggle" id="poolUnitToggle" onclick="togglePoolNewQtyType()">יח'</button>
+            <button class="btn" onclick="addPoolItem()">＋</button>
+          </div>
+          <div id="poolList"></div>
         </div>
-        <div id="groceryList"></div>
-        <button class="btn-ghost" id="groceryClearBtn" onclick="clearChecked()"></button>
+      </div>
+
+      <!-- HISTORY -->
+      <div id="grocerySec-history" style="display:none">
+        <div class="card">
+          <div class="card-title" id="historyTitle"></div>
+          <div class="pool-search-wrap">
+            <input class="pool-search" id="historySearch" type="search" placeholder="🔍" oninput="onHistorySearch(this.value)">
+          </div>
+          <div id="historyList"></div>
+        </div>
+      </div>
+
+      <!-- SHOPPING + CART combined -->
+      <div id="grocerySec-shopping" style="display:none">
+        <div class="card">
+          <div class="card-title" id="shoppingListTitle"></div>
+          <div id="shoppingListEl"></div>
+          <button class="btn" id="doneShoppingBtn" onclick="doneShopping()" style="margin-top:10px;background:linear-gradient(135deg,#38a169,#2f855a);display:none"></button>
+        </div>
       </div>
     </div>
 
@@ -465,7 +497,7 @@
   </div>
 </div>
 
-<script src="app.js?v=20260406v"></script>
+<script src="app.js?v=20260407r"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>

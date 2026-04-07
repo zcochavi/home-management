@@ -41,7 +41,7 @@ const STRINGS = {
     parentRole:'הורה', kidRole:'ילד/ה', roleAdmin:'🔑 מנהל', roleParent:'הורה', roleKid:'ילד/ה',
     greetMorning:'בוקר טוב', greetAfternoon:'צהריים טובים', greetEvening:'ערב טוב',
     switchUser:'החלף משתמש', langToggle:'EN',
-    tabs:['בית','משימות','קניות','שיעורים','לוח שנה','קהילה','דשבורד'],
+    tabs:['בית','משימות','סופרמרקט','שיעורים','לוח שנה','קהילה','דשבורד'],
     all:'כולם',
     todayChores:'⚡ משימות היום',
     personChores: n => `⚡ משימות של ${n}`,
@@ -57,6 +57,20 @@ const STRINGS = {
     choreHistory:'✅ היסטוריה', choreHistoryEmpty:'אין משימות שהושלמו עדיין', choreHistorySearch:'חיפוש בהיסטוריה...',
     high:'גבוה', medium:'בינוני', low:'נמוך',
     youLabel:'(את/ה)', add:'הוסף',
+    superPoolTitle:'🏪 מאגר', superListTitle:'🛒 רשימת קניות', superCartTitle:'🧺 בעגלה',
+    poolAddPlaceholder:'שם הפריט...',
+    poolEmpty:'אין פריטים במאגר — הוסף את הפריטים שאתם קונים בדרך כלל',
+    shoppingListEmpty:'הרשימה ריקה — הוסף פריטים מהמאגר',
+    cartEmpty:'הסל ריק',
+    startShopping:'🛒 התחל קנייה',
+    doneShopping:'✓ סיימתי לקנות',
+    shoppingHistoryTitle:'📋 היסטוריה', shoppingHistoryEmpty:'אין היסטוריית קניות עדיין',
+    historyBought:'קנה', historyMissed:'לא הביא',
+    addToList:'+ רשימה', inList:'✓ ברשימה',
+    toCart:'לעגלה ←', returnToList:'↩ חזור',
+    stillNeed:'עוד לקחת', inCartLabel:'בעגלה',
+    doneShoppingConfirm: (bought, missed) => missed ? `קנית ${bought} פריטים.\nלא הבאת ${missed} פריטים — המשך?` : `קנית ${bought} פריטים. להסיים?`,
+    doneShoppingMsg: (name, bought, missedNames) => missedNames.length ? `${name} סיים לקנות — לא הביא: ${missedNames.join(', ')}` : `${name} סיים לקנות (${bought} פריטים)`,
     shoppingList:'🛒 רשימת קניות', addItemPlaceholder:'הוסף פריט...',
     clearChecked:'🗑 נקה מסומנים', groceryEmpty:'🛒 הרשימה ריקה!',
     cats:{ 'Fruit & Veg':'פירות וירקות','Dairy & Eggs':'חלב וביצים','Pantry':'מזווה','Meat & Fish':'בשר ודגים' },
@@ -119,7 +133,7 @@ const STRINGS = {
     parentRole:'Parent', kidRole:'Kid', roleAdmin:'🔑 Admin', roleParent:'Parent', roleKid:'Kid',
     greetMorning:'Good morning', greetAfternoon:'Good afternoon', greetEvening:'Good evening',
     switchUser:'Switch user', langToggle:'עב',
-    tabs:['Home','Chores','Grocery','Homework','Calendar','Community','Dashboard'],
+    tabs:['Home','Chores','Supermarket','Homework','Calendar','Community','Dashboard'],
     all:'All',
     todayChores:"⚡ Today's Chores",
     personChores: n => `⚡ ${n}'s Chores`,
@@ -135,6 +149,20 @@ const STRINGS = {
     choreHistory:'✅ History', choreHistoryEmpty:'No completed chores yet', choreHistorySearch:'Search history…',
     high:'high', medium:'medium', low:'low',
     youLabel:'(you)', add:'Add',
+    superPoolTitle:'🏪 Pool', superListTitle:'🛒 Shopping List', superCartTitle:'🧺 In Cart',
+    poolAddPlaceholder:'Item name...',
+    poolEmpty:"No items in pool — add items your family usually buys",
+    shoppingListEmpty:'List is empty — add items from the pool',
+    cartEmpty:'Cart is empty',
+    startShopping:'🛒 Start Shopping',
+    doneShopping:'✓ Done Shopping',
+    shoppingHistoryTitle:'📋 History', shoppingHistoryEmpty:'No shopping history yet',
+    historyBought:'Bought', historyMissed:'Missed',
+    addToList:'+ List', inList:'✓ In List',
+    toCart:'→ Cart', returnToList:'↩ Return',
+    stillNeed:'Still need', inCartLabel:'In cart',
+    doneShoppingConfirm: (bought, missed) => missed ? `Bought ${bought} items.\nMissed ${missed} items — finish?` : `Bought ${bought} items. Finish?`,
+    doneShoppingMsg: (name, bought, missedNames) => missedNames.length ? `${name} is done shopping — missed: ${missedNames.join(', ')}` : `${name} is done shopping (${bought} items)`,
     shoppingList:'🛒 Shopping List', addItemPlaceholder:'Add item…',
     clearChecked:'🗑 Clear checked', groceryEmpty:'🛒 List is empty!',
     cats:{ 'Fruit & Veg':'Fruit & Veg','Dairy & Eggs':'Dairy & Eggs','Pantry':'Pantry','Meat & Fish':'Meat & Fish' },
@@ -349,6 +377,7 @@ const tomorrow = new Date(_now.getTime()+864e5).toISOString().slice(0,10);
 let S = {
   user:null, uid:null, tab:'home', filter:'All', child:null,
   chores:[], grocery:[], homework:[], stars:{}, events:[],
+  groceryPool:[], shoppingList:[], inCart:[], shoppingHistory:[],
   calYear:_now.getFullYear(), calMonth:_now.getMonth(), calSelected:today,
   lockedMember: null,
 };
@@ -605,6 +634,7 @@ async function doSignUp() {
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       chores: init.chores||[], grocery: init.grocery||[],
       homework: init.homework||[], events: init.events||[], stars: init.stars||{},
+      groceryPool: [], shoppingList: [], inCart: [], shoppingHistory: [],
     });
     await fbDb.collection('joinCodes').doc(code).set({ ownerUid });
     // Generate personal codes for each kid
@@ -803,13 +833,14 @@ function renderNotifBanners(undismissed) {
   undismissed.forEach(n => {
     if (existing.has('notifBanner_' + n.id)) return;
     const REQUEST_TYPES = ['school_pending','event_pending','application_pending'];
-    const isRequest = REQUEST_TYPES.includes(n.type);
-    const isGood    = n.type?.includes('approved');
-    const isDenied  = n.type?.includes('denied') || n.type?.includes('rejected');
-    const bg     = isGood ? '#f0fff4' : isDenied ? '#fff5f5' : '#ebf8ff';
-    const border = isGood ? '#9ae6b4' : isDenied ? '#feb2b2' : '#90cdf4';
-    const color  = isGood ? '#276749' : isDenied ? '#c53030' : '#2b6cb0';
-    const icon   = isGood ? '✅' : isDenied ? '❌' : isRequest ? '📋' : '🔔';
+    const isRequest  = REQUEST_TYPES.includes(n.type);
+    const isInfo     = n.type === 'shopping_done';
+    const isGood     = n.type?.includes('approved');
+    const isDenied   = n.type?.includes('denied') || n.type?.includes('rejected');
+    const bg     = isInfo ? '#fffbeb' : isGood ? '#f0fff4' : isDenied ? '#fff5f5' : '#ebf8ff';
+    const border = isInfo ? '#f6e05e' : isGood ? '#9ae6b4' : isDenied ? '#feb2b2' : '#90cdf4';
+    const color  = isInfo ? '#744210' : isGood ? '#276749' : isDenied ? '#c53030' : '#2b6cb0';
+    const icon   = isInfo ? '🛒' : isGood ? '✅' : isDenied ? '❌' : isRequest ? '📋' : '🔔';
     const div = document.createElement('div');
     div.className = 'notif-banner notif-banner-in';
     div.id = 'notifBanner_' + n.id;
@@ -1055,7 +1086,7 @@ function renderMessageCenter() {
   }
   list.innerHTML = notifs.map(n => {
     const isGood = n.type?.includes('approved');
-    const icon   = isGood ? '✅' : '❌';
+    const icon   = n.type === 'shopping_done' ? '🛒' : isGood ? '✅' : '❌';
     const dt     = n.createdAt?.toDate ? n.createdAt.toDate().toLocaleString('he-IL', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
     const dimmed = n.dismissed ? 'opacity:0.55;' : '';
     return `<div class="mc-item" id="mcItem_${n.id}" style="${dimmed}">
@@ -1199,6 +1230,41 @@ function shareKidCode(name, code) {
   }
 }
 
+async function generateSpouseCode(memberName) {
+  const btn = document.querySelector(`[data-spouse-gen="${CSS.escape(memberName)}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  try {
+    const code = generateFamilyCode();
+    const inviteEmail = code + '@' + JOIN_DOMAIN;
+    const app2 = firebase.initializeApp(FIREBASE_CONFIG, 'spouse_' + Date.now());
+    try {
+      await app2.auth().createUserWithEmailAndPassword(inviteEmail, code);
+    } finally {
+      await app2.delete();
+    }
+    await fbDb.collection('joinCodes').doc(code).set({ ownerUid: S.uid, memberName });
+    const members = getMembers().map(m => m.name === memberName ? { ...m, joinCode: code } : m);
+    if (familyData) familyData.members = members;
+    await fbDb.collection('families').doc(S.uid).update({ members });
+    renderMgmtMembers();
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'צור קוד'; }
+    alert('שגיאה ביצירת קוד: ' + e.message);
+  }
+}
+
+function shareSpouseCode(name, code) {
+  const url  = location.origin + location.pathname + '?join=' + code;
+  const text = `הצטרפ/י כ-${name} למשפחת ${familyData?.familyName || ''} ב-FamilyHub!\nקוד כניסה אישי: ${code}\n${url}`;
+  if (navigator.share) {
+    navigator.share({ title: 'FamilyHub', text });
+  } else {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('✓ הועתק!');
+    }).catch(() => prompt('העתק את הקוד:', text));
+  }
+}
+
 // ════════════════════════════════════════
 //  FIRESTORE PERSISTENCE
 // ════════════════════════════════════════
@@ -1208,6 +1274,7 @@ async function save() {
     await fbDb.collection('families').doc(S.uid).update({
       chores: S.chores, grocery: S.grocery, homework: S.homework,
       events: S.events, stars: S.stars,
+      groceryPool: S.groceryPool, shoppingList: S.shoppingList, inCart: S.inCart,
     });
   } catch(e) { console.error('Save error:', e); }
 }
@@ -1317,10 +1384,15 @@ function subscribeToFamily(uid) {
     const d = snap.data();
     familyData = d;
     S.chores   = d.chores   || [];
-    S.grocery  = d.grocery  || [];
-    S.homework = d.homework || [];
-    S.events   = d.events   || [];
-    S.stars    = d.stars    || {};
+    S.grocery      = d.grocery      || [];
+    S.homework     = d.homework     || [];
+    S.events       = d.events       || [];
+    S.stars        = d.stars        || {};
+    S.groceryPool      = d.groceryPool      || [];
+    S.shoppingList     = d.shoppingList     || [];
+    S.inCart           = d.inCart           || [];
+    S.shoppingHistory  = d.shoppingHistory  || [];
+    migrateGroceryIfNeeded();
     afterLoad();
   }, err => {
     console.error('Firestore error:', err);
@@ -1586,7 +1658,7 @@ function toggleEventPerson(key) {
 function renderAll() {
   const sy = window.scrollY;
   renderTabBar(); renderStatic(); renderHeader(); renderHome();
-  renderChores(); renderGrocery(); renderHomework();
+  renderChores(); renderSupermarket(); renderHomework();
   renderCalendar(); renderGCalBar(); applyRoleUI();
   if (S.tab === 'community') renderCommunity();
   // Restore scroll position — Firestore onSnapshot re-renders reset it on mobile
@@ -1632,6 +1704,15 @@ function renderMgmtMembers() {
             <span style="font-size:11px;color:#6a11cb;font-weight:700;background:#f0e6ff;padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
             <button style="background:none;border:none;font-size:13px;cursor:pointer;padding:2px 4px" onclick="shareKidCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד">📤</button>
           </div>` : ''}
+        ${m.role === 'parent' && m.name !== S.user ? (m.joinCode ? `
+          <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+            <span style="font-size:10px;color:#718096;margin-left:2px">🔑</span>
+            <span style="font-size:11px;color:#276749;font-weight:700;background:#c6f6d5;padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
+            <button style="background:none;border:none;font-size:13px;cursor:pointer;padding:2px 4px" onclick="shareSpouseCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד">📤</button>
+          </div>` : `
+          <div style="margin-top:4px">
+            <button data-spouse-gen="${esc(m.name)}" style="font-size:11px;background:#ebf8ff;color:#2b6cb0;border:1px solid #bee3f8;border-radius:8px;padding:2px 10px;cursor:pointer;font-family:inherit" onclick="generateSpouseCode('${esc(m.name)}')">🔑 צור קוד כניסה</button>
+          </div>`) : ''}
       </div>
       <button class="mgmt-icon-btn purple" onclick="toggleMgmtEdit(${i})" title="ערוך">✏️</button>
       ${canDel ? `<button class="mgmt-icon-btn red" onclick="mgmtRemoveMember('${esc(m.name)}')" title="הסר">🗑</button>` : '<span style="width:26px"></span>'}
@@ -3060,12 +3141,18 @@ async function saveMgmtCatEdit(i, originalName) {
   if (familyData) familyData.groceryCategories = cats;
   if (newName !== originalName) {
     S.grocery = S.grocery.map(g => g.category === originalName ? { ...g, category: newName } : g);
-    await fbDb.collection('families').doc(S.uid).update({ groceryCategories: cats, grocery: S.grocery });
+    S.groceryPool  = S.groceryPool.map(p  => p.category  === originalName ? { ...p,  category: newName } : p);
+    S.shoppingList = S.shoppingList.map(x => x.category  === originalName ? { ...x,  category: newName } : x);
+    S.inCart       = S.inCart.map(x       => x.category  === originalName ? { ...x,  category: newName } : x);
+    await fbDb.collection('families').doc(S.uid).update({
+      groceryCategories: cats, grocery: S.grocery,
+      groceryPool: S.groceryPool, shoppingList: S.shoppingList, inCart: S.inCart,
+    });
   } else {
     await fbDb.collection('families').doc(S.uid).update({ groceryCategories: cats });
   }
   el(`mgmtCatPanel_${i}`).classList.remove('open');
-  renderMgmtCats(); renderStatic(); renderGrocery();
+  renderMgmtCats(); renderStatic(); renderSupermarket();
 }
 
 async function mgmtAddCat() {
@@ -3085,7 +3172,7 @@ async function mgmtRemoveCat(name) {
   const cats = getGroceryCats().filter(c => c.name !== name);
   if (familyData) familyData.groceryCategories = cats;
   await fbDb.collection('families').doc(S.uid).update({ groceryCategories: cats });
-  renderMgmtCats(); renderStatic(); renderGrocery();
+  renderMgmtCats(); renderStatic(); renderSupermarket();
 }
 
 // ── Homework Subjects ────────────────────
@@ -3375,23 +3462,25 @@ function renderStatic() {
   const sb=el('switchBtn'); if(sb) sb.textContent = t('switchUser');
   el('starChartTitle').textContent   = t('starChart');
   el('hwDueSoonTitle').textContent   = t('hwDueSoon');
-  el('shoppingListTitle').textContent = t('shoppingList');
+  el('poolTitle').textContent        = t('superPoolTitle');
+  el('shoppingListTitle').textContent = t('superListTitle');
   el('addChoreTitle').textContent    = t('addChoreTitle');
   el('addEventTitle').textContent    = t('addEventTitle');
   el('newChoreText').placeholder  = t('chorePlaceholder');
-  el('groceryItem').placeholder   = t('addItemPlaceholder');
+  el('poolItemInput').placeholder = t('poolAddPlaceholder');
   el('hwDesc').placeholder        = t('hwPlaceholder');
   el('newEventTitle').placeholder = t('eventPlaceholder');
   el('addChoreBtn').textContent  = t('add');
   el('addHwBtn').textContent     = t('add');
   el('addEventBtn').textContent  = t('add');
-  el('groceryClearBtn').textContent = t('clearChecked');
+  el('doneShoppingBtn').textContent   = t('doneShopping');
+  el('historyTitle').textContent      = t('shoppingHistoryTitle');
   const lbl=el('gcalSyncLabel');if(lbl)lbl.textContent=t('gcalSyncOption');
   el('newChorePriority').innerHTML = `
     <option value="high">🔴 ${t('high')}</option>
     <option value="medium">🟡 ${t('medium')}</option>
     <option value="low">🟢 ${t('low')}</option>`;
-  el('groceryCat').innerHTML = getGroceryCats().map(c =>
+  el('poolCatSelect').innerHTML = getGroceryCats().map(c =>
     `<option value="${esc(c.name)}">${c.emoji} ${esc(c.name)}</option>`).join('');
   el('hwSubject').innerHTML = getSubjects().map(s =>
     `<option value="${esc(s.name)}">${esc(subjectLabel(s.name))}</option>`).join('');
@@ -3404,8 +3493,7 @@ function renderStatic() {
 function applyRoleUI() {
   // Kids can add chores for themselves but can't pick assignee
   el('newChoreAssignee').style.display = isParent()?'':'none';
-  el('groceryAddForm').style.display   = isParent()?'':'none';
-  el('groceryClearBtn').style.display  = isParent()?'':'none';
+  el('poolAddForm').style.display      = isParent()?'':'none';
 }
 
 // ════════════════════════════════════════
@@ -3698,25 +3786,506 @@ function addChore(){
 }
 
 // ════════════════════════════════════════
-//  GROCERY
+//  SUPERMARKET
 // ════════════════════════════════════════
-function renderGrocery(){
-  const ed=isParent();let html='';
-  getGroceryCats().forEach(cat=>{
-    const items=S.grocery.filter(g=>g.category===cat.name);if(!items.length)return;
-    html+=`<div class="cat-title">${cat.emoji} ${esc(cat.name)}</div>`;
-    html+=items.map(g=>`<div class="g-item">
-      <div class="check-box ${g.checked?'done':''} ${ed?'':'readonly'}" ${ed?`onclick="toggleGrocery(${g.id})"`:''}>
-        ${g.checked?'✓':''}</div>
-      <div class="g-item-text ${g.checked?'done':''}">${esc(g.text)}</div>
-      ${ed?`<button class="del-btn" onclick="deleteGrocery(${g.id})">🗑</button>`:''}</div>`).join('');
-  });
-  el('groceryList').innerHTML=html||`<div class="empty">${t('groceryEmpty')}</div>`;
+let _grocerySection = 'pool';
+let _poolQtyFor = null;      // poolId currently showing qty input
+let _poolEditFor = null;     // poolId currently being edited
+let _poolEditQtyType = 'count'; // unit type in active edit row
+let _poolNewQtyType = 'count';  // unit for next new pool item: 'count' | 'kg'
+const _collapsedPoolCats     = new Set();
+const _collapsedShoppingCats = new Set();
+let _poolSearch = '';
+let _historySearch = '';
+const _expandedHistoryDates = new Set();
+
+function onHistorySearch(val) {
+  _historySearch = val.trim().toLowerCase();
+  renderShoppingHistory();
 }
-function addGrocery(){if(!isParent())return;const text=el('groceryItem').value.trim();if(!text)return;S.grocery.push({id:Date.now(),text,category:el('groceryCat').value,checked:false});el('groceryItem').value='';save();renderGrocery();}
-function toggleGrocery(id){if(!isParent())return;const g=S.grocery.find(x=>x.id===id);if(g){g.checked=!g.checked;save();renderGrocery();}}
-function deleteGrocery(id){if(!isParent())return;S.grocery=S.grocery.filter(x=>x.id!==id);save();renderGrocery();}
-function clearChecked(){if(!isParent())return;S.grocery=S.grocery.filter(g=>!g.checked);save();renderGrocery();}
+
+function toggleHistoryDate(el) {
+  const key = el.dataset.datekey;
+  if (_expandedHistoryDates.has(key)) _expandedHistoryDates.delete(key);
+  else _expandedHistoryDates.add(key);
+  renderShoppingHistory();
+}
+
+function onPoolSearch(val) {
+  _poolSearch = val.trim().toLowerCase();
+  renderPool();
+}
+
+function toggleCatCollapse(el) {
+  const sec = el.dataset.section;
+  const cat = el.dataset.cat;
+  const set = sec === 'pool' ? _collapsedPoolCats : _collapsedShoppingCats;
+  if (set.has(cat)) set.delete(cat); else set.add(cat);
+  if (sec === 'pool') renderPool(); else renderShoppingList();
+}
+
+function togglePoolNewQtyType() {
+  _poolNewQtyType = _poolNewQtyType === 'count' ? 'kg' : 'count';
+  const btn = el('poolUnitToggle');
+  if (btn) {
+    btn.textContent = _poolNewQtyType === 'kg' ? 'ק"ג' : 'יח\'';
+    btn.classList.toggle('kg', _poolNewQtyType === 'kg');
+  }
+}
+
+function fmtQty(qty, qtyType) {
+  if (qtyType === 'kg') {
+    const n = parseFloat(qty) || 0;
+    return (Number.isInteger(n) ? n : n.toFixed(1)) + ' ק"ג';
+  }
+  return '×' + (parseInt(qty) || 1);
+}
+
+function migrateGroceryIfNeeded() {
+  if (!S.groceryPool.length && S.grocery?.length) {
+    S.groceryPool = S.grocery.map(g => ({ id: g.id, name: g.text, category: g.category || '' }));
+    saveGrocery();
+  }
+}
+
+async function saveGrocery() {
+  if (!S.uid || !fbDb) return;
+  try {
+    await fbDb.collection('families').doc(S.uid).update({
+      groceryPool: S.groceryPool, shoppingList: S.shoppingList, inCart: S.inCart,
+    });
+  } catch(e) { console.error('saveGrocery error:', e); }
+}
+
+async function saveShoppingHistory() {
+  if (!S.uid || !fbDb) return;
+  try {
+    await fbDb.collection('families').doc(S.uid).update({ shoppingHistory: S.shoppingHistory });
+  } catch(e) { console.error('saveShoppingHistory error:', e); }
+}
+
+function switchGrocerySection(sec) {
+  _grocerySection = sec;
+  ['pool','shopping','history'].forEach(s => {
+    el(`grocerySec-${s}`).style.display = s === sec ? '' : 'none';
+    el(`gtab-${s}`)?.classList.toggle('active', s === sec);
+  });
+  if (sec === 'pool')     renderPool();
+  if (sec === 'shopping') renderShoppingList();
+  if (sec === 'history')  renderShoppingHistory();
+}
+
+function renderSupermarket() {
+  renderPool();
+  if (_grocerySection === 'shopping') renderShoppingList();
+  else if (_grocerySection === 'history') renderShoppingHistory();
+}
+
+function renderPool() {
+  const ed = isParent();
+  const cats = getGroceryCats();
+  const knownCats = new Set(cats.map(c => c.name));
+  let html = '';
+
+  function poolItemHtml(p) {
+    const inList = S.shoppingList.some(x => x.poolId === p.id);
+    const qtyActive = _poolQtyFor === p.id;
+    const isKg = p.qtyType === 'kg';
+    const unitLabel = isKg ? 'ק"ג' : 'יח\'';
+
+    if (_poolEditFor === p.id) {
+      const editIsKg = _poolEditQtyType === 'kg';
+      const catOptions = getGroceryCats().map(c =>
+        `<option value="${esc(c.name)}"${c.name===p.category?' selected':''}>${c.emoji} ${esc(c.name)}</option>`).join('');
+      return `<div class="pool-item pool-item-edit-row">
+        <input class="g-input" id="poolEditName_${p.id}" value="${esc(p.name)}"
+          style="flex:1;min-width:80px;padding:6px 10px"
+          onkeydown="if(event.key==='Enter')confirmEditPoolItem(${p.id})">
+        <select class="g-cat" id="poolEditCat_${p.id}">${catOptions}</select>
+        <button class="unit-toggle${editIsKg?' kg':''}" id="poolEditUnit_${p.id}"
+          onclick="togglePoolEditQtyType(${p.id})">${editIsKg?'ק"ג':'יח\''}</button>
+        <button class="cart-btn" onclick="confirmEditPoolItem(${p.id})">✓</button>
+        <button class="pool-add-btn" onclick="cancelEditPoolItem()" style="border-color:#718096;color:#718096">✕</button>
+      </div>`;
+    }
+
+    if (qtyActive) {
+      return `<div class="pool-item pool-item-qty-row">
+        <div class="pool-item-name">${esc(p.name)}</div>
+        <input class="qty-input${isKg?' kg':''}" id="poolQtyInput_${p.id}"
+          type="number" min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${p.lastQty||1}"
+          ${isKg?`oninput="this.value=this.value.replace(/(\\.\\d{1})\\d+/,'$1')"`:''}
+          onkeydown="if(event.key==='Enter')confirmAddToList(${p.id})">
+        <span class="qty-unit-label">${unitLabel}</span>
+        <button class="cart-btn" onclick="confirmAddToList(${p.id})">✓</button>
+        <button class="pool-add-btn" onclick="cancelAddToList()" style="border-color:#718096;color:#718096">✕</button>
+      </div>`;
+    }
+    return `<div class="pool-item">
+      <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
+      <button class="pool-add-btn${inList?' in-list':''}" onclick="togglePoolItem(${p.id})">${inList?t('inList'):t('addToList')}</button>
+      ${ed?`<button class="del-btn" style="color:#a0aec0" onclick="startEditPoolItem(${p.id})">✏️</button>`:''}
+      ${ed?`<button class="del-btn" onclick="deletePoolItem(${p.id})">🗑</button>`:''}
+    </div>`;
+  }
+
+  const searching = _poolSearch.length > 0;
+  const poolItems = searching
+    ? S.groceryPool.filter(p => p.name.toLowerCase().includes(_poolSearch))
+    : S.groceryPool;
+
+  function poolCatHtml(emoji, name, items) {
+    const collapsed = !searching && _collapsedPoolCats.has(name);
+    return `<div class="cat-title cat-collapsible" data-section="pool" data-cat="${esc(name)}" onclick="toggleCatCollapse(this)">
+        <span class="cat-chevron">${collapsed?'◀':'▾'}</span>${emoji} ${esc(name)}<span class="cat-count">${collapsed?` (${items.length})`:''}</span>
+      </div>${collapsed ? '' : items.map(poolItemHtml).join('')}`;
+  }
+
+  if (searching && !poolItems.length) {
+    html = `<div class="empty">אין תוצאות עבור "${esc(_poolSearch)}"</div>`;
+  } else {
+    cats.forEach(cat => {
+      const items = poolItems.filter(p => p.category === cat.name);
+      if (!items.length) return;
+      html += poolCatHtml(cat.emoji, cat.name, items);
+    });
+    const orphans = poolItems.filter(p => !knownCats.has(p.category));
+    if (orphans.length) html += poolCatHtml('🛒', 'אחר', orphans);
+  }
+  el('poolList').innerHTML = html || `<div class="empty">${t('poolEmpty')}</div>`;
+  if (_poolQtyFor !== null) {
+    const inp = el(`poolQtyInput_${_poolQtyFor}`);
+    if (inp) { inp.focus(); inp.select(); }
+  }
+  if (_poolEditFor !== null) {
+    const inp = el(`poolEditName_${_poolEditFor}`);
+    if (inp) { inp.focus(); inp.select(); }
+  }
+}
+
+function addPoolItem() {
+  if (!isParent()) return;
+  const name = el('poolItemInput').value.trim();
+  if (!name) return;
+  if (S.groceryPool.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+    el('poolItemInput').value = '';
+    return;
+  }
+  const category = el('poolCatSelect').value;
+  S.groceryPool.push({ id: Date.now(), name, category, qtyType: _poolNewQtyType });
+  el('poolItemInput').value = '';
+  saveGrocery();
+  renderPool();
+}
+
+function deletePoolItem(id) {
+  if (!isParent()) return;
+  S.groceryPool  = S.groceryPool.filter(p => p.id !== id);
+  S.shoppingList = S.shoppingList.filter(x => x.poolId !== id);
+  saveGrocery();
+  renderPool();
+}
+
+function togglePoolItem(poolId) {
+  const idx = S.shoppingList.findIndex(x => x.poolId === poolId);
+  if (idx !== -1) {
+    // Already in list — remove it (parents only)
+    if (!isParent()) return;
+    S.shoppingList.splice(idx, 1);
+    saveGrocery();
+    renderPool();
+  } else {
+    // Show inline qty input
+    _poolQtyFor = poolId;
+    renderPool();
+  }
+}
+
+function confirmAddToList(poolId) {
+  const pool = S.groceryPool.find(p => p.id === poolId);
+  if (!pool) return;
+  const inp = el(`poolQtyInput_${poolId}`);
+  const isKg = pool.qtyType === 'kg';
+  const raw = isKg ? parseFloat(parseFloat(inp?.value).toFixed(1)) : parseInt(inp?.value);
+  const qty = isKg ? Math.max(0.1, raw || 1) : Math.max(1, raw || 1);
+  pool.lastQty = qty;
+  S.shoppingList.push({ id: Date.now(), poolId, name: pool.name, category: pool.category, qty, qtyType: pool.qtyType || 'count' });
+  _poolQtyFor = null;
+  saveGrocery();
+  renderPool();
+}
+
+function cancelAddToList() {
+  _poolQtyFor = null;
+  renderPool();
+}
+
+function startEditPoolItem(id) {
+  const pool = S.groceryPool.find(p => p.id === id);
+  if (!pool) return;
+  _poolEditFor = id;
+  _poolEditQtyType = pool.qtyType || 'count';
+  _poolQtyFor = null; // close qty row if open
+  renderPool();
+}
+
+function togglePoolEditQtyType(id) {
+  _poolEditQtyType = _poolEditQtyType === 'count' ? 'kg' : 'count';
+  const btn = el(`poolEditUnit_${id}`);
+  if (btn) {
+    btn.textContent = _poolEditQtyType === 'kg' ? 'ק"ג' : 'יח\'';
+    btn.classList.toggle('kg', _poolEditQtyType === 'kg');
+  }
+}
+
+function confirmEditPoolItem(id) {
+  const pool = S.groceryPool.find(p => p.id === id);
+  if (!pool) return;
+  const newName = el(`poolEditName_${id}`)?.value.trim();
+  if (!newName) return;
+  const newCat  = el(`poolEditCat_${id}`)?.value || '';
+  const oldName = pool.name;
+  pool.name     = newName;
+  pool.category = newCat;
+  pool.qtyType  = _poolEditQtyType;
+  // Sync name/category into existing shoppingList and inCart entries
+  S.shoppingList.forEach(x => { if (x.poolId === id) { x.name = newName; x.category = newCat; x.qtyType = _poolEditQtyType; } });
+  S.inCart.forEach(x =>       { if (x.poolId === id) { x.name = newName; x.category = newCat; x.qtyType = _poolEditQtyType; } });
+  _poolEditFor = null;
+  saveGrocery();
+  renderPool();
+}
+
+function cancelEditPoolItem() {
+  _poolEditFor = null;
+  renderPool();
+}
+
+function renderShoppingList() {
+  const ed = isParent();
+  const hasContent = S.shoppingList.length || S.inCart.length;
+  if (!hasContent) {
+    el('shoppingListEl').innerHTML = `<div class="empty">${t('shoppingListEmpty')}</div>`;
+    el('doneShoppingBtn').style.display = 'none';
+    return;
+  }
+  let html = '';
+  const cats = getGroceryCats();
+  const knownCats = new Set(cats.map(c => c.name));
+
+  function listItemHtml(item) {
+    const isKg = item.qtyType === 'kg';
+    const unitLabel = isKg ? 'ק"ג' : 'יח\'';
+    const qtyBadge = `<span class="unit-badge" style="background:#e9f5ff;color:#2b6cb0">${fmtQty(item.qty||1, item.qtyType)}</span>`;
+    return `<div class="slist-item">
+      <div class="slist-item-name">${esc(item.name)} ${qtyBadge}</div>
+      <input class="qty-input${isKg?' kg':''}" type="number"
+        min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${item.qty||1}"
+        ${isKg?`oninput="this.value=this.value.replace(/(\\\.\\d{1})\\d+/,'$1')"`:``}
+        onchange="updateListQty(${item.id},this.value)">
+      <span class="qty-unit-label">${unitLabel}</span>
+      <button class="cart-btn" onclick="moveToCart(${item.id})">${t('toCart')}</button>
+      ${ed?`<button class="del-btn" onclick="removeFromShoppingList(${item.id})">🗑</button>`:''}
+    </div>`;
+  }
+
+  // Items still to grab
+  if (S.shoppingList.length) {
+    html += `<div class="super-section-label">📋 ${t('stillNeed')} (${S.shoppingList.length})</div>`;
+    function shoppingCatHtml(emoji, name, items) {
+      const collapsed = _collapsedShoppingCats.has(name);
+      return `<div class="cat-title cat-collapsible" data-section="shopping" data-cat="${esc(name)}" onclick="toggleCatCollapse(this)">
+          <span class="cat-chevron">${collapsed?'◀':'▾'}</span>${emoji} ${esc(name)}<span class="cat-count">${collapsed?` (${items.length})`:''}</span>
+        </div>${collapsed ? '' : items.map(listItemHtml).join('')}`;
+    }
+    cats.forEach(cat => {
+      const items = S.shoppingList.filter(x => x.category === cat.name);
+      if (!items.length) return;
+      html += shoppingCatHtml(cat.emoji, cat.name, items);
+    });
+    const orphans = S.shoppingList.filter(x => !knownCats.has(x.category));
+    if (orphans.length) html += shoppingCatHtml('🛒', 'אחר', orphans);
+  }
+
+  // Items already in cart
+  if (S.inCart.length) {
+    html += `<div class="super-section-label">✅ ${t('inCartLabel')} (${S.inCart.length})</div>`;
+    html += S.inCart.map(item => `<div class="cart-item">
+      <div class="cart-item-name">${esc(item.name)} <span class="unit-badge" style="background:#c6f6d5;color:#276749">${fmtQty(item.qty||1, item.qtyType)}</span></div>
+      <button class="pool-add-btn" onclick="returnToList(${item.id})" style="border-color:#e53e3e;color:#e53e3e;font-size:11px">${t('returnToList')}</button>
+    </div>`).join('');
+  }
+
+  el('shoppingListEl').innerHTML = html;
+  el('doneShoppingBtn').style.display = (ed && hasContent) ? '' : 'none';
+}
+
+
+function moveToCart(id) {
+  const idx = S.shoppingList.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  const item = S.shoppingList.splice(idx, 1)[0];
+  S.inCart.push({ ...item, id: Date.now() });
+  saveGrocery();
+  renderShoppingList();
+}
+
+function removeFromShoppingList(id) {
+  if (!isParent()) return;
+  S.shoppingList = S.shoppingList.filter(x => x.id !== id);
+  saveGrocery();
+  renderShoppingList();
+}
+
+function updateListQty(id, val) {
+  const item = S.shoppingList.find(x => x.id === id);
+  if (!item) return;
+  const isKg = item.qtyType === 'kg';
+  const parsed = isKg ? parseFloat(parseFloat(val).toFixed(1)) : parseInt(val);
+  if (!isNaN(parsed) && parsed > 0) {
+    item.qty = isKg ? Math.max(0.1, parsed) : Math.max(1, parsed);
+    // Update badge in-place without full re-render
+    const inp = document.querySelector(`input[onchange="updateListQty(${id},this.value)"]`);
+    const badge = inp?.closest('.slist-item')?.querySelector('.unit-badge');
+    if (badge) badge.textContent = fmtQty(item.qty, item.qtyType);
+    saveGrocery();
+  }
+}
+
+function updateCartQty(id, val) {
+  const item = S.inCart.find(x => x.id === id);
+  if (!item) return;
+  const isKg = item.qtyType === 'kg';
+  const parsed = isKg ? parseFloat(parseFloat(val).toFixed(1)) : parseInt(val);
+  if (!isNaN(parsed) && parsed > 0) {
+    item.qty = isKg ? Math.max(0.1, parsed) : Math.max(1, parsed);
+    saveGrocery();
+  }
+}
+
+function returnToList(id) {
+  const idx = S.inCart.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  const item = S.inCart.splice(idx, 1)[0];
+  S.shoppingList.push({ ...item, id: Date.now() });
+  saveGrocery();
+  renderShoppingList();
+}
+
+async function doneShopping() {
+  if (!isParent()) return;
+  const missed = [...S.shoppingList];
+  const bought = S.inCart.length;
+  const confirmMsg = t('doneShoppingConfirm', bought, missed.length);
+  if (!confirm(confirmMsg)) return;
+  const msg = t('doneShoppingMsg', S.user, bought, missed.map(x => x.name));
+  try {
+    await fbDb.collection('families').doc(S.uid)
+      .collection('notifications').add({
+        type: 'shopping_done',
+        message: msg,
+        by: S.user,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        dismissed: false,
+      });
+  } catch(e) { console.error('doneShopping notif:', e); }
+  // Save to history (keep last 50 sessions, most recent first)
+  const entry = {
+    id: Date.now(),
+    ts: Date.now(),
+    by: S.user,
+    bought: S.inCart.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' })),
+    missed: missed.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' })),
+  };
+  S.shoppingHistory = [entry, ...S.shoppingHistory].slice(0, 50);
+  S.shoppingList = [];
+  S.inCart = [];
+  saveGrocery();
+  saveShoppingHistory();
+  switchGrocerySection('shopping');
+}
+
+function _histEntryHtml(entry, searchTerm) {
+  const d = new Date(entry.ts);
+  const timeStr = d.toLocaleTimeString(t('locale'), { hour:'2-digit', minute:'2-digit' });
+  const datePrefix = searchTerm
+    ? `<span class="hist-search-date">${d.toLocaleDateString(t('locale'), { day:'numeric', month:'short', year:'numeric' })} · </span>`
+    : '';
+  const emoji = getEmoji(entry.by) || '🛒';
+
+  const hl = name => {
+    if (!searchTerm) return esc(name);
+    const lo = name.toLowerCase(), idx = lo.indexOf(searchTerm);
+    if (idx === -1) return esc(name);
+    return esc(name.slice(0, idx))
+      + `<mark>${esc(name.slice(idx, idx + searchTerm.length))}</mark>`
+      + esc(name.slice(idx + searchTerm.length));
+  };
+
+  const boughtHtml = entry.bought.map(x =>
+    `<span class="hist-item bought">${hl(x.name)} <span class="hist-qty">${fmtQty(x.qty, x.qtyType)}</span></span>`
+  ).join('');
+  const missedHtml = entry.missed.length
+    ? `<div class="hist-missed-row"><span class="hist-missed-label">${t('historyMissed')}:</span> `
+      + entry.missed.map(x => `<span class="hist-item missed">${hl(x.name)}</span>`).join('')
+      + `</div>`
+    : '';
+
+  return `<div class="hist-entry">
+    <div class="hist-header">
+      <span class="hist-who">${emoji} ${esc(entry.by)}</span>
+      <span class="hist-when">${datePrefix}${timeStr}</span>
+    </div>
+    <div class="hist-items-row">${boughtHtml}</div>
+    ${missedHtml}
+  </div>`;
+}
+
+function renderShoppingHistory() {
+  const list = el('historyList');
+  if (!list) return;
+  if (!S.shoppingHistory.length) {
+    list.innerHTML = `<div class="empty">${t('shoppingHistoryEmpty')}</div>`;
+    return;
+  }
+
+  const search = _historySearch;
+
+  // ── Search mode: flat results ──────────────────────────
+  if (search) {
+    const results = S.shoppingHistory.filter(e =>
+      [...e.bought, ...e.missed].some(x => x.name.toLowerCase().includes(search))
+    );
+    if (!results.length) {
+      list.innerHTML = `<div class="empty">לא נמצא "${esc(search)}" בהיסטוריה</div>`;
+      return;
+    }
+    list.innerHTML = `<div class="hist-search-count">${results.length} תוצאות</div>`
+      + results.map(e => _histEntryHtml(e, search)).join('');
+    return;
+  }
+
+  // ── Grouped by date ────────────────────────────────────
+  const groups = new Map();
+  S.shoppingHistory.forEach(entry => {
+    const key = new Date(entry.ts).toLocaleDateString(t('locale'), { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  });
+
+  let html = '';
+  groups.forEach((entries, key) => {
+    const expanded = _expandedHistoryDates.has(key);
+    const count = entries.length;
+    html += `<div class="hist-date-header" data-datekey="${esc(key)}" onclick="toggleHistoryDate(this)">
+      <span class="cat-chevron">${expanded ? '▾' : '◀'}</span>
+      <span class="hist-date-label">${key}</span>
+      <span class="hist-date-count">${count} קנייה${count > 1 ? 'ות' : ''}</span>
+    </div>`;
+    if (expanded) html += entries.map(e => _histEntryHtml(e, '')).join('');
+  });
+  list.innerHTML = html;
+}
 
 // ════════════════════════════════════════
 //  HOMEWORK
