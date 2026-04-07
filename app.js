@@ -3057,8 +3057,8 @@ function renderShoppingHistorySettings() {
       <div style="display:flex;align-items:center;gap:10px">
         <input type="number" min="0" max="365" value="${ttl}" id="adminHistoryTtlInput"
           style="width:72px;text-align:center;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px;font-size:14px;font-family:inherit">
-        <span style="font-size:13px;color:#4a5568">ימים</span>
-        <button class="admin-btn" onclick="adminSaveHistoryTtl()" style="padding:6px 14px;font-size:13px">שמור</button>
+        <button class="admin-btn" onclick="adminSaveHistoryTtl()" style="padding:6px 14px;font-size:13px;line-height:1.4">שמור</button>
+        <span style="font-size:13px;color:#4a5568;line-height:1.4">ימים</span>
         <span id="adminHistoryTtlMsg" style="font-size:12px;color:#38a169;min-width:40px"></span>
       </div>
     </div>`;
@@ -5030,9 +5030,17 @@ function switchTab(tab) {
 
 let _analyticsCharts = {};
 let _presenceRefreshTimer = null;
-let _presencePrevOnline  = new Set();
-let _presenceCachedData  = null;
-let _presenceExpanded    = { parent: false, kid: false };
+let _presencePrevOnline   = new Set();
+let _presenceOnline       = [];
+let _presenceOffline      = [];
+let _presenceOfflineTotal = 0;
+let _presenceStats        = null;
+let _presenceSearchQ      = '';
+let _presenceSearchData   = [];
+let _presenceSearchTotal  = 0;
+let _presenceSearchPage   = 0;
+let _presenceLoadingMore  = false;
+let _presenceSearchTimer  = null;
 
 function _destroyCharts() {
   Object.values(_analyticsCharts).forEach(c => { try { c.destroy(); } catch(e){} });
@@ -5064,8 +5072,16 @@ async function loadPresenceSection() {
   if (!container) return;
   try {
     const fn = firebase.functions().httpsCallable('getPresence');
-    const { data } = await fn();
-    _presenceCachedData = data.members || [];
+    const { data } = await fn({ mode: 'default' });
+    _presenceOnline       = data.online || [];
+    _presenceOffline      = data.offlineSlice || [];
+    _presenceOfflineTotal = data.offlineTotal || 0;
+    _presenceStats        = data.stats || null;
+    _presenceSearchQ      = '';
+    _presenceSearchData   = [];
+    _presenceSearchTotal  = 0;
+    _presenceSearchPage   = 0;
+    if (el('presenceSearch')) el('presenceSearch').value = '';
     _renderPresenceGroups();
   } catch(e) {
     const c = el('presenceGrid');
@@ -5073,73 +5089,159 @@ async function loadPresenceSection() {
   }
 }
 
-function togglePresenceGroup(role) {
-  _presenceExpanded[role] = !_presenceExpanded[role];
+async function _refreshPresenceOnline() {
+  if (!el('presenceGrid')) return;
+  try {
+    const fn = firebase.functions().httpsCallable('getPresence');
+    const { data } = await fn({ mode: 'online' });
+    _presenceOnline = data.online || [];
+    if (_presenceStats) {
+      _presenceStats.pOnline = _presenceOnline.filter(m => m.role !== 'kid').length;
+      _presenceStats.kOnline = _presenceOnline.filter(m => m.role === 'kid').length;
+    }
+    _renderPresenceGroups();
+  } catch(_) {}
+}
+
+function _schedulePresenceSearch() {
+  const q = (el('presenceSearch')?.value || '').trim();
+  clearTimeout(_presenceSearchTimer);
+  if (!q) {
+    _presenceSearchQ    = '';
+    _presenceSearchData = [];
+    _presenceSearchTotal = 0;
+    _presenceSearchPage  = 0;
+    _renderPresenceGroups();
+    return;
+  }
+  _presenceSearchTimer = setTimeout(() => _runPresenceSearch(q), 400);
+}
+
+async function _runPresenceSearch(q) {
+  _presenceSearchQ     = q;
+  _presenceSearchData  = [];
+  _presenceSearchTotal = 0;
+  _presenceSearchPage  = 0;
+  const container = el('presenceGrid');
+  if (!container) return;
+  container.innerHTML = `<div style="color:#a0aec0;font-size:12px;padding:8px">מחפש...</div>`;
+  try {
+    const fn = firebase.functions().httpsCallable('getPresence');
+    const { data } = await fn({ mode: 'search', search: q, page: 0 });
+    _presenceSearchData  = data.members || [];
+    _presenceSearchTotal = data.total   || 0;
+    _presenceSearchPage  = 0;
+    _renderPresenceGroups();
+  } catch(e) {
+    if (el('presenceGrid')) el('presenceGrid').innerHTML = `<div style="color:#e53e3e;font-size:12px;padding:8px">${esc(e.message)}</div>`;
+  }
+}
+
+async function loadMorePresence() {
+  if (_presenceLoadingMore) return;
+  _presenceLoadingMore = true;
   _renderPresenceGroups();
+  try {
+    const fn = firebase.functions().httpsCallable('getPresence');
+    if (_presenceSearchQ) {
+      const nextPage = _presenceSearchPage + 1;
+      const { data } = await fn({ mode: 'search', search: _presenceSearchQ, page: nextPage });
+      _presenceSearchData  = [..._presenceSearchData, ...(data.members || [])];
+      _presenceSearchPage  = nextPage;
+    } else {
+      const nextPage = Math.floor(_presenceOffline.length / 50);
+      const { data } = await fn({ mode: 'browse', page: nextPage });
+      _presenceOffline = [..._presenceOffline, ...(data.members || [])];
+    }
+  } finally {
+    _presenceLoadingMore = false;
+    _renderPresenceGroups();
+  }
 }
 
 function _renderPresenceGroups() {
   const container = el('presenceGrid');
-  if (!container || !_presenceCachedData) return;
+  if (!container) return;
 
-  const q = (el('presenceSearch')?.value || '').trim().toLowerCase();
-  const members = q
-    ? _presenceCachedData.filter(m =>
-        (m.memberName || '').toLowerCase().includes(q) ||
-        (m.familyName || '').toLowerCase().includes(q))
-    : _presenceCachedData;
-
-  const parents = members.filter(m => m.role !== 'kid');
-  const kids    = members.filter(m => m.role === 'kid');
-  const pOnline = parents.filter(m => m.online).length;
-  const kOnline = kids.filter(m => m.online).length;
-
+  // Update header count
   const countEl = el('presenceOnlineCount');
-  if (countEl) countEl.textContent = `${pOnline + kOnline} מחוברים מתוך ${members.length}`;
-
-  const newOnline = new Set(members.filter(m => m.online).map(m => m.familyUid + '_' + m.memberName));
-
-  // Auto-expand groups that have search results
-  if (q) {
-    if (parents.length) _presenceExpanded.parent = true;
-    if (kids.length)    _presenceExpanded.kid    = true;
+  if (countEl && _presenceStats) {
+    const total = _presenceStats.pOnline + _presenceStats.kOnline + _presenceStats.pOffline + _presenceStats.kOffline;
+    countEl.textContent = `${_presenceStats.pOnline + _presenceStats.kOnline} מחוברים מתוך ${total}`;
   }
 
-  const groupHtml = (role, label, group, onlineCount) => {
-    const expanded = _presenceExpanded[role];
-    const cardsHtml = expanded ? group.map(m => {
-      const key = m.familyUid + '_' + m.memberName;
-      const justOnline = m.online && !_presencePrevOnline.has(key) && _presencePrevOnline.size > 0;
-      const isKidRole  = m.role === 'kid';
-      const badgeClass = isKidRole ? 'role-badge-kid' : 'role-badge-parent';
-      const badgeLabel = isKidRole ? t('roleKid') : t('roleParent');
-      const timeLabel  = m.online ? 'מחובר/ת' : _presenceTimeAgo(m.lastSeenMs);
-      const clickable = isAdmin() && m.role !== 'kid';
-      return `<div class="presence-card${justOnline ? ' just-online' : ''}${clickable ? ' presence-card-clickable' : ''}"
-        ${clickable ? `onclick="openFamilyDetails('${m.familyUid}','${esc(m.memberName)}')"` : ''}>
-        <div class="presence-dot ${m.online ? 'online' : 'offline'}"></div>
-        <div class="presence-name">${esc(m.memberName)}<br><span style="font-weight:700;color:#718096">${esc(m.familyName)}</span></div>
-        <span class="role-badge ${badgeClass}" style="font-size:9px;padding:1px 6px">${badgeLabel}</span>
-        <div class="presence-time ${m.online ? 'online' : ''}">${timeLabel}</div>
-      </div>`;
-    }).join('') : '';
-    return `
-      <div class="presence-group">
-        <div class="presence-group-header" onclick="togglePresenceGroup('${role}')">
-          <span class="presence-group-chevron">${expanded ? '▾' : '◂'}</span>
-          <span class="presence-group-label">${label}</span>
-          <span class="presence-group-count">
-            <span style="color:${onlineCount > 0 ? '#48bb78' : '#a0aec0'};font-weight:800">${onlineCount}</span>
-            <span style="color:#a0aec0">/ ${group.length} מחוברים</span>
-          </span>
-        </div>
-        ${expanded ? `<div class="presence-cards-grid">${cardsHtml}</div>` : ''}
-      </div>`;
-  };
+  const newOnline = new Set(_presenceOnline.map(m => m.familyUid + '_' + m.memberName));
 
-  container.innerHTML =
-    groupHtml('parent', 'הורים', parents, pOnline) +
-    groupHtml('kid',    'ילדים',  kids,    kOnline);
+  function memberCard(m) {
+    const key        = m.familyUid + '_' + m.memberName;
+    const justOnline = m.online && !_presencePrevOnline.has(key) && _presencePrevOnline.size > 0;
+    const isKidRole  = m.role === 'kid';
+    const badgeClass = isKidRole ? 'role-badge-kid' : 'role-badge-parent';
+    const badgeLabel = isKidRole ? t('roleKid') : t('roleParent');
+    const timeLabel  = m.online ? 'מחובר/ת' : _presenceTimeAgo(m.lastSeenMs);
+    const clickable  = isAdmin() && !isKidRole;
+    return `<div class="presence-card${justOnline ? ' just-online' : ''}${clickable ? ' presence-card-clickable' : ''}"
+      ${clickable ? `onclick="openFamilyDetails('${m.familyUid}','${esc(m.memberName)}')"` : ''}>
+      <div class="presence-dot ${m.online ? 'online' : 'offline'}"></div>
+      <div class="presence-name">${esc(m.memberName)}<br><span style="font-weight:700;color:#718096">${esc(m.familyName)}</span></div>
+      <span class="role-badge ${badgeClass}" style="font-size:9px;padding:1px 6px">${badgeLabel}</span>
+      <div class="presence-time ${m.online ? 'online' : ''}">${timeLabel}</div>
+    </div>`;
+  }
+
+  function loadMoreBtn(remaining) {
+    return remaining <= 0 ? '' : `
+      <div style="text-align:center;padding:12px 0 4px">
+        <button class="analytics-refresh-btn" style="padding:6px 18px;font-size:12px;font-weight:700"
+          onclick="loadMorePresence()" ${_presenceLoadingMore ? 'disabled' : ''}>
+          ${_presenceLoadingMore ? 'טוען...' : `+ ${remaining} נוספים`}
+        </button>
+      </div>`;
+  }
+
+  // ── Search mode ──────────────────────────────────────────
+  if (_presenceSearchQ) {
+    const remaining = _presenceSearchTotal - _presenceSearchData.length;
+    container.innerHTML = `
+      <div style="font-size:11px;color:#a0aec0;font-weight:700;padding:4px 0 8px">
+        ${_presenceSearchTotal} תוצאות עבור &ldquo;${esc(_presenceSearchQ)}&rdquo;
+      </div>
+      <div class="presence-cards-grid">${_presenceSearchData.map(memberCard).join('')}</div>
+      ${loadMoreBtn(remaining)}`;
+    _presencePrevOnline = newOnline;
+    return;
+  }
+
+  // ── Normal mode ──────────────────────────────────────────
+  const onlineSection = _presenceOnline.length === 0
+    ? `<div style="color:#a0aec0;font-size:12px;padding:6px 0 10px">אין משתמשים מחוברים כרגע</div>`
+    : `<div class="presence-cards-grid">${_presenceOnline.map(memberCard).join('')}</div>`;
+
+  const offlineRemaining = _presenceOfflineTotal - _presenceOffline.length;
+  const offlineSection = _presenceOfflineTotal === 0 ? '' : `
+    <div class="presence-group" style="margin-top:12px">
+      <div class="presence-group-header" style="cursor:default">
+        <span class="presence-group-label" style="color:#718096">לא מחוברים</span>
+        <span class="presence-group-count">
+          <span style="color:#a0aec0;font-weight:800">${_presenceOfflineTotal}</span>
+          <span style="color:#a0aec0"> · מוצגים ${_presenceOffline.length}</span>
+        </span>
+      </div>
+      <div class="presence-cards-grid">${_presenceOffline.map(memberCard).join('')}</div>
+      ${loadMoreBtn(offlineRemaining)}
+    </div>`;
+
+  container.innerHTML = `
+    <div class="presence-group">
+      <div class="presence-group-header" style="cursor:default">
+        <span class="presence-group-label">מחוברים עכשיו</span>
+        <span class="presence-group-count">
+          <span style="color:${_presenceOnline.length > 0 ? '#48bb78' : '#a0aec0'};font-weight:800">${_presenceOnline.length}</span>
+        </span>
+      </div>
+      ${onlineSection}
+    </div>
+    ${offlineSection}`;
 
   _presencePrevOnline = newOnline;
 }
@@ -5296,7 +5398,7 @@ async function renderAnalytics(forceRefresh) {
     _renderAnalyticsUI(container, d);
     // Load presence section and start auto-refresh every 30s
     await loadPresenceSection();
-    _presenceRefreshTimer = setInterval(loadPresenceSection, 30 * 1000);
+    _presenceRefreshTimer = setInterval(_refreshPresenceOnline, 30 * 1000);
   } catch(e) {
     console.error('renderAnalytics:', e);
     container.innerHTML = `<div class="card" style="color:#e53e3e;padding:20px;text-align:center;font-size:13px;font-weight:700">שגיאה בטעינת נתונים: ${esc(e.message||String(e))}</div>`;
@@ -5362,7 +5464,7 @@ function _renderAnalyticsUI(container, d) {
         <button class="analytics-refresh-btn" onclick="loadPresenceSection()" title="רענן">↻</button>
       </div>
       <input id="presenceSearch" type="search" placeholder="חיפוש משתמש..." class="presence-search"
-        oninput="_renderPresenceGroups()" />
+        oninput="_schedulePresenceSearch()" />
       <div id="presenceGrid" class="presence-grid">
         <div style="color:#a0aec0;font-size:12px;padding:8px">טוען...</div>
       </div>
