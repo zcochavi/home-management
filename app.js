@@ -569,7 +569,11 @@ function setAuthMode(mode) {
   el('joinPanel').style.display     = mode==='join'   ? '' : 'none';
   el('authTabSignin').classList.toggle('active', mode==='signin' || mode==='signup');
   el('authTabJoin').classList.toggle('active',   mode==='join');
-  ['siError','su1Error','su2Error','joinError'].forEach(id => { const e=el(id); if(e) e.textContent=''; });
+  // Only clear errors for panels being hidden — never wipe the active panel's error
+  if (mode !== 'join') { const e=el('joinError'); if(e) e.textContent=''; }
+  if (mode !== 'signin' && mode !== 'signup') {
+    ['siError','su1Error','su2Error'].forEach(id => { const e=el(id); if(e) e.textContent=''; });
+  }
 }
 
 function signupNext() {
@@ -690,9 +694,16 @@ async function doJoin() {
   };
 
   try {
+    // Clear any stale Firebase Auth session before signing in with the invite code
+    if (fbAuth.currentUser) { _joining = true; await fbAuth.signOut().catch(() => {}); }
+    _joining = true;
     el('joinError').textContent = '⏳ מתחבר...';
     const inviteEmail = code + '@' + JOIN_DOMAIN;
-    const cred = await fbAuth.signInWithEmailAndPassword(inviteEmail, code);
+    const signInPromise = fbAuth.signInWithEmailAndPassword(inviteEmail, code);
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(Object.assign(new Error('timeout'), { code: 'auth/timeout' })), 15000)
+    );
+    const cred = await Promise.race([signInPromise, timeoutPromise]);
 
     el('joinError').textContent = '⏳ בודק קוד...';
     let ownerUid = null, memberName = null;
@@ -740,8 +751,15 @@ async function doJoin() {
       .then(() => clearTimeout(loadTimeout))
       .catch(() => clearTimeout(loadTimeout));
   } catch(e) {
-    const invalidCode = ['auth/user-not-found','auth/wrong-password','auth/invalid-credential'].includes(e.code);
-    await _failJoin(invalidCode ? 'קוד לא תקין — בדוק שהעתקת נכון.' : ('שגיאה [' + (e.code || e.message) + ']'));
+    const msgs = {
+      'auth/user-not-found':     'קוד לא קיים — בקש קוד חדש.',
+      'auth/wrong-password':     'קוד שגוי — בדוק שהעתקת נכון.',
+      'auth/invalid-credential': 'קוד לא קיים — בקש קוד חדש.',
+      'auth/too-many-requests':  'יותר מדי ניסיונות — נסה שוב עוד כמה דקות.',
+      'auth/network-request-failed': 'בעיית רשת — בדוק חיבור לאינטרנט.',
+      'auth/timeout':            'פסק זמן — בדוק חיבור לאינטרנט ונסה שוב.',
+    };
+    await _failJoin(msgs[e.code] || 'שגיאה [' + (e.code || e.message) + ']');
   }
 }
 
