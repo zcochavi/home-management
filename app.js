@@ -1671,6 +1671,17 @@ function el(id){ return document.getElementById(id); }
 // ════════════════════════════════════════
 //  LOGIN / MEMBER PICKER
 // ════════════════════════════════════════
+// Returns the member name of the currently authenticated user, derived from Firebase Auth.
+// Owner: uid === S.uid → use ownerMemberName. Joined member: uid encoded in displayName.
+function _authMemberName() {
+  const uid = fbAuth.currentUser?.uid;
+  if (!uid) return null;
+  if (uid === S.uid) return familyData?.ownerMemberName || null;
+  const dp = fbAuth.currentUser?.displayName || '';
+  const parts = dp.split('|');
+  return (parts.length === 2 && parts[0] === S.uid) ? (parts[1] || null) : null;
+}
+
 function renderLoginScreen() {
   el('loginFamilyName').textContent = familyData?.familyName || '';
   el('loginSub').textContent = STRINGS.he.loginSub;
@@ -1680,9 +1691,13 @@ function renderLoginScreen() {
   if (S.lockedMember) {
     // Locked device: only show the locked member
     visibleMembers = members.filter(m => m.name === S.lockedMember);
-  } else if (S.user && getParents().includes(S.user)) {
-    // Parent device: show self + all kids, not other parents
-    visibleMembers = members.filter(m => m.name === S.user || m.role === 'kid');
+  } else {
+    // Identify who the current auth user is — owner via ownerMemberName, joined via displayName
+    const authName = _authMemberName() || S.user;
+    if (authName && getParents().includes(authName)) {
+      // This is a parent — show only themselves + kids, not the other parent
+      visibleMembers = members.filter(m => m.name === authName || m.role === 'kid');
+    }
   }
   el('loginGrid').innerHTML = visibleMembers.map((m, i) => `
     <div class="login-card${i===visibleMembers.length-1&&visibleMembers.length%2!==0?' login-card-solo':''}" onclick="login('${esc(m.name)}')">
