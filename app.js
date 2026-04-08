@@ -1688,7 +1688,7 @@ function renderLoginScreen() {
     <div class="login-card${i===visibleMembers.length-1&&visibleMembers.length%2!==0?' login-card-solo':''}" onclick="login('${esc(m.name)}')">
       <div class="login-card-emoji">${getAvatar(m.name)}</div>
       <div class="login-card-name">${esc(m.name)}</div>
-      <div class="login-card-role">${roleBadgeHtml(m.role, m.role==='parent'?S.uid:null)}</div>
+      <div class="login-card-role">${roleBadgeHtml(m.role, m.role==='parent' && !!ADMIN_UID && S.uid===ADMIN_UID && m.name===(familyData?.ownerMemberName||null) ? S.uid : null)}</div>
     </div>`).join('');
 }
 
@@ -1697,6 +1697,12 @@ function login(name) {
   if (getKids().includes(name)) S.child = name;
   if (!S.child && getKids().length > 0) S.child = getKids()[0];
   localStorage.setItem('familyhub_member_' + S.uid, name);
+  // First time the admin owner picks their member — save it so the picker can
+  // show the admin badge on the right person only (not on all parents)
+  if (fbAuth.currentUser?.uid === S.uid && ADMIN_UID && S.uid === ADMIN_UID && !familyData?.ownerMemberName) {
+    fbDb.collection('families').doc(S.uid).update({ ownerMemberName: name }).catch(() => {});
+    if (familyData) familyData.ownerMemberName = name;
+  }
   el('loginScreen').classList.add('hidden');
   el('app').classList.add('visible');
   loadSyncedClassEvents();
