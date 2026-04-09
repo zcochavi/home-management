@@ -53,9 +53,9 @@ const STRINGS = {
     wbHi: n => `שלום ${n}!`,
     wbStars: n => `יש לך ${n} ⭐ כוכבים השבוע`,
     addChoreTitle:'➕ הוסף משימה', chorePlaceholder:'מה צריך לעשות...',
-    noChores:'🎉 אין משימות להציג',
+    noChores:'זה זמן טוב להוסיף משהו קטן 🙂',
     choreHistory:'✅ היסטוריה', choreHistoryEmpty:'אין משימות שהושלמו עדיין', choreHistorySearch:'חיפוש בהיסטוריה...',
-    high:'גבוה', medium:'בינוני', low:'נמוך',
+    high:'גבוהה', medium:'בינונית', low:'נמוכה',
     youLabel:'(את/ה)', add:'הוסף',
     superPoolTitle:'🏪 מאגר', superListTitle:'🛒 רשימת קניות', superCartTitle:'🧺 בעגלה',
     poolAddPlaceholder:'שם הפריט...',
@@ -145,7 +145,7 @@ const STRINGS = {
     wbHi: n => `Hi ${n}!`,
     wbStars: n => `You have ${n} ⭐ star${n!==1?'s':''} this week`,
     addChoreTitle:'➕ Add Chore', chorePlaceholder:'What needs doing…',
-    noChores:'🎉 No chores to show',
+    noChores:'A good time to add something small 🙂',
     choreHistory:'✅ History', choreHistoryEmpty:'No completed chores yet', choreHistorySearch:'Search history…',
     high:'high', medium:'medium', low:'low',
     youLabel:'(you)', add:'Add',
@@ -255,15 +255,34 @@ function getKids()           { return getMembers().filter(m => m.role === 'kid')
 function getParents()        { return getMembers().filter(m => m.role === 'parent').map(m => m.name); }
 function getAllMemberNames()  { return getMembers().map(m => m.name); }
 function getEmoji(name)      { return getMembers().find(m => m.name === name)?.emoji || '👤'; }
-// Returns <img> if member has a photo, else emoji string.
-// sizePx = explicit px (for inline/text contexts); omit to fill container (width/height 100%).
+// Phosphor-style person SVG per role (matches tab icon style)
+function _memberPersonSVG(role) {
+  if (role === 'kid') {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">
+      <circle cx="12" cy="12" r="9"/>
+      <circle cx="9" cy="10.5" r="1" fill="currentColor" stroke="none"/>
+      <circle cx="15" cy="10.5" r="1" fill="currentColor" stroke="none"/>
+      <path d="M9.5 15.5c.6.8 1.4 1.2 2.5 1.2s1.9-.4 2.5-1.2"/>
+    </svg>`;
+  }
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">
+    <circle cx="12" cy="7" r="4"/>
+    <path d="M3 21c0-4.4 4-8 9-8s9 3.6 9 8"/>
+  </svg>`;
+}
+// Returns <img> if member has a photo, else an SVG person icon.
+// sizePx = explicit px for standalone use; omit to fill container (width/height 100%).
 function getAvatar(name, sizePx) {
   const member = getMembers().find(m => m.name === name);
   if (member?.photo) {
     const s = sizePx != null ? `width:${sizePx}px;height:${sizePx}px` : 'width:100%;height:100%';
     return `<img src="${esc(member.photo)}" style="${s};object-fit:cover;border-radius:50%;display:block">`;
   }
-  return member?.emoji || '👤';
+  const color = getPersonColor(name);
+  const role = member?.role || 'parent';
+  const dim = sizePx != null ? `${sizePx}px` : '100%';
+  const bg = sizePx != null ? `background:${color}1a;` : '';
+  return `<span style="display:flex;align-items:center;justify-content:center;width:${dim};height:${dim};border-radius:50%;${bg}color:${color};"><span style="width:62%;height:62%;display:flex;">${_memberPersonSVG(role)}</span></span>`;
 }
 
 const COLOR_PALETTE  = ['#c471ed','#4facfe','#fa709a','#43e97b','#f9d423','#f5576c','#667eea','#48bb78'];
@@ -289,17 +308,17 @@ const DEFAULT_GROCERY_CATS = [
   { name:'Meat & Fish', emoji:'🥩' },
 ];
 const DEFAULT_SUBJECTS = [
-  { name:'Maths',   nameHe:'מתמטיקה', bg:'#3b82f6', color:'#ffffff' },
-  { name:'English', nameHe:'אנגלית',  bg:'#10b981', color:'#ffffff' },
-  { name:'Science', nameHe:'מדעים',   bg:'#8b5cf6', color:'#ffffff' },
-  { name:'History', nameHe:'היסטוריה',bg:'#f59e0b', color:'#ffffff' },
-  { name:'Art',     nameHe:'אמנות',   bg:'#ec4899', color:'#ffffff' },
+  { name:'Maths',   nameHe:'מתמטיקה', bg:'#f0f4ff', color:'#4a65cc' },
+  { name:'English', nameHe:'אנגלית',  bg:'#f3f4f6', color:'#6b7280' },
+  { name:'Science', nameHe:'מדעים',   bg:'#f3f4f6', color:'#6b7280' },
+  { name:'History', nameHe:'היסטוריה',bg:'#f3f4f6', color:'#6b7280' },
+  { name:'Art',     nameHe:'אמנות',   bg:'#f3f4f6', color:'#6b7280' },
 ];
 const SUBJECT_COLOR_POOL = [
-  { bg:'#ef4444', color:'#ffffff' },{ bg:'#14b8a6', color:'#ffffff' },
-  { bg:'#f97316', color:'#ffffff' },{ bg:'#6366f1', color:'#ffffff' },
-  { bg:'#84cc16', color:'#ffffff' },{ bg:'#06b6d4', color:'#ffffff' },
-  { bg:'#a855f7', color:'#ffffff' },{ bg:'#0ea5e9', color:'#ffffff' },
+  { bg:'#f0f4ff', color:'#4a65cc' },{ bg:'#f3f4f6', color:'#6b7280' },
+  { bg:'#f3f4f6', color:'#6b7280' },{ bg:'#f0f4ff', color:'#4a65cc' },
+  { bg:'#f3f4f6', color:'#6b7280' },{ bg:'#f3f4f6', color:'#6b7280' },
+  { bg:'#f3f4f6', color:'#6b7280' },{ bg:'#f0f4ff', color:'#4a65cc' },
 ];
 
 // Keyword → emoji suggestions for grocery category names
@@ -360,7 +379,7 @@ function getSubjects() {
 function subjectBadgeStyle(name) {
   const s = getSubjects().find(s => s.name === name);
   if (s) return `background:${s.bg};color:${s.color}`;
-  return 'background:#f0f4ff;color:#718096';
+  return 'background:#f3f4f6;color:#6b7280';
 }
 function subjectLabel(name) {
   const s = getSubjects().find(s => s.name === name);
@@ -368,9 +387,17 @@ function subjectLabel(name) {
   return s?.name || name;
 }
 
-const _now     = new Date();
-const today    = _now.toISOString().slice(0,10);
-const tomorrow = new Date(_now.getTime()+864e5).toISOString().slice(0,10);
+const _now       = new Date();
+const today      = _now.toISOString().slice(0,10);
+const tomorrow   = new Date(_now.getTime()+864e5).toISOString().slice(0,10);
+const yesterday  = new Date(_now.getTime()-864e5).toISOString().slice(0,10);
+
+function _choreWhen(id) {
+  const d = new Date(id).toISOString().slice(0,10);
+  if (d === today)     return 'היום';
+  if (d === yesterday) return 'אתמול';
+  return fmtDate(d);
+}
 
 // ════════════════════════════════════════
 //  STATE
@@ -812,7 +839,7 @@ function showToast(msg, type = 'info', duration = 4000) {
     document.body.appendChild(wrap);
   }
   const t = document.createElement('div');
-  const bg = type === 'error' ? '#c53030' : type === 'success' ? '#276749' : '#4a6fa5';
+  const bg = type === 'error' ? '#c53030' : type === 'success' ? '#4CAF84' : '#4a65cc';
   t.style.cssText = `background:${bg};color:#fff;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.18);opacity:0;transition:opacity .25s;text-align:center;pointer-events:none`;
   t.textContent = msg;
   wrap.appendChild(t);
@@ -910,9 +937,9 @@ function renderNotifBanners(undismissed) {
     const isInfo     = n.type === 'shopping_done';
     const isGood     = n.type?.includes('approved') || n.type === 'member_joined';
     const isDenied   = n.type?.includes('denied') || n.type?.includes('rejected');
-    const bg     = isInfo ? '#fffbeb' : isGood ? '#f0fff4' : isDenied ? '#fff5f5' : '#ebf8ff';
-    const border = isInfo ? '#f6e05e' : isGood ? '#9ae6b4' : isDenied ? '#feb2b2' : '#90cdf4';
-    const color  = isInfo ? '#744210' : isGood ? '#276749' : isDenied ? '#c53030' : '#2b6cb0';
+    const bg     = isDenied ? '#fff5f5' : '#ebf8ff';
+    const border = isDenied ? '#feb2b2' : '#90cdf4';
+    const color  = isDenied ? '#c53030' : '#2b6cb0';
     const icon   = isInfo ? '🛒' : isGood ? '✅' : isDenied ? '❌' : isRequest ? '📋' : '🔔';
     const div = document.createElement('div');
     div.className = 'notif-banner notif-banner-in';
@@ -971,7 +998,7 @@ async function quickApproveReq(notifId, type, reqId, btn) {
 }
 
 async function quickDenyReq(notifId, type, reqId, btn) {
-  if (!confirm('לדחות את הבקשה?')) return;
+  if (!await _confirm('לדחות את הבקשה?', { danger: true, okLabel: 'דחה' })) return;
   btn.closest('.notif-banner-actions').querySelectorAll('button').forEach(b => b.disabled = true);
   try {
     if (type === 'school_pending') {
@@ -1039,17 +1066,21 @@ async function renderPendingPanel() {
     const allPending = pendingSnap.docs.map(d => ({ id: d.id, classId: d.ref.parent.parent.id, ...d.data() }));
     const pending = admin ? allPending : allPending.filter(ev => isCommitteeFor(ev.classId));
     el('ppEventsList').innerHTML = pending.length
-      ? pending.map(ev => `
-          <div class="pending-event-row">
+      ? pending.map(ev => {
+          const expired = ev.date && !isEventUpcoming(ev.date);
+          return `<div class="pending-event-row">
             <div class="pending-event-info">
-              <span class="pending-event-title">${esc(ev.title)}</span>
-              <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + ev.date : ''} · ${esc(classLabelFromId(ev.classId))}</span>
+              <span class="pending-event-title">${esc(ev.title)}${expired ? '<span class="pending-expired-tag">פג תוקף</span>' : ''}</span>
+              <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + fmtEventDate(ev.date) : ''} · ${esc(classLabelFromId(ev.classId))}</span>
             </div>
             <div class="pending-event-actions">
-              <button class="pending-approve-btn" onclick="approveEvent('${ev.classId}','${ev.id}')">${t('pendingApprove')}</button>
-              <button class="pending-reject-btn"  onclick="rejectEvent('${ev.classId}','${ev.id}')">${t('pendingReject')}</button>
+              ${expired
+                ? `<span style="font-size:11px;color:var(--gray-400);font-weight:600">לא ניתן לאשר</span>`
+                : `<button class="pending-approve-btn" onclick="approveEvent('${ev.classId}','${ev.id}')">${t('pendingApprove')}</button>`}
+              <button class="pending-reject-btn" onclick="rejectEvent('${ev.classId}','${ev.id}')">${t('pendingReject')}</button>
             </div>
-          </div>`).join('')
+          </div>`;
+        }).join('')
       : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין בקשות ממתינות</div>';
 
     // Committee applications
@@ -1298,7 +1329,7 @@ function shareKidCode(name, code) {
     navigator.share({ title: 'FamilyHub', text });
   } else {
     navigator.clipboard.writeText(text).then(() => {
-      alert('✓ הועתק!');
+      _alert('✓ הועתק!');
     }).catch(() => prompt('העתק את הקוד:', text));
   }
 }
@@ -1314,7 +1345,7 @@ async function generateSpouseCode(memberName) {
     renderMgmtMembers();
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = 'צור קוד'; }
-    alert('שגיאה ביצירת קוד: ' + e.message);
+    _alert('שגיאה ביצירת קוד: ' + e.message);
   }
 }
 
@@ -1329,7 +1360,7 @@ async function regenSpouseCode(memberName) {
     renderMgmtMembers();
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = '🔄'; }
-    alert('שגיאה: ' + e.message);
+    _alert('שגיאה: ' + e.message);
   }
 }
 
@@ -1340,7 +1371,7 @@ function shareSpouseCode(name, code) {
     navigator.share({ title: 'FamilyHub', text });
   } else {
     navigator.clipboard.writeText(text).then(() => {
-      alert('✓ הועתק!');
+      _alert('✓ הועתק!');
     }).catch(() => prompt('העתק את הקוד:', text));
   }
 }
@@ -1427,7 +1458,7 @@ async function initFCM() {
       localStorage.setItem('familyhub_fcm_family_' + tokenKey, S.uid);
       await fbDb.collection('families').doc(S.uid)
         .collection('fcmTokens').doc(tokenKey)
-        .set({ token, platform, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        .set({ token, platform, memberName: S.user || '', isOwner: fbAuth.currentUser?.uid === S.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
       console.log('[FCM] registered on', platform);
     }
     fbMessaging.onMessage(payload => {
@@ -1667,6 +1698,18 @@ function fmtDateLong(str) {
 }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function el(id){ return document.getElementById(id); }
+function fhSpinnerHTML(){ return `<span class="fh-spinner">${'<span></span>'.repeat(8)}</span>`; }
+
+// ── Action icon SVGs ──────────────────────────
+const _ico = {
+  x:    `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:13px;height:13px;display:block"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>`,
+  undo: `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:block"><path d="M4 8L2 5l2-3"/><path d="M2 5h6a4 4 0 0 1 0 8H6"/></svg>`,
+  edit: `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:block"><path d="M9.5 2a1.5 1.5 0 0 1 2 2L4 11H2V9L9.5 2z"/></svg>`,
+  trash:`<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:block"><line x1="2" y1="4" x2="12" y2="4"/><path d="M5 4V2.5h4V4"/><path d="M4 4l.7 7.5h4.6L10 4"/></svg>`,
+  plus: `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:13px;height:13px;display:block"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>`,
+  list: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="width:15px;height:15px;display:block"><circle cx="3.5" cy="5" r="1" fill="currentColor" stroke="none"/><circle cx="3.5" cy="8.5" r="1" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1" fill="currentColor" stroke="none"/><line x1="6.5" y1="5" x2="13" y2="5"/><line x1="6.5" y1="8.5" x2="13" y2="8.5"/><line x1="6.5" y1="12" x2="11" y2="12"/></svg>`,
+  cart: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;display:block"><path d="M1 1.5h2l1.8 7.5h7l1.7-5.5H4.5"/><circle cx="6.5" cy="13" r="1" fill="currentColor" stroke="none"/><circle cx="11" cy="13" r="1" fill="currentColor" stroke="none"/></svg>`,
+};
 
 // ════════════════════════════════════════
 //  LOGIN / MEMBER PICKER
@@ -1833,7 +1876,7 @@ function renderMgmtMembers() {
       <div class="mgmt-member-info">
         <div class="mgmt-member-name">${esc(m.name)}</div>
         <div class="mgmt-member-role">${m.role==='parent'?'הורה':'ילד/ה'}</div>
-        ${m.role==='kid'&&m.school?.city ? `<div class="mgmt-school-info">🏫 ${esc(m.school.city)}${m.school.name?', '+esc(m.school.name):''}${m.school.grade?', כיתה '+esc(m.school.grade)+(m.school.classNum?'\''+esc(m.school.classNum):''):''} ${m.schoolPending?'<span style="background:#fef3c7;color:#92400e;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:700">⏳ ממתין</span>':''}</div>` : ''}
+        ${m.role==='kid'&&m.school?.city ? `<div class="mgmt-school-info">🏫 ${esc(m.school.city)}${m.school.name?', '+esc(m.school.name):''}${m.school.grade?', כיתה '+esc(m.school.grade)+(m.school.classNum?'\''+esc(m.school.classNum):''):''} ${m.schoolPending?'<span style="background:var(--gray-100);color:var(--gray-500);font-size:10px;padding:1px 6px;border-radius:8px;font-weight:700">⏳ ממתין</span>':''}</div>` : ''}
         ${m.role === 'kid' && m.joinCode ? `
           <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
             <span style="font-size:11px;color:#6a11cb;font-weight:700;background:#f0e6ff;padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
@@ -1842,7 +1885,7 @@ function renderMgmtMembers() {
         ${m.role === 'parent' && m.name !== S.user ? (m.joinCode ? `
           <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
             <span style="font-size:10px;color:#718096;margin-left:2px">🔑</span>
-            <span style="font-size:11px;color:#276749;font-weight:700;background:#c6f6d5;padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
+            <span style="font-size:11px;color:var(--primary-600);font-weight:700;background:var(--primary-50);padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
             <button style="background:none;border:none;font-size:13px;cursor:pointer;padding:2px 4px" onclick="shareSpouseCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד">📤</button>
             <button data-spouse-regen="${esc(m.name)}" style="font-size:11px;background:#fff5f5;color:#c53030;border:1px solid #fed7d7;border-radius:8px;padding:2px 8px;cursor:pointer;font-family:inherit" onclick="regenSpouseCode('${esc(m.name)}')" title="צור קוד חדש">🔄</button>
           </div>` : `
@@ -2063,7 +2106,15 @@ async function saveMgmtEdit(i, originalName) {
   // Rename in existing data if member name changed
   if (newName !== originalName) {
     S.chores   = S.chores.map(c   => c.assignee===originalName ? {...c,assignee:newName} : c);
-    S.homework = S.homework.map(h => h.child===originalName    ? {...h,child:newName}    : h);
+    S.homework = S.homework.map(h => {
+      if(h.scope==='class'){
+        const doneBy={...(h.doneBy||{})},doneAtBy={...(h.doneAtBy||{})};
+        if(originalName in doneBy){doneBy[newName]=doneBy[originalName];delete doneBy[originalName];}
+        if(originalName in doneAtBy){doneAtBy[newName]=doneAtBy[originalName];delete doneAtBy[originalName];}
+        return {...h,doneBy,doneAtBy};
+      }
+      return h.child===originalName?{...h,child:newName}:h;
+    });
     S.stars    = Object.fromEntries(Object.entries(S.stars).map(([k,v]) => [k===originalName?newName:k, v]));
     if (S.user   === originalName) S.user   = newName;
     if (S.filter === originalName) S.filter = newName;
@@ -2090,13 +2141,20 @@ async function saveMgmtEdit(i, originalName) {
 }
 
 async function mgmtRemoveMember(name) {
-  if (!confirm(`הסר את ${name}?`)) return;
+  if (!await _confirm(`הסר את ${name}?`, { danger: true, okLabel: 'הסר' })) return;
   const removedMember = getMembers().find(m => m.name === name);
   if (removedMember?.role === 'kid' && removedMember?.school)
     unregisterFromClass(name, removedMember.school); // fire-and-forget
   const members = getMembers().filter(m => m.name !== name);
   S.chores   = S.chores.filter(c   => c.assignee !== name);
-  S.homework = S.homework.filter(h => h.child    !== name);
+  S.homework = S.homework
+    .filter(h => h.scope==='class' || h.child !== name)
+    .map(h => {
+      if(h.scope!=='class')return h;
+      const doneBy={...(h.doneBy||{})},doneAtBy={...(h.doneAtBy||{})};
+      delete doneBy[name];delete doneAtBy[name];
+      return {...h,doneBy,doneAtBy};
+    });
   const stars = { ...S.stars }; delete stars[name];
   S.stars = stars;
   if (familyData) familyData.members = members;
@@ -2468,6 +2526,19 @@ function isEventUpcoming(dateStr) {
   const [y,m,d] = dateStr.split('-').map(Number);
   return new Date(y, m-1, d+1) >= new Date();
 }
+function timeAgo(ts) {
+  if (!ts) return '';
+  const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : new Date(ts));
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 2)   return 'עכשיו';
+  if (mins < 60)  return `לפני ${mins} דק'`;
+  const h = Math.floor(mins / 60);
+  if (h < 24)     return `לפני ${h} שע'`;
+  const days = Math.floor(h / 24);
+  if (days === 1) return 'אתמול';
+  if (days < 7)   return `לפני ${days} ימים`;
+  return fmtDate(d.toISOString().slice(0, 10));
+}
 function fmtEventDate(dateStr) {
   if (!dateStr) return '';
   const [y,m,d] = dateStr.split('-').map(Number);
@@ -2481,9 +2552,10 @@ function fmtEventDate(dateStr) {
   return date.toLocaleDateString(t('locale'), {month:'short', day:'numeric'});
 }
 
-let _commCache     = {}; // { [classId]: { classmates, events, loadedAt, error? } }
-let _commListeners = {}; // { [classId]: [unsubFn, ...] }
-let _commAddOpen   = {}; // { [classId]: bool }
+let _commCache       = {}; // { [classId]: { classmates, events, loadedAt, error? } }
+let _commListeners   = {}; // { [classId]: [unsubFn, ...] }
+let _commAddOpen     = {}; // { [classId]: bool }
+let _commVisibleCids = []; // cids currently rendered in community tab
 
 function _unsubCommClass(cid) {
   (_commListeners[cid] || []).forEach(fn => fn());
@@ -2594,27 +2666,74 @@ async function loadCommunityData(kidsWithSchool) {
 }
 
 function scopeBadge(scope) {
-  if (!scope || scope === 'class') return `<span class="scope-badge scope-class">${t('commScopeClass')}</span>`;
+  if (!scope || scope === 'class') return ''; // class is the default — no badge needed
   if (scope === 'grade')  return `<span class="scope-badge scope-grade">${t('commScopeGrade')}</span>`;
   if (scope === 'school') return `<span class="scope-badge scope-school">${t('commScopeSchool')}</span>`;
   return '';
 }
-function renderEventRow(ev, cid, isPast) {
-  const canDel = isParent() && ev.postedBy?.familyUid === S.uid;
-  const sid = ev.scopeId || cid;
-  return `<div class="comm-event${isPast?' comm-past-event':''}">
-    <div class="comm-event-icon">${eventTypeIcon(ev.type)}</div>
-    <div class="comm-event-body">
-      <div class="comm-event-title">${esc(ev.title)}${scopeBadge(ev.scope)}</div>
-      <div class="comm-event-meta">
-        <span class="comm-event-date">${fmtEventDate(ev.date)}</span>
-        ${ev.postedBy ? ` · ${esc(personFullName(ev.postedBy))}` : ''}
+// Colored initial avatar for posters from other families
+function _authorAvatar(name) {
+  const palette = ['#6C8CFF','#FFB86B','#6DD3A0','#f093fb','#fa709a','#4facfe','#f9d423','#667eea'];
+  const color = palette[(name||'?').charCodeAt(0) % palette.length];
+  const letter = (name||'?')[0].toUpperCase();
+  return `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:${color}22;color:${color};font-size:18px;font-weight:800;border-radius:50%">${letter}</span>`;
+}
+
+function renderPostCard(ev, cid) {
+  const cache    = _commCache[cid] || {};
+  const canDel   = isParent() && ev.postedBy?.familyUid === S.uid;
+  const sid      = ev.scopeId || cid;
+  const scope    = ev.scope || 'class';
+  const author   = personFullName(ev.postedBy) || 'הורה';
+  // Poster's child: look up by familyUid in classmates
+  const classmate = cache.classmates?.find(c => c.familyUid === ev.postedBy?.familyUid);
+  const kidName   = classmate?.kidName || '';
+  const ago      = timeAgo(ev.createdAt);
+  const likedBy  = ev.likedBy || [];
+  const liked    = likedBy.includes(S.uid);
+  const likeCount    = likedBy.length;
+  const commentCount = ev.commentCount || 0;
+  const avatarHtml   = ev.postedBy?.familyUid === S.uid
+    ? getAvatar(ev.postedBy.firstName)
+    : _authorAvatar(ev.postedBy?.firstName || '?');
+
+  const scopeTag = scopeBadge(scope);
+  return `<div class="post-card">
+    <div class="post-card-header">
+      <div class="post-card-avatar">${avatarHtml}</div>
+      <div class="post-card-meta">
+        <div class="post-card-author">${esc(author)}</div>
+        ${kidName ? `<div class="post-card-child">${esc(kidName)}</div>` : ''}
+        <div class="post-card-sub">${eventTypeIcon(ev.type)} ${esc(classLabelFromId(cid))}${ago ? ' · ' + ago : ''}${scopeTag ? ' ' + scopeTag : ''}</div>
       </div>
-      ${ev.note ? `<div class="comm-event-note">${esc(ev.note)}</div>` : ''}
+      ${canDel ? `<button class="post-card-del" onclick="deleteClassEvent('${scope}','${sid}','${ev.id}')">×</button>` : ''}
+    </div>
+    <div class="post-card-body">
+      <div class="post-card-title">${esc(ev.title)}</div>
+      ${ev.note ? `<div class="post-card-note">${esc(ev.note)}</div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
-    ${canDel ? `<button class="del-btn" onclick="deleteClassEvent('${ev.scope||'class'}','${sid}','${ev.id}')">×</button>` : ''}
+    ${ev.date ? `<div class="post-card-date">📅 ${fmtEventDate(ev.date)}</div>` : ''}
+    <div class="post-card-reactions">
+      <button class="post-reaction${liked?' post-reaction-liked':''}" onclick="toggleLike('${scope}','${sid}','${ev.id}')">
+        ${liked?'❤️':'🤍'}${likeCount ? ' ' + likeCount : ''}
+      </button>
+      <button class="post-reaction">💬${commentCount ? ' ' + commentCount : ''}</button>
+    </div>
   </div>`;
+}
+
+async function toggleLike(scope, scopeId, evId) {
+  const collName = scope === 'grade' ? 'schoolGrades' : scope === 'school' ? 'schools' : 'schoolClasses';
+  const ref = fbDb.collection(collName).doc(scopeId).collection('events').doc(evId);
+  const allCached = Object.values(_commCache).flatMap(c => [...(c.events||[]),...(c.gradeEvents||[]),...(c.schoolEvents||[])]);
+  const ev = allCached.find(e => e.id === evId);
+  const liked = (ev?.likedBy||[]).includes(S.uid);
+  try {
+    await ref.update({ likedBy: liked
+      ? firebase.firestore.FieldValue.arrayRemove(S.uid)
+      : firebase.firestore.FieldValue.arrayUnion(S.uid) });
+  } catch(e) { console.error('toggleLike:', e); }
 }
 
 function filterClassmates(cid, q) {
@@ -2646,27 +2765,30 @@ function renderCommCard(kid) {
       <button onclick="refreshCommunity()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#c8d3e8;padding:4px;line-height:1" title="רענן">↻</button>
     </div>
 
-    <div class="comm-section-label">📅 ${t('commClassEvents')}</div>
     ${upcoming.length
-      ? upcoming.map(ev=>renderEventRow(ev,cid,false)).join('')
-      : `<div style="font-size:13px;color:#a0aec0;padding:6px 0;font-weight:600">${t('commNoEvents')}</div>`}
+      ? `<div class="post-feed">${upcoming.map(ev=>renderPostCard(ev,cid)).join('')}</div>`
+      : `<div class="post-feed-empty">${t('commNoEvents')}</div>`}
 
     ${isCommitteeFor(cid) && cache.pendingEvents?.length ? `
-    <div class="comm-section-label" style="margin-top:16px;display:flex;align-items:center;gap:8px;color:#92400e">
+    <div class="comm-section-label" style="margin-top:16px;display:flex;align-items:center;gap:8px">
       <span>${t('pendingSection')}</span>
-      <span class="comm-count" style="background:#fef3c7;color:#92400e">${cache.pendingEvents.length}</span>
+      <span class="comm-count">${cache.pendingEvents.length}</span>
     </div>
-    ${cache.pendingEvents.map(ev=>`
-      <div class="pending-event-row">
+    ${cache.pendingEvents.map(ev => {
+        const expired = ev.date && !isEventUpcoming(ev.date);
+        return `<div class="pending-event-row">
         <div class="pending-event-info">
-          <span class="pending-event-title">${esc(ev.title)}</span>
-          <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + ev.date : ''}</span>
+          <span class="pending-event-title">${esc(ev.title)}${expired ? '<span class="pending-expired-tag">פג תוקף</span>' : ''}</span>
+          <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + fmtEventDate(ev.date) : ''}</span>
         </div>
         <div class="pending-event-actions">
-          <button class="pending-approve-btn" onclick="approveEvent('${cid}','${ev.id}')">${t('pendingApprove')}</button>
-          <button class="pending-reject-btn"  onclick="rejectEvent('${cid}','${ev.id}')">${t('pendingReject')}</button>
+          ${expired
+            ? `<span style="font-size:11px;color:var(--gray-400);font-weight:600">לא ניתן לאשר</span>`
+            : `<button class="pending-approve-btn" onclick="approveEvent('${cid}','${ev.id}')">${t('pendingApprove')}</button>`}
+          <button class="pending-reject-btn" onclick="rejectEvent('${cid}','${ev.id}')">${t('pendingReject')}</button>
         </div>
-      </div>`).join('')}` : ''}
+      </div>`;
+      }).join('')}` : ''}
 
     ${(() => {
   const apps = cache.applications || [];
@@ -2698,7 +2820,7 @@ function renderCommCard(kid) {
     const approveBtn = isAdmin() ? `<button class="pending-approve-btn" onclick="adminApproveApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationApprove')}</button><button class="pending-reject-btn" onclick="adminDenyApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationDeny')}</button>` : '';
     const voteBtn = !isAdmin() && !isCommitteeFor(cid) && isParent()
       ? (voted
-          ? `<span style="font-size:12px;font-weight:800;color:#48bb78">${t('commApplicationVoted')}</span>`
+          ? `<span style="font-size:12px;font-weight:700;color:var(--gray-400)">${t('commApplicationVoted')}</span>`
           : `<button class="pending-approve-btn" onclick="voteForApplication('${app.id}','${cid}')">${t('commApplicationVote')}</button>`)
       : '';
     html += `<div class="application-row">
@@ -2750,9 +2872,7 @@ function renderCommCard(kid) {
         <button class="auth-btn-back" style="flex:1;padding:10px" onclick="toggleCommAddForm('${cid}')">ביטול</button>
       </div>
     </div>
-    <button class="btn-ghost" style="width:100%;margin-top:8px" id="commAddBtn_${cid}" onclick="toggleCommAddForm('${cid}')">
-      ${addOpen ? '✕ סגור' : t('commAddEvent')}
-    </button>` : ''}
+` : ''}
 
     <div class="comm-section-label" style="margin-top:16px;display:flex;align-items:center;gap:8px">
       <span>👥 ${t('commClassmates')}</span>
@@ -2809,10 +2929,17 @@ async function renderCommunity() {
 
   await loadCommunityData(kidsWithSchool);
   renderHomeUpcoming();
+  _commVisibleCids = kidsWithSchool.map(k => classIdFor(k.school)).filter(Boolean);
   const adminBtn = isAdmin()
     ? `<button class="admin-btn" onclick="openAdminPanel(true, true)">📋 היסטוריית אירועים</button>`
     : '';
-  container.innerHTML = adminBtn + kidsWithSchool.map(kid => renderCommCard(kid)).join('');
+  const fabHtml = isParent() ? `
+    <button class="comm-fab${Object.values(_commAddOpen).some(v=>v)?' comm-fab-open':''}" id="commFab" onclick="commFabClick()" title="${t('commAddEvent')}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
+    </button>` : '';
+  container.innerHTML = adminBtn + kidsWithSchool.map(kid => renderCommCard(kid)).join('') + fabHtml;
 }
 
 function onCommEvTypeChange(cid) {
@@ -2835,9 +2962,23 @@ function matchesGenderFilter(ev, kidName) {
 
 function toggleCommAddForm(cid) {
   _commAddOpen[cid] = !_commAddOpen[cid];
-  el('commAddForm_' + cid)?.classList.toggle('open', !!_commAddOpen[cid]);
-  const btn = el('commAddBtn_' + cid);
-  if (btn) btn.textContent = _commAddOpen[cid] ? '✕ סגור' : t('commAddEvent');
+  const form = el('commAddForm_' + cid);
+  form?.classList.toggle('open', !!_commAddOpen[cid]);
+  if (_commAddOpen[cid]) {
+    setTimeout(() => form?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+  }
+  // Sync FAB icon
+  const fab = el('commFab');
+  if (fab) fab.classList.toggle('comm-fab-open', Object.values(_commAddOpen).some(v => v));
+}
+
+function commFabClick() {
+  if (!_commVisibleCids.length) return;
+  // If one form already open — close it
+  const openCid = _commVisibleCids.find(c => _commAddOpen[c]);
+  if (openCid) { toggleCommAddForm(openCid); return; }
+  // Open the first (or only) class
+  toggleCommAddForm(_commVisibleCids[0]);
 }
 
 async function submitClassEvent(cid) {
@@ -2871,7 +3012,7 @@ async function submitClassEvent(cid) {
     } else {
       // Regular parent: send to pending queue for committee/admin approval (class scope only)
       await fbDb.collection('schoolClasses').doc(cid).collection('pendingEvents').add({ ...docData, status: 'pending' });
-      alert(t('pendingSubmitted'));
+      _alert(t('pendingSubmitted'));
     }
     _commAddOpen[cid] = false;
     // onSnapshot will update the cache and re-render automatically
@@ -2900,7 +3041,7 @@ async function approveEvent(cid, pendingId) {
 }
 
 async function rejectEvent(cid, pendingId) {
-  if (!confirm('לדחות את הבקשה?')) return;
+  if (!await _confirm('לדחות את הבקשה?', { danger: true, okLabel: 'דחה' })) return;
   try {
     await fbFunctions.httpsCallable('rejectEvent')({ cid, pendingId });
     await renderPendingPanel();
@@ -2964,7 +3105,7 @@ async function renderNotifSettings() {
         </label>
         <div style="display:flex;gap:8px;margin-top:4px">
           <button class="admin-btn" onclick="saveNotifSettings('${key}')" style="flex:1;padding:8px;font-size:13px">💾 שמור</button>
-          <button class="admin-btn" onclick="nudgePendingNow('${key}')" style="flex:1;padding:8px;font-size:13px;background:#f0fff4;color:#276749;border-color:#9ae6b4">🔔 שלח תזכורת עכשיו</button>
+          <button class="admin-btn" onclick="nudgePendingNow('${key}')" style="flex:1;padding:8px;font-size:13px">🔔 שלח תזכורת עכשיו</button>
         </div>
       </div>
     </div>`;
@@ -2980,16 +3121,16 @@ async function saveNotifSettings(key) {
       { [key]: { expiryDays, reminderHoursBeforeExpiry, notifyOnDecision } },
       { merge: true }
     );
-    alert('הגדרות נשמרו');
-  } catch(e) { alert('שגיאה: ' + e.message); }
+    _alert('הגדרות נשמרו');
+  } catch(e) { _alert('שגיאה: ' + e.message); }
 }
 
 async function nudgePendingNow(type) {
   try {
     const nudge = fbFunctions.httpsCallable('nudgePending');
     const result = await nudge({ type });
-    alert(`נשלחו ${result.data.sent} תזכורות`);
-  } catch(e) { alert('שגיאה: ' + e.message); }
+    _alert(`נשלחו ${result.data.sent} תזכורות`);
+  } catch(e) { _alert('שגיאה: ' + e.message); }
 }
 
 async function renderLeaderboardSettings() {
@@ -3012,8 +3153,8 @@ async function saveLeaderboardSettings() {
   const days = parseInt(el('leaderboardDaysInput')?.value) || 30;
   try {
     await fbDb.collection('appConfig').doc('leaderboard').set({ days }, { merge: true });
-    alert('הגדרות נשמרו');
-  } catch(e) { alert('שגיאה: ' + e.message); }
+    _alert('הגדרות נשמרו');
+  } catch(e) { _alert('שגיאה: ' + e.message); }
 }
 
 function renderMaintenanceTools() {
@@ -3175,7 +3316,7 @@ async function setCommitteeRoleLegacy(familyUid, grant, cid) {
 }
 
 async function applyForCommittee(cid) {
-  if (!confirm('להגיש מועמדות לוועד ההורים?')) return;
+  if (!await _confirm('להגיש מועמדות לוועד ההורים?', { okLabel: 'הגש' })) return;
   try {
     await fbDb.collection('committeeApplications').add({
       applicantUid: S.uid,
@@ -3221,7 +3362,7 @@ async function adminApproveApplication(appId, cid) {
 }
 
 async function adminDenyApplication(appId, cid) {
-  if (!confirm('לדחות מועמדות זו?')) return;
+  if (!await _confirm('לדחות מועמדות זו?', { danger: true, okLabel: 'דחה' })) return;
   try {
     await fbFunctions.httpsCallable('adminDenyApplication')({ appId });
     await renderPendingPanel();
@@ -3237,14 +3378,14 @@ async function approveSchoolPart(id, part) {
     }
     await fbFunctions.httpsCallable('resolveSchoolPart')({ id, part, action: 'approved', adminName: myFullName() });
     await renderPendingPanel();
-  } catch(e) { console.error('approveSchoolPart:', e); alert('שגיאה: ' + e.message); }
+  } catch(e) { console.error('approveSchoolPart:', e); _alert('שגיאה: ' + e.message); }
 }
 
 async function denySchoolPart(id, part) {
   try {
     await fbFunctions.httpsCallable('resolveSchoolPart')({ id, part, action: 'denied', adminName: myFullName() });
     await renderPendingPanel();
-  } catch(e) { console.error('denySchoolPart:', e); alert('שגיאה: ' + e.message); }
+  } catch(e) { console.error('denySchoolPart:', e); _alert('שגיאה: ' + e.message); }
 }
 
 async function approveSchool(id) {
@@ -3256,14 +3397,14 @@ async function approveSchool(id) {
     // registerInClass is now handled by the Cloud Function with the correct familyUid
     await fbFunctions.httpsCallable('approveSchoolRequest')({ id, adminName: myFullName() });
     await renderPendingPanel();
-  } catch(e) { console.error('approveSchool:', e); alert('שגיאה: ' + e.message); }
+  } catch(e) { console.error('approveSchool:', e); _alert('שגיאה: ' + e.message); }
 }
 
 async function denySchool(id) {
   try {
     await fbFunctions.httpsCallable('denySchoolRequest')({ id, adminName: myFullName() });
     await renderPendingPanel();
-  } catch(e) { console.error('denySchool:', e); alert('שגיאה: ' + e.message); }
+  } catch(e) { console.error('denySchool:', e); _alert('שגיאה: ' + e.message); }
 }
 
 async function refreshCommunity() {
@@ -3509,86 +3650,84 @@ function _initHeaderCollapse() {
 }
 let _installPrompt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _installPrompt = e; });
-function toggleMenu(btn) { _menuOpen ? closeMenu() : openMenu(btn); }
-function openMenu(btn) {
-  _menuOpen = true;
-  const lang = getLang();
-  const isHe = lang === 'he';
-  const parentItems = isParent() ? `
-    <div class="menu-item" onclick="closeMenu();openMgmt()">
-      <span class="menu-item-icon">⚙️</span>
-      <span>${isHe ? 'ניהול' : 'Management'}</span>
-    </div>
-    <div class="menu-sep"></div>` : '';
-  const gcalItem = (gcalConnected() || gcalWasConnected()) ? `
-    <div class="menu-item" onclick="closeMenu();disconnectGCal()" style="color:#4285f4">
-      <span class="menu-item-icon">📅</span>
-      <span>${isHe ? 'נתק Google Calendar' : 'Disconnect Google Calendar'}</span>
-    </div>
-    <div class="menu-sep"></div>` : '';
-  const adminItem = isAdmin() ? `
-    <div class="menu-sep"></div>
-    <div class="menu-item" onclick="closeMenu();openAdminPanel(false)">
-      <span class="menu-item-icon">🔧</span>
-      <span>${isHe ? 'הגדרות מערכת' : 'System settings'}</span>
-    </div>` : '';
-  el('menuDropdown').innerHTML = parentItems + gcalItem + `
-    <div class="menu-item" onclick="closeMenu();openPhotoModal()">
-      <span class="menu-item-icon">📷</span>
-      <span>${isHe ? 'תמונות משפחה' : 'Family photos'}</span>
-    </div>
-    <div class="menu-sep"></div>
-    <div class="menu-item" onclick="closeMenu();openTabEditor()">
-      <span class="menu-item-icon">🗂</span>
-      <span>${isHe ? 'התאמת לשוניות' : 'Customize tabs'}</span>
-    </div>
-    <div class="menu-sep"></div>
-    <div class="menu-item" onclick="closeMenu();openHomeEditor()">
-      <span class="menu-item-icon">✏️</span>
-      <span>${isHe ? 'התאמת דף הבית' : 'Customize home'}</span>
-    </div>` + adminItem + `
-    <div class="menu-sep"></div>
-    <div class="menu-item" onclick="closeMenu();toggleLang()">
-      <span class="menu-item-icon">🌐</span>
-      <span>${isHe ? 'Switch to English' : 'עבור לעברית'}</span>
-    </div>
-    ${!S.lockedMember ? `<div class="menu-sep"></div>
-    <div class="menu-item" onclick="closeMenu();switchUser()">
-      <span class="menu-item-icon">👤</span>
-      <span>${isHe ? 'החלף משתמש' : 'Switch member'}</span>
-    </div>` : ''}
-    <div class="menu-sep"></div>
-    <div class="menu-item" onclick="closeMenu();installApp()">
-      <span class="menu-item-icon">📲</span>
-      <span>${isHe ? 'הוסף לדף הבית' : 'Add to home screen'}</span>
-    </div>
-    <div class="menu-sep"></div>
-    <div class="menu-item" onclick="closeMenu();authSignOut()" style="color:#e53e3e">
-      <span class="menu-item-icon">🚪</span>
-      <span>${isHe ? 'יציאה מהחשבון' : 'Sign out'}</span>
-    </div>`;
-  // Position dropdown relative to the ☰ button
-  const dd = el('menuDropdown');
-  dd.style.display = 'block';
-  const r = btn ? btn.getBoundingClientRect() : el('menuDropdown').getBoundingClientRect();
-  const ddW = dd.offsetWidth || 200;
-  // Align to whichever edge of the button is closer to the nearest app boundary
-  const spaceRight = window.innerWidth - r.right;
-  const spaceLeft  = r.left;
-  if (spaceRight >= spaceLeft) {
-    dd.style.left  = r.left + 'px';
-    dd.style.right = '';
-  } else {
-    dd.style.right = (window.innerWidth - r.right) + 'px';
-    dd.style.left  = '';
-  }
-  dd.style.top = (r.bottom + 6) + 'px';
-  el('menuOverlay').style.display = 'block';
+// SVG icons for the drawer menu
+const DRAWER_ICONS = {
+  mgmt:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>`,
+  photos:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>`,
+  tabs:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+  home_ed: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>`,
+  lang:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>`,
+  switch:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/><line x1="20" y1="8" x2="23" y2="11"/><line x1="20" y1="14" x2="23" y2="11"/></svg>`,
+  install: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+  admin:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
+  gcal:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+  signout: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+};
+
+function _drawerItem(icon, label, onclick, opts = {}) {
+  const cls = ['menu-item', opts.active ? 'active' : '', opts.danger ? 'danger' : ''].filter(Boolean).join(' ');
+  const badge = opts.badge ? `<span class="menu-item-badge">${opts.badge}</span>` : '';
+  return `<button class="${cls}" onclick="${onclick}">
+    <span class="menu-item-icon">${DRAWER_ICONS[icon] || ''}</span>
+    <span class="menu-item-label">${label}</span>
+    ${badge}
+  </button>`;
 }
+
+function toggleMenu(btn) { _menuOpen ? closeMenu() : openMenu(btn); }
+
+function openMenu() {
+  _menuOpen = true;
+  const isHe = getLang() === 'he';
+  const familyName = familyData?.familyName || '';
+  const notifCount = parseInt(el('notifBellBadge')?.textContent || '0') || 0;
+  const pendingCount = parseInt(el('pendingReqBadge')?.textContent || '0') || 0;
+
+  const mainItems = [
+    isParent() ? _drawerItem('mgmt',    isHe ? 'ניהול' : 'Management',           `closeMenu();openMgmt()`)          : '',
+    isParent() ? _drawerItem('home_ed', isHe ? 'התאמת דף הבית' : 'Customize home', `closeMenu();openHomeEditor()`)   : '',
+    isParent() ? _drawerItem('tabs',    isHe ? 'התאמת לשוניות' : 'Customize tabs', `closeMenu();openTabEditor()`)    : '',
+    _drawerItem('photos', isHe ? 'תמונות משפחה' : 'Family photos', `closeMenu();openPhotoModal()`),
+    (gcalConnected() || gcalWasConnected()) ? _drawerItem('gcal', isHe ? 'נתק Google Calendar' : 'Disconnect GCal', `closeMenu();disconnectGCal()`) : '',
+  ].filter(Boolean).join('');
+
+  const secondaryItems = [
+    _drawerItem('lang',    isHe ? 'Switch to English' : 'עבור לעברית',   `closeMenu();toggleLang()`),
+    !S.lockedMember ? _drawerItem('switch', isHe ? 'החלף משתמש' : 'Switch member', `closeMenu();switchUser()`) : '',
+    _drawerItem('install', isHe ? 'הוסף לדף הבית' : 'Add to home screen', `closeMenu();installApp()`),
+    isAdmin() ? _drawerItem('admin', isHe ? 'הגדרות מערכת' : 'System settings', `closeMenu();openAdminPanel(false)`,
+      { badge: pendingCount > 0 ? pendingCount : null }) : '',
+  ].filter(Boolean).join('');
+
+  const signoutItem = _drawerItem('signout', isHe ? 'יציאה מהחשבון' : 'Sign out', `closeMenu();authSignOut()`, { danger: true });
+
+  el('menuDropdown').innerHTML = `
+    <div class="drawer-user-section">
+      <div class="drawer-avatar">${getAvatar(S.user) || getEmoji(S.user)}</div>
+      <div class="drawer-user-name">${esc(S.user)}</div>
+      <div class="drawer-user-sub">${esc(familyName)}</div>
+    </div>
+    <nav class="drawer-nav">
+      ${mainItems}
+      <div class="drawer-nav-sep"></div>
+      ${secondaryItems}
+    </nav>
+    <div class="drawer-footer">
+      ${signoutItem}
+    </div>`;
+
+  const dd = el('menuDropdown');
+  dd.style.display = 'flex';
+  requestAnimationFrame(() => dd.classList.add('open'));
+  el('menuOverlay').classList.add('open');
+}
+
 function closeMenu() {
   _menuOpen = false;
-  el('menuDropdown').style.display = 'none';
-  el('menuOverlay').style.display  = 'none';
+  const dd = el('menuDropdown');
+  dd.classList.remove('open');
+  el('menuOverlay').classList.remove('open');
+  setTimeout(() => { if (!_menuOpen) dd.style.display = 'none'; }, 280);
 }
 
 async function installApp() {
@@ -3625,6 +3764,71 @@ async function installApp() {
   );
 }
 
+// ── Priority segmented control ────────────
+function _priSegPick(val) {
+  const sel = el('newChorePriority');
+  if (sel) sel.value = val;
+  document.querySelectorAll('#priSegControl .pri-seg-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.val === val));
+}
+
+// ── Soft Card Dropdown ────────────────────
+function _buildSoftDd(ddId, selectId, dotMap) {
+  const dd = el(ddId);
+  const sel = el(selectId);
+  if (!dd || !sel) return;
+  const options = Array.from(sel.options);
+  const curVal  = sel.value || (options[0]?.value || '');
+  const curText = options.find(o => o.value === curVal)?.text || '';
+  const items = options.map(o => {
+    const dot = dotMap?.[o.value] ? `<span class="chore-dot ${dotMap[o.value]}" style="flex-shrink:0;margin-inline-end:8px"></span>` : '';
+    return `<button class="sd-item${o.value===curVal?' sd-selected':''}" data-val="${esc(o.value)}" onclick="_softDdPick('${ddId}','${selectId}','${esc(o.value)}')">${dot}${esc(o.text)}</button>`;
+  }).join('');
+  dd.innerHTML = `<button class="sd-trigger" onclick="_softDdToggle('${ddId}')"><span id="${ddId}Lbl">${esc(curText)}</span></button><div class="sd-panel" id="${ddId}Panel">${items}</div>`;
+}
+
+function _softDdToggle(ddId) {
+  const panel = el(ddId + 'Panel');
+  const dd    = el(ddId);
+  if (!panel || !dd) return;
+  document.querySelectorAll('.sd-panel.open').forEach(p => { if (p !== panel) p.classList.remove('open'); });
+  if (panel.classList.contains('open')) { panel.classList.remove('open'); return; }
+  const rect = dd.querySelector('.sd-trigger').getBoundingClientRect();
+  const vh = window.innerHeight;
+  const spaceBelow = vh - rect.bottom - 8;
+  const spaceAbove = rect.top - 8;
+  if (spaceBelow >= spaceAbove || spaceBelow >= 120) {
+    panel.style.top       = (rect.bottom + 4) + 'px';
+    panel.style.bottom    = 'auto';
+    panel.style.maxHeight = Math.min(vh * 0.6, spaceBelow) + 'px';
+  } else {
+    panel.style.bottom    = (vh - rect.top + 4) + 'px';
+    panel.style.top       = 'auto';
+    panel.style.maxHeight = Math.min(vh * 0.6, spaceAbove) + 'px';
+  }
+  panel.style.right = (window.innerWidth - rect.right) + 'px';
+  panel.style.left  = 'auto';
+  panel.classList.add('open');
+  setTimeout(() => {
+    document.addEventListener('click', function _h(e) {
+      if (!dd.contains(e.target)) { panel.classList.remove('open'); document.removeEventListener('click', _h); }
+    });
+  }, 0);
+}
+
+function _softDdPick(ddId, selectId, value) {
+  const sel = el(selectId);
+  if (!sel) return;
+  sel.value = value;
+  const lbl = el(ddId + 'Lbl');
+  if (lbl) lbl.textContent = Array.from(sel.options).find(o => o.value === value)?.text || value;
+  const panel = el(ddId + 'Panel');
+  if (panel) {
+    panel.querySelectorAll('.sd-item').forEach(b => b.classList.toggle('sd-selected', b.dataset.val === value));
+    panel.classList.remove('open');
+  }
+}
+
 function renderStatic() {
   const lb=el('langBtn');   if(lb) lb.textContent = t('langToggle');
   const sb=el('switchBtn'); if(sb) sb.textContent = t('switchUser');
@@ -3632,36 +3836,38 @@ function renderStatic() {
   el('hwDueSoonTitle').textContent   = t('hwDueSoon');
   el('poolTitle').textContent        = t('superPoolTitle');
   el('shoppingListTitle').textContent = t('superListTitle');
-  el('addChoreTitle').textContent    = t('addChoreTitle');
   el('addEventTitle').textContent    = t('addEventTitle');
   el('newChoreText').placeholder  = t('chorePlaceholder');
   el('poolItemInput').placeholder = t('poolAddPlaceholder');
   el('hwDesc').placeholder        = t('hwPlaceholder');
   el('newEventTitle').placeholder = t('eventPlaceholder');
-  el('addChoreBtn').textContent  = t('add');
-  el('addHwBtn').textContent     = t('add');
+  el('addHwBtn').innerHTML = _ico.plus;
   el('addEventBtn').textContent  = t('add');
   el('doneShoppingBtn').textContent   = t('doneShopping');
   el('historyTitle').textContent      = t('shoppingHistoryTitle');
   const lbl=el('gcalSyncLabel');if(lbl)lbl.textContent=t('gcalSyncOption');
   el('newChorePriority').innerHTML = `
-    <option value="high">🔴 ${t('high')}</option>
-    <option value="medium">🟡 ${t('medium')}</option>
-    <option value="low">🟢 ${t('low')}</option>`;
+    <option value="high">${t('high')}</option>
+    <option value="medium" selected>${t('medium')}</option>
+    <option value="low">${t('low')}</option>`;
   el('poolCatSelect').innerHTML = getGroceryCats().map(c =>
     `<option value="${esc(c.name)}">${c.emoji} ${esc(c.name)}</option>`).join('');
+  _buildSoftDd('ddPoolCat', 'poolCatSelect');
   el('hwSubject').innerHTML = getSubjects().map(s =>
     `<option value="${esc(s.name)}">${esc(subjectLabel(s.name))}</option>`).join('');
   // Dynamic member dropdowns
   el('newChoreAssignee').innerHTML = getAllMemberNames().map(n =>
-    `<option value="${esc(n)}">${getEmoji(n)} ${esc(n)}</option>`).join('');
+    `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+  _buildSoftDd('ddAssignee', 'newChoreAssignee');
   renderEventPersonPicker();
 }
 
 function applyRoleUI() {
   // Kids can add chores for themselves but can't pick assignee
-  el('newChoreAssignee').style.display = isParent()?'':'none';
-  el('poolAddForm').style.display      = isParent()?'':'none';
+  const ddA = el('ddAssignee');
+  if (ddA) ddA.style.display = isParent() ? '' : 'none';
+  el('poolAddTrigger').style.display = isParent()?'':'none';
+  el('poolAddForm').style.display = 'none';
 }
 
 // ════════════════════════════════════════
@@ -3670,14 +3876,14 @@ function applyRoleUI() {
 function renderHeader() {
   const h = new Date().getHours();
   const g = h<12?t('greetMorning'):h<17?t('greetAfternoon'):t('greetEvening');
-  el('headerGreeting').innerHTML = `${esc(g)}, ${esc(S.user)}! ${getEmoji(S.user)} <span class="header-role-badge">${currentUserRoleBadge()}</span>`;
-  el('headerDate').textContent = new Date().toLocaleDateString(t('locale'),{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  el('headerGreeting').innerHTML = `${esc(g)}, <strong>${esc(S.user)}</strong>! <span style="display:inline-flex;vertical-align:middle;margin:0 2px;">${getAvatar(S.user, 22)}</span>&nbsp;<span class="header-role-badge">${currentUserRoleBadge()}</span>`;
+  el('headerDate').textContent = new Date().toLocaleDateString(t('locale'),{weekday:'long',month:'long',day:'numeric'});
   const allNames = getAllMemberNames();
   const members = isParent()
     ? [{name:'All',emoji:'👨‍👩‍👧‍👧'}, ...allNames.map(n=>({name:n,emoji:getEmoji(n)}))]
     : [{name:'All',emoji:'👨‍👩‍👧‍👧'}, {name:S.user,emoji:getEmoji(S.user)}];
   el('avatarRow').innerHTML = members.map(f => `
-    <div class="avatar-chip ${S.filter===f.name?'active':''}" onclick="setFilter('${esc(f.name)}')">
+    <div class="avatar-chip ${f.name==='All'?'avatar-chip-all':''} ${S.filter===f.name?'active':''}" onclick="setFilter('${esc(f.name)}')">
       <div class="avatar-bubble">${f.name==='All' ? '👨‍👩‍👧‍👧' : getAvatar(f.name)}</div>
       <div class="avatar-label">${f.name==='All'?t('all'):f.name}</div>
     </div>`).join('');
@@ -3737,15 +3943,48 @@ function renderHomeUpcoming() {
   card.style.display = '';
   container.innerHTML = all.map(ev => {
     const isClass = ev._src === 'class';
-    return `<div class="task-row" style="gap:8px;padding:6px 0;align-items:flex-start">
-      <span style="font-size:18px;flex-shrink:0;line-height:1.4">${eventTypeIcon(ev.type)}</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:700;color:#1a202c">${esc(ev.title)}${isClass ? scopeBadge(ev.scope) : ''}</div>
-        <div style="font-size:11px;color:#718096;font-weight:600;margin-top:2px">${fmtDate(ev.date)}${ev.time ? ' · ' + ev.time : ''}</div>
+    return `<div class="home-event-row" onclick="switchTab('calendar')">
+      <div class="home-event-icon">${eventTypeIcon(ev.type)}</div>
+      <div class="home-event-body">
+        <div class="home-event-title">${esc(ev.title)}${isClass ? scopeBadge(ev.scope) : ''}</div>
+        <div class="home-event-meta">${fmtDate(ev.date)}${ev.time ? ' · ' + ev.time : ''}${isClass && ev._kid ? ' · ' + esc(ev._kid) : ''}</div>
       </div>
-      ${isClass && ev._kid ? `<span class="mini-avatar">${getAvatar(ev._kid)}</span>` : ''}
+      <span class="home-chevron">‹</span>
     </div>`;
   }).join('');
+}
+
+function renderHomeShopping() {
+  const sec = el('homeSection-shopping');
+  if (!sec) return;
+  const placeholder = t('locale') === 'he-IL' ? 'הוסף לרשימת הקניות...' : 'Add to shopping list...';
+  sec.innerHTML = `<div class="card">
+    <div class="card-title">🛒 קניות מהירות</div>
+    <div class="home-quick-add-wrap">
+      <span class="home-quick-add-prefix">＋</span>
+      <input class="home-quick-add-input" id="homeQuickAddInput" type="text"
+        placeholder="${placeholder}"
+        onkeydown="if(event.key==='Enter')homeQuickAddShop()">
+      <button class="home-quick-add-btn" onclick="homeQuickAddShop()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      </button>
+    </div>
+  </div>`;
+}
+
+function homeQuickAddShop() {
+  const input = el('homeQuickAddInput');
+  if (!input) return;
+  const name = input.value.trim();
+  if (!name) { input.focus(); return; }
+  if (!S.groceryPool.find(p => p.name.toLowerCase() === name.toLowerCase())) {
+    S.groceryPool.push({ id: Date.now(), name, category: '', qtyType: 'unit' });
+    saveGrocery();
+    renderPool();
+  }
+  input.value = '';
+  input.classList.add('quick-added');
+  setTimeout(() => input.classList.remove('quick-added'), 700);
 }
 
 // ════════════════════════════════════════
@@ -3901,12 +4140,17 @@ function renderHome() {
   el('homeTasks').innerHTML = tasks.length
     ? tasks.slice(0,8).map(c => {
         const can = isParent()||c.assignee===S.user;
-        return `<div class="task-row">
+        const showSub = isParent() && c.assignee && c.assignee !== 'All';
+        return `<div class="task-row home-task-row">
           <div class="check-box ${c.done?'done':''} ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
-            ${c.done?'✓':''}</div>
-          <div class="task-text ${c.done?'done':''}">${esc(c.text)}</div>
-          ${isParent()?`<div class="mini-avatar">${getAvatar(c.assignee)}</div>`:''}
-          <span class="pri pri-${c.priority}">${t(c.priority)}</span></div>`;
+            ${c.done?`<svg viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6 5,9 10,3"/></svg>`:''}
+          </div>
+          <div class="task-body">
+            <div class="task-text ${c.done?'done':''}">${esc(c.text)}</div>
+            ${showSub?`<div class="task-sub">${esc(c.assignee)}</div>`:''}
+          </div>
+          <div class="home-type-icon home-type-chore">🧹</div>
+        </div>`;
       }).join('')
     : t('allDone');
 
@@ -3924,14 +4168,18 @@ function renderHome() {
     return a.due.localeCompare(b.due);
   });
   el('hwSummary').innerHTML = hw.length
-    ? hw.map(h => `<div class="task-row">
-        ${isParent()?`<div class="mini-avatar">${getAvatar(h.child)}</div>`:''}
-        <div class="task-text">${esc(h.desc)}</div>
-        ${h.due?`<span style="font-size:11px;color:#a0aec0;font-weight:600;white-space:nowrap">${fmtDate(h.due)}</span>`:''}
-        <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span></div>`).join('')
+    ? hw.map(h => `<div class="task-row home-task-row">
+        <div class="check-box readonly"></div>
+        <div class="task-body">
+          <div class="task-text">${esc(h.desc)}</div>
+          <div class="task-sub">${isParent()?`${esc(h.child)} · `:''}${h.due?fmtDate(h.due):''}</div>
+        </div>
+        <div class="home-type-icon home-type-hw">📚</div>
+      </div>`).join('')
     : t('noPendingHw');
 
   renderHomeUpcoming();
+  renderHomeShopping();
   applyHomePrefs();
 }
 
@@ -3962,37 +4210,56 @@ function setStar(kid,val){
 // ── Chore history state ───────────────────
 let _choreHistOpen   = false;
 let _choreHistSearch = '';
+let _pendingDelete = null;
+let _snackTimer = null;
+let _chore3dotActiveId = null;
 
 function renderChores() {
-  // Show assignee dropdown only when no specific member is focused
-  if (isParent()) {
-    const assigneeEl = el('newChoreAssignee');
-    if (assigneeEl) assigneeEl.style.display = S.filter === 'All' ? '' : 'none';
-  }
-  // Update add-chore title to reflect focused member
-  const choreTitleEl = el('addChoreTitle');
-  if (choreTitleEl) {
-    choreTitleEl.textContent = S.filter === 'All'
-      ? t('addChoreTitle')
-      : `➕ הוסף משימה ל${S.filter}`;
+  // Show assignee select only when parent is viewing all members
+  const showAssigneeSelect = isParent() && S.filter === 'All';
+  const ddAssigneeEl = el('ddAssignee');
+  const sepEl = el('choreQaSep');
+  if (ddAssigneeEl) ddAssigneeEl.style.display = showAssigneeSelect ? '' : 'none';
+  if (sepEl)        sepEl.style.display        = showAssigneeSelect ? '' : 'none';
+  const choreInput = el('newChoreText');
+  if (choreInput) {
+    choreInput.placeholder = S.filter === 'All' ? t('chorePlaceholder') : `הוסף משימה ל${S.filter}...`;
   }
   let items = S.filter==='All' ? S.chores : S.chores.filter(c=>c.assignee===S.filter);
   const active = items.filter(c=>!c.done);
   const showAssignee = S.filter==='All';
   const inner = active.length ? active.map(c=>{
     const can = isParent()||c.assignee===S.user;
-    return `<div class="hw-item" data-chore-id="${c.id}">
-      <div class="hw-head">
-        <div class="check-box ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
+    const priDotCls = c.priority==='high' ? 'chore-dot-high' : c.priority==='medium' ? 'chore-dot-med' : 'chore-dot-low';
+    const priLabel = t(c.priority);
+    const metaParts = [showAssignee ? esc(c.assignee) : ''].filter(Boolean).join(' • ');
+    const threeDotSVG = `<svg viewBox="0 0 16 16" fill="currentColor" style="width:14px;height:14px;display:block"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>`;
+    return `<div class="chore-card" data-chore-id="${c.id}">
+      ${isParent()?`<div class="chore-reveal-zone">
+        <button class="chore-action-btn chore-action-delete" onclick="deleteChore(${c.id})">מחק</button>
+        <button class="chore-action-btn chore-action-edit" onclick="startEditChore(${c.id})">ערוך</button>
+      </div>`:''}
+      <div class="chore-slide">
+        <div class="check-box chore-check ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
+          <svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </div>
-        ${showAssignee?`<span style="font-size:18px;flex-shrink:0;line-height:1">${getAvatar(c.assignee,20)}</span>`:''}
-        <div class="hw-desc-text" style="flex:1">${esc(c.text)}</div>
-        <span class="pri pri-${c.priority}">${t(c.priority)}</span>
-        ${isParent()?`<button class="del-btn" onclick="deleteChore(${c.id})">×</button>`:''}
+        <div class="chore-body" id="choreBody_${c.id}">
+          <div class="chore-text" onclick="this.classList.toggle('expanded');event.stopPropagation()">${esc(c.text)}</div>
+          <div class="chore-meta-row">
+            ${metaParts ? `<span class="chore-meta">${metaParts}</span><span class="chore-meta-sep">•</span>` : ''}<span class="chore-meta">${_choreWhen(c.id)}</span><span class="chore-meta-sep">•</span><span class="chore-dot ${priDotCls}"></span><span class="chore-pri-label">${priLabel}</span>
+          </div>
+        </div>
+        ${isParent()?`<div class="chore-3dot" id="chore3dot_${c.id}">
+          <button class="chore-3dot-btn" onclick="_chore3dotToggle(${c.id});event.stopPropagation()">${threeDotSVG}</button>
+        </div>`:''}
       </div>
     </div>`;
-  }).join('') : `<div class="empty">${t('noChores')}</div>`;
-  el('choresContent').innerHTML = `<div class="card">${inner}</div>`;
+  }).join('') : `<div class="chore-empty-cta" onclick="el('newChoreText').focus()">
+    <div class="chore-empty-title">${S.filter==='All' ? 'אין משימות' : `אין משימות ל${S.filter}`} 🎉</div>
+    <div class="chore-empty-sub">${t('noChores')}</div>
+  </div>`;
+  el('choresContent').innerHTML = `<div class="chore-list">${inner}</div>`;
+  _initChoreSwipes();
   renderChoreHistory(S.filter);
 }
 
@@ -4009,9 +4276,9 @@ function renderChoreHistory(filter) {
   ) : allDone;
   wrap.innerHTML=`<div class="card" style="margin-top:0">
     <div class="hw-hist-hdr" onclick="toggleChoreHistory()">
+      <span style="color:#a0aec0;font-size:12px;margin-inline-end:6px">${_choreHistOpen?'▲':'▼'}</span>
       <span class="hw-hist-title">${t('choreHistory')}</span>
       <span class="hw-hist-count">${allDone.length}</span>
-      <span style="color:#a0aec0;font-size:12px;margin-inline-start:4px">${_choreHistOpen?'▲':'▼'}</span>
     </div>
     ${_choreHistOpen?`
       <input class="hw-hist-search" placeholder="${t('choreHistorySearch')}"
@@ -4027,8 +4294,8 @@ function choreHistListHTML(filtered, filter) {
       ${filter==='All'?`<span style="font-size:16px;flex-shrink:0">${getAvatar(c.assignee,16)}</span>`:''}
       <div class="hw-hist-desc" style="flex:1">${esc(c.text)}</div>
       <span class="hw-hist-ts">${fmtDoneAt(c.doneAt)}</span>
-      ${isParent()?`<button class="del-btn" style="opacity:0.5;font-size:14px" title="בטל סימון" onclick="toggleChore(${c.id})">↩</button>`:''}
-      ${isParent()?`<button class="del-btn" onclick="deleteChore(${c.id})">×</button>`:''}</div>`
+      ${isParent()?`<button class="del-btn" title="בטל סימון" onclick="toggleChore(${c.id})">${_ico.undo}</button>`:''}
+      ${isParent()?`<button class="del-btn" onclick="deleteChore(${c.id})">${_ico.x}</button>`:''}</div>`
   ).join('') : `<div class="empty" style="padding:8px 0">${t('choreHistoryEmpty')}</div>`;
 }
 
@@ -4090,10 +4357,285 @@ function toggleChore(id) {
   save(); renderChores(); renderHome();
 }
 
-function deleteChore(id){
-  if(!isParent())return;
-  S.chores=S.chores.filter(x=>x.id!==id);
-  save(); renderHome(); renderChores();
+function deleteChore(id) {
+  if (!isParent()) return;
+  const idx = S.chores.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  const chore = S.chores.splice(idx, 1)[0];
+  if (_pendingDelete) { clearTimeout(_pendingDelete.timer); save(); }
+  _pendingDelete = { id, chore,
+    timer: setTimeout(() => { _pendingDelete = null; save(); renderHome(); }, 3000)
+  };
+  renderChores(); renderHome();
+  _showSnackbar('המשימה נמחקה', () => {
+    if (_pendingDelete && _pendingDelete.id === id) {
+      clearTimeout(_pendingDelete.timer);
+      S.chores.push(_pendingDelete.chore);
+      _pendingDelete = null;
+      save(); renderChores(); renderHome();
+    }
+  });
+}
+
+// ── Custom Modal ──────────────────────────────
+let _cmodalResolve = null;
+function _cmodalEl() {
+  let ov = document.getElementById('_cmodalOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = '_cmodalOverlay';
+    ov.className = 'cmodal-overlay';
+    ov.addEventListener('click', () => _cmodalClose(false));
+    document.body.appendChild(ov);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && _cmodalResolve) _cmodalClose(false); });
+  }
+  return ov;
+}
+function _cmodalClose(val) {
+  const ov = document.getElementById('_cmodalOverlay');
+  if (!ov) return;
+  ov.classList.remove('cmodal-visible');
+  if (_cmodalResolve) { _cmodalResolve(val); _cmodalResolve = null; }
+}
+function _confirm(msg, opts = {}) {
+  const ov = _cmodalEl();
+  const dangerCls = opts.danger ? ' cmodal-danger' : '';
+  const cancelLbl = opts.cancelLabel || 'ביטול';
+  const okLbl     = opts.okLabel    || 'אישור';
+  ov.innerHTML = `<div class="cmodal-box" onclick="event.stopPropagation()">
+    <div class="cmodal-msg">${msg}</div>
+    <div class="cmodal-btns">
+      <button class="cmodal-btn cmodal-ok${dangerCls}" onclick="_cmodalClose(true)">${okLbl}</button>
+      <button class="cmodal-btn cmodal-cancel" onclick="_cmodalClose(false)">${cancelLbl}</button>
+    </div>
+  </div>`;
+  requestAnimationFrame(() => ov.classList.add('cmodal-visible'));
+  return new Promise(res => { _cmodalResolve = res; });
+}
+function _alert(msg, opts = {}) {
+  const ov = _cmodalEl();
+  const okLbl = opts.okLabel || 'סגור';
+  ov.innerHTML = `<div class="cmodal-box" onclick="event.stopPropagation()" style="max-width:320px">
+    <div class="cmodal-msg">${msg}</div>
+    <div class="cmodal-btns" style="justify-content:center">
+      <button class="cmodal-btn cmodal-ok" style="flex:0 0 auto;min-width:110px" onclick="_cmodalClose(true)">${okLbl}</button>
+    </div>
+  </div>`;
+  requestAnimationFrame(() => ov.classList.add('cmodal-visible'));
+  return new Promise(res => { _cmodalResolve = res; });
+}
+
+function _showSnackbar(msg, undoFn) {
+  let snack = el('appSnackbar');
+  if (!snack) {
+    snack = document.createElement('div');
+    snack.id = 'appSnackbar';
+    snack.className = 'snackbar';
+    document.body.appendChild(snack);
+  }
+  snack.innerHTML = `<span class="snack-msg">${esc(msg)}</span>${undoFn ? '<button class="snack-undo" onclick="_snackUndo()">בטל</button>' : ''}`;
+  snack._undoFn = undoFn;
+  snack.classList.add('show');
+  if (_snackTimer) clearTimeout(_snackTimer);
+  _snackTimer = setTimeout(_hideSnackbar, 3000);
+}
+function _snackUndo() {
+  const snack = el('appSnackbar');
+  if (snack && snack._undoFn) snack._undoFn();
+  _hideSnackbar();
+}
+function _hideSnackbar() {
+  const snack = el('appSnackbar');
+  if (snack) snack.classList.remove('show');
+  if (_snackTimer) { clearTimeout(_snackTimer); _snackTimer = null; }
+}
+function _chore3dotToggle(id) {
+  if (_chore3dotActiveId === id) { _chore3dotClose(); return; }
+  _chore3dotClose();
+  const cont = el('chore3dot_' + id);
+  if (!cont) return;
+  let panel = el('_choreGlobalMenu');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = '_choreGlobalMenu';
+    document.body.appendChild(panel);
+  }
+  Object.assign(panel.style, {
+    position:'fixed', zIndex:'9999', background:'#fff',
+    borderRadius:'14px', boxShadow:'0 8px 24px rgba(0,0,0,0.08)',
+    border:'1px solid #e5e7eb', padding:'6px',
+    display:'flex', flexDirection:'column', gap:'2px',
+    minWidth:'110px', opacity:'0', pointerEvents:'none',
+    transition:'opacity 160ms ease, transform 160ms ease',
+    transform:'translateY(-6px) scale(0.96)', transformOrigin:'top left',
+  });
+  const btn = (emoji, text, danger, cb) => {
+    const b = document.createElement('button');
+    b.style.cssText = `display:flex;align-items:center;gap:8px;white-space:nowrap;padding:6px 10px;min-height:36px;border-radius:8px;border:none;background:transparent;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;color:${danger?'#DC2626':'#111827'};width:100%;`;
+    b.innerHTML = `<span style="width:20px;text-align:center;flex-shrink:0">${emoji}</span><span>${text}</span>`;
+    b.onmouseenter = () => b.style.background = danger ? 'rgba(220,38,38,0.05)' : '#f9fafb';
+    b.onmouseleave = () => b.style.background = 'transparent';
+    b.onclick = cb;
+    return b;
+  };
+  panel.innerHTML = '';
+  panel.appendChild(btn('✏️', 'ערוך', false, () => { _chore3dotClose(); startEditChore(id); }));
+  panel.appendChild(btn('🗑', 'מחק',  true,  () => { _chore3dotClose(); deleteChore(id); }));
+  const rect = cont.querySelector('.chore-3dot-btn').getBoundingClientRect();
+  panel.style.top   = (rect.bottom + 6) + 'px';
+  panel.style.left  = rect.left + 'px';
+  panel.style.right = 'auto';
+  panel.style.opacity = '1';
+  panel.style.pointerEvents = 'auto';
+  panel.style.transform = 'translateY(0) scale(1)';
+  _chore3dotActiveId = id;
+  setTimeout(() => {
+    document.addEventListener('click', function _h(e) {
+      if (!panel.contains(e.target) && !cont.contains(e.target)) { _chore3dotClose(); document.removeEventListener('click', _h); }
+    });
+  }, 0);
+}
+function _chore3dotClose() {
+  const p = el('_choreGlobalMenu');
+  if (p) { p.style.opacity = '0'; p.style.pointerEvents = 'none'; p.style.transform = 'translateY(-6px) scale(0.96)'; }
+  _chore3dotActiveId = null;
+}
+
+let _pool3dotActiveId = null;
+function _pool3dotToggle(id) {
+  if (_pool3dotActiveId === id) { _pool3dotClose(); return; }
+  _pool3dotClose();
+  const cont = el('pool3dot_' + id);
+  if (!cont) return;
+  let panel = el('_poolGlobalMenu');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = '_poolGlobalMenu';
+    document.body.appendChild(panel);
+  }
+  Object.assign(panel.style, {
+    position:'fixed', zIndex:'9999', background:'#fff',
+    borderRadius:'14px', boxShadow:'0 8px 24px rgba(0,0,0,0.08)',
+    border:'1px solid #e5e7eb', padding:'6px',
+    display:'flex', flexDirection:'column', gap:'2px',
+    minWidth:'110px', opacity:'0', pointerEvents:'none',
+    transition:'opacity 160ms ease, transform 160ms ease',
+    transform:'translateY(-6px) scale(0.96)', transformOrigin:'top left',
+  });
+  const btn = (emoji, text, danger, cb) => {
+    const b = document.createElement('button');
+    b.style.cssText = `display:flex;align-items:center;gap:8px;white-space:nowrap;padding:6px 10px;min-height:36px;border-radius:8px;border:none;background:transparent;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;color:${danger?'#DC2626':'#111827'};width:auto;`;
+    b.innerHTML = `<span style="width:20px;text-align:center;flex-shrink:0">${emoji}</span><span>${text}</span>`;
+    b.onmouseenter = () => b.style.background = danger ? 'rgba(220,38,38,0.05)' : '#f9fafb';
+    b.onmouseleave = () => b.style.background = 'transparent';
+    b.onclick = cb;
+    return b;
+  };
+  panel.innerHTML = '';
+  panel.appendChild(btn('✏️', 'ערוך', false, () => { _pool3dotClose(); startEditPoolItem(id); }));
+  panel.appendChild(btn('🗑', 'מחק',  true,  () => { _pool3dotClose(); deletePoolItem(id); }));
+  const rect = cont.querySelector('.chore-3dot-btn').getBoundingClientRect();
+  panel.style.top  = (rect.bottom + 6) + 'px';
+  panel.style.left = rect.left + 'px';
+  panel.style.opacity = '1';
+  panel.style.pointerEvents = 'auto';
+  panel.style.transform = 'translateY(0) scale(1)';
+  _pool3dotActiveId = id;
+  setTimeout(() => {
+    document.addEventListener('click', function _h(e) {
+      if (!panel.contains(e.target) && !cont.contains(e.target)) { _pool3dotClose(); document.removeEventListener('click', _h); }
+    });
+  }, 0);
+}
+function _pool3dotClose() {
+  const p = el('_poolGlobalMenu');
+  if (p) { p.style.opacity = '0'; p.style.pointerEvents = 'none'; p.style.transform = 'translateY(-6px) scale(0.96)'; }
+  _pool3dotActiveId = null;
+}
+function _initPoolSwipes() {
+  if (!isParent()) return;
+  const REVEAL = 120;
+  document.querySelectorAll('.pool-item[data-pool-id]').forEach(row => {
+    const slide = row.querySelector('.pool-slide');
+    if (!slide) return;
+    let startX = 0, curX = 0, active = false, isOpen = false;
+    slide.addEventListener('touchstart', e => {
+      startX = e.touches[0].clientX; active = true; slide.style.transition = 'none';
+    }, { passive: true });
+    slide.addEventListener('touchmove', e => {
+      if (!active) return;
+      // RTL: swipe left (negative dx) reveals zone on the left
+      const dx = e.touches[0].clientX - startX;
+      // Positive = swipe right (close), negative = swipe left (open)
+      const raw = isOpen ? dx + REVEAL : dx;
+      curX = Math.max(0, Math.min(REVEAL, raw));
+      slide.style.transform = `translateX(${curX}px)`;
+    }, { passive: true });
+    slide.addEventListener('touchend', () => {
+      active = false; slide.style.transition = 'transform 0.22s ease';
+      if (!isOpen && curX > REVEAL / 2) { slide.style.transform = `translateX(${REVEAL}px)`; isOpen = true; }
+      else if (isOpen && curX < REVEAL / 2) { slide.style.transform = 'translateX(0)'; isOpen = false; }
+      else { slide.style.transform = isOpen ? `translateX(${REVEAL}px)` : 'translateX(0)'; }
+      curX = 0;
+    });
+    slide.addEventListener('click', () => {
+      if (isOpen) { slide.style.transition = 'transform 0.22s ease'; slide.style.transform = 'translateX(0)'; isOpen = false; }
+    });
+  });
+}
+
+function startEditChore(id) {
+  // Snap slide back instantly (may be open from swipe reveal)
+  const slide = document.querySelector(`[data-chore-id="${id}"] .chore-slide`);
+  if (slide) { slide.style.transition = 'none'; slide.style.transform = 'translateX(0)'; }
+
+  const body = document.querySelector(`[data-chore-id="${id}"] .chore-body`);
+  const card = document.querySelector(`[data-chore-id="${id}"]`);
+  if (!body || !card) return;
+  const chore = S.chores.find(x => x.id === id);
+  if (!chore) return;
+  card.classList.add('editing');
+  body.innerHTML = `<input class="chore-edit-input" id="choreEditInput_${id}" value="${esc(chore.text)}" onkeydown="if(event.key==='Enter')saveEditChore(${id});if(event.key==='Escape')cancelEditChore(${id})"><div class="chore-edit-actions"><button class="chore-edit-save" onclick="saveEditChore(${id});event.stopPropagation()">שמור</button><button class="chore-edit-cancel" onclick="cancelEditChore(${id});event.stopPropagation()">ביטול</button></div>`;
+  const inp = el('choreEditInput_' + id);
+  if (inp) { inp.focus(); inp.select(); }
+}
+function saveEditChore(id) {
+  const inp = el('choreEditInput_' + id);
+  if (!inp) return;
+  const text = inp.value.trim();
+  if (!text) return;
+  const chore = S.chores.find(x => x.id === id);
+  if (chore) chore.text = text;
+  save(); renderChores(); renderHome();
+}
+function cancelEditChore(id) { renderChores(); }
+function _initChoreSwipes() {
+  if (!isParent()) return;
+  const REVEAL = 160;
+  document.querySelectorAll('.chore-card[data-chore-id]').forEach(row => {
+    const slide = row.querySelector('.chore-slide');
+    if (!slide) return;
+    let startX = 0, curX = 0, active = false, isOpen = false;
+    slide.addEventListener('touchstart', e => {
+      startX = e.touches[0].clientX; active = true; slide.style.transition = 'none';
+    }, { passive: true });
+    slide.addEventListener('touchmove', e => {
+      if (!active) return;
+      const dx = e.touches[0].clientX - startX;
+      curX = Math.max(0, Math.min(REVEAL, isOpen ? dx + REVEAL : dx));
+      slide.style.transform = `translateX(${curX}px)`;
+    }, { passive: true });
+    slide.addEventListener('touchend', () => {
+      active = false; slide.style.transition = 'transform 0.22s ease';
+      if (!isOpen && curX > REVEAL / 2) { slide.style.transform = `translateX(${REVEAL}px)`; isOpen = true; }
+      else if (isOpen && curX < REVEAL / 2) { slide.style.transform = 'translateX(0)'; isOpen = false; }
+      else { slide.style.transform = isOpen ? `translateX(${REVEAL}px)` : 'translateX(0)'; }
+      curX = 0;
+    });
+    slide.addEventListener('click', () => {
+      if (isOpen) { slide.style.transition = 'transform 0.22s ease'; slide.style.transform = 'translateX(0)'; isOpen = false; }
+    });
+  });
 }
 function addChore(){
   const text=el('newChoreText').value.trim();if(!text)return;
@@ -4101,20 +4643,22 @@ function addChore(){
     ?(S.filter!=='All'?S.filter:el('newChoreAssignee').value)
     :S.user;
   S.chores.push({id:Date.now(),text,assignee,priority:el('newChorePriority').value,done:false});
-  el('newChoreText').value='';save();renderHome();renderChores();
+  el('newChoreText').value=''; _priSegPick('medium'); save();renderHome();renderChores();
 }
 
 // ════════════════════════════════════════
 //  SUPERMARKET
 // ════════════════════════════════════════
 let _grocerySection = 'pool';
-let _poolQtyFor = null;      // poolId currently showing qty input
+let _poolQtyActiveId = null;  // poolId whose inline qty control is visible (mobile)
 let _poolEditFor = null;     // poolId currently being edited
 let _poolEditQtyType = 'count'; // unit type in active edit row
 let _poolNewQtyType = 'count';  // unit for next new pool item: 'count' | 'kg'
 const _collapsedPoolCats     = new Set();
 const _collapsedShoppingCats = new Set();
 let _poolSearch = '';
+let _poolCatFilter = null;
+let _poolChipsOpen = false;
 let _historySearch = '';
 const _expandedHistoryDates = new Set();
 
@@ -4135,12 +4679,31 @@ function onPoolSearch(val) {
   renderPool();
 }
 
+function pickPoolCat(name) {
+  _poolCatFilter = _poolCatFilter === name ? null : name;
+  renderPool();
+}
+function togglePoolChips() {
+  _poolChipsOpen = !_poolChipsOpen;
+  renderPool();
+}
+
 function toggleCatCollapse(el) {
   const sec = el.dataset.section;
   const cat = el.dataset.cat;
   const set = sec === 'pool' ? _collapsedPoolCats : _collapsedShoppingCats;
   if (set.has(cat)) set.delete(cat); else set.add(cat);
   if (sec === 'pool') renderPool(); else renderShoppingList();
+}
+
+function togglePoolAddForm(forceOpen) {
+  const form = el('poolAddForm');
+  const trigger = el('poolAddTrigger');
+  if (!form) return;
+  const open = forceOpen !== undefined ? forceOpen : form.style.display === 'none';
+  form.style.display = open ? '' : 'none';
+  if (trigger) trigger.classList.toggle('active', open);
+  if (open) setTimeout(() => el('poolItemInput')?.focus(), 30);
 }
 
 function togglePoolNewQtyType() {
@@ -4203,15 +4766,34 @@ async function saveShoppingHistoryTtl(days) {
   pruneShoppingHistory();
 }
 
+function _scrollY() {
+  return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+}
+function _scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
+  document.body.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function _updateScrollTopBtn() {
+  const btn = el('scrollTopBtn');
+  if (!btn) return;
+  const show = _scrollY() > 80 && _grocerySection === 'pool' && S.tab === 'grocery';
+  btn.classList.toggle('visible', show);
+}
+window.addEventListener('scroll', _updateScrollTopBtn, { passive: true });
+document.addEventListener('scroll', _updateScrollTopBtn, { passive: true });
+
 function switchGrocerySection(sec) {
   _grocerySection = sec;
   ['pool','shopping','history'].forEach(s => {
     el(`grocerySec-${s}`).style.display = s === sec ? '' : 'none';
     el(`gtab-${s}`)?.classList.toggle('active', s === sec);
   });
+  if (sec !== 'shopping') el('doneShoppingBtn').style.display = 'none';
   if (sec === 'pool')     renderPool();
   if (sec === 'shopping') renderShoppingList();
   if (sec === 'history')  renderShoppingHistory();
+  _updateScrollTopBtn();
 }
 
 function renderSupermarket() {
@@ -4227,8 +4809,9 @@ function renderPool() {
   let html = '';
 
   function poolItemHtml(p) {
-    const inList = S.shoppingList.some(x => x.poolId === p.id);
-    const qtyActive = _poolQtyFor === p.id;
+    const inShoppingList = S.shoppingList.some(x => x.poolId === p.id);
+    const inCartAlready  = !inShoppingList && S.inCart.some(x => x.poolId === p.id);
+    const inList = inShoppingList || inCartAlready;
     const isKg = p.qtyType === 'kg';
     const unitLabel = isKg ? 'ק"ג' : 'יח\'';
 
@@ -4240,7 +4823,8 @@ function renderPool() {
         <input class="g-input" id="poolEditName_${p.id}" value="${esc(p.name)}"
           style="flex:1;min-width:80px;padding:6px 10px"
           onkeydown="if(event.key==='Enter')confirmEditPoolItem(${p.id})">
-        <select class="g-cat" id="poolEditCat_${p.id}">${catOptions}</select>
+        <select id="poolEditCat_${p.id}" style="display:none">${catOptions}</select>
+        <div id="poolEditCatDd_${p.id}" style="flex-shrink:0"></div>
         <button class="unit-toggle${editIsKg?' kg':''}" id="poolEditUnit_${p.id}"
           onclick="togglePoolEditQtyType(${p.id})">${editIsKg?'ק"ג':'יח\''}</button>
         <button class="cart-btn" onclick="confirmEditPoolItem(${p.id})">✓</button>
@@ -4248,35 +4832,106 @@ function renderPool() {
       </div>`;
     }
 
-    if (qtyActive) {
-      return `<div class="pool-item pool-item-qty-row">
-        <div class="pool-item-name">${esc(p.name)}</div>
-        <input class="qty-input${isKg?' kg':''}" id="poolQtyInput_${p.id}"
-          type="number" min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${p.lastQty||1}"
-          ${isKg?`oninput="this.value=this.value.replace(/(\\.\\d{1})\\d+/,'$1')"`:''}
-          onkeydown="if(event.key==='Enter')confirmAddToList(${p.id})">
-        <span class="qty-unit-label">${unitLabel}</span>
-        <button class="cart-btn" onclick="confirmAddToList(${p.id})">✓</button>
-        <button class="pool-add-btn" onclick="cancelAddToList()" style="border-color:#718096;color:#718096">✕</button>
+    const threeDotSVG = `<svg viewBox="0 0 16 16" fill="currentColor" style="width:14px;height:14px;display:block"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>`;
+    const listItem = S.shoppingList.find(x => x.poolId === p.id);
+    const qtyVal = listItem ? listItem.qty : (p.lastQty || 1);
+    const isActive = _poolQtyActiveId === p.id;
+
+    if (inCartAlready) {
+      return `<div class="pool-item pool-item-in-cart" data-pool-id="${p.id}">
+        ${ed?`<div class="pool-reveal-zone">
+          <button class="chore-action-btn chore-action-delete" onclick="deletePoolItem(${p.id})">מחק</button>
+          <button class="chore-action-btn chore-action-edit" onclick="startEditPoolItem(${p.id})">ערוך</button>
+        </div>`:''}
+        <div class="pool-slide">
+          <span class="pool-in-cart-check">✓</span>
+          <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
+          ${ed?`<div class="pool-3dot" id="pool3dot_${p.id}"><button class="chore-3dot-btn" onclick="_pool3dotToggle(${p.id});event.stopPropagation()">${threeDotSVG}</button></div>`:''}
+        </div>
       </div>`;
     }
-    return `<div class="pool-item">
-      <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
-      <button class="pool-add-btn${inList?' in-list':''}" onclick="togglePoolItem(${p.id})">${inList?t('inList'):t('addToList')}</button>
-      ${ed?`<button class="del-btn" style="color:#a0aec0" onclick="startEditPoolItem(${p.id})">✏️</button>`:''}
-      ${ed?`<button class="del-btn" onclick="deletePoolItem(${p.id})">🗑</button>`:''}
+    if (inShoppingList) {
+      return `<div class="pool-item pool-item-in-list${isActive?' qty-active':''}" data-pool-id="${p.id}">
+        ${ed?`<div class="pool-reveal-zone">
+          <button class="chore-action-btn chore-action-delete" onclick="deletePoolItem(${p.id})">מחק</button>
+          <button class="chore-action-btn chore-action-edit" onclick="startEditPoolItem(${p.id})">ערוך</button>
+        </div>`:''}
+        <div class="pool-slide pool-clickable" onclick="addPoolItemNow(${p.id})">
+          <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
+          <div class="pool-qty-inline" onclick="event.stopPropagation()">
+            <input class="qty-input${isKg?' kg':''}" type="number"
+              min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${qtyVal}"
+              oninput="updatePoolQty(${p.id},this.value)${isKg?";this.value=this.value.replace(/(\\..{1})./g,'$1')":""}">
+            <span class="qty-unit-label">${unitLabel}</span>
+          </div>
+          ${ed?`<div class="pool-3dot" id="pool3dot_${p.id}"><button class="chore-3dot-btn" onclick="_pool3dotToggle(${p.id});event.stopPropagation()">${threeDotSVG}</button></div>`:''}
+        </div>
+      </div>`;
+    }
+    return `<div class="pool-item" data-pool-id="${p.id}">
+      ${ed?`<div class="pool-reveal-zone">
+        <button class="chore-action-btn chore-action-delete" onclick="deletePoolItem(${p.id})">מחק</button>
+        <button class="chore-action-btn chore-action-edit" onclick="startEditPoolItem(${p.id})">ערוך</button>
+      </div>`:''}
+      <div class="pool-slide pool-clickable" onclick="addPoolItemNow(${p.id})">
+        <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
+        ${ed?`<div class="pool-3dot" id="pool3dot_${p.id}"><button class="chore-3dot-btn" onclick="_pool3dotToggle(${p.id});event.stopPropagation()">${threeDotSVG}</button></div>`:''}
+      </div>
     </div>`;
   }
 
+  // Render category chips
+  const chipCats = cats.filter(c => S.groceryPool.some(p => p.category === c.name));
+  const hasOrphans = S.groceryPool.some(p => !knownCats.has(p.category));
+  const chipsEl = el('poolCatChips');
+  if (chipsEl) {
+    const chipCount = chipCats.length + (hasOrphans ? 1 : 0);
+    if (chipCount > 1) {
+      const activeLabel = _poolCatFilter
+        ? (cats.find(c => c.name === _poolCatFilter)
+            ? `${cats.find(c=>c.name===_poolCatFilter).emoji} ${esc(_poolCatFilter)}`
+            : _poolCatFilter === '__other__' ? 'אחר' : '')
+        : '';
+      const toggleLabel = activeLabel
+        ? `<span class="cat-chips-active-label">${activeLabel}</span>`
+        : '';
+      const chevron = _poolChipsOpen ? '▴' : '▾';
+      const allChip = `<button class="cat-chip${!_poolCatFilter?' active':''}" onclick="pickPoolCat(null)">הכל</button>`;
+      const catChips = chipCats.map(c =>
+        `<button class="cat-chip${_poolCatFilter===c.name?' active':''}" onclick="pickPoolCat('${esc(c.name)}')">${c.emoji} ${esc(c.name)}</button>`
+      ).join('');
+      const orphanChip = hasOrphans
+        ? `<button class="cat-chip${_poolCatFilter==='__other__'?' active':''}" onclick="pickPoolCat('__other__')">אחר</button>`
+        : '';
+      const chipsRow = _poolChipsOpen
+        ? `<div class="cat-chips">${allChip}${catChips}${orphanChip}</div>`
+        : '';
+      chipsEl.innerHTML = `
+        <button class="cat-chips-toggle${_poolCatFilter?' has-filter':''}" onclick="togglePoolChips()">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="4" x2="14" y2="4"/><line x1="4" y1="8" x2="12" y2="8"/><line x1="6" y1="12" x2="10" y2="12"/></svg>
+          סינון${toggleLabel}
+          <span class="cat-chips-chevron">${chevron}</span>
+        </button>
+        ${chipsRow}`;
+    } else {
+      chipsEl.innerHTML = '';
+    }
+  }
+
   const searching = _poolSearch.length > 0;
-  const poolItems = searching
+  let poolItems = _poolSearch.length > 0
     ? S.groceryPool.filter(p => p.name.toLowerCase().includes(_poolSearch))
     : S.groceryPool;
+  if (_poolCatFilter) {
+    poolItems = _poolCatFilter === '__other__'
+      ? poolItems.filter(p => !knownCats.has(p.category))
+      : poolItems.filter(p => p.category === _poolCatFilter);
+  }
 
   function poolCatHtml(emoji, name, items) {
     const collapsed = !searching && _collapsedPoolCats.has(name);
     return `<div class="cat-title cat-collapsible" data-section="pool" data-cat="${esc(name)}" onclick="toggleCatCollapse(this)">
-        <span class="cat-chevron">${collapsed?'◀':'▾'}</span>${emoji} ${esc(name)}<span class="cat-count">${collapsed?` (${items.length})`:''}</span>
+        <span class="cat-chevron">${collapsed?'▴':'▾'}</span>${emoji} ${esc(name)}<span class="cat-count">${collapsed?` (${items.length})`:''}</span>
       </div>${collapsed ? '' : items.map(poolItemHtml).join('')}`;
   }
 
@@ -4292,10 +4947,7 @@ function renderPool() {
     if (orphans.length) html += poolCatHtml('🛒', 'אחר', orphans);
   }
   el('poolList').innerHTML = html || `<div class="empty">${t('poolEmpty')}</div>`;
-  if (_poolQtyFor !== null) {
-    const inp = el(`poolQtyInput_${_poolQtyFor}`);
-    if (inp) { inp.focus(); inp.select(); }
-  }
+  _initPoolSwipes();
   if (_poolEditFor !== null) {
     const inp = el(`poolEditName_${_poolEditFor}`);
     if (inp) { inp.focus(); inp.select(); }
@@ -4315,6 +4967,7 @@ function addPoolItem() {
   el('poolItemInput').value = '';
   saveGrocery();
   renderPool();
+  togglePoolAddForm(false);
 }
 
 function deletePoolItem(id) {
@@ -4325,47 +4978,76 @@ function deletePoolItem(id) {
   renderPool();
 }
 
-function togglePoolItem(poolId) {
-  const idx = S.shoppingList.findIndex(x => x.poolId === poolId);
-  if (idx !== -1) {
-    // Already in list — remove it (parents only)
-    if (!isParent()) return;
-    S.shoppingList.splice(idx, 1);
-    saveGrocery();
-    renderPool();
-  } else {
-    // Show inline qty input
-    _poolQtyFor = poolId;
-    renderPool();
+function addPoolItemNow(poolId) {
+  if (S.inCart.some(x => x.poolId === poolId)) return; // already in cart, ignore
+  if (S.shoppingList.some(x => x.poolId === poolId)) {
+    // Already in list — remove it (toggle off)
+    removePoolItemFromList(poolId);
+    return;
   }
-}
-
-function confirmAddToList(poolId) {
   const pool = S.groceryPool.find(p => p.id === poolId);
   if (!pool) return;
-  const inp = el(`poolQtyInput_${poolId}`);
-  const isKg = pool.qtyType === 'kg';
-  const raw = isKg ? parseFloat(parseFloat(inp?.value).toFixed(1)) : parseInt(inp?.value);
-  const qty = isKg ? Math.max(0.1, raw || 1) : Math.max(1, raw || 1);
-  pool.lastQty = qty;
+  const qty = pool.lastQty || 1;
   S.shoppingList.push({ id: Date.now(), poolId, name: pool.name, category: pool.category, qty, qtyType: pool.qtyType || 'count' });
-  _poolQtyFor = null;
+  _poolQtyActiveId = poolId;
   saveGrocery();
   renderPool();
+  renderShoppingList();
 }
 
-function cancelAddToList() {
-  _poolQtyFor = null;
+function removePoolItemFromList(poolId) {
+  if (!isParent()) return;
+  const idx = S.shoppingList.findIndex(x => x.poolId === poolId);
+  if (idx === -1) return;
+  S.shoppingList.splice(idx, 1);
+  if (_poolQtyActiveId === poolId) _poolQtyActiveId = null;
+  saveGrocery();
   renderPool();
+  renderShoppingList();
 }
+
+function setPoolQtyActive(poolId) {
+  if (_poolQtyActiveId === poolId) return;
+  // Update DOM classes directly — no full re-render
+  if (_poolQtyActiveId !== null) {
+    const old = document.querySelector(`[data-pool-id="${_poolQtyActiveId}"]`);
+    if (old) old.classList.remove('qty-active');
+  }
+  _poolQtyActiveId = poolId;
+  const cur = document.querySelector(`[data-pool-id="${poolId}"]`);
+  if (cur) cur.classList.add('qty-active');
+}
+
+let _poolQtySaveTimer = null;
+function updatePoolQty(poolId, rawValue) {
+  const pool = S.groceryPool.find(p => p.id === poolId);
+  if (!pool) return;
+  const isKg = pool.qtyType === 'kg';
+  const raw = isKg ? parseFloat(parseFloat(rawValue).toFixed(1)) : parseInt(rawValue);
+  const qty = isKg ? Math.max(0.1, raw || 0.1) : Math.max(1, raw || 1);
+  const listItem = S.shoppingList.find(x => x.poolId === poolId);
+  if (listItem) listItem.qty = qty;
+  pool.lastQty = qty;
+  // Update the qty badge in the shopping list without a full re-render
+  clearTimeout(_poolQtySaveTimer);
+  _poolQtySaveTimer = setTimeout(() => { saveGrocery(); renderShoppingList(); }, 600);
+}
+
+// Legacy stubs (no longer used but kept in case of any lingering references)
+function confirmAddToList() {}
+function cancelAddToList() {}
 
 function startEditPoolItem(id) {
   const pool = S.groceryPool.find(p => p.id === id);
   if (!pool) return;
+  // Snap slide back instantly (may be open from swipe reveal)
+  const slide = document.querySelector(`[data-pool-id="${id}"] .pool-slide`);
+  if (slide) { slide.style.transition = 'none'; slide.style.transform = 'translateX(0)'; }
   _poolEditFor = id;
   _poolEditQtyType = pool.qtyType || 'count';
-  _poolQtyFor = null; // close qty row if open
+  _poolQtyActiveId = null; // close any active qty control
   renderPool();
+  setTimeout(() => _buildSoftDd('poolEditCatDd_' + id, 'poolEditCat_' + id), 0);
 }
 
 function togglePoolEditQtyType(id) {
@@ -4423,18 +5105,21 @@ function renderShoppingList() {
         ${isKg?`oninput="this.value=this.value.replace(/(\\\.\\d{1})\\d+/,'$1')"`:``}
         onchange="updateListQty(${item.id},this.value)">
       <span class="qty-unit-label">${unitLabel}</span>
-      <button class="cart-btn" onclick="moveToCart(${item.id})">${t('toCart')}</button>
-      ${ed?`<button class="del-btn" onclick="removeFromShoppingList(${item.id})">🗑</button>`:''}
+      <button class="cart-btn" onclick="moveToCart(${item.id})" aria-label="${t('toCart')}">${_ico.cart}</button>
+      ${ed?`<button class="del-btn" onclick="removeFromShoppingList(${item.id})">${_ico.trash}</button>`:''}
     </div>`;
   }
 
   // Items still to grab
   if (S.shoppingList.length) {
-    html += `<div class="super-section-label">📋 ${t('stillNeed')} (${S.shoppingList.length})</div>`;
+    html += `<div class="super-section-label" style="display:flex;align-items:center;justify-content:space-between">
+      <span>📋 ${t('stillNeed')} (${S.shoppingList.length})</span>
+      ${ed?`<button class="clear-list-btn" onclick="clearShoppingList()">× נקה</button>`:''}
+    </div>`;
     function shoppingCatHtml(emoji, name, items) {
       const collapsed = _collapsedShoppingCats.has(name);
       return `<div class="cat-title cat-collapsible" data-section="shopping" data-cat="${esc(name)}" onclick="toggleCatCollapse(this)">
-          <span class="cat-chevron">${collapsed?'◀':'▾'}</span>${emoji} ${esc(name)}<span class="cat-count">${collapsed?` (${items.length})`:''}</span>
+          <span class="cat-chevron">${collapsed?'▴':'▾'}</span>${emoji} ${esc(name)}<span class="cat-count">${collapsed?` (${items.length})`:''}</span>
         </div>${collapsed ? '' : items.map(listItemHtml).join('')}`;
     }
     cats.forEach(cat => {
@@ -4450,13 +5135,13 @@ function renderShoppingList() {
   if (S.inCart.length) {
     html += `<div class="super-section-label">✅ ${t('inCartLabel')} (${S.inCart.length})</div>`;
     html += S.inCart.map(item => `<div class="cart-item">
-      <div class="cart-item-name">${esc(item.name)} <span class="unit-badge" style="background:#c6f6d5;color:#276749">${fmtQty(item.qty||1, item.qtyType)}</span></div>
-      <button class="pool-add-btn" onclick="returnToList(${item.id})" style="border-color:#e53e3e;color:#e53e3e;font-size:11px">${t('returnToList')}</button>
+      <div class="cart-item-name">${esc(item.name)} <span class="unit-badge" style="background:var(--gray-100);color:var(--gray-500)">${fmtQty(item.qty||1, item.qtyType)}</span></div>
+      <button class="return-to-list-btn" onclick="returnToList(${item.id})">${t('returnToList')}</button>
     </div>`).join('');
   }
 
   el('shoppingListEl').innerHTML = html;
-  el('doneShoppingBtn').style.display = (ed && hasContent) ? '' : 'none';
+  el('doneShoppingBtn').style.display = (ed && hasContent && _grocerySection === 'shopping') ? '' : 'none';
 }
 
 
@@ -4467,6 +5152,7 @@ function moveToCart(id) {
   S.inCart.push({ ...item, id: Date.now() });
   saveGrocery();
   renderShoppingList();
+  renderPool();
 }
 
 function removeFromShoppingList(id) {
@@ -4474,6 +5160,15 @@ function removeFromShoppingList(id) {
   S.shoppingList = S.shoppingList.filter(x => x.id !== id);
   saveGrocery();
   renderShoppingList();
+}
+async function clearShoppingList() {
+  if (!isParent()) return;
+  if (!await _confirm('לנקות את כל הרשימה?', { danger: true, okLabel: 'נקה' })) return;
+  S.shoppingList = [];
+  S.inCart = [];
+  saveGrocery();
+  renderShoppingList();
+  renderPool();
 }
 
 function updateListQty(id, val) {
@@ -4509,6 +5204,7 @@ function returnToList(id) {
   S.shoppingList.push({ ...item, id: Date.now() });
   saveGrocery();
   renderShoppingList();
+  renderPool();
 }
 
 async function doneShopping() {
@@ -4516,7 +5212,7 @@ async function doneShopping() {
   const missed = [...S.shoppingList];
   const bought = S.inCart.length;
   const confirmMsg = t('doneShoppingConfirm', bought, missed.length);
-  if (!confirm(confirmMsg)) return;
+  if (!await _confirm(confirmMsg, { okLabel: 'סיימתי' })) return;
   const msg = t('doneShoppingMsg', S.user, bought, missed.map(x => x.name));
   try {
     await fbDb.collection('families').doc(S.uid)
@@ -4563,11 +5259,11 @@ function _histEntryHtml(entry, searchTerm) {
   };
 
   const boughtHtml = entry.bought.map(x =>
-    `<span class="hist-item bought">${hl(x.name)} <span class="hist-qty">${fmtQty(x.qty, x.qtyType)}</span></span>`
-  ).join('');
+    `${hl(x.name)}<span class="hist-qty"> ${fmtQty(x.qty, x.qtyType)}</span>`
+  ).join('<span class="hist-sep"> · </span>');
   const missedHtml = entry.missed.length
-    ? `<div class="hist-missed-row"><span class="hist-missed-label">${t('historyMissed')}:</span> `
-      + entry.missed.map(x => `<span class="hist-item missed">${hl(x.name)}</span>`).join('')
+    ? `<div class="hist-missed-text"><span class="hist-missed-label">${t('historyMissed')}:</span> `
+      + entry.missed.map(x => hl(x.name)).join(', ')
       + `</div>`
     : '';
 
@@ -4576,7 +5272,7 @@ function _histEntryHtml(entry, searchTerm) {
       <span class="hist-who">${emoji} ${esc(entry.by)}</span>
       <span class="hist-when">${datePrefix}${timeStr}</span>
     </div>
-    <div class="hist-items-row">${boughtHtml}</div>
+    <div class="hist-items-text">${boughtHtml}</div>
     ${missedHtml}
   </div>`;
 }
@@ -4618,7 +5314,7 @@ function renderShoppingHistory() {
     const expanded = _expandedHistoryDates.has(key);
     const count = entries.length;
     html += `<div class="hist-date-header" data-datekey="${esc(key)}" onclick="toggleHistoryDate(this)">
-      <span class="cat-chevron">${expanded ? '▾' : '◀'}</span>
+      <span class="cat-chevron">${expanded ? '▾' : '▴'}</span>
       <span class="hist-date-label">${key}</span>
       <span class="hist-date-count">${count} ${count > 1 ? 'קניות' : 'קנייה'}</span>
     </div>`;
@@ -4632,6 +5328,7 @@ function renderShoppingHistory() {
 // ════════════════════════════════════════
 let _hwHistOpen = false;
 let _hwHistSearch = '';
+let _hwScope      = 'personal';
 
 function fmtDoneAt(ts) {
   if (!ts) return '';
@@ -4642,28 +5339,62 @@ function fmtDoneAt(ts) {
 }
 
 function renderHomework(){
-  const kids = isParent() ? getKids() : getKids().filter(k=>k===S.user);
-  const filterActive = getKids().includes(S.filter);
-  const childTabsEl = el('childTabsContainer');
-  childTabsEl.style.display = filterActive ? 'none' : '';
-  childTabsEl.innerHTML = kids.map(k =>
-    `<div class="child-tab ${S.child===k?'active':''}" onclick="switchChild('${esc(k)}')">${getEmoji(k)} ${k}</div>`
+  const kids=isParent()?getKids():getKids().filter(k=>k===S.user);
+  const filterActive=getKids().includes(S.filter);
+  const childTabsEl=el('childTabsContainer');
+  childTabsEl.style.display=(filterActive||_hwScope==='class')?'none':'';
+  childTabsEl.innerHTML=kids.map(k=>
+    `<div class="child-tab ${S.child===k?'active':''}" onclick="switchChild('${esc(k)}')"><span style="display:inline-flex;vertical-align:middle;width:15px;height:15px;margin-inline-end:4px;opacity:0.85;">${_memberPersonSVG('kid')}</span>${k}</div>`
   ).join('');
 
-  if (!S.child) {
-    el('hwCardTitle').textContent = t('hwTitle','');
-    el('hwList').innerHTML = `<div class="empty">${t('noKids')}</div>`;
-    el('addHwForm').style.display = 'none';
-    el('hwHistoryWrap').innerHTML = '';
+  // Scope toggle: parents only
+  const scopeEl=el('hwScopeSeg');
+  if(scopeEl)scopeEl.style.display=isParent()?'':'none';
+
+  // Class homework section
+  const classHw=S.homework.filter(h=>h.scope==='class');
+  const classSec=el('hwClassSection');
+  const classListEl=el('hwClassList');
+  if(classSec&&classListEl){
+    if(!classHw.length){
+      classSec.style.display='none';
+    } else {
+      classSec.style.display='';
+      const child=S.child;
+      const allKids=getKids();
+      classListEl.innerHTML=classHw.map(h=>{
+        const myDone=!!(h.doneBy&&h.doneBy[child]);
+        const can=child&&(isParent()||child===S.user);
+        const doneCount=allKids.filter(k=>h.doneBy&&h.doneBy[k]).length;
+        return `<div class="hw-item hw-class-item ${myDone?'hw-class-done':''}" data-hw-id="${h.id}">
+          <div class="hw-head">
+            <div class="check-box ${myDone?'done':''} ${can&&!myDone?'':'readonly'}" ${can&&!myDone?`onclick="toggleHW(${h.id})"`:''}>
+            </div>
+            <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
+            <div class="hw-desc-text ${myDone?'done':''}">${esc(h.desc)}</div>
+            ${doneCount>0?`<span class="hw-done-count">${doneCount}/${allKids.length}</span>`:''}
+            ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}
+          </div>
+          ${h.due?`<div class="hw-due">${t('hwDueLabel',fmtDate(h.due))}</div>`:''}
+          <div class="hw-done-by">${allKids.map(k=>`<span class="hw-done-pip ${h.doneBy&&h.doneBy[k]?'hw-done-pip-done':''}" title="${esc(k)}">${esc(k.charAt(0))}</span>`).join('')}</div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  if(!S.child){
+    el('hwCardTitle').textContent=t('hwTitle','');
+    el('hwList').innerHTML=`<div class="empty">${t('noKids')}</div>`;
+    el('addHwForm').style.display='none';
+    el('hwHistoryWrap').innerHTML='';
     return;
   }
-  el('hwCardTitle').textContent = t('hwTitle', S.child);
-  const canAdd = isParent()||S.child===S.user;
-  el('addHwForm').style.display = canAdd ? '' : 'none';
+  el('hwCardTitle').textContent=t('hwTitle',S.child);
+  const canAdd=isParent()||S.child===S.user;
+  el('addHwForm').style.display=canAdd?'':'none';
 
-  // Active (not done) items only
-  const pending = S.homework.filter(h=>h.child===S.child && !h.done);
-  el('hwList').innerHTML = pending.length ? pending.map(h=>{
+  const pending=S.homework.filter(h=>(!h.scope||h.scope==='personal')&&h.child===S.child&&!h.done);
+  el('hwList').innerHTML=pending.length?pending.map(h=>{
     const can=isParent()||h.child===S.user;
     return `<div class="hw-item" data-hw-id="${h.id}">
       <div class="hw-head">
@@ -4671,9 +5402,9 @@ function renderHomework(){
         </div>
         <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
         <div class="hw-desc-text">${esc(h.desc)}</div>
-        ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">×</button>`:''}</div>
+        ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}</div>
       ${h.due?`<div class="hw-due">${t('hwDueLabel',fmtDate(h.due))}</div>`:''}</div>`;
-  }).join('') : `<div class="empty">${t('noHw')}</div>`;
+  }).join(''):`<div class="empty">${t('noHw')}</div>`;
 
   renderHwHistory(S.child);
 }
@@ -4681,8 +5412,13 @@ function renderHomework(){
 function renderHwHistory(child) {
   const wrap = el('hwHistoryWrap');
   if (!wrap || !child) return;
-  const allDone = S.homework.filter(h=>h.child===child && h.done)
-    .sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
+  const personalDone=S.homework
+    .filter(h=>(!h.scope||h.scope==='personal')&&h.child===child&&h.done)
+    .map(h=>({...h,_doneAt:h.doneAt,_isClass:false}));
+  const classDone=S.homework
+    .filter(h=>h.scope==='class'&&h.doneBy&&h.doneBy[child])
+    .map(h=>({...h,_doneAt:h.doneAtBy&&h.doneAtBy[child],_isClass:true}));
+  const allDone=[...personalDone,...classDone].sort((a,b)=>(b._doneAt||0)-(a._doneAt||0));
   if (!allDone.length) { wrap.innerHTML = ''; return; }
 
   const q = _hwHistSearch.toLowerCase();
@@ -4692,9 +5428,9 @@ function renderHwHistory(child) {
 
   wrap.innerHTML = `<div class="card" style="margin-top:10px">
     <div class="hw-hist-hdr" onclick="toggleHwHistory()">
+      <span style="color:#a0aec0;font-size:12px;margin-inline-end:6px">${_hwHistOpen?'▲':'▼'}</span>
       <span class="hw-hist-title">${t('hwHistory')}</span>
       <span class="hw-hist-count">${allDone.length}</span>
-      <span style="color:#a0aec0;font-size:12px;margin-inline-start:4px">${_hwHistOpen?'▲':'▼'}</span>
     </div>
     ${_hwHistOpen ? `
       <input class="hw-hist-search" placeholder="${t('hwHistorySearch')}"
@@ -4708,18 +5444,25 @@ function hwHistListHTML(filtered) {
   return filtered.length ? filtered.map(h=>`
     <div class="hw-hist-item" data-hw-id="${h.id}">
       <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
+      ${h._isClass?`<span class="hw-class-badge">כיתה</span>`:''}
       <div class="hw-hist-desc">${esc(h.desc)}</div>
-      <span class="hw-hist-ts">${fmtDoneAt(h.doneAt)}</span>
-      ${isParent()?`<button class="del-btn" style="opacity:0.5;font-size:14px" title="בטל סימון" onclick="toggleHW(${h.id})">↩</button>`:''}
-      ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">×</button>`:''}
+      <span class="hw-hist-ts">${fmtDoneAt(h._doneAt)}</span>
+      ${isParent()&&!h._isClass?`<button class="del-btn" title="בטל סימון" onclick="toggleHW(${h.id})">${_ico.undo}</button>`:''}
+      ${h._isClass?`<button class="del-btn" title="בטל סימון" onclick="toggleHW(${h.id})">${_ico.undo}</button>`:''}
+      ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}
     </div>`).join('')
   : `<div class="empty" style="padding:8px 0">${t('hwHistoryEmpty')}</div>`;
 }
 function filterHwHistory(child) {
   const listEl = el('hwHistList');
   if (!listEl) return;
-  const allDone = S.homework.filter(h=>h.child===child && h.done)
-    .sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
+  const personalDone=S.homework
+    .filter(h=>(!h.scope||h.scope==='personal')&&h.child===child&&h.done)
+    .map(h=>({...h,_doneAt:h.doneAt,_isClass:false}));
+  const classDone=S.homework
+    .filter(h=>h.scope==='class'&&h.doneBy&&h.doneBy[child])
+    .map(h=>({...h,_doneAt:h.doneAtBy&&h.doneAtBy[child],_isClass:true}));
+  const allDone=[...personalDone,...classDone].sort((a,b)=>(b._doneAt||0)-(a._doneAt||0));
   const q = _hwHistSearch.toLowerCase();
   const filtered = q ? allDone.filter(h=>
     h.desc.toLowerCase().includes(q) || subjectLabel(h.subject).toLowerCase().includes(q)
@@ -4732,54 +5475,99 @@ function toggleHwHistory() {
 }
 
 function switchChild(c){S.child=c;renderHomework();}
+function _hwScopePick(val) {
+  _hwScope = val;
+  document.querySelectorAll('#hwScopeSeg .hw-scope-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.val === val));
+  const childTabsEl = el('childTabsContainer');
+  if (childTabsEl) {
+    const filterActive = getKids().includes(S.filter);
+    childTabsEl.style.display = (filterActive || val === 'class') ? 'none' : '';
+  }
+  const hwDescEl = el('hwDesc');
+  if (hwDescEl) hwDescEl.placeholder = val === 'class' ? 'שיעור בית לכל הכיתה...' : t('hwPlaceholder');
+}
 
 function toggleHW(id){
   const h=S.homework.find(x=>x.id===id);
-  if(!h||(!isParent()&&h.child!==S.user))return;
+  if(!h)return;
+  if(h.scope==='class'){
+    const child=S.child;
+    if(!child||(!isParent()&&child!==S.user))return;
+    const isDone=!!(h.doneBy&&h.doneBy[child]);
+    if(!isDone){
+      const row=document.querySelector(`.hw-item[data-hw-id="${id}"]`);
+      if(row){
+        row.classList.add('hw-fly-out');
+        setTimeout(()=>{
+          if(!h.doneBy)h.doneBy={};
+          if(!h.doneAtBy)h.doneAtBy={};
+          h.doneBy[child]=true;h.doneAtBy[child]=Date.now();
+          _hwHistOpen=true;save();renderHomework();renderHome();
+        },270);return;
+      }
+      if(!h.doneBy)h.doneBy={};if(!h.doneAtBy)h.doneAtBy={};
+      h.doneBy[child]=true;h.doneAtBy[child]=Date.now();_hwHistOpen=true;
+    } else {
+      const histRow=document.querySelector(`.hw-hist-item[data-hw-id="${id}"]`);
+      if(histRow){
+        histRow.classList.add('hw-fly-out-hist');
+        setTimeout(()=>{
+          delete h.doneBy[child];delete h.doneAtBy[child];
+          save();renderHomework();renderHome();
+        },270);return;
+      }
+      delete h.doneBy[child];delete h.doneAtBy[child];
+    }
+    save();renderHomework();renderHome();return;
+  }
+  // Personal item
+  if(!isParent()&&h.child!==S.user)return;
   if(!h.done){
-    // Animate the item out, then mark done
     const row=document.querySelector(`.hw-item[data-hw-id="${id}"]`);
     if(row){
       row.classList.remove('hw-fly-in-active');
-      void row.offsetWidth; // force reflow so animation restarts clean
+      void row.offsetWidth;
       row.classList.add('hw-fly-out');
       setTimeout(()=>{
-        h.done=true; h.doneAt=Date.now();
-        _hwHistOpen=true;  // auto-open history so user sees where it went
-        save(); renderHomework(); renderHome();
+        h.done=true;h.doneAt=Date.now();
+        _hwHistOpen=true;save();renderHomework();renderHome();
         requestAnimationFrame(()=>{
           const hist=document.querySelector(`.hw-hist-item[data-hw-id="${id}"]`);
-          if(hist) hist.classList.add('hw-fly-in');
+          if(hist)hist.classList.add('hw-fly-in');
         });
-      },270);
-      return;
+      },270);return;
     }
-    h.done=true; h.doneAt=Date.now(); _hwHistOpen=true;
+    h.done=true;h.doneAt=Date.now();_hwHistOpen=true;
   } else {
-    // Animate history item out, then restore to active list
     const histRow=document.querySelector(`.hw-hist-item[data-hw-id="${id}"]`);
     if(histRow){
       histRow.classList.add('hw-fly-out-hist');
       setTimeout(()=>{
-        h.done=false; delete h.doneAt;
-        save(); renderHomework(); renderHome();
+        h.done=false;delete h.doneAt;
+        save();renderHomework();renderHome();
         requestAnimationFrame(()=>{
           const active=document.querySelector(`.hw-item[data-hw-id="${id}"]`);
-          if(active) active.classList.add('hw-fly-in-active');
+          if(active)active.classList.add('hw-fly-in-active');
         });
-      },270);
-      return;
+      },270);return;
     }
-    h.done=false; delete h.doneAt;
-    save(); renderHomework(); renderHome();
+    h.done=false;delete h.doneAt;
   }
+  save();renderHomework();renderHome();
 }
 
 function deleteHW(id){if(!isParent())return;S.homework=S.homework.filter(x=>x.id!==id);save();renderHomework();renderHome();}
 function addHomework(){
-  if(!S.child)return;
-  const desc=el('hwDesc').value.trim();if(!desc||(!isParent()&&S.child!==S.user))return;
-  S.homework.push({id:Date.now(),child:S.child,subject:el('hwSubject').value,desc,due:el('hwDue').value,done:false});
+  const desc=el('hwDesc').value.trim();if(!desc)return;
+  if(_hwScope==='class'){
+    if(!isParent())return;
+    S.homework.push({id:Date.now(),scope:'class',subject:el('hwSubject').value,desc,due:el('hwDue').value,doneBy:{},doneAtBy:{}});
+  } else {
+    if(!S.child)return;
+    if(!isParent()&&S.child!==S.user)return;
+    S.homework.push({id:Date.now(),scope:'personal',child:S.child,subject:el('hwSubject').value,desc,due:el('hwDue').value,done:false});
+  }
   el('hwDesc').value='';save();renderHomework();renderHome();
 }
 
@@ -4945,7 +5733,7 @@ function renderDayPanel(events){
         <div class="event-meta">${e.time?'🕐 '+e.time:t('allDay')}${e.gcal?' '+t('gcalSource'):''}</div>
       </div>
       ${personLabel?`<span class="event-person-chip" style="background:${color}22;color:${color}">${personLabel}</span>`:''}
-      ${canDel?`<button class="del-btn" onclick="deleteEvent(${e.id},'${e.gcalId||''}')">×</button>`:''}</div>`;
+      ${canDel?`<button class="del-btn" onclick="deleteEvent(${e.id},'${e.gcalId||''}')">${_ico.x}</button>`:''}</div>`;
   }).join('');
   el('dayPanel').innerHTML=html;
 }
@@ -4973,14 +5761,60 @@ async function deleteEvent(id,gcalId){
 //  TABS & FILTER
 // ════════════════════════════════════════
 const ALL_TABS = [
-  { id:'home',      icon:'🏡' },
-  { id:'chores',    icon:'✅' },
-  { id:'grocery',   icon:'🛒' },
-  { id:'homework',  icon:'📚' },
-  { id:'calendar',  icon:'📅' },
-  { id:'community', icon:'🏫' },
+  { id:'home',      icon:'🏡', adminOnly: false },
+  { id:'chores',    icon:'✅', adminOnly: false },
+  { id:'grocery',   icon:'🛒', adminOnly: false },
+  { id:'homework',  icon:'📚', adminOnly: false },
+  { id:'calendar',  icon:'📅', adminOnly: false },
+  { id:'community', icon:'🏫', adminOnly: false },
   { id:'analytics', icon:'📊', adminOnly: true },
 ];
+
+// SVG icon library (Phosphor-style, 2px stroke, rounded caps)
+const TAB_ICONS = {
+  home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>`,
+  chores: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-4.5"/></svg>`,
+  grocery: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6L18 2z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>`,
+  homework: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>`,
+  calendar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+  community: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>`,
+  analytics: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="3" y1="20" x2="21" y2="20"/></svg>`,
+  more: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>`,
+};
+
+// Filled icon variants for active state
+const TAB_ICONS_FILLED = {
+  home:      `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7A1 1 0 003 11h1v9a1 1 0 001 1h5v-5h4v5h5a1 1 0 001-1v-9h1a1 1 0 00.707-1.707l-7-7z"/></svg>`,
+  chores:    `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path fill-rule="evenodd" d="M12 2a10 10 0 100 20A10 10 0 0012 2zm4.707 8.293a1 1 0 00-1.414 0L10.5 15.086l-1.793-1.793a1 1 0 00-1.414 1.414l2.5 2.5a1 1 0 001.414 0l5.5-5.5a1 1 0 000-1.414z" clip-rule="evenodd"/></svg>`,
+  grocery:   `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M19 7H5L3.5 3H1v2h1.22L5.5 16.2A2 2 0 007.46 18h9.07a2 2 0 001.96-1.6L20.78 7H19zm-3 8a1 1 0 110 2 1 1 0 010-2zm-8 0a1 1 0 110 2 1 1 0 010-2z"/><rect x="8" y="10" width="8" height="2" rx="1"/></svg>`,
+  homework:  `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM9 4h2v5l-1-.75L9 9V4zm9 16H6V4h1v9l3-2.25L13 13V4h5v16z"/></svg>`,
+  calendar:  `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V8h16v13z"/></svg>`,
+  community: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>`,
+  analytics: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>`,
+};
+
+function tabIcon(id, active = false) {
+  if (active && TAB_ICONS_FILLED[id]) return TAB_ICONS_FILLED[id];
+  return TAB_ICONS[id] || '';
+}
+
+function scrollTabBar(dir) {
+  const sc = el('tabScroll');
+  if (!sc) return;
+  // dir: -1 = scroll left (more tabs in RTL), +1 = scroll right (back to start in RTL)
+  sc.scrollBy({ left: dir * -160, behavior: 'smooth' });
+}
+
+function updateTabArrows() {
+  const sc = el('tabScroll');
+  const prev = el('tabArrowPrev');
+  const next = el('tabArrowNext');
+  if (!sc || !prev || !next) return;
+  const sl = Math.abs(sc.scrollLeft); // RTL scrollLeft can be negative in Chrome
+  const max = sc.scrollWidth - sc.clientWidth;
+  prev.classList.toggle('tab-arrow-hidden', sl <= 4);
+  next.classList.toggle('tab-arrow-hidden', sl >= max - 4);
+}
 const TAB_IDX = { home:0, chores:1, grocery:2, homework:3, calendar:4, community:5, analytics:6 };
 function tabLabel(id) { return t('tabs')[TAB_IDX[id]] || id; }
 
@@ -5013,28 +5847,60 @@ function saveActiveTabs(ids) {
 
 function renderTabBar() {
   const active = getActiveTabs();
-  // If current tab was removed, fall back to first active
   if (!active.includes(S.tab)) {
     S.tab = active[0];
     document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
     el('tab-' + S.tab)?.classList.add('active');
   }
-  el('tabBar').innerHTML = active.map(id => {
+
+  const tabsHtml = active.map(id => {
     const tab = ALL_TABS.find(t => t.id === id);
     if (!tab) return '';
-    return `<div class="tab ${S.tab===id?'active':''}" data-tab="${id}" onclick="switchTab('${id}')">
-      <span class="tab-icon">${tab.icon}</span>
+    const isActive = S.tab === id;
+    return `<button class="tab${isActive ? ' active' : ''}" data-tab="${id}" onclick="switchTab('${id}')">
+      <span class="tab-icon">${tabIcon(id, isActive)}</span>
       <span class="tab-label">${tabLabel(id)}</span>
-    </div>`;
+    </button>`;
   }).join('');
+
+  el('tabBar').innerHTML = `
+    <button class="tab-arrow tab-arrow-hidden" id="tabArrowPrev" onclick="scrollTabBar(-1)" aria-label="הקודם">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+    </button>
+    <div class="tab-scroll" id="tabScroll">${tabsHtml}</div>
+    <button class="tab-arrow tab-arrow-hidden" id="tabArrowNext" onclick="scrollTabBar(1)" aria-label="הבא">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>`;
+
+  const sc = el('tabScroll');
+  sc.addEventListener('scroll', updateTabArrows, { passive: true });
+  // Scroll active tab into view and update arrows after layout
+  requestAnimationFrame(() => {
+    sc.querySelector('.tab.active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+    updateTabArrows();
+  });
 }
 
 function switchTab(tab) {
+  const active = getActiveTabs();
+  const oldIdx = active.indexOf(S.tab);
+  const newIdx = active.indexOf(tab);
+  const enterClass = newIdx >= oldIdx ? 'tab-enter-right' : 'tab-enter-left';
+
   S.tab = tab;
   el('tabBar').querySelectorAll('.tab').forEach(e =>
     e.classList.toggle('active', e.dataset.tab === tab));
-  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
-  el('tab-' + tab).classList.add('active');
+  document.querySelectorAll('.tab-content').forEach(e =>
+    e.classList.remove('active', 'tab-enter-right', 'tab-enter-left'));
+  const newContent = el('tab-' + tab);
+  if (newContent) {
+    newContent.classList.add('active', enterClass);
+    setTimeout(() => newContent.classList.remove('tab-enter-right', 'tab-enter-left'), 220);
+  }
+  // Scroll active tab button into view
+  el('tabScroll')?.querySelector('.tab.active')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
+  updateTabArrows();
+  _updateScrollTopBtn();
   if (tab === 'community') renderCommunity();
   if (tab === 'analytics') renderAnalytics();
   if (tab === 'homework' && getKids().includes(S.filter)) S.child = S.filter;
@@ -5268,7 +6134,7 @@ function _renderPresenceGroups() {
         <span class="presence-group-chevron">${onlineExp ? '▾' : '◂'}</span>
         <span class="presence-group-label">מחוברים עכשיו</span>
         <span class="presence-group-count">
-          <span style="color:${_presenceOnline.length > 0 ? '#48bb78' : '#a0aec0'};font-weight:800">${_presenceOnline.length}</span>
+          <span style="color:${_presenceOnline.length > 0 ? 'var(--primary-500)' : 'var(--gray-400)'};font-weight:800">${_presenceOnline.length}</span>
         </span>
       </div>
       ${onlineBody}
@@ -5461,7 +6327,7 @@ function _renderAnalyticsUI(container, d) {
         <a href="https://console.firebase.google.com/project/familyhub-7fdd5/usage" target="_blank" rel="noopener noreferrer"
            style="font-size:11px;font-weight:800;color:#6a11cb;text-decoration:none;background:#f0e8ff;padding:3px 9px;border-radius:8px">📈 שימוש</a>
         <a href="https://console.firebase.google.com/project/familyhub-7fdd5/settings/billing" target="_blank" rel="noopener noreferrer"
-           style="font-size:11px;font-weight:800;color:#276749;text-decoration:none;background:#e6f4ea;padding:3px 9px;border-radius:8px">💳 חיוב</a>
+           style="font-size:11px;font-weight:800;color:var(--primary-600);text-decoration:none;background:var(--primary-50);padding:3px 9px;border-radius:8px">💳 חיוב</a>
         <button class="analytics-refresh-btn" onclick="renderAnalytics(true)" title="רענן">↻</button>
       </div>
     </div>
@@ -5842,6 +6708,7 @@ const HOME_SECTIONS = [
   { id:'stars',    icon:'⭐', labelKey:'starChart'   },
   { id:'homework', icon:'📚', labelKey:'hwDueSoon'   },
   { id:'upcoming', icon:'📅', labelHe:'אירועים קרובים', labelEn:'Upcoming events' },
+  { id:'shopping', icon:'🛒', labelHe:'קניות מהירות',  labelEn:'Quick shopping' },
 ];
 
 function _normaliseHomePrefs(p) {

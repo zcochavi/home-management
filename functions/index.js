@@ -5,11 +5,13 @@ const db = admin.firestore();
 
 // ── Helpers ───────────────────────────────────────────────
 
-async function getTokens(familyUid) {
-  const snap = await db.collection('families').doc(familyUid)
-    .collection('fcmTokens').get();
+async function getTokens(familyUid, ownerOnly = false) {
+  const col = db.collection('families').doc(familyUid).collection('fcmTokens');
+  const snap = ownerOnly
+    ? await col.where('isOwner', '==', true).get()
+    : await col.get();
   const tokens = snap.docs.map(d => d.data().token).filter(Boolean);
-  console.log(`getTokens(${familyUid}): found ${tokens.length} token(s)`);
+  console.log(`getTokens(${familyUid}, ownerOnly=${ownerOnly}): found ${tokens.length} token(s)`);
   return tokens;
 }
 
@@ -155,7 +157,7 @@ exports.onPendingEventCreated = functions.firestore
     console.log(`onPendingEventCreated: notifying ${targetUids.length} committee/admin user(s)`);
     if (!targetUids.length) return;
 
-    const tokenArrays = await Promise.all(targetUids.map(getTokens));
+    const tokenArrays = await Promise.all(targetUids.map(uid => getTokens(uid, uid === ADMIN_UID)));
     const poster = personFullName(ev.postedBy);
     await sendToTokens(tokenArrays.flat(),
       `⏳ ממתין לאישור: ${ev.title}`,
@@ -241,7 +243,7 @@ exports.onApplicationCreated = functions.firestore
               .forEach(uid => targets.push(uid));
 
     if (!targets.length) return;
-    const tokenArrays = await Promise.all(targets.map(getTokens));
+    const tokenArrays = await Promise.all(targets.map(uid => getTokens(uid, uid === ADMIN_UID)));
     await sendToTokens(tokenArrays.flat(),
       `👤 מועמדות חדשה לוועד: ${app.applicantName}`,
       `${classLabel(cid)} · ${app.voteCount||0}/15 תמיכות`,
@@ -318,7 +320,7 @@ exports.onPendingSchoolCreated = functions.firestore
     await writeNotif(ADMIN_UID, 'school_pending', bellMsg, { recipientUid: ADMIN_UID, requestedByUid: reqUid, reqId: ctx.params.reqId });
 
     // Push notification for admin
-    const tokens = await getTokens(ADMIN_UID);
+    const tokens = await getTokens(ADMIN_UID, true);
     await sendToTokens(tokens,
       `🏫 בקשה חדשה: ${label}`,
       requester ? `הוגש על ידי ${requester}` : '',
@@ -390,7 +392,7 @@ exports.dailyNotificationJobs = functions.pubsub
         memberUids.filter(uid => uid !== app.applicantUid && !targets.includes(uid))
                   .forEach(uid => targets.push(uid));
         if (targets.length) {
-          const tokenArrays = await Promise.all(targets.map(getTokens));
+          const tokenArrays = await Promise.all(targets.map(uid => getTokens(uid, uid === ADMIN_UID)));
           const hoursLeft = Math.round((expiresMs - now.toMillis()) / 3600000);
           await sendToTokens(tokenArrays.flat(),
             `⏰ תזכורת: מועמדות ועד ממתינה`,
@@ -449,7 +451,7 @@ exports.dailyNotificationJobs = functions.pubsub
           .map(d => d.id);
         if (ADMIN_UID && !targets.includes(ADMIN_UID)) targets.push(ADMIN_UID);
         if (targets.length) {
-          const tokenArrays = await Promise.all(targets.map(getTokens));
+          const tokenArrays = await Promise.all(targets.map(uid => getTokens(uid, uid === ADMIN_UID)));
           const hoursLeft = Math.round((expiresMs - now.toMillis()) / 3600000);
           await sendToTokens(tokenArrays.flat(),
             `⏰ תזכורת: אירוע ממתין לאישור`,
@@ -490,31 +492,54 @@ exports.getPresence = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('permission-denied', 'Admins only');
   }
 
-  const ONLINE_THRESHOLD = 8 * 60 * 1000; // 8 min (2 min heartbeat + generous buffer for throttled browsers)
+  // mode: 'default' — initial load (all presence, returns online + first offline page + stats)
+  // mode: 'online'  — fast heartbeat refresh (queries only online=true docs)
+  // mode: 'browse'  — paginated offline list
+  // mode: 'search'  — paginated search across all members
+  const mode      = data?.mode || 'default';
+  const searchQ   = (data?.search || '').trim().toLowerCase();
+  const page      = Math.max(0, parseInt(data?.page || 0));
+  const PAGE_SIZE = 50;
+  const ONLINE_THRESHOLD = 8 * 60 * 1000;
   const now = Date.now();
 
-  // Read both collections in parallel
+  function buildMember(p) {
+    if (!p.familyUid || !p.memberName) return null;
+    const lastSeenMs = p.lastSeen?.toMillis?.() || 0;
+    return {
+      familyUid:  p.familyUid,
+      memberName: p.memberName,
+      familyName: p.familyName || '',
+      role:       p.role || 'parent',
+      online:     p.online === true && lastSeenMs > now - ONLINE_THRESHOLD,
+      lastSeenMs,
+    };
+  }
+
+  // Fast path — only online docs (30s heartbeat refresh, ~50 reads instead of ~1K)
+  if (mode === 'online') {
+    const snap = await db.collection('presence').where('online', '==', true).get();
+    const online = snap.docs.map(d => buildMember(d.data())).filter(m => m?.online);
+    online.sort((a, b) => b.lastSeenMs - a.lastSeenMs);
+    return { online };
+  }
+
+  // Full read: presence + families (to include members who never logged in)
   const [presenceSnap, familiesSnap] = await Promise.all([
     db.collection('presence').get(),
     db.collection('families').get(),
   ]);
 
-  // Build family lookup: familyUid -> { familyName, members[] }
-  const familyMap = {};
-  familiesSnap.docs.forEach(d => {
-    familyMap[d.id] = { familyName: d.data().familyName || '', members: d.data().members || [] };
-  });
-
-  // Build member list keyed by "familyUid_memberName" from families
-  const memberMap = {}; // key -> member entry
+  // Seed memberMap from families so everyone appears even without a presence doc
+  const memberMap = {};
   familiesSnap.docs.forEach(famDoc => {
-    const fam = familyMap[famDoc.id];
+    const fam = famDoc.data();
     (fam.members || []).forEach(m => {
       const key = famDoc.id + '_' + (m.name || '');
       memberMap[key] = {
         familyUid:  famDoc.id,
         memberName: m.name || '',
-        familyName: fam.familyName,
+        familyName: fam.familyName || '',
         role:       m.role || 'parent',
         online:     false,
         lastSeenMs: 0,
@@ -522,41 +547,51 @@ exports.getPresence = functions.https.onCall(async (data, context) => {
     });
   });
 
-  // Apply presence records — use most recent record when multiple docs share the same key
+  // Merge presence records (most recent wins)
   presenceSnap.docs.forEach(d => {
-    const p = d.data();
-    if (!p.familyUid || !p.memberName) return;
-    const key        = p.familyUid + '_' + p.memberName;
-    const lastSeenMs = p.lastSeen?.toMillis?.() || 0;
-    const online     = p.online === true && lastSeenMs > now - ONLINE_THRESHOLD;
-    if (memberMap[key]) {
-      // Only update if this record is more recent
-      if (lastSeenMs >= memberMap[key].lastSeenMs) {
-        memberMap[key].online     = online;
-        memberMap[key].lastSeenMs = lastSeenMs;
-      }
-    } else {
-      // Presence record exists but no matching family member — include anyway
-      const fam = familyMap[p.familyUid];
-      memberMap[key] = {
-        familyUid:  p.familyUid,
-        memberName: p.memberName,
-        familyName: fam?.familyName || p.familyName || '',
-        role:       p.role || 'parent',
-        online,
-        lastSeenMs,
-      };
-    }
+    const m = buildMember(d.data());
+    if (!m) return;
+    const key = m.familyUid + '_' + m.memberName;
+    if (!memberMap[key] || m.lastSeenMs >= memberMap[key].lastSeenMs) memberMap[key] = m;
   });
 
-  const members = Object.values(memberMap);
-
-  // Online first, then by lastSeen descending
-  members.sort((a, b) =>
+  const allMembers = Object.values(memberMap);
+  allMembers.sort((a, b) =>
     (b.online ? 1 : 0) - (a.online ? 1 : 0) || b.lastSeenMs - a.lastSeenMs
   );
 
-  return { members };
+  if (mode === 'default') {
+    const online  = allMembers.filter(m => m.online);
+    const offline = allMembers.filter(m => !m.online);
+    return {
+      online,
+      offlineSlice: offline.slice(0, PAGE_SIZE),
+      offlineTotal: offline.length,
+      stats: {
+        pOnline:  online.filter(m => m.role !== 'kid').length,
+        kOnline:  online.filter(m => m.role === 'kid').length,
+        pOffline: offline.filter(m => m.role !== 'kid').length,
+        kOffline: offline.filter(m => m.role === 'kid').length,
+      },
+      pageSize: PAGE_SIZE,
+    };
+  }
+
+  // 'browse' (offline pagination) or 'search'
+  const pool = searchQ
+    ? allMembers.filter(m =>
+        m.memberName.toLowerCase().includes(searchQ) ||
+        m.familyName.toLowerCase().includes(searchQ))
+    : allMembers.filter(m => !m.online);
+
+  const start = page * PAGE_SIZE;
+  return {
+    members:  pool.slice(start, start + PAGE_SIZE),
+    total:    pool.length,
+    page,
+    hasMore:  start + PAGE_SIZE < pool.length,
+    pageSize: PAGE_SIZE,
+  };
 });
 
 exports.getAnalytics = functions.https.onCall(async (data, context) => {
@@ -566,7 +601,7 @@ exports.getAnalytics = functions.https.onCall(async (data, context) => {
 
   // Families & members
   const familiesSnap = await db.collection('families').get();
-  const families = familiesSnap.docs.map(d => d.data());
+  const families = familiesSnap.docs.map(d => ({ _id: d.id, ...d.data() }));
   const familyCount = families.length;
   const parentCount = families.reduce((n,f) => n + (f.members||[]).filter(m=>m.role==='parent').length, 0);
   const kidCount    = families.reduce((n,f) => n + (f.members||[]).filter(m=>m.role==='kid').length, 0);
@@ -640,10 +675,11 @@ exports.getAnalytics = functions.https.onCall(async (data, context) => {
       if (c.schoolName && c.city) schoolToCity[c.schoolName] = c.city;
     });
     const schoolCount = {}, cityCount = {};
-    families.forEach(fam => {
+    families.forEach((fam, _, arr) => {
+      if (fam._id === ADMIN_UID) return; // exclude admin family
       (fam.members||[]).filter(m => m.role === 'kid').forEach(kid => {
-        const school = (kid.school || '').trim();
-        const city   = schoolToCity[school] || '';
+        const school = (kid.school?.name || '').trim();
+        const city   = (kid.school?.city || '').trim();
         if (school) schoolCount[school] = (schoolCount[school]||0) + 1;
         if (city)   cityCount[city]     = (cityCount[city]||0)   + 1;
       });
@@ -657,6 +693,7 @@ exports.getAnalytics = functions.https.onCall(async (data, context) => {
     sessionsSnap.docs.forEach(d => {
       const s = d.data();
       if (!s.durationMs) return;
+      if (s.familyUid === ADMIN_UID) return; // exclude admin
       const startMs = s.startTime?.toMillis?.() || 0;
       if (startMs < lbCutoffMs) return;
       const key = (s.familyUid||'') + '_' + (s.memberName||'');
@@ -998,7 +1035,7 @@ exports.nudgePending = functions.https.onCall(async (data, context) => {
       memberUids.filter(uid => uid !== app.applicantUid && !targets.includes(uid))
                 .forEach(uid => targets.push(uid));
       if (targets.length) {
-        const tokenArrays = await Promise.all(targets.map(getTokens));
+        const tokenArrays = await Promise.all(targets.map(uid => getTokens(uid, uid === ADMIN_UID)));
         await sendToTokens(tokenArrays.flat(),
           `🔔 מועמדות ועד ממתינה להצבעה`,
           `${app.applicantName} · ${classLabel(app.classId)}`,
@@ -1027,7 +1064,7 @@ exports.nudgePending = functions.https.onCall(async (data, context) => {
         .map(d => d.id);
       if (ADMIN_UID && !targets.includes(ADMIN_UID)) targets.push(ADMIN_UID);
       if (targets.length) {
-        const tokenArrays = await Promise.all(targets.map(getTokens));
+        const tokenArrays = await Promise.all(targets.map(uid => getTokens(uid, uid === ADMIN_UID)));
         await sendToTokens(tokenArrays.flat(),
           `🔔 אירוע ממתין לאישור`,
           `${ev.title} · ${classLabel(classId)}`,

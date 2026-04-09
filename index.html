@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260408am') location.reload(true);
+        if (v !== '20260413o') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -20,7 +20,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="FamilyHub">
-  <meta name="theme-color" content="#6a11cb">
+  <meta name="theme-color" content="#6C8CFF">
   <script>
     (function(){
       function makeIcon(size) {
@@ -38,14 +38,14 @@
       document.getElementById('appleTouchIcon').href=makeIcon(180);
     })();
   </script>
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
   <!-- Firebase SDKs — must load before main script -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260408w">
+  <link rel="stylesheet" href="styles.css?v=20260413o">
 </head>
 <body>
 
@@ -398,19 +398,28 @@
           <div id="homeUpcoming"></div>
         </div>
       </div>
+      <div id="homeSection-shopping"></div>
     </div>
 
     <!-- CHORES -->
     <div id="tab-chores" class="tab-content">
       <div id="choresContent"></div>
-      <div class="card" id="addChoreCard">
-        <div class="card-title" id="addChoreTitle"></div>
-        <div class="add-form">
-          <input class="add-input" id="newChoreText" type="text" onkeydown="if(event.key==='Enter')addChore()">
-          <div class="form-row">
-            <select id="newChoreAssignee" style="flex:1"></select>
-            <select id="newChorePriority" style="flex:1"></select>
-            <button class="btn-sm" id="addChoreBtn" onclick="addChore()"></button>
+      <div class="card chore-quick-add" id="addChoreCard">
+        <div class="chore-qa-input-row">
+          <input class="chore-qa-input" id="newChoreText" type="text" onkeydown="if(event.key==='Enter')addChore()">
+          <button class="chore-qa-plus" id="addChoreBtn" onclick="addChore()">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+          </button>
+        </div>
+        <div class="chore-qa-controls-row">
+          <select id="newChoreAssignee" style="display:none"></select>
+          <div class="soft-dd" id="ddAssignee"></div>
+          <div class="chore-qa-sep" id="choreQaSep"></div>
+          <select id="newChorePriority" style="display:none"></select>
+          <div class="pri-seg" id="priSegControl">
+            <button class="pri-seg-btn" data-val="high"   onclick="_priSegPick('high')">גבוהה</button>
+            <button class="pri-seg-btn active" data-val="medium" onclick="_priSegPick('medium')">בינונית</button>
+            <button class="pri-seg-btn" data-val="low"    onclick="_priSegPick('low')">נמוכה</button>
           </div>
         </div>
       </div>
@@ -432,9 +441,12 @@
           <div class="pool-search-wrap">
             <input class="pool-search" id="poolSearch" type="search" placeholder="🔍" oninput="onPoolSearch(this.value)">
           </div>
-          <div class="grocery-add" id="poolAddForm">
+          <div class="cat-chips-wrap" id="poolCatChips"></div>
+          <button class="pool-add-trigger" id="poolAddTrigger" onclick="togglePoolAddForm()">＋ הוסף פריט</button>
+          <div class="grocery-add pool-add-expand" id="poolAddForm" style="display:none">
             <input class="g-input" id="poolItemInput" type="text" onkeydown="if(event.key==='Enter')addPoolItem()">
-            <select class="g-cat" id="poolCatSelect"></select>
+            <select id="poolCatSelect" style="display:none"></select>
+            <div class="soft-dd" id="ddPoolCat"></div>
             <button class="unit-toggle" id="poolUnitToggle" onclick="togglePoolNewQtyType()">יח'</button>
             <button class="btn" onclick="addPoolItem()">＋</button>
           </div>
@@ -458,18 +470,26 @@
         <div class="card">
           <div class="card-title" id="shoppingListTitle"></div>
           <div id="shoppingListEl"></div>
-          <button class="btn" id="doneShoppingBtn" onclick="doneShopping()" style="margin-top:10px;background:linear-gradient(135deg,#38a169,#2f855a);display:none"></button>
         </div>
       </div>
+      <button class="done-shopping-sticky" id="doneShoppingBtn" onclick="doneShopping()" style="display:none"></button>
     </div>
 
     <!-- HOMEWORK -->
     <div id="tab-homework" class="tab-content">
       <div class="child-tabs" id="childTabsContainer"></div>
+      <div class="card hw-class-card" id="hwClassSection" style="display:none">
+        <div class="hw-section-hdr">🏫 שיעורי בית של הכיתה</div>
+        <div id="hwClassList"></div>
+      </div>
       <div class="card">
         <div class="card-title" id="hwCardTitle"></div>
         <div id="hwList"></div>
         <div class="add-form" id="addHwForm">
+          <div class="hw-scope-seg" id="hwScopeSeg" style="display:none">
+            <button class="hw-scope-btn active" data-val="personal" onclick="_hwScopePick('personal')">אישי</button>
+            <button class="hw-scope-btn" data-val="class" onclick="_hwScopePick('class')">🏫 לכל הכיתה</button>
+          </div>
           <input class="add-input" id="hwDesc" type="text">
           <div class="form-row">
             <select id="hwSubject" style="flex:1"></select>
@@ -530,7 +550,10 @@
   </div>
 </div>
 
-<script src="app.js?v=20260408w"></script>
+<button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+</button>
+<script src="app.js?v=20260413o"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
