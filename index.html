@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260413bd') location.reload(true);
+        if (v !== '20260413bu') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260413bd">
+  <link rel="stylesheet" href="styles.css?v=20260413bu">
 </head>
 <body>
 
@@ -486,7 +486,7 @@
 
     <!-- HOMEWORK -->
     <div id="tab-homework" class="tab-content">
-      <div class="hw-kid-chips" id="childTabsContainer"></div>
+      <div class="tab-chips-row" id="childTabsContainer"></div>
       <div class="card hw-class-card" id="hwClassSection" style="display:none">
         <div class="hw-section-hdr">🏫 שיעורי בית של הכיתה</div>
         <div id="hwClassList"></div>
@@ -548,6 +548,7 @@
             <input type="date" id="newEventDate" style="flex:1">
             <input type="time" id="newEventTime" style="flex:0 0 100px">
           </div>
+          <input class="add-input" id="newEventLocation" type="text" placeholder="📍 מיקום (אופציונלי)">
           <div id="newEventPersonPicker" class="event-person-picker"></div>
           <label id="gcalSyncRow" style="display:none;align-items:center;gap:7px;font-size:13px;font-weight:700;color:#4a5568;cursor:pointer;margin-top:6px">
             <input type="checkbox" id="gcalSyncCheck" style="width:16px;height:16px;accent-color:#4285f4">
@@ -563,7 +564,7 @@
 <button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
 </button>
-<script src="app.js?v=20260413bd"></script>
+<script src="app.js?v=20260413bu"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>

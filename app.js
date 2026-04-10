@@ -1824,13 +1824,17 @@ function renderEventPersonPicker() {
   if (!picker) return;
   const others = getAllMemberNames().filter(n => n !== S.user);
   const chips = [
-    { key:'All', label:t('everyone'), emoji:'👨‍👩‍👧‍👧' },
-    ...others.map(n => ({ key:n, label:n, emoji:getEmoji(n) })),
+    { key:'All', label:t('everyone') },
+    ...others.map(n => ({ key:n, label:n })),
   ];
-  picker.innerHTML = chips.map(c =>
-    `<div class="ep-chip ${_eventPersons.includes(c.key)?'selected':''}" onclick="toggleEventPerson('${esc(c.key)}')">
-       <span>${c.emoji}</span><span>${esc(c.label)}</span>
-     </div>`).join('');
+  picker.innerHTML = chips.map(c => {
+    const sel = _eventPersons.includes(c.key);
+    const avatarHTML = c.key === 'All' ? _allGroupAvatar() : getAvatar(c.key);
+    return `<div class="ep-chip ${sel?'selected':''}" onclick="toggleEventPerson('${esc(c.key)}')">
+      <span class="ep-chip-avatar">${avatarHTML}</span>
+      <span>${esc(c.label)}</span>
+    </div>`;
+  }).join('');
 }
 
 function toggleEventPerson(key) {
@@ -2574,6 +2578,7 @@ let _commCache       = {}; // { [classId]: { classmates, events, loadedAt, error
 let _commListeners   = {}; // { [classId]: [unsubFn, ...] }
 let _commAddOpen     = {}; // { [classId]: bool }
 let _commVisibleCids = []; // cids currently rendered in community tab
+let _commVisibleKids = []; // { name, cid } for kids currently rendered
 
 function _unsubCommClass(cid) {
   (_commListeners[cid] || []).forEach(fn => fn());
@@ -2707,16 +2712,12 @@ function renderPostCard(ev, cid) {
   const classmate = cache.classmates?.find(c => c.familyUid === ev.postedBy?.familyUid);
   const kidName   = classmate?.kidName || '';
   const ago      = timeAgo(ev.createdAt);
-  const likedBy  = ev.likedBy || [];
-  const liked    = likedBy.includes(S.uid);
-  const likeCount    = likedBy.length;
-  const commentCount = ev.commentCount || 0;
   const avatarHtml   = ev.postedBy?.familyUid === S.uid
     ? getAvatar(ev.postedBy.firstName)
     : _authorAvatar(ev.postedBy?.firstName || '?');
 
   const scopeTag = scopeBadge(scope);
-  return `<div class="post-card">
+  return `<div class="post-card" data-ev-id="${ev.id}">
     <div class="post-card-header">
       <div class="post-card-avatar">${avatarHtml}</div>
       <div class="post-card-meta">
@@ -2728,30 +2729,86 @@ function renderPostCard(ev, cid) {
     </div>
     <div class="post-card-body">
       <div class="post-card-title">${esc(ev.title)}</div>
+      ${ev.location ? `<div class="post-card-location">📍 ${esc(ev.location)}</div>` : ''}
       ${ev.note ? `<div class="post-card-note">${esc(ev.note)}</div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
     ${ev.date ? `<div class="post-card-date">📅 ${fmtEventDate(ev.date)}</div>` : ''}
     <div class="post-card-reactions">
-      <button class="post-reaction${liked?' post-reaction-liked':''}" onclick="toggleLike('${scope}','${sid}','${ev.id}')">
-        ${liked?'❤️':'🤍'}${likeCount ? ' ' + likeCount : ''}
-      </button>
-      <button class="post-reaction">💬${commentCount ? ' ' + commentCount : ''}</button>
+      ${_reactionBtns(ev, scope, sid)}
     </div>
   </div>`;
 }
 
-async function toggleLike(scope, scopeId, evId) {
+const _REACTIONS = [
+  { key: 'thumbsUp', emoji: '👍' },
+  { key: 'heart',    emoji: '❤️' },
+  { key: 'party',    emoji: '🎉' },
+];
+
+function _reactionBtns(ev, scope, sid) {
+  return _REACTIONS.map(r => {
+    // backward compat: treat likedBy as heart
+    const arr = r.key === 'heart'
+      ? [...(ev.reactions?.heart || []), ...(ev.likedBy || [])]
+        .filter((v, i, a) => a.indexOf(v) === i)  // dedupe
+      : (ev.reactions?.[r.key] || []);
+    const active = arr.includes(S.uid);
+    const count  = arr.length;
+    return `<button class="post-reaction${active ? ' post-reaction-active' : ''}"
+      data-reaction="${r.key}"
+      onclick="toggleReaction('${scope}','${sid}','${ev.id}','${r.key}')">
+      <span class="post-reaction-emoji">${r.emoji}</span>${count ? `<span class="post-reaction-count">${count}</span>` : ''}
+    </button>`;
+  }).join('');
+}
+
+async function toggleReaction(scope, scopeId, evId, reactionKey) {
   const collName = scope === 'grade' ? 'schoolGrades' : scope === 'school' ? 'schools' : 'schoolClasses';
   const ref = fbDb.collection(collName).doc(scopeId).collection('events').doc(evId);
   const allCached = Object.values(_commCache).flatMap(c => [...(c.events||[]),...(c.gradeEvents||[]),...(c.schoolEvents||[])]);
   const ev = allCached.find(e => e.id === evId);
-  const liked = (ev?.likedBy||[]).includes(S.uid);
+  if (!ev) return;
+
+  const arr = reactionKey === 'heart'
+    ? [...(ev.reactions?.heart || []), ...(ev.likedBy || [])].filter((v,i,a) => a.indexOf(v) === i)
+    : (ev.reactions?.[reactionKey] || []);
+  const active = arr.includes(S.uid);
+
+  // Optimistic update — mutate cache immediately
+  if (!ev.reactions) ev.reactions = {};
+  if (!ev.reactions[reactionKey]) ev.reactions[reactionKey] = [];
+  if (active) {
+    ev.reactions[reactionKey] = ev.reactions[reactionKey].filter(u => u !== S.uid);
+    if (reactionKey === 'heart') ev.likedBy = (ev.likedBy || []).filter(u => u !== S.uid);
+  } else {
+    if (!ev.reactions[reactionKey].includes(S.uid))
+      ev.reactions[reactionKey] = [...ev.reactions[reactionKey], S.uid];
+  }
+
+  // Re-render just the reactions row for this card + animate the tapped button
+  const cardEl = document.querySelector(`.post-card[data-ev-id="${evId}"]`);
+  if (cardEl) {
+    const row = cardEl.querySelector('.post-card-reactions');
+    if (row) {
+      row.innerHTML = _reactionBtns(ev, scope, scopeId);
+      const btn = row.querySelector(`[data-reaction="${reactionKey}"]`);
+      if (btn && !active) {
+        btn.classList.add('post-reaction-bounce');
+        btn.addEventListener('animationend', () => btn.classList.remove('post-reaction-bounce'), { once: true });
+      }
+    }
+  }
+
+  // Sync to Firestore in background
   try {
-    await ref.update({ likedBy: liked
+    const update = { [`reactions.${reactionKey}`]: active
       ? firebase.firestore.FieldValue.arrayRemove(S.uid)
-      : firebase.firestore.FieldValue.arrayUnion(S.uid) });
-  } catch(e) { console.error('toggleLike:', e); }
+      : firebase.firestore.FieldValue.arrayUnion(S.uid) };
+    if (reactionKey === 'heart' && active && (ev.likedBy || []).includes(S.uid))
+      update.likedBy = firebase.firestore.FieldValue.arrayRemove(S.uid);
+    await ref.update(update);
+  } catch(e) { console.error('toggleReaction:', e); }
 }
 
 function filterClassmates(cid, q) {
@@ -2862,11 +2919,12 @@ function renderCommCard(kid) {
       <input class="auth-input" id="commEvTitle_${cid}" placeholder="${t('commEventTitle')}" style="margin-bottom:6px">
       <div style="display:flex;gap:8px;margin-bottom:6px">
         <input type="date" class="auth-input" id="commEvDate_${cid}" style="flex:1">
-        <select class="auth-input" id="commEvType_${cid}" style="flex:1" onchange="onCommEvTypeChange('${cid}')">
+        <div id="commEvTypeDd_${cid}" style="flex:1;min-width:0"></div>
+        <select id="commEvType_${cid}" style="display:none" onchange="onCommEvTypeChange('${cid}')">
           ${EVENT_TYPES.map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
         </select>
       </div>
-      <div id="commEvGenderWrap_${cid}" style="display:none;margin-bottom:6px">
+      <div id="commEvGenderWrap_${cid}" style="margin-bottom:6px">
         <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">מי מוזמן?</div>
         <div style="display:flex;gap:8px">
           <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" value="all"   checked> כולם</label>
@@ -2883,6 +2941,7 @@ function renderCommCard(kid) {
           <option value="school">🏛 ${t('commScopeSchool')}</option>
         </select>
       </div>` : `<input type="hidden" id="commEvScope_${cid}" value="class">`}
+      <input class="auth-input" id="commEvLocation_${cid}" placeholder="📍 מיקום (אופציונלי)" style="margin-bottom:6px">
       <input class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" style="margin-bottom:6px">
       <input class="auth-input" id="commEvPaybox_${cid}" placeholder="${t('commEventPaybox')}" style="margin-bottom:10px" type="url" dir="ltr">
       <div style="display:flex;gap:8px">
@@ -2950,16 +3009,26 @@ async function renderCommunity() {
   await loadCommunityData(kidsWithSchool);
   renderHomeUpcoming();
   _commVisibleCids = kidsWithSchool.map(k => classIdFor(k.school)).filter(Boolean);
+  _commVisibleKids = kidsWithSchool
+    .map(k => ({ name: k.name, cid: classIdFor(k.school) }))
+    .filter(k => k.cid);
   const adminBtn = isAdmin()
     ? `<button class="admin-btn" onclick="openAdminPanel(true, true)">📋 היסטוריית אירועים</button>`
     : '';
   const fabHtml = isParent() ? `
-    <button class="comm-fab${Object.values(_commAddOpen).some(v=>v)?' comm-fab-open':''}" id="commFab" onclick="commFabClick()" title="${t('commAddEvent')}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-      </svg>
-    </button>` : '';
+    <div class="comm-fab-wrap" id="commFabWrap">
+      <div class="comm-fab-picker" id="commFabPicker"></div>
+      <button class="comm-fab${Object.values(_commAddOpen).some(v=>v)?' comm-fab-open':''}" id="commFab" onclick="commFabClick()" title="${t('commAddEvent')}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+      </button>
+    </div>` : '';
   container.innerHTML = adminBtn + kidsWithSchool.map(kid => renderCommCard(kid)).join('') + fabHtml;
+  kidsWithSchool.forEach(kid => {
+    const cid = classIdFor(kid.school);
+    if (cid) _buildSoftDd('commEvTypeDd_' + cid, 'commEvType_' + cid);
+  });
 }
 
 function onCommEvTypeChange(cid) {
@@ -2985,7 +3054,10 @@ function toggleCommAddForm(cid) {
   const form = el('commAddForm_' + cid);
   form?.classList.toggle('open', !!_commAddOpen[cid]);
   if (_commAddOpen[cid]) {
-    setTimeout(() => form?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+    setTimeout(() => {
+      _buildSoftDd('commEvTypeDd_' + cid, 'commEvType_' + cid);
+      form?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 50);
   }
   // Sync FAB icon
   const fab = el('commFab');
@@ -2994,11 +3066,43 @@ function toggleCommAddForm(cid) {
 
 function commFabClick() {
   if (!_commVisibleCids.length) return;
-  // If one form already open — close it
+  // If any form already open — close it and hide picker
   const openCid = _commVisibleCids.find(c => _commAddOpen[c]);
-  if (openCid) { toggleCommAddForm(openCid); return; }
-  // Open the first (or only) class
-  toggleCommAddForm(_commVisibleCids[0]);
+  if (openCid) { toggleCommAddForm(openCid); _commHidePicker(); return; }
+  // Single kid — open directly
+  if (_commVisibleKids.length <= 1) {
+    toggleCommAddForm(_commVisibleCids[0]);
+    return;
+  }
+  // Multiple kids — toggle picker
+  const picker = el('commFabPicker');
+  if (!picker) return;
+  if (picker.classList.contains('open')) { _commHidePicker(); return; }
+  picker.innerHTML = _commVisibleKids.map(k =>
+    `<button class="comm-fab-pick-item" onclick="_commPickKid('${k.cid}')">
+      <span class="comm-fab-pick-avatar">${getAvatar(k.name)}</span>
+      <span>${esc(k.name)}</span>
+    </button>`
+  ).join('');
+  picker.classList.add('open');
+  el('commFab')?.classList.add('comm-fab-open');
+  setTimeout(() => {
+    document.addEventListener('click', function _h(e) {
+      if (!el('commFabWrap')?.contains(e.target)) { _commHidePicker(); document.removeEventListener('click', _h); }
+    });
+  }, 0);
+}
+
+function _commPickKid(cid) {
+  _commHidePicker();
+  toggleCommAddForm(cid);
+}
+
+function _commHidePicker() {
+  const picker = el('commFabPicker');
+  if (picker) picker.classList.remove('open');
+  if (!_commVisibleCids.some(c => _commAddOpen[c]))
+    el('commFab')?.classList.remove('comm-fab-open');
 }
 
 async function submitClassEvent(cid) {
@@ -3006,6 +3110,7 @@ async function submitClassEvent(cid) {
   const date       = el('commEvDate_'   + cid)?.value;
   const type       = el('commEvType_'   + cid)?.value || 'other';
   const scope      = el('commEvScope_'  + cid)?.value || 'class';
+  const location   = el('commEvLocation_'+ cid)?.value.trim() || '';
   const note       = el('commEvNote_'   + cid)?.value.trim() || '';
   const payboxRaw  = el('commEvPaybox_' + cid)?.value.trim() || '';
   const payboxUrl  = payboxRaw && (payboxRaw.startsWith('http://') || payboxRaw.startsWith('https://')) ? payboxRaw : '';
@@ -3018,6 +3123,7 @@ async function submitClassEvent(cid) {
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     genderFilter,
   };
+  if (location) docData.location = location;
   if (payboxUrl) docData.payboxUrl = payboxUrl;
 
   // Resolve target collection and document ID
@@ -3097,8 +3203,7 @@ async function loadNotifSettings() {
   } catch(e) { return NOTIF_DEFAULTS; }
 }
 
-async function renderNotifSettings() {
-  const cfg = await loadNotifSettings();
+function _renderNotifSettingsFromCfg(cfg) {
   const types = [
     { key: 'committeeApplications', label: '🗳️ מועמדויות לוועד' },
     { key: 'pendingEvents',         label: '📋 אירועים ממתינים לאישור' },
@@ -3132,6 +3237,10 @@ async function renderNotifSettings() {
   }).join('');
 }
 
+async function renderNotifSettings() {
+  _renderNotifSettingsFromCfg(await loadNotifSettings());
+}
+
 async function saveNotifSettings(key) {
   const expiryDays             = parseInt(el(`notif_${key}_expiry`)?.value) || NOTIF_DEFAULTS[key].expiryDays;
   const reminderHoursBeforeExpiry = parseInt(el(`notif_${key}_reminder`)?.value) || NOTIF_DEFAULTS[key].reminderHoursBeforeExpiry;
@@ -3141,6 +3250,7 @@ async function saveNotifSettings(key) {
       { [key]: { expiryDays, reminderHoursBeforeExpiry, notifyOnDecision } },
       { merge: true }
     );
+    _adminPanelCache = null;
     _alert('הגדרות נשמרו');
   } catch(e) { _alert('שגיאה: ' + e.message); }
 }
@@ -3153,9 +3263,7 @@ async function nudgePendingNow(type) {
   } catch(e) { _alert('שגיאה: ' + e.message); }
 }
 
-async function renderLeaderboardSettings() {
-  const snap = await fbDb.collection('appConfig').doc('leaderboard').get().catch(() => null);
-  const days = snap?.exists ? (snap.data().days || 30) : 30;
+function _renderLeaderboardFromDays(days) {
   el('adminLeaderboardSettings').innerHTML = `
     <div class="card" style="margin-bottom:12px;padding:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:10px">🏆 לוח המובילים</div>
@@ -3169,10 +3277,16 @@ async function renderLeaderboardSettings() {
     </div>`;
 }
 
+async function renderLeaderboardSettings() {
+  const snap = await fbDb.collection('appConfig').doc('leaderboard').get().catch(() => null);
+  _renderLeaderboardFromDays(snap?.exists ? (snap.data().days || 30) : 30);
+}
+
 async function saveLeaderboardSettings() {
   const days = parseInt(el('leaderboardDaysInput')?.value) || 30;
   try {
     await fbDb.collection('appConfig').doc('leaderboard').set({ days }, { merge: true });
+    _adminPanelCache = null;
     _alert('הגדרות נשמרו');
   } catch(e) { _alert('שגיאה: ' + e.message); }
 }
@@ -3254,65 +3368,90 @@ async function adminSaveHistoryTtl() {
   if (msg) { msg.textContent = 'נשמר ✓'; setTimeout(() => { msg.textContent = ''; }, 2000); }
 }
 
+let _adminPanelCache = null;
+const _ADMIN_CACHE_TTL = 120_000; // 2 minutes
+
+function _adminLogHtml(combined) {
+  if (!combined.length) return '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין היסטוריה עדיין</div>';
+  return combined.map(entry => {
+    if (entry._type === 'expired') {
+      return `<div class="admin-log-row" style="opacity:0.6">
+        <div class="admin-log-title">
+          <span class="admin-log-badge" style="background:#f3f4f6;color:#6b7280">⏱ פג תוקף</span>${esc(entry.title||'')}
+        </div>
+        <div class="admin-log-meta">הוגש על ידי: ${esc(personFullName(entry.postedBy)||'?')} · תאריך: ${entry.date ? fmtEventDate(entry.date) : '?'}</div>
+        <div class="admin-log-meta">כיתה: ${esc(classLabelFromId(entry.classId||''))}</div>
+      </div>`;
+    }
+    const approved = entry.action === 'approved';
+    const dt = entry.actionAt?.toDate ? entry.actionAt.toDate().toLocaleString('he-IL') : '';
+    return `<div class="admin-log-row">
+      <div class="admin-log-title">
+        <span class="admin-log-badge ${approved ? 'approved' : 'rejected'}">${approved ? '✓ אושר' : '✕ נדחה'}</span>${esc(entry.eventTitle)}
+      </div>
+      <div class="admin-log-meta">הוגש על ידי: ${esc(personFullName(entry.submittedBy)||'?')} · ${approved ? 'אושר' : 'נדחה'} על ידי: ${esc(personFullName(entry.actionBy)||'?')} · ${dt}</div>
+      <div class="admin-log-meta">כיתה: ${esc(classLabelFromId(entry.classId||''))}</div>
+    </div>`;
+  }).join('');
+}
+
+async function _fetchAdminPanelData() {
+  const [logSnap, expiredSnap, notifSnap, lbSnap] = await Promise.all([
+    fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get(),
+    fbDb.collectionGroup('pendingEvents').get(),
+    fbDb.collection('appConfig').doc('notifications').get().catch(() => null),
+    fbDb.collection('appConfig').doc('leaderboard').get().catch(() => null),
+  ]);
+  const log = logSnap.docs.map(d => ({ _type: 'log', ...d.data() }));
+  const expiredPending = expiredSnap.docs
+    .map(d => ({ _type: 'expired', id: d.id, classId: d.ref.parent.parent.id, ...d.data() }))
+    .filter(ev => ev.date && !isEventUpcoming(ev.date));
+  const sortKey = e => e._type === 'log'
+    ? (e.actionAt?.toDate?.() || new Date(0)).getTime()
+    : new Date(e.date || 0).getTime();
+  const combined = [...log, ...expiredPending].sort((a, b) => sortKey(b) - sortKey(a));
+  const notifData = notifSnap?.exists ? notifSnap.data() : {};
+  const notifCfg = {
+    committeeApplications: { ...NOTIF_DEFAULTS.committeeApplications, ...(notifData.committeeApplications || {}) },
+    pendingEvents:         { ...NOTIF_DEFAULTS.pendingEvents,         ...(notifData.pendingEvents || {}) },
+  };
+  const lbDays = lbSnap?.exists ? (lbSnap.data().days || 30) : 30;
+  return { combined, notifCfg, lbDays, ts: Date.now() };
+}
+
+function _applyAdminPanelCache(data, showLog) {
+  if (showLog) el('adminLogList').innerHTML = _adminLogHtml(data.combined);
+  _renderNotifSettingsFromCfg(data.notifCfg);
+  _renderLeaderboardFromDays(data.lbDays);
+  renderShoppingHistorySettings();
+  renderMaintenanceTools();
+}
+
 async function renderAdminPanel(showLog = true) {
-  if (!showLog) {
-    await renderNotifSettings();
-    await renderLeaderboardSettings();
-    renderShoppingHistorySettings();
-    renderMaintenanceTools();
+  const cached = _adminPanelCache;
+  if (cached) {
+    // Render immediately from cache — user sees content with no wait
+    _applyAdminPanelCache(cached, showLog);
+    // Refresh in background if stale
+    if (Date.now() - cached.ts > _ADMIN_CACHE_TTL) {
+      _fetchAdminPanelData().then(data => {
+        _adminPanelCache = data;
+        if (!el('adminPanel')?.classList.contains('hidden')) {
+          _applyAdminPanelCache(data, showLog);
+        }
+      }).catch(e => console.error('adminPanel bg refresh:', e));
+    }
     return;
   }
-  el('adminLogList').innerHTML = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
+  // First load — show spinner, fetch all 4 in parallel, cache and render
+  if (showLog) el('adminLogList').innerHTML = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
   try {
-    const [logSnap, expiredSnap] = await Promise.all([
-      fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get(),
-      fbDb.collectionGroup('pendingEvents').get(),
-    ]);
-
-    // Resolved entries from adminLog
-    const log = logSnap.docs.map(d => ({ _type: 'log', ...d.data() }));
-
-    // Expired pending events (not yet approved/denied, but date has passed)
-    const expiredPending = expiredSnap.docs
-      .map(d => ({ _type: 'expired', id: d.id, classId: d.ref.parent.parent.id, ...d.data() }))
-      .filter(ev => ev.date && !isEventUpcoming(ev.date));
-
-    // Merge and sort — expired entries go by their event date, log entries by actionAt
-    const sortKey = e => e._type === 'log'
-      ? (e.actionAt?.toDate?.() || new Date(0)).getTime()
-      : new Date(e.date || 0).getTime();
-    const combined = [...log, ...expiredPending].sort((a, b) => sortKey(b) - sortKey(a));
-
-    el('adminLogList').innerHTML = combined.length
-      ? combined.map(entry => {
-          if (entry._type === 'expired') {
-            return `<div class="admin-log-row" style="opacity:0.6">
-              <div class="admin-log-title">
-                <span class="admin-log-badge" style="background:#f3f4f6;color:#6b7280">⏱ פג תוקף</span>${esc(entry.title||'')}
-              </div>
-              <div class="admin-log-meta">הוגש על ידי: ${esc(personFullName(entry.postedBy)||'?')} · תאריך: ${entry.date ? fmtEventDate(entry.date) : '?'}</div>
-              <div class="admin-log-meta">כיתה: ${esc(classLabelFromId(entry.classId||''))}</div>
-            </div>`;
-          }
-          const approved = entry.action === 'approved';
-          const dt = entry.actionAt?.toDate ? entry.actionAt.toDate().toLocaleString('he-IL') : '';
-          return `<div class="admin-log-row">
-            <div class="admin-log-title">
-              <span class="admin-log-badge ${approved ? 'approved' : 'rejected'}">${approved ? '✓ אושר' : '✕ נדחה'}</span>${esc(entry.eventTitle)}
-            </div>
-            <div class="admin-log-meta">הוגש על ידי: ${esc(personFullName(entry.submittedBy)||'?')} · ${approved ? 'אושר' : 'נדחה'} על ידי: ${esc(personFullName(entry.actionBy)||'?')} · ${dt}</div>
-            <div class="admin-log-meta">כיתה: ${esc(classLabelFromId(entry.classId||''))}</div>
-          </div>`;
-        }).join('')
-      : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין היסטוריה עדיין</div>';
-
-    await renderNotifSettings();
-    await renderLeaderboardSettings();
-    renderShoppingHistorySettings();
-    renderMaintenanceTools();
+    const data = await _fetchAdminPanelData();
+    _adminPanelCache = data;
+    _applyAdminPanelCache(data, showLog);
   } catch(e) {
     console.error('renderAdminPanel:', e);
-    el('adminLogList').innerHTML = `<div style="color:#e53e3e;font-size:12px">${e.message}</div>`;
+    if (showLog) el('adminLogList').innerHTML = `<div style="color:#e53e3e;font-size:12px">${e.message}</div>`;
   }
 }
 
@@ -3866,6 +4005,7 @@ function _softDdPick(ddId, selectId, value) {
   const sel = el(selectId);
   if (!sel) return;
   sel.value = value;
+  sel.dispatchEvent(new Event('change'));
   const lbl = el(ddId + 'Lbl');
   if (lbl) lbl.textContent = Array.from(sel.options).find(o => o.value === value)?.text || value;
   const panel = el(ddId + 'Panel');
@@ -3963,7 +4103,10 @@ function _kidChipsHtml() {
 
 function _hwKidChipsHtml(kids) {
   return kids.map(k =>
-    `<button class="hw-kid-chip${S.child===k?' active':''}" onclick="switchChild('${esc(k)}')">${getAvatar(k, 18)} ${esc(k)}</button>`
+    `<div class="avatar-chip${S.child===k?' active':''}" onclick="switchChild('${esc(k)}')">
+      <div class="avatar-bubble">${getAvatar(k)}</div>
+      <div class="avatar-label">${esc(k)}</div>
+    </div>`
   ).join('');
 }
 
@@ -4007,7 +4150,7 @@ function renderHomeUpcoming() {
   const all = [...personal, ...classEvs]
     .filter(e => {
       if (!e.date) return false;
-      const key = (e.id || e.title) + '_' + e.date;
+      const key = `${e.title}_${e.date}_${e._kid || ''}`;
       if (seen.has(key)) return false;
       seen.add(key); return true;
     })
@@ -4021,33 +4164,79 @@ function renderHomeUpcoming() {
   card.style.display = '';
   container.innerHTML = all.map(ev => {
     const isClass = ev._src === 'class';
-    return `<div class="home-event-row" onclick="switchTab('calendar')">
+    const kidArg = isClass && ev._kid ? esc(ev._kid).replace(/'/g,"\\'") : '';
+    return `<div class="home-event-row" onclick="navToCalendarDate('${ev.date}','${ev._src||''}','${kidArg}')">
       <div class="home-event-icon">${eventTypeIcon(ev.type)}</div>
       <div class="home-event-body">
         <div class="home-event-title">${esc(ev.title)}${isClass ? scopeBadge(ev.scope) : ''}</div>
         <div class="home-event-meta">${fmtDate(ev.date)}${ev.time ? ' · ' + ev.time : ''}${isClass && ev._kid ? ' · ' + esc(ev._kid) : ''}</div>
       </div>
-      <span class="home-chevron">‹</span>
+      <span class="home-chevron">›</span>
     </div>`;
   }).join('');
 }
 
+let _homeQuickPickId = null;
+
 function renderHomeShopping() {
   const sec = el('homeSection-shopping');
   if (!sec) return;
-  const placeholder = t('locale') === 'he-IL' ? 'הוסף לרשימת הקניות...' : 'Add to shopping list...';
+  const placeholder = t('locale') === 'he-IL' ? 'חפש מהמאגר...' : 'Search pool…';
   sec.innerHTML = `<div class="card">
     <div class="card-title">🛒 קניות מהירות</div>
-    <div class="home-quick-add-wrap">
-      <span class="home-quick-add-prefix">＋</span>
-      <input class="home-quick-add-input" id="homeQuickAddInput" type="text"
-        placeholder="${placeholder}"
-        onkeydown="if(event.key==='Enter')homeQuickAddShop()">
-      <button class="home-quick-add-btn" onclick="homeQuickAddShop()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      </button>
+    <div class="home-quick-ac-outer">
+      <div class="home-quick-add-wrap">
+        <span class="home-quick-add-prefix">＋</span>
+        <input class="home-quick-add-input" id="homeQuickAddInput" type="text"
+          placeholder="${placeholder}" autocomplete="off"
+          oninput="homeQuickAcInput(this)"
+          onblur="setTimeout(()=>{const d=el('homeQuickAcDrop');if(d)d.style.display='none'},160)"
+          onkeydown="homeQuickAcKey(event)">
+        <button class="home-quick-add-btn" onclick="homeQuickAddShop()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+      <div class="home-quick-ac-drop" id="homeQuickAcDrop" style="display:none"></div>
     </div>
   </div>`;
+}
+
+function homeQuickAcInput(inp) {
+  _homeQuickPickId = null;
+  const q = inp.value.trim().toLowerCase();
+  const drop = el('homeQuickAcDrop');
+  if (!drop) return;
+  if (!q) { drop.style.display = 'none'; drop.innerHTML = ''; return; }
+  const matches = S.groceryPool.filter(p => p.name.toLowerCase().includes(q)).slice(0, 8);
+  if (!matches.length) { drop.style.display = 'none'; drop.innerHTML = ''; return; }
+  drop.innerHTML = matches.map(p => {
+    const inList = S.shoppingList.some(x => x.poolId === p.id);
+    const catLabel = p.category ? `<span class="home-quick-ac-cat">${esc(p.category)}</span>` : '';
+    const check = inList ? `<span class="home-ac-check">✓</span>` : '';
+    return `<div class="home-quick-ac-item${inList ? ' in-list' : ''}" onmousedown="homeQuickAcPick(${p.id})">
+      ${check}<span>${esc(p.name)}</span>${catLabel}
+    </div>`;
+  }).join('');
+  drop.style.display = 'block';
+}
+
+function homeQuickAcPick(poolId) {
+  const pool = S.groceryPool.find(p => p.id === poolId);
+  if (!pool) return;
+  _homeQuickPickId = poolId;
+  const inp = el('homeQuickAddInput');
+  if (inp) inp.value = pool.name;
+  const drop = el('homeQuickAcDrop');
+  if (drop) drop.style.display = 'none';
+  homeQuickAddShop();
+}
+
+function homeQuickAcKey(e) {
+  if (e.key === 'Enter') { homeQuickAddShop(); return; }
+  if (e.key === 'Escape') {
+    const drop = el('homeQuickAcDrop');
+    if (drop) drop.style.display = 'none';
+  }
 }
 
 function homeQuickAddShop() {
@@ -4055,14 +4244,20 @@ function homeQuickAddShop() {
   if (!input) return;
   const name = input.value.trim();
   if (!name) { input.focus(); return; }
-  if (!S.groceryPool.find(p => p.name.toLowerCase() === name.toLowerCase())) {
-    S.groceryPool.push({ id: Date.now(), name, category: '', qtyType: 'unit' });
+  let pool = _homeQuickPickId ? S.groceryPool.find(p => p.id === _homeQuickPickId) : null;
+  if (!pool) pool = S.groceryPool.find(p => p.name.toLowerCase() === name.toLowerCase());
+  if (!pool) { input.focus(); return; }
+  if (!S.shoppingList.some(x => x.poolId === pool.id)) {
+    const qty = pool.lastQty || 1;
+    S.shoppingList.push({ id: Date.now(), poolId: pool.id, name: pool.name, category: pool.category, qty, qtyType: pool.qtyType || 'count' });
     saveGrocery();
     renderPool();
+    renderShoppingList();
   }
   input.value = '';
+  _homeQuickPickId = null;
   input.classList.add('quick-added');
-  setTimeout(() => input.classList.remove('quick-added'), 700);
+  setTimeout(() => { input.classList.remove('quick-added'); input.focus(); }, 700);
 }
 
 // ════════════════════════════════════════
@@ -5847,7 +6042,7 @@ function renderDayPanel(events){
     return `<div class="event-item ${e.gcal?'gcal-event':''}" style="border-inline-start-color:${color}">
       <div class="event-body">
         <div class="event-title">${e.gcal?'<span class="g-badge">G</span>':''}${esc(e.title)}</div>
-        <div class="event-meta">${e.time?'🕐 '+e.time:t('allDay')}${e.gcal?' '+t('gcalSource'):''}</div>
+        <div class="event-meta">${e.time?'🕐 '+e.time:t('allDay')}${e.location?' · 📍 '+esc(e.location):''}${e.gcal?' '+t('gcalSource'):''}</div>
       </div>
       ${personLabel?`<span class="event-person-chip" style="background:${color}22;color:${color}">${personLabel}</span>`:''}
       ${canDel?`<button class="del-btn" onclick="deleteEvent(${e.id},'${e.gcalId||''}')">${_ico.x}</button>`:''}</div>`;
@@ -5859,10 +6054,11 @@ async function addEvent(){
   const title=el('newEventTitle').value.trim(),date=el('newEventDate').value;
   if(!title||!date)return;
   const person = _eventPersons.length===1&&_eventPersons[0]==='All' ? 'All' : _eventPersons;
-  const ev={id:Date.now(),title,date,time:el('newEventTime').value,person};
+  const location=el('newEventLocation')?.value.trim()||'';
+  const ev={id:Date.now(),title,date,time:el('newEventTime').value,person,...(location&&{location})};
   const syncGcal=gcalConnected()&&isParent()&&el('gcalSyncCheck').checked;
   if(syncGcal){const gcalId=await gcalCreateEvent(ev);if(gcalId)ev.gcalId=gcalId;}
-  S.events.push(ev);el('newEventTitle').value='';el('newEventTime').value='';
+  S.events.push(ev);el('newEventTitle').value='';el('newEventTime').value='';if(el('newEventLocation'))el('newEventLocation').value='';
   _eventPersons=['All']; renderEventPersonPicker();
   S.calSelected=date;const d2=new Date(date+'T00:00:00');S.calYear=d2.getFullYear();S.calMonth=d2.getMonth();
   save();if(syncGcal)await fetchGCalEvents();else renderCalendar();
@@ -5996,6 +6192,20 @@ function renderTabBar() {
     sc.querySelector('.tab.active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
     updateTabArrows();
   });
+}
+
+function navToCalendarDate(dateStr, src, kid) {
+  const [yr, mo] = dateStr.split('-').map(Number);
+  S.calYear = yr;
+  S.calMonth = mo - 1;
+  S.calSelected = dateStr;
+  if (src === 'class' && kid) {
+    _calClassEventsOn[kid] = true;  // ensure kid's class events toggle is on
+  } else {
+    _calClassOnly = false;           // ensure personal events aren't hidden
+  }
+  switchTab('calendar');
+  renderCalendar();
 }
 
 function switchTab(tab) {
