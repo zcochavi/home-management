@@ -4880,7 +4880,7 @@ function _scrollToTop() {
 function _updateScrollTopBtn() {
   const btn = el('scrollTopBtn');
   if (!btn) return;
-  const show = _scrollY() > 80 && _grocerySection === 'pool' && S.tab === 'grocery';
+  const show = _scrollY() > 80 && (S.tab === 'chores' || (_grocerySection === 'pool' && S.tab === 'grocery'));
   btn.classList.toggle('visible', show);
 }
 window.addEventListener('scroll', _updateScrollTopBtn, { passive: true });
