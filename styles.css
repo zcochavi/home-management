@@ -680,7 +680,7 @@ body {
 .chore-dot-med  { background: #f59e0b; }
 .chore-dot-low  { background: #86efac; }
 .chore-pri-label { font-size: 11px; font-weight: 500; color: var(--gray-400); }
-@media (hover: none) { .chore-3dot, .pool-3dot { display: none !important; } }
+@media (hover: none), (pointer: coarse) { .chore-3dot, .pool-3dot { display: none !important; } }
 .chore-3dot { flex-shrink: 0; position: relative; display: flex; align-items: flex-start; padding-top: 2px; }
 .chore-3dot-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; background: none; cursor: pointer; color: var(--gray-400); border-radius: 6px; transition: background var(--t-fast), color var(--t-fast); flex-shrink: 0; }
 .chore-3dot-btn:hover { background: var(--gray-100); color: var(--gray-600); }
