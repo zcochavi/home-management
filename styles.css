@@ -842,7 +842,7 @@ body {
 
 .pool-item { display: flex; align-items: stretch; padding: 0; background: var(--gray-50); border-radius: 14px; margin-bottom: 6px; transition: background var(--t-fast); position: relative; overflow: hidden; }
 .pool-slide { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; padding: 10px 12px; transition: transform 0.22s ease; background: inherit; border-radius: inherit; position: relative; z-index: 1; }
-.pool-reveal-zone { position: absolute; top: 0; left: 0; bottom: 0; width: 120px; display: flex; overflow: hidden; border-radius: var(--r-md) 0 0 var(--r-md); }
+.pool-reveal-zone { position: absolute; top: 0; left: 0; bottom: 0; width: 90px; display: flex; overflow: hidden; border-radius: var(--r-md) 0 0 var(--r-md); }
 .pool-3dot { flex-shrink: 0; display: flex; align-items: center; }
 @media (hover: hover) and (pointer: fine) { .pool-item:hover { background: var(--primary-50); } }
 .pool-item-name { flex: 1; font-size: 14px; font-weight: 600; color: var(--gray-700); min-width: 0; }

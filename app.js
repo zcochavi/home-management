@@ -4627,7 +4627,7 @@ function _pool3dotClose() {
 }
 function _initPoolSwipes() {
   if (!isParent()) return;
-  const REVEAL = 120;
+  const REVEAL = 90;
   document.querySelectorAll('.pool-item[data-pool-id]').forEach(row => {
     const slide = row.querySelector('.pool-slide');
     if (!slide) return;
@@ -4923,8 +4923,9 @@ function renderPool() {
     if (inCartAlready) {
       return `<div class="pool-item pool-item-in-cart" data-pool-id="${p.id}">
         ${ed?`<div class="pool-reveal-zone">
-          <button class="chore-action-btn chore-action-delete" onclick="deletePoolItem(${p.id})">מחק</button>
-          <button class="chore-action-btn chore-action-edit" onclick="startEditPoolItem(${p.id})">ערוך</button>
+          <button class="chore-action-btn chore-action-delete" onclick="deletePoolItem(${p.id})">${_ico.trash}</button>
+          <div class="chore-action-sep"></div>
+          <button class="chore-action-btn chore-action-edit" onclick="startEditPoolItem(${p.id})">${_ico.edit}</button>
         </div>`:''}
         <div class="pool-slide">
           <span class="pool-in-cart-check">✓</span>
@@ -4936,8 +4937,9 @@ function renderPool() {
     if (inShoppingList) {
       return `<div class="pool-item pool-item-in-list${isActive?' qty-active':''}" data-pool-id="${p.id}">
         ${ed?`<div class="pool-reveal-zone">
-          <button class="chore-action-btn chore-action-delete" onclick="deletePoolItem(${p.id})">מחק</button>
-          <button class="chore-action-btn chore-action-edit" onclick="startEditPoolItem(${p.id})">ערוך</button>
+          <button class="chore-action-btn chore-action-delete" onclick="deletePoolItem(${p.id})">${_ico.trash}</button>
+          <div class="chore-action-sep"></div>
+          <button class="chore-action-btn chore-action-edit" onclick="startEditPoolItem(${p.id})">${_ico.edit}</button>
         </div>`:''}
         <div class="pool-slide pool-clickable" onclick="addPoolItemNow(${p.id})">
           <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
