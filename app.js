@@ -945,16 +945,25 @@ function renderNotifBanners(undismissed) {
     div.className = 'notif-banner notif-banner-in';
     div.id = 'notifBanner_' + n.id;
     div.style.cssText = `background:${bg};border-color:${border};color:${color}`;
-    const requestActions = isRequest && isAdmin()
-      ? (n.reqId
-          ? `<div class="notif-banner-actions">
+    let requestActions = '';
+    if (isRequest && isAdmin()) {
+      if (!n.reqId) {
+        requestActions = `<div class="notif-banner-actions"><button class="notif-banner-act approve" onclick="closeMenu();openPendingPanel()" title="פתח בקשות">📋</button></div>`;
+      } else {
+        let evExpired = false;
+        if (n.type === 'event_pending') {
+          const [cid, pendingId] = n.reqId.split('|');
+          const cachedEv = _commCache[cid]?.pendingEvents?.find(e => e.id === pendingId);
+          evExpired = !!(cachedEv && !isEventUpcoming(cachedEv.date));
+        }
+        requestActions = evExpired
+          ? `<div class="notif-banner-actions"><span style="font-size:11px;color:var(--gray-400);font-weight:600">פג תוקף</span></div>`
+          : `<div class="notif-banner-actions">
                <button class="notif-banner-act approve" onclick="quickApproveReq('${n.id}','${n.type}','${n.reqId}',this)" title="אישור">✓</button>
                <button class="notif-banner-act deny"    onclick="quickDenyReq('${n.id}','${n.type}','${n.reqId}',this)"    title="דחייה">✗</button>
-             </div>`
-          : `<div class="notif-banner-actions">
-               <button class="notif-banner-act approve" onclick="closeMenu();openPendingPanel()" title="פתח בקשות">📋</button>
-             </div>`)
-      : '';
+             </div>`;
+      }
+    }
     div.innerHTML = `<span class="notif-banner-icon">${icon}</span>
       <span class="notif-banner-text">${esc(n.message)}</span>
       ${requestActions}
@@ -998,6 +1007,11 @@ async function quickApproveReq(notifId, type, reqId, btn) {
 }
 
 async function quickDenyReq(notifId, type, reqId, btn) {
+  if (type === 'event_pending') {
+    const [cid, pendingId] = reqId.split('|');
+    const cachedEv = _commCache[cid]?.pendingEvents?.find(e => e.id === pendingId);
+    if (cachedEv && !isEventUpcoming(cachedEv.date)) return; // expired — silently ignore
+  }
   if (!await _confirm('לדחות את הבקשה?', { danger: true, okLabel: 'דחה' })) return;
   btn.closest('.notif-banner-actions').querySelectorAll('button').forEach(b => b.disabled = true);
   try {
@@ -1065,22 +1079,22 @@ async function renderPendingPanel() {
     const committeeClasses = familyData?.committeeClasses || [];
     const allPending = pendingSnap.docs.map(d => ({ id: d.id, classId: d.ref.parent.parent.id, ...d.data() }));
     const pending = admin ? allPending : allPending.filter(ev => isCommitteeFor(ev.classId));
-    el('ppEventsList').innerHTML = pending.length
-      ? pending.map(ev => {
-          const expired = ev.date && !isEventUpcoming(ev.date);
-          return `<div class="pending-event-row">
-            <div class="pending-event-info">
-              <span class="pending-event-title">${esc(ev.title)}${expired ? '<span class="pending-expired-tag">פג תוקף</span>' : ''}</span>
-              <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + fmtEventDate(ev.date) : ''} · ${esc(classLabelFromId(ev.classId))}</span>
-            </div>
-            <div class="pending-event-actions">
-              ${expired
-                ? `<span style="font-size:11px;color:var(--gray-400);font-weight:600">לא ניתן לאשר</span>`
-                : `<button class="pending-approve-btn" onclick="approveEvent('${ev.classId}','${ev.id}')">${t('pendingApprove')}</button>`}
-              <button class="pending-reject-btn" onclick="rejectEvent('${ev.classId}','${ev.id}')">${t('pendingReject')}</button>
-            </div>
-          </div>`;
-        }).join('')
+    const activePending  = pending.filter(ev => !ev.date || isEventUpcoming(ev.date));
+    const expiredPending = pending.filter(ev => ev.date && !isEventUpcoming(ev.date));
+
+    const pendingRowHtml = ev => `<div class="pending-event-row">
+      <div class="pending-event-info">
+        <span class="pending-event-title">${esc(ev.title)}</span>
+        <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + fmtEventDate(ev.date) : ''} · ${esc(classLabelFromId(ev.classId))}</span>
+      </div>
+      <div class="pending-event-actions">
+        <button class="pending-approve-btn" onclick="approveEvent('${ev.classId}','${ev.id}')">${t('pendingApprove')}</button>
+        <button class="pending-reject-btn"  onclick="rejectEvent('${ev.classId}','${ev.id}')">${t('pendingReject')}</button>
+      </div>
+    </div>`;
+
+    el('ppEventsList').innerHTML = activePending.length
+      ? activePending.map(pendingRowHtml).join('')
       : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין בקשות ממתינות</div>';
 
     // Committee applications
@@ -1150,7 +1164,7 @@ async function renderPendingPanel() {
 
     // Update badge
     const adminCount = admin ? ((appsSnap?.docs.length || 0) + (schoolsSnap?.docs.length || 0)) : 0;
-    const total = pending.length + adminCount;
+    const total = activePending.length + adminCount;
     const badge = el('pendingReqBadge');
     if (badge) { badge.textContent = total || ''; badge.classList.toggle('hidden', !total); }
   } catch(e) { console.error('renderPendingPanel:', e); }
@@ -1167,9 +1181,13 @@ async function _fetchPendingBadge() {
       );
     }
     const [evSnap, appsSnap, schoolsSnap] = await Promise.all(fetches);
+    const activeDocs = evSnap.docs.filter(d => {
+      const data = d.data();
+      return !data.date || isEventUpcoming(data.date);
+    });
     const evCount = admin
-      ? evSnap.size
-      : evSnap.docs.filter(d => isCommitteeFor(d.ref.parent.parent.id)).length;
+      ? activeDocs.length
+      : activeDocs.filter(d => isCommitteeFor(d.ref.parent.parent.id)).length;
     const total = evCount + (appsSnap?.size || 0) + (schoolsSnap?.size || 0);
     const badge = el('pendingReqBadge');
     if (badge) { badge.textContent = total || ''; badge.classList.toggle('hidden', !total); }
@@ -2769,26 +2787,26 @@ function renderCommCard(kid) {
       ? `<div class="post-feed">${upcoming.map(ev=>renderPostCard(ev,cid)).join('')}</div>`
       : `<div class="post-feed-empty">${t('commNoEvents')}</div>`}
 
-    ${isCommitteeFor(cid) && cache.pendingEvents?.length ? `
-    <div class="comm-section-label" style="margin-top:16px;display:flex;align-items:center;gap:8px">
-      <span>${t('pendingSection')}</span>
-      <span class="comm-count">${cache.pendingEvents.length}</span>
-    </div>
-    ${cache.pendingEvents.map(ev => {
-        const expired = ev.date && !isEventUpcoming(ev.date);
-        return `<div class="pending-event-row">
-        <div class="pending-event-info">
-          <span class="pending-event-title">${esc(ev.title)}${expired ? '<span class="pending-expired-tag">פג תוקף</span>' : ''}</span>
-          <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + fmtEventDate(ev.date) : ''}</span>
+    ${(() => {
+      if (!isCommitteeFor(cid) || !cache.pendingEvents?.length) return '';
+      const activePend  = cache.pendingEvents.filter(ev => !ev.date || isEventUpcoming(ev.date));
+      const expiredPend = cache.pendingEvents.filter(ev => ev.date && !isEventUpcoming(ev.date));
+      return activePend.length ? `
+        <div class="comm-section-label" style="margin-top:16px;display:flex;align-items:center;gap:8px">
+          <span>${t('pendingSection')}</span>
+          <span class="comm-count">${activePend.length}</span>
         </div>
-        <div class="pending-event-actions">
-          ${expired
-            ? `<span style="font-size:11px;color:var(--gray-400);font-weight:600">לא ניתן לאשר</span>`
-            : `<button class="pending-approve-btn" onclick="approveEvent('${cid}','${ev.id}')">${t('pendingApprove')}</button>`}
-          <button class="pending-reject-btn" onclick="rejectEvent('${cid}','${ev.id}')">${t('pendingReject')}</button>
-        </div>
-      </div>`;
-      }).join('')}` : ''}
+        ${activePend.map(ev => `<div class="pending-event-row">
+          <div class="pending-event-info">
+            <span class="pending-event-title">${esc(ev.title)}</span>
+            <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + fmtEventDate(ev.date) : ''}</span>
+          </div>
+          <div class="pending-event-actions">
+            <button class="pending-approve-btn" onclick="approveEvent('${cid}','${ev.id}')">${t('pendingApprove')}</button>
+            <button class="pending-reject-btn"  onclick="rejectEvent('${cid}','${ev.id}')">${t('pendingReject')}</button>
+          </div>
+        </div>`).join('')}` : '';
+    })()}
 
     ${(() => {
   const apps = cache.applications || [];
@@ -3246,12 +3264,36 @@ async function renderAdminPanel(showLog = true) {
   }
   el('adminLogList').innerHTML = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
   try {
-    const logSnap = await fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get();
+    const [logSnap, expiredSnap] = await Promise.all([
+      fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get(),
+      fbDb.collectionGroup('pendingEvents').get(),
+    ]);
 
-    // Log
-    const log = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-    el('adminLogList').innerHTML = log.length
-      ? log.map(entry => {
+    // Resolved entries from adminLog
+    const log = logSnap.docs.map(d => ({ _type: 'log', ...d.data() }));
+
+    // Expired pending events (not yet approved/denied, but date has passed)
+    const expiredPending = expiredSnap.docs
+      .map(d => ({ _type: 'expired', id: d.id, classId: d.ref.parent.parent.id, ...d.data() }))
+      .filter(ev => ev.date && !isEventUpcoming(ev.date));
+
+    // Merge and sort — expired entries go by their event date, log entries by actionAt
+    const sortKey = e => e._type === 'log'
+      ? (e.actionAt?.toDate?.() || new Date(0)).getTime()
+      : new Date(e.date || 0).getTime();
+    const combined = [...log, ...expiredPending].sort((a, b) => sortKey(b) - sortKey(a));
+
+    el('adminLogList').innerHTML = combined.length
+      ? combined.map(entry => {
+          if (entry._type === 'expired') {
+            return `<div class="admin-log-row" style="opacity:0.6">
+              <div class="admin-log-title">
+                <span class="admin-log-badge" style="background:#f3f4f6;color:#6b7280">⏱ פג תוקף</span>${esc(entry.title||'')}
+              </div>
+              <div class="admin-log-meta">הוגש על ידי: ${esc(personFullName(entry.postedBy)||'?')} · תאריך: ${entry.date ? fmtEventDate(entry.date) : '?'}</div>
+              <div class="admin-log-meta">כיתה: ${esc(classLabelFromId(entry.classId||''))}</div>
+            </div>`;
+          }
           const approved = entry.action === 'approved';
           const dt = entry.actionAt?.toDate ? entry.actionAt.toDate().toLocaleString('he-IL') : '';
           return `<div class="admin-log-row">
@@ -3694,18 +3736,19 @@ function openMenu() {
   ].filter(Boolean).join('');
 
   const secondaryItems = [
-    _drawerItem('lang',    isHe ? 'Switch to English' : 'עבור לעברית',   `closeMenu();toggleLang()`),
     !S.lockedMember ? _drawerItem('switch', isHe ? 'החלף משתמש' : 'Switch member', `closeMenu();switchUser()`) : '',
     _drawerItem('install', isHe ? 'הוסף לדף הבית' : 'Add to home screen', `closeMenu();installApp()`),
-    isAdmin() ? _drawerItem('admin', isHe ? 'הגדרות מערכת' : 'System settings', `closeMenu();openAdminPanel(false)`,
-      { badge: pendingCount > 0 ? pendingCount : null }) : '',
+    isAdmin() ? _drawerItem('admin', isHe ? 'הגדרות מערכת' : 'System settings', `closeMenu();openAdminPanel(false)`) : '',
   ].filter(Boolean).join('');
 
   const signoutItem = _drawerItem('signout', isHe ? 'יציאה מהחשבון' : 'Sign out', `closeMenu();authSignOut()`, { danger: true });
 
   el('menuDropdown').innerHTML = `
     <div class="drawer-user-section">
-      <div class="drawer-avatar">${getAvatar(S.user) || getEmoji(S.user)}</div>
+      <div class="drawer-user-top">
+        <div class="drawer-avatar">${getAvatar(S.user) || getEmoji(S.user)}</div>
+        <button class="drawer-lang-btn" onclick="closeMenu();toggleLang()" title="${isHe ? 'Switch to English' : 'עבור לעברית'}">${DRAWER_ICONS.lang}</button>
+      </div>
       <div class="drawer-user-name">${esc(S.user)}</div>
       <div class="drawer-user-sub">${esc(familyName)}</div>
     </div>
@@ -4921,16 +4964,17 @@ function renderPool() {
             ? `${cats.find(c=>c.name===_poolCatFilter).emoji} ${esc(_poolCatFilter)}`
             : _poolCatFilter === '__other__' ? 'אחר' : '')
         : '';
+      const clearX = `<span class="cat-chip-x" onclick="pickPoolCat(null);event.stopPropagation()">×</span>`;
       const toggleLabel = activeLabel
-        ? `<span class="cat-chips-active-label">${activeLabel}</span>`
+        ? `<span class="cat-chips-active-label">${activeLabel}${clearX}</span>`
         : '';
       const chevron = _poolChipsOpen ? '▴' : '▾';
       const allChip = `<button class="cat-chip${!_poolCatFilter?' active':''}" onclick="pickPoolCat(null)">הכל</button>`;
       const catChips = chipCats.map(c =>
-        `<button class="cat-chip${_poolCatFilter===c.name?' active':''}" onclick="pickPoolCat('${esc(c.name)}')">${c.emoji} ${esc(c.name)}</button>`
+        `<button class="cat-chip${_poolCatFilter===c.name?' active':''}" onclick="pickPoolCat('${esc(c.name)}')">${c.emoji} ${esc(c.name)}${_poolCatFilter===c.name ? clearX : ''}</button>`
       ).join('');
       const orphanChip = hasOrphans
-        ? `<button class="cat-chip${_poolCatFilter==='__other__'?' active':''}" onclick="pickPoolCat('__other__')">אחר</button>`
+        ? `<button class="cat-chip${_poolCatFilter==='__other__'?' active':''}" onclick="pickPoolCat('__other__')">אחר${_poolCatFilter==='__other__' ? clearX : ''}</button>`
         : '';
       const chipsRow = _poolChipsOpen
         ? `<div class="cat-chips">${allChip}${catChips}${orphanChip}</div>`
@@ -5915,17 +5959,21 @@ function switchTab(tab) {
   const enterClass = newIdx >= oldIdx ? 'tab-enter-right' : 'tab-enter-left';
 
   S.tab = tab;
-  window.scrollTo(0, 0); // reset scroll before layout changes to prevent jump
+  // Synchronous scroll reset — window.scrollTo is async on mobile Safari
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
   el('tabBar').querySelectorAll('.tab').forEach(e =>
     e.classList.toggle('active', e.dataset.tab === tab));
   document.querySelectorAll('.tab-content').forEach(e =>
     e.classList.remove('active', 'tab-enter-right', 'tab-enter-left'));
   const newContent = el('tab-' + tab);
   if (newContent) {
+    // Keep new content invisible while display:block takes effect (prevents
+    // a one-frame flash at the final position before the animation's from-keyframe kicks in)
+    newContent.style.opacity = '0';
     newContent.classList.add('active');
-    // rAF ensures display:block is committed before animation starts,
-    // so the browser captures the correct 'from' keyframe
     requestAnimationFrame(() => {
+      newContent.style.opacity = '';   // hand off to the animation's from { opacity:0 }
       newContent.classList.add(enterClass);
       setTimeout(() => newContent.classList.remove('tab-enter-right', 'tab-enter-left'), 220);
     });
@@ -6807,13 +6855,11 @@ function renderHomeEditor() {
   const inactive = order.filter(id =>  hidden.includes(id) && visible.find(s => s.id === id));
   el('homeEditorActive').innerHTML = active.length ? active.map((id, i) => {
     const s = HOME_SECTIONS.find(x => x.id === id);
-    const first = i === 0, last = i === active.length - 1;
-    return `<div class="tab-ed-row">
+    return `<div class="tab-ed-row" data-drag-idx="${i}">
+      <span class="tab-ed-handle" onpointerdown="homeDragDown(event,${i})">⠿</span>
       <span class="tab-ed-icon">${s.icon}</span>
       <span class="tab-ed-label">${_homeSectionLabel(s)}</span>
       <div class="tab-ed-btns">
-        <button class="tab-ed-arrow" onclick="homeSectionMoveUp('${id}')"   ${first?'disabled':''}>↑</button>
-        <button class="tab-ed-arrow" onclick="homeSectionMoveDown('${id}')" ${last ?'disabled':''}>↓</button>
         <button class="tab-ed-remove" onclick="homeSectionHide('${id}')">×</button>
       </div></div>`;
   }).join('') : `<div style="padding:12px 0;color:#a0aec0;font-size:13px;font-weight:700;text-align:center">הכל מוסתר</div>`;
@@ -6826,18 +6872,6 @@ function renderHomeEditor() {
   }).join('') : `<div style="padding:12px 0;color:#a0aec0;font-size:13px;font-weight:700;text-align:center">כל הסקציות מוצגות ✓</div>`;
 }
 
-function homeSectionMoveUp(id) {
-  const p = getHomePrefs(); const i = p.order.indexOf(id);
-  if (i <= 0) return;
-  [p.order[i-1], p.order[i]] = [p.order[i], p.order[i-1]];
-  saveHomePrefs(p); renderHomeEditor();
-}
-function homeSectionMoveDown(id) {
-  const p = getHomePrefs(); const i = p.order.indexOf(id);
-  if (i < 0 || i >= p.order.length - 1) return;
-  [p.order[i], p.order[i+1]] = [p.order[i+1], p.order[i]];
-  saveHomePrefs(p); renderHomeEditor();
-}
 function homeSectionHide(id) {
   const p = getHomePrefs();
   if (!p.hidden.includes(id)) p.hidden.push(id);
@@ -6847,6 +6881,85 @@ function homeSectionShow(id) {
   const p = getHomePrefs();
   p.hidden = p.hidden.filter(x => x !== id);
   saveHomePrefs(p); renderHomeEditor();
+}
+
+// ────────────────────────────────────────
+//  Drag-and-drop reorder — home editor
+// ────────────────────────────────────────
+const _homeDrag = { on:false, timer:null, idx:-1, hoverIdx:-1, y0:0, rowH:48, handle:null };
+
+function homeDragDown(e, idx) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  e.stopPropagation();
+  const handle = e.currentTarget;
+  handle.setPointerCapture(e.pointerId);
+  _homeDrag.handle = handle;
+  handle.addEventListener('pointermove',   homeDragMove);
+  handle.addEventListener('pointerup',     homeDragUp);
+  handle.addEventListener('pointercancel', homeDragUp);
+  _homeDrag.y0 = e.clientY;
+  _homeDrag.timer = setTimeout(() => {
+    _homeDrag.on = true;
+    _homeDrag.idx = idx;
+    _homeDrag.hoverIdx = idx;
+    const rows = [...el('homeEditorActive').querySelectorAll('.tab-ed-row')];
+    _homeDrag.rowH = rows[0]?.offsetHeight || 48;
+    rows[idx]?.classList.add('tab-ed-dragging');
+    if (navigator.vibrate) navigator.vibrate(40);
+  }, 350);
+}
+
+function homeDragMove(e) {
+  const y = e.clientY;
+  if (_homeDrag.timer && Math.abs(y - _homeDrag.y0) > 15) {
+    clearTimeout(_homeDrag.timer); _homeDrag.timer = null;
+  }
+  if (!_homeDrag.on) return;
+  e.preventDefault();
+  const dy = y - _homeDrag.y0;
+  const rows = [...el('homeEditorActive').querySelectorAll('.tab-ed-row')];
+  rows[_homeDrag.idx].style.transform = `translateY(${dy}px)`;
+  rows[_homeDrag.idx].style.zIndex    = '10';
+  const raw = _homeDrag.idx + dy / _homeDrag.rowH;
+  _homeDrag.hoverIdx = Math.max(0, Math.min(rows.length - 1, Math.round(raw)));
+  rows.forEach((r, i) => {
+    if (i === _homeDrag.idx) return;
+    let shift = 0;
+    if (_homeDrag.hoverIdx > _homeDrag.idx && i > _homeDrag.idx && i <= _homeDrag.hoverIdx) shift = -_homeDrag.rowH;
+    if (_homeDrag.hoverIdx < _homeDrag.idx && i >= _homeDrag.hoverIdx && i < _homeDrag.idx) shift = _homeDrag.rowH;
+    r.style.transform = shift ? `translateY(${shift}px)` : '';
+  });
+}
+
+function homeDragUp(e) {
+  if (_homeDrag.timer) { clearTimeout(_homeDrag.timer); _homeDrag.timer = null; }
+  if (_homeDrag.handle) {
+    _homeDrag.handle.removeEventListener('pointermove',   homeDragMove);
+    _homeDrag.handle.removeEventListener('pointerup',     homeDragUp);
+    _homeDrag.handle.removeEventListener('pointercancel', homeDragUp);
+    _homeDrag.handle = null;
+  }
+  if (!_homeDrag.on) { _homeDrag.on = false; return; }
+  _homeDrag.on = false;
+  el('homeEditorActive').querySelectorAll('.tab-ed-row').forEach(r => {
+    r.style.transform = r.style.zIndex = '';
+    r.classList.remove('tab-ed-dragging');
+  });
+  if (_homeDrag.hoverIdx >= 0 && _homeDrag.hoverIdx !== _homeDrag.idx) {
+    const p = getHomePrefs();
+    const vis = HOME_SECTIONS.filter(s => s.id !== 'stars' || getKids().length > 0);
+    const activeIds = p.order.filter(id => !p.hidden.includes(id) && vis.find(s => s.id === id));
+    const [moved] = activeIds.splice(_homeDrag.idx, 1);
+    activeIds.splice(_homeDrag.hoverIdx, 0, moved);
+    let ai = 0;
+    p.order = p.order.map(id =>
+      (!p.hidden.includes(id) && vis.find(s => s.id === id)) ? activeIds[ai++] : id
+    );
+    saveHomePrefs(p);
+    renderHome();
+  }
+  _homeDrag.idx = _homeDrag.hoverIdx = -1;
+  renderHomeEditor();
 }
 
 function setFilter(name){
