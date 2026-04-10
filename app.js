@@ -4988,27 +4988,32 @@ function renderPool() {
     if (chipCount > 1) {
       const hasFilter = _poolCatFilter.size > 0;
       const clearX = (name) => `<span class="cat-chip-x" onclick="pickPoolCat('${name}');event.stopPropagation()">×</span>`;
-      const toggleLabel = _poolCatFilter.size === 1
-        ? (() => { const n = [..._poolCatFilter][0]; const c = cats.find(x=>x.name===n); return ` · ${c ? c.emoji+' '+esc(n) : n==='__other__'?'אחר':esc(n)}`; })()
-        : _poolCatFilter.size > 1 ? ` · ${_poolCatFilter.size}` : '';
       const chevron = _poolChipsOpen ? '▴' : '▾';
+      // Active chips always shown inline next to toggle button
+      const activeChips = [..._poolCatFilter].map(name => {
+        const c = cats.find(x => x.name === name);
+        const label = c ? `${c.emoji} ${esc(name)}` : name === '__other__' ? 'אחר' : esc(name);
+        return `<button class="cat-chip active" onclick="pickPoolCat('${esc(name)}')">${label}${clearX(name)}</button>`;
+      }).join('');
       const allChip = `<button class="cat-chip${!hasFilter?' active':''}" onclick="pickPoolCat(null)">הכל</button>`;
       const catChips = chipCats.map(c => {
         const active = _poolCatFilter.has(c.name);
-        return `<button class="cat-chip${active?' active':''}" onclick="pickPoolCat('${esc(c.name)}')">${c.emoji} ${esc(c.name)}${active ? clearX(c.name) : ''}</button>`;
+        return `<button class="cat-chip${active?' active':''}" onclick="pickPoolCat('${esc(c.name)}')">${c.emoji} ${esc(c.name)}</button>`;
       }).join('');
       const orphanChip = hasOrphans
-        ? (() => { const active = _poolCatFilter.has('__other__'); return `<button class="cat-chip${active?' active':''}" onclick="pickPoolCat('__other__')">אחר${active ? clearX('__other__') : ''}</button>`; })()
+        ? (() => { const active = _poolCatFilter.has('__other__'); return `<button class="cat-chip${active?' active':''}" onclick="pickPoolCat('__other__')">אחר</button>`; })()
         : '';
       const chipsRow = _poolChipsOpen
         ? `<div class="cat-chips">${allChip}${catChips}${orphanChip}</div>`
         : '';
       chipsEl.innerHTML = `
-        <button class="cat-chips-toggle${hasFilter?' has-filter':''}" onclick="togglePoolChips()">
-          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="4" x2="14" y2="4"/><line x1="4" y1="8" x2="12" y2="8"/><line x1="6" y1="12" x2="10" y2="12"/></svg>
-          סינון${toggleLabel}
-          <span class="cat-chips-chevron">${chevron}</span>
-        </button>
+        <div class="cat-chips-bar">
+          <button class="cat-chips-toggle${hasFilter?' has-filter':''}" onclick="togglePoolChips()">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="4" x2="14" y2="4"/><line x1="4" y1="8" x2="12" y2="8"/><line x1="6" y1="12" x2="10" y2="12"/></svg>
+            סינון
+            <span class="cat-chips-chevron">${chevron}</span>
+          </button>${activeChips}
+        </div>
         ${chipsRow}`;
     } else {
       chipsEl.innerHTML = '';
