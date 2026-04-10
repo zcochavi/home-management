@@ -6900,11 +6900,14 @@ function renderHomeEditor() {
   const inactive = order.filter(id =>  hidden.includes(id) && visible.find(s => s.id === id));
   el('homeEditorActive').innerHTML = active.length ? active.map((id, i) => {
     const s = HOME_SECTIONS.find(x => x.id === id);
+    const first = i === 0, last = i === active.length - 1;
     return `<div class="tab-ed-row" data-drag-idx="${i}">
       <span class="tab-ed-handle" onpointerdown="homeDragDown(event,${i})">⠿</span>
       <span class="tab-ed-icon">${s.icon}</span>
       <span class="tab-ed-label">${_homeSectionLabel(s)}</span>
       <div class="tab-ed-btns">
+        <button class="tab-ed-arrow" onclick="homeSectionMoveUp('${id}')"   ${first?'disabled':''}>↑</button>
+        <button class="tab-ed-arrow" onclick="homeSectionMoveDown('${id}')" ${last ?'disabled':''}>↓</button>
         <button class="tab-ed-remove" onclick="homeSectionHide('${id}')">×</button>
       </div></div>`;
   }).join('') : `<div style="padding:12px 0;color:#a0aec0;font-size:13px;font-weight:700;text-align:center">הכל מוסתר</div>`;
@@ -6917,6 +6920,28 @@ function renderHomeEditor() {
   }).join('') : `<div style="padding:12px 0;color:#a0aec0;font-size:13px;font-weight:700;text-align:center">כל הסקציות מוצגות ✓</div>`;
 }
 
+function homeSectionMoveUp(id) {
+  const p = getHomePrefs();
+  const vis = HOME_SECTIONS.filter(s => s.id !== 'stars' || getKids().length > 0);
+  const activeIds = p.order.filter(i => !p.hidden.includes(i) && vis.find(s => s.id === i));
+  const idx = activeIds.indexOf(id);
+  if (idx <= 0) return;
+  [activeIds[idx-1], activeIds[idx]] = [activeIds[idx], activeIds[idx-1]];
+  let ai = 0;
+  p.order = p.order.map(i => (!p.hidden.includes(i) && vis.find(s => s.id === i)) ? activeIds[ai++] : i);
+  saveHomePrefs(p); renderHomeEditor(); renderHome();
+}
+function homeSectionMoveDown(id) {
+  const p = getHomePrefs();
+  const vis = HOME_SECTIONS.filter(s => s.id !== 'stars' || getKids().length > 0);
+  const activeIds = p.order.filter(i => !p.hidden.includes(i) && vis.find(s => s.id === i));
+  const idx = activeIds.indexOf(id);
+  if (idx < 0 || idx >= activeIds.length - 1) return;
+  [activeIds[idx], activeIds[idx+1]] = [activeIds[idx+1], activeIds[idx]];
+  let ai = 0;
+  p.order = p.order.map(i => (!p.hidden.includes(i) && vis.find(s => s.id === i)) ? activeIds[ai++] : i);
+  saveHomePrefs(p); renderHomeEditor(); renderHome();
+}
 function homeSectionHide(id) {
   const p = getHomePrefs();
   if (!p.hidden.includes(id)) p.hidden.push(id);
