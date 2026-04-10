@@ -4630,15 +4630,19 @@ function _initPoolSwipes() {
   document.querySelectorAll('.pool-item[data-pool-id]').forEach(row => {
     const slide = row.querySelector('.pool-slide');
     if (!slide) return;
-    let startX = 0, curX = 0, active = false, isOpen = false;
+    let startX = 0, startY = 0, curX = 0, active = false, locked = false, isOpen = false;
     slide.addEventListener('touchstart', e => {
-      startX = e.touches[0].clientX; active = true; slide.style.transition = 'none';
+      startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+      active = true; locked = false; slide.style.transition = 'none';
     }, { passive: true });
     slide.addEventListener('touchmove', e => {
       if (!active) return;
-      // RTL: swipe left (negative dx) reveals zone on the left
       const dx = e.touches[0].clientX - startX;
-      // Positive = swipe right (close), negative = swipe left (open)
+      const dy = e.touches[0].clientY - startY;
+      if (!locked) {
+        if (Math.abs(dy) > Math.abs(dx)) { active = false; return; } // vertical scroll wins
+        locked = true;
+      }
       const raw = isOpen ? dx + REVEAL : dx;
       curX = Math.max(0, Math.min(REVEAL, raw));
       slide.style.transform = `translateX(${curX}px)`;
@@ -4687,13 +4691,19 @@ function _initChoreSwipes() {
   document.querySelectorAll('.chore-card[data-chore-id]').forEach(row => {
     const slide = row.querySelector('.chore-slide');
     if (!slide) return;
-    let startX = 0, curX = 0, active = false, isOpen = false;
+    let startX = 0, startY = 0, curX = 0, active = false, locked = false, isOpen = false;
     slide.addEventListener('touchstart', e => {
-      startX = e.touches[0].clientX; active = true; slide.style.transition = 'none';
+      startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+      active = true; locked = false; slide.style.transition = 'none';
     }, { passive: true });
     slide.addEventListener('touchmove', e => {
       if (!active) return;
       const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      if (!locked) {
+        if (Math.abs(dy) > Math.abs(dx)) { active = false; return; } // vertical scroll wins
+        locked = true;
+      }
       curX = Math.max(0, Math.min(REVEAL, isOpen ? dx + REVEAL : dx));
       slide.style.transform = `translateX(${curX}px)`;
     }, { passive: true });
