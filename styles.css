@@ -692,11 +692,13 @@ body {
 .chore-edit-actions { display: flex; gap: 8px; margin-top: 8px; }
 .chore-edit-save { border: none; background: var(--primary-500); color: #fff; font-family: inherit; font-size: 12px; font-weight: 700; padding: 5px 14px; border-radius: 8px; cursor: pointer; }
 .chore-edit-cancel { border: none; background: var(--gray-100); color: var(--gray-600); font-family: inherit; font-size: 12px; font-weight: 600; padding: 5px 14px; border-radius: 8px; cursor: pointer; }
-.chore-reveal-zone { position: absolute; top: 0; left: 0; bottom: 0; width: 160px; display: flex; overflow: hidden; border-radius: var(--r-md) 0 0 var(--r-md); }
-.chore-action-btn { flex: 1; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 700; transition: filter var(--t-fast); }
+.chore-reveal-zone { position: absolute; top: 0; left: 0; bottom: 0; width: 110px; display: flex; overflow: hidden; border-radius: var(--r-md) 0 0 var(--r-md); }
+.chore-action-btn { flex: 1; display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; transition: filter var(--t-fast); }
+.chore-action-btn svg { width: 18px; height: 18px; }
 .chore-action-btn:active { filter: brightness(0.92); }
 .chore-action-delete { background: #FEE2E2; color: #DC2626; }
 .chore-action-edit    { background: #EEF2FF; color: #4B5EAA; }
+.chore-action-sep { width: 1px; background: rgba(0,0,0,0.08); flex-shrink: 0; }
 
 /* ── Quick-add chore form ─────────────────── */
 .chore-quick-add { padding: 0; overflow: hidden; margin-top: 12px; }

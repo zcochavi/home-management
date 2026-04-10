@@ -4308,8 +4308,9 @@ function renderChores() {
     const threeDotSVG = `<svg viewBox="0 0 16 16" fill="currentColor" style="width:14px;height:14px;display:block"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>`;
     return `<div class="chore-card" data-chore-id="${c.id}">
       ${isParent()?`<div class="chore-reveal-zone">
-        <button class="chore-action-btn chore-action-delete" onclick="deleteChore(${c.id})">מחק</button>
-        <button class="chore-action-btn chore-action-edit" onclick="startEditChore(${c.id})">ערוך</button>
+        <button class="chore-action-btn chore-action-delete" onclick="deleteChore(${c.id})">${_ico.trash}</button>
+        <div class="chore-action-sep"></div>
+        <button class="chore-action-btn chore-action-edit" onclick="startEditChore(${c.id})">${_ico.edit}</button>
       </div>`:''}
       <div class="chore-slide">
         <div class="check-box chore-check ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
@@ -4687,7 +4688,7 @@ function saveEditChore(id) {
 function cancelEditChore(id) { renderChores(); }
 function _initChoreSwipes() {
   if (!isParent()) return;
-  const REVEAL = 160;
+  const REVEAL = 110;
   document.querySelectorAll('.chore-card[data-chore-id]').forEach(row => {
     const slide = row.querySelector('.chore-slide');
     if (!slide) return;
