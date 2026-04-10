@@ -4793,11 +4793,11 @@ function toggleCatCollapse(el) {
 
 function togglePoolAddForm(forceOpen) {
   const form = el('poolAddForm');
-  const trigger = el('poolAddTrigger');
+  const wrap = el('poolAddWrap');
   if (!form) return;
   const open = forceOpen !== undefined ? forceOpen : form.style.display === 'none';
   form.style.display = open ? '' : 'none';
-  if (trigger) trigger.classList.toggle('active', open);
+  if (wrap) wrap.classList.toggle('active', open);
   if (open) {
     if (_poolLastCat) {
       const sel = el('poolCatSelect');
@@ -5072,7 +5072,7 @@ function addPoolItem() {
   el('poolItemInput').value = '';
   saveGrocery();
   renderPool();
-  togglePoolAddForm(false);
+  setTimeout(() => el('poolItemInput')?.focus(), 30);
 }
 
 function deletePoolItem(id) {

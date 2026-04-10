@@ -778,18 +778,20 @@ body {
 .grocery-subtab { flex: 1; padding: 8px 4px; border: none; border-radius: var(--r-pill); background: transparent; font-family: inherit; font-size: 12px; font-weight: 700; color: var(--gray-500); cursor: pointer; transition: all var(--t-normal); white-space: nowrap; }
 .grocery-subtab.active { background: var(--surface); color: var(--primary-500); box-shadow: 0 2px 8px rgba(108,140,255,0.15); }
 
+.pool-add-wrap { border-radius: var(--r-md); margin-bottom: 8px; transition: background var(--t-fast); }
+.pool-add-wrap.active { background: var(--primary-50); }
 .pool-add-trigger {
   display: flex; align-items: center; gap: 6px;
-  width: 100%; padding: 8px 4px; margin-bottom: 8px;
+  width: 100%; padding: 8px 4px;
   background: none; border: none; border-radius: var(--r-sm);
   font-family: inherit; font-size: 13px; font-weight: 600;
   color: var(--gray-400); cursor: pointer;
-  transition: color var(--t-fast), background var(--t-fast);
+  transition: color var(--t-fast);
   text-align: right;
 }
-.pool-add-trigger:hover { color: var(--primary-500); background: var(--primary-50); }
-.pool-add-trigger.active { color: var(--primary-600); }
-.pool-add-expand { margin-top: 2px; }
+.pool-add-trigger:hover { color: var(--primary-500); }
+.pool-add-wrap.active .pool-add-trigger { color: var(--primary-600); }
+.pool-add-expand { padding: 0 4px 8px; }
 .grocery-add { display: flex; gap: 7px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
 .g-input { flex: 1; min-width: 120px; padding: 10px 14px; border: 1.5px solid var(--gray-200); border-radius: var(--r-input); font-family: inherit; font-size: 14px; font-weight: 600; outline: none; transition: border-color var(--t-fast); }
 .g-input:focus { border-color: var(--primary-500); background: var(--primary-50); }
