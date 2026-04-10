@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260413ap') location.reload(true);
+        if (v !== '20260413aq') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260413ap">
+  <link rel="stylesheet" href="styles.css?v=20260413aq">
 </head>
 <body>
 
@@ -369,7 +369,11 @@
       </div>
     </div>
     <div class="header-body" id="headerBody">
-      <div class="header-date" id="headerDate"></div>
+      <div class="header-date-row">
+        <span id="headerDate"></span>
+        <span class="header-date-sep" id="headerWeatherSep" style="display:none">·</span>
+        <span id="headerWeather"></span>
+      </div>
       <div id="notifBanners"></div>
     </div>
     <button class="header-collapse-btn" id="headerCollapseBtn" onclick="toggleHeaderCollapse()" aria-label="הסתר/הצג כותרת">▾</button>
@@ -382,7 +386,6 @@
     <div id="tab-home" class="tab-content active">
       <div class="tab-chips-row" id="homeChips"></div>
       <div id="welcomeBanner"></div>
-      <div id="weatherWidget"></div>
       <div id="homeSection-chores">
         <div class="card"><div class="card-title" id="homeChoresTitle"></div><div id="homeTasks"></div></div>
       </div>
@@ -557,7 +560,7 @@
 <button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
 </button>
-<script src="app.js?v=20260413ap"></script>
+<script src="app.js?v=20260413aq"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>

@@ -4180,22 +4180,16 @@ function _showWeatherLoading() {
   </div>`;
 }
 
+const _wxEmoji = { sunny:'☀️', night:'🌙', partly:'⛅', cloudy:'☁️', foggy:'🌫️', drizzle:'🌦️', rainy:'🌧️', snowy:'❄️', stormy:'⛈️' };
 function renderWeatherWidget() {
-  const wx = el('weatherWidget');
-  if (!wx || !_weatherCache) return;
-  const {temp, code, isDay, city} = _weatherCache;
-  const {type, desc} = _wxInfo(code, isDay);
-  const allHidden = HOME_SECTIONS.every(s => getHomePrefs().hidden.includes(s.id));
-  const heroClass = allHidden ? ' hero' : '';
-  const cityHtml = city ? `<div class="wx-city">${esc(city)}</div>` : '';
-  wx.innerHTML = `<div class="wx-card wx-${type}${heroClass}">
-    <div class="wx-scene">${_wxSceneHTML(type)}</div>
-    <div class="wx-info">
-      <div class="wx-temp">${temp}°</div>
-      <div class="wx-desc">${desc}</div>
-      ${cityHtml}
-    </div>
-  </div>`;
+  if (!_weatherCache) return;
+  const {temp, code, isDay} = _weatherCache;
+  const {type} = _wxInfo(code, isDay);
+  const emoji = _wxEmoji[type] || '🌡️';
+  const hw = el('headerWeather');
+  const sep = el('headerWeatherSep');
+  if (hw) hw.innerHTML = `<span class="header-weather-inline">${emoji} ${temp}°</span>`;
+  if (sep) sep.style.display = '';
 }
 
 function renderHome() {
