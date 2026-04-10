@@ -880,10 +880,10 @@ body {
 .pool-item-edit-row { background: var(--primary-50); border: 1.5px solid var(--primary-200, #93a8ff); flex-wrap: wrap; gap: 6px; padding: 10px 12px; align-items: center; }
 .pool-item-edit-row .sd-trigger { border: 1.5px solid var(--gray-200); border-radius: var(--r-input); background: var(--surface); font-size: 12px; font-weight: 700; color: var(--gray-700); padding: 7px 8px; }
 
-.qty-input { width: 48px; padding: 4px 6px; border: 1.5px solid var(--gray-200); border-radius: var(--r-sm); font-family: inherit; font-size: 13px; font-weight: 800; text-align: center; outline: none; }
-.qty-input.kg { width: 62px; }
-.pool-qty-inline .qty-input { width: 42px; padding: 3px 5px; font-size: 12px; }
-.pool-qty-inline .qty-input.kg { width: 56px; }
+.qty-input { width: 38px; padding: 4px 4px; border: 1.5px solid var(--gray-200); border-radius: var(--r-sm); font-family: inherit; font-size: 13px; font-weight: 800; text-align: center; outline: none; }
+.qty-input.kg { width: 50px; }
+.pool-qty-inline .qty-input { width: 34px; padding: 3px 4px; font-size: 12px; }
+.pool-qty-inline .qty-input.kg { width: 46px; }
 .pool-qty-inline .qty-unit-label { font-size: 11px; }
 .qty-input:focus { border-color: var(--primary-500); }
 .qty-unit-label { font-size: 12px; font-weight: 800; color: var(--gray-500); white-space: nowrap; }
