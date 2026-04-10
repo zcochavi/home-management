@@ -887,7 +887,7 @@ body {
 .pool-qty-inline .qty-unit-label { font-size: 11px; }
 .qty-input:focus { border-color: var(--primary-500); }
 .qty-unit-label { font-size: 12px; font-weight: 800; color: var(--gray-500); white-space: nowrap; }
-.unit-toggle { padding: 7px 9px; border: 1.5px solid var(--gray-200); border-radius: var(--r-input); background: var(--surface); font-family: inherit; font-size: 12px; font-weight: 800; color: var(--gray-500); cursor: pointer; white-space: nowrap; transition: all var(--t-fast); }
+.unit-toggle { width: 52px; text-align: center; padding: 7px 0; border: 1.5px solid var(--gray-200); border-radius: var(--r-input); background: var(--surface); font-family: inherit; font-size: 12px; font-weight: 800; color: var(--gray-500); cursor: pointer; white-space: nowrap; transition: all var(--t-fast); flex-shrink: 0; }
 .unit-toggle.kg { border-color: var(--gray-200); color: var(--gray-500); background: var(--surface); }
 .unit-badge { font-size: 10px; font-weight: 800; color: var(--gray-400); background: var(--gray-100); border-radius: 5px; padding: 1px 5px; margin-inline-start: 4px; white-space: nowrap; }
 
