@@ -795,9 +795,10 @@ body {
 .pool-add-trigger:hover { color: var(--primary-500); }
 .pool-add-wrap.active .pool-add-trigger { color: var(--primary-600); }
 .pool-add-expand { padding: 0 4px 8px; }
+.pool-add-expand .sd-trigger { background: var(--surface); border: 1.5px solid var(--gray-200); border-radius: var(--r-input); }
 .grocery-add { display: flex; gap: 7px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
-.g-input { flex: 1; min-width: 120px; padding: 10px 14px; border: 1.5px solid var(--gray-200); border-radius: var(--r-input); font-family: inherit; font-size: 14px; font-weight: 600; outline: none; transition: border-color var(--t-fast); }
-.g-input:focus { border-color: var(--primary-500); background: var(--primary-50); }
+.g-input { flex: 1; min-width: 120px; padding: 10px 14px; border: 1.5px solid var(--gray-200); border-radius: var(--r-input); font-family: inherit; font-size: 14px; font-weight: 600; outline: none; background: var(--surface); transition: border-color var(--t-fast); }
+.g-input:focus { border-color: var(--primary-500); background: var(--surface); }
 .g-cat { padding: 10px 8px; border: 1.5px solid var(--gray-200); border-radius: var(--r-input); font-family: inherit; font-size: 12px; font-weight: 700; outline: none; background: var(--surface); cursor: pointer; }
 
 .g-item { display: flex; align-items: center; gap: 9px; padding: 9px 12px; background: var(--gray-50); border-radius: 14px; margin-bottom: 6px; transition: background var(--t-fast); }
