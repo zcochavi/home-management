@@ -1519,6 +1519,21 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .post-reaction-liked:hover { background: #ffe4e6; border-color: #f87171; }
 
 /* ── Community FAB ── */
+.chore-fab {
+  position: fixed;
+  bottom: calc(var(--tab-bar-h) + env(safe-area-inset-bottom, 0px) + 20px);
+  right: max(20px, calc((100vw - 520px) / 2 + 20px));
+  width: 56px; height: 56px; border-radius: 50%;
+  background: var(--primary-500); color: white; border: none;
+  box-shadow: var(--shadow-fab);
+  cursor: pointer; z-index: 90;
+  display: flex; align-items: center; justify-content: center;
+  transition: background var(--t-normal), box-shadow var(--t-normal), transform var(--t-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+.chore-fab:hover { background: var(--primary-600); box-shadow: 0 6px 24px rgba(108,140,255,0.55); }
+.chore-fab:active { transform: scale(0.94); }
+.chore-fab svg { width: 22px; height: 22px; }
 .comm-fab {
   position: fixed;
   bottom: calc(var(--tab-bar-h) + env(safe-area-inset-bottom, 0px) + 20px);

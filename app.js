@@ -4290,6 +4290,8 @@ let _chore3dotActiveId = null;
 function renderChores() {
   const choresChipsEl = el('choresChips');
   if (choresChipsEl) choresChipsEl.innerHTML = _allMemberChipsHtml();
+  const fab = document.querySelector('.chore-fab');
+  if (fab) fab.style.display = isParent() ? '' : 'none';
   // Show assignee select only when parent is viewing all members
   const showAssigneeSelect = isParent() && S.filter === 'All';
   const ddAssigneeEl = el('ddAssignee');
@@ -4723,6 +4725,12 @@ function _initChoreSwipes() {
     });
   });
 }
+function choreFabClick() {
+  const card = el('addChoreCard');
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  setTimeout(() => el('newChoreText')?.focus(), 300);
+}
+
 function addChore(){
   const text=el('newChoreText').value.trim();if(!text)return;
   const assignee=isParent()
