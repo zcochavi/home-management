@@ -4984,6 +4984,7 @@ function renderPool() {
   const hasOrphans = S.groceryPool.some(p => !knownCats.has(p.category));
   const chipsEl = el('poolCatChips');
   if (chipsEl) {
+    const prevChipsScroll = chipsEl.querySelector('.cat-chips')?.scrollLeft ?? 0;
     const chipCount = chipCats.length + (hasOrphans ? 1 : 0);
     if (chipCount > 1) {
       const hasFilter = _poolCatFilter.size > 0;
@@ -5015,6 +5016,10 @@ function renderPool() {
           </button>${activeChips}
         </div>
         ${chipsRow}`;
+      if (prevChipsScroll) {
+        const newChips = chipsEl.querySelector('.cat-chips');
+        if (newChips) newChips.scrollLeft = prevChipsScroll;
+      }
     } else {
       chipsEl.innerHTML = '';
     }
