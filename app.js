@@ -3926,6 +3926,15 @@ function renderHeader() {
 }
 
 // ── Tab chip helpers ──────────────────────────
+function _allGroupAvatar() {
+  const svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">
+    <circle cx="15" cy="8" r="3"/>
+    <path d="M22 20c0-3.3-3.1-6-7-6"/>
+    <circle cx="9" cy="8" r="3"/>
+    <path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/>
+  </svg>`;
+  return `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#a0aec0"><span style="width:72%;height:72%;display:flex">${svg}</span></span>`;
+}
 function _allMemberChipsHtml() {
   if (!isParent()) return '';
   const allNames = getAllMemberNames();
@@ -3934,7 +3943,7 @@ function _allMemberChipsHtml() {
   return members.map(f => {
     const isAll = f.name === 'All';
     return `<div class="avatar-chip${isAll?' avatar-chip-all':''}${S.filter===f.name?' active':''}" onclick="setFilter('${esc(f.name)}')">
-      <div class="avatar-bubble">${isAll ? '👨‍👩‍👧‍👧' : getAvatar(f.name)}</div>
+      <div class="avatar-bubble">${isAll ? _allGroupAvatar() : getAvatar(f.name)}</div>
       <div class="avatar-label">${isAll ? t('all') : esc(f.name)}</div>
     </div>`;
   }).join('');
