@@ -4965,8 +4965,9 @@ function renderPool() {
     }
     return `<div class="pool-item" data-pool-id="${p.id}">
       ${ed?`<div class="pool-reveal-zone">
-        <button class="chore-action-btn chore-action-delete" onclick="deletePoolItem(${p.id})">מחק</button>
-        <button class="chore-action-btn chore-action-edit" onclick="startEditPoolItem(${p.id})">ערוך</button>
+        <button class="chore-action-btn chore-action-delete" onclick="deletePoolItem(${p.id})">${_ico.trash}</button>
+        <div class="chore-action-sep"></div>
+        <button class="chore-action-btn chore-action-edit" onclick="startEditPoolItem(${p.id})">${_ico.edit}</button>
       </div>`:''}
       <div class="pool-slide pool-clickable" onclick="addPoolItemNow(${p.id})">
         <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
