@@ -3728,7 +3728,7 @@ function openMenu() {
   const pendingCount = parseInt(el('pendingReqBadge')?.textContent || '0') || 0;
 
   const mainItems = [
-    isParent() ? _drawerItem('mgmt',    isHe ? 'ניהול' : 'Management',           `closeMenu();openMgmt()`)          : '',
+    isParent() ? _drawerItem('mgmt',    isHe ? 'הגדרות' : 'Settings',           `closeMenu();openMgmt()`)          : '',
     isParent() ? _drawerItem('home_ed', isHe ? 'התאמת דף הבית' : 'Customize home', `closeMenu();openHomeEditor()`)   : '',
     isParent() ? _drawerItem('tabs',    isHe ? 'התאמת לשוניות' : 'Customize tabs', `closeMenu();openTabEditor()`)    : '',
     _drawerItem('photos', isHe ? 'תמונות משפחה' : 'Family photos', `closeMenu();openPhotoModal()`),
