@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260413ce') location.reload(true);
+        if (v !== '20260413dl') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260413ce">
+  <link rel="stylesheet" href="styles.css?v=20260413dl">
 </head>
 <body>
 
@@ -332,16 +332,6 @@
 <!-- Custom autocomplete dropdown -->
 <div id="acDropdown"></div>
 
-<!-- PHOTO MANAGER MODAL -->
-<div id="photoModal" class="photo-modal-wrap" style="display:none">
-  <div style="background:white;border-radius:20px;padding:22px;width:100%;max-width:340px;max-height:80vh;overflow-y:auto">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
-      <div style="font-size:16px;font-weight:900;color:#1a202c">📷 תמונות משפחה</div>
-      <button onclick="closePhotoModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#718096;line-height:1;padding:0 2px">×</button>
-    </div>
-    <div id="photoMemberList"></div>
-  </div>
-</div>
 <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoFile(event)">
 
 <!-- HAMBURGER MENU -->
@@ -426,12 +416,6 @@
         </div>
       </div>
       <div id="choreHistoryWrap"></div>
-      <div class="chore-fab-wrap" id="choreFabWrap">
-        <div class="chore-fab-picker" id="choreFabPicker"></div>
-        <button class="chore-fab" id="choreFab" onclick="choreFabClick()" aria-label="הוסף משימה">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
-        </button>
-      </div>
     </div>
 
     <!-- GROCERY / SUPERMARKET -->
@@ -564,10 +548,16 @@
   </div>
 </div>
 
+<div class="chore-fab-wrap" id="choreFabWrap" style="display:none">
+  <div class="chore-fab-picker" id="choreFabPicker"></div>
+  <button class="chore-fab" id="choreFab" onclick="choreFabClick()" aria-label="הוסף משימה">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+  </button>
+</div>
 <button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
 </button>
-<script src="app.js?v=20260413ce"></script>
+<script src="app.js?v=20260413dl"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>

@@ -144,6 +144,7 @@ body {
 .mb-role-toggle.input-error .mb-role-btn { color: var(--error); }
 
 @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-5px)} 40%,80%{transform:translateX(5px)} }
+.input-shake { border-color: var(--error) !important; animation: shake .35s ease; }
 @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
 
 .auth-error { color: var(--error); font-size: 13px; font-weight: 600; margin-bottom: 6px; min-height: 16px; }
@@ -207,7 +208,6 @@ body {
 .photo-upload-btn:hover { background: var(--primary-100); }
 .photo-remove-btn { padding: 7px 8px; border: none; border-radius: 10px; background: none; color: var(--error); font-size: 14px; cursor: pointer; opacity: 0.5; flex-shrink: 0; line-height: 1; }
 .photo-remove-btn:hover { opacity: 1; }
-.photo-modal-wrap { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 600; display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(4px); }
 
 /* ═══════════════════════════════════════════
    LOGIN — MEMBER PICKER
@@ -386,6 +386,7 @@ body {
 .drawer-lang-btn { width: 34px; height: 34px; border-radius: 50%; border: none; background: var(--gray-100); color: var(--gray-500); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background var(--t-fast), color var(--t-fast); flex-shrink: 0; padding: 0; }
 .drawer-lang-btn:hover { background: var(--primary-100); color: var(--primary-600); }
 .drawer-lang-btn svg { width: 18px; height: 18px; }
+.drawer-avatar-wrap { position: relative; flex-shrink: 0; width: 56px; height: 56px; }
 .drawer-avatar {
   width: 56px; height: 56px; border-radius: 50%;
   background: var(--primary-100);
@@ -393,6 +394,8 @@ body {
   font-size: 28px; overflow: hidden; flex-shrink: 0;
   box-shadow: 0 0 0 3px var(--surface), 0 0 0 5px var(--primary-200, #93a8ff);
 }
+.drawer-avatar-edit { position: absolute; bottom: 0; left: 0; width: 22px; height: 22px; border-radius: 50%; background: var(--primary-500); color: #fff; display: flex; align-items: center; justify-content: center; border: 2px solid var(--surface); cursor: pointer; transition: background var(--t-fast); }
+.drawer-avatar-edit:hover { background: var(--primary-600); }
 .drawer-user-name {
   font-size: 18px; font-weight: 800; color: var(--gray-900); line-height: 1.2;
 }
@@ -800,7 +803,7 @@ body {
 .pool-add-wrap.active .pool-add-trigger { color: var(--primary-600); }
 .pool-add-expand { padding: 0 4px 8px; }
 .pool-add-expand .sd-trigger { background: var(--surface); border: 1.5px solid var(--gray-200); border-radius: var(--r-input); }
-.comm-add-form .sd-trigger, #ddHwSubject .sd-trigger { width: 100%; height: 100%; box-sizing: border-box; background: var(--surface); border: 1.5px solid var(--gray-200); border-radius: var(--r-input); font-size: 14px; font-weight: 600; color: var(--gray-900); padding: 0 16px; justify-content: space-between; }
+.comm-add-form .sd-trigger, #ddHwSubject .sd-trigger { width: 100%; box-sizing: border-box; background: var(--surface); border: 1.5px solid var(--gray-200); border-radius: var(--r-input); font-size: 14px; font-weight: 600; color: var(--gray-900); padding: 12px 16px; justify-content: space-between; }
 .comm-add-form .sd-trigger::after, #ddHwSubject .sd-trigger::after { content: '▾'; font-size: 11px; color: var(--gray-400); margin-inline-start: 4px; }
 .grocery-add { display: flex; gap: 7px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
 .g-input { flex: 1; min-width: 120px; padding: 10px 14px; border: 1.5px solid var(--gray-200); border-radius: var(--r-input); font-family: inherit; font-size: 14px; font-weight: 600; outline: none; background: var(--surface); transition: border-color var(--t-fast); }
@@ -934,7 +937,8 @@ body {
 .cart-btn { width: 30px; height: 30px; border: none; border-radius: 8px; background: var(--primary-500); color: white; font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: all var(--t-fast); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .cart-btn:hover { background: var(--primary-600); }
 .cart-item { display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: var(--surface); border-radius: 14px; margin-bottom: 6px; border: 1.5px solid var(--gray-200); }
-.cart-item-name { flex: 1; font-size: 14px; font-weight: 600; color: var(--gray-800); }
+.cart-item-name { flex: 1; font-size: 14px; font-weight: 600; color: var(--gray-800); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cart-req-qty { font-size: 11px; font-weight: 700; color: var(--gray-400); background: var(--gray-100); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
 .return-to-list-btn { border: none; background: none; color: var(--gray-400); font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; padding: 4px 6px; border-radius: 6px; transition: background var(--t-fast), color var(--t-fast); white-space: nowrap; flex-shrink: 0; }
 .return-to-list-btn:hover { background: #FEF2F2; color: #c53030; }
 .remaining-item { display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: var(--error-bg); border-radius: 14px; margin-bottom: 6px; border: 1.5px solid #ffb5b5; }
@@ -959,6 +963,7 @@ body {
 .hist-items-text { font-size: 13px; font-weight: 500; color: var(--gray-600); line-height: 1.6; }
 .hist-sep { color: var(--gray-300); font-weight: 400; }
 .hist-qty { font-size: 11px; font-weight: 600; color: var(--gray-400); }
+.hist-item { display: inline-flex; direction: rtl; align-items: baseline; vertical-align: baseline; gap: 2px; }
 .hist-missed-text { font-size: 12px; color: #c53030; margin-top: 2px; }
 .hist-missed-label { font-weight: 700; }
 mark { background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px; }
@@ -1298,6 +1303,9 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .mgmt-member-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .mgmt-member-row:last-of-type { border-bottom: none; }
 .mgmt-avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--primary-50); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
+.mgmt-avatar-wrap { position: relative; width: 40px; height: 40px; flex-shrink: 0; cursor: pointer; }
+.mgmt-avatar-wrap .mgmt-avatar { width: 100%; height: 100%; }
+.mgmt-avatar-edit { position: absolute; bottom: -2px; left: -2px; width: 18px; height: 18px; border-radius: 50%; background: var(--primary-500); color: #fff; display: flex; align-items: center; justify-content: center; border: 2px solid var(--surface); pointer-events: none; }
 .mgmt-member-info { flex: 1; min-width: 0; }
 .mgmt-member-name { font-size: 14px; font-weight: 700; color: var(--gray-900); }
 .mgmt-member-role { font-size: 11px; color: var(--gray-500); font-weight: 600; }
@@ -1411,7 +1419,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .header-greeting {
   font-size: 26px; font-weight: 800;
   color: var(--gray-900); margin-top: 4px;
-  line-height: 1.2;
+  line-height: 1.2; text-align: center;
 }
 .header-date {
   font-size: 12px; color: var(--gray-400); font-weight: 500;
@@ -1422,7 +1430,8 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 
 
 /* ── Home: task rows with type icon ── */
-.home-task-row { align-items: center; }
+.home-task-row { align-items: flex-start; }
+.home-task-row .check-box { margin-top: 1px; }
 .task-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .task-sub { font-size: 11px; color: var(--gray-400); font-weight: 600; }
 .home-type-icon {
@@ -1547,6 +1556,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .post-reaction-emoji { font-size: 16px; line-height: 1; }
 .post-reaction-count { font-size: 12px; font-weight: 700; }
 .post-reaction:hover { background: var(--primary-50); border-color: var(--primary-200); }
+.post-reaction.post-reaction-readonly { cursor: default; pointer-events: none; opacity: 0.65; }
 .post-reaction.post-reaction-active { border-color: var(--primary-300); background: var(--primary-50); color: var(--primary-600); }
 .post-reaction.post-reaction-active:hover { background: var(--primary-100); }
 @keyframes reaction-bounce { 0%{transform:scale(1)} 35%{transform:scale(1.35)} 65%{transform:scale(0.92)} 100%{transform:scale(1)} }

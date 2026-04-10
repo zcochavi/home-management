@@ -256,8 +256,21 @@ function getParents()        { return getMembers().filter(m => m.role === 'paren
 function getAllMemberNames()  { return getMembers().map(m => m.name); }
 function getEmoji(name)      { return getMembers().find(m => m.name === name)?.emoji || '👤'; }
 // Phosphor-style person SVG per role (matches tab icon style)
-function _memberPersonSVG(role) {
+function _memberPersonSVG(role, gender) {
   if (role === 'kid') {
+    if (gender === 'girl') {
+      // girl: face + two pigtails
+      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">
+        <circle cx="12" cy="13" r="8"/>
+        <path d="M7 5.5C7 3.5 8.5 2 10.5 2S12 3 12 3s-.5-1 1.5-1S17 3.5 17 5.5" stroke-width="1.8"/>
+        <path d="M7 5.5C5 6 4 7.5 4 9" stroke-width="1.8"/>
+        <path d="M17 5.5C19 6 20 7.5 20 9" stroke-width="1.8"/>
+        <circle cx="9.5" cy="12" r="1" fill="currentColor" stroke="none"/>
+        <circle cx="14.5" cy="12" r="1" fill="currentColor" stroke="none"/>
+        <path d="M9.5 16.5c.6.8 1.4 1.2 2.5 1.2s1.9-.4 2.5-1.2"/>
+      </svg>`;
+    }
+    // boy: smiley face in circle
     return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">
       <circle cx="12" cy="12" r="9"/>
       <circle cx="9" cy="10.5" r="1" fill="currentColor" stroke="none"/>
@@ -265,6 +278,15 @@ function _memberPersonSVG(role) {
       <path d="M9.5 15.5c.6.8 1.4 1.2 2.5 1.2s1.9-.4 2.5-1.2"/>
     </svg>`;
   }
+  if (gender === 'female') {
+    // female adult: bust + shoulder curves suggesting hair
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">
+      <circle cx="12" cy="7" r="4"/>
+      <path d="M3 21c0-4.4 4-8 9-8s9 3.6 9 8"/>
+      <path d="M8 4C8 2.5 10 1.5 12 1.5S16 2.5 16 4" stroke-width="1.6"/>
+    </svg>`;
+  }
+  // male / default adult
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">
     <circle cx="12" cy="7" r="4"/>
     <path d="M3 21c0-4.4 4-8 9-8s9 3.6 9 8"/>
@@ -282,7 +304,8 @@ function getAvatar(name, sizePx) {
   const role = member?.role || 'parent';
   const dim = sizePx != null ? `${sizePx}px` : '100%';
   const bg = sizePx != null ? `background:${color}1a;` : '';
-  return `<span style="display:flex;align-items:center;justify-content:center;width:${dim};height:${dim};border-radius:50%;${bg}color:${color};"><span style="width:62%;height:62%;display:flex;">${_memberPersonSVG(role)}</span></span>`;
+  const gender = member?.gender || null;
+  return `<span style="display:flex;align-items:center;justify-content:center;width:${dim};height:${dim};border-radius:50%;${bg}color:${color};"><span style="width:62%;height:62%;display:flex;">${_memberPersonSVG(role, gender)}</span></span>`;
 }
 
 const COLOR_PALETTE  = ['#c471ed','#4facfe','#fa709a','#43e97b','#f9d423','#f5576c','#667eea','#48bb78'];
@@ -825,8 +848,9 @@ let _sessionStartMs  = null;
 
 function _applyAdminUI() {
   const btn = el('pendingReqBtn');
-  if (btn) btn.style.display = isCommittee() ? '' : 'none';
-  if (isCommittee()) _fetchPendingBadge();
+  const showBell = isCommittee() && !isKid();
+  if (btn) btn.style.display = showBell ? '' : 'none';
+  if (showBell) _fetchPendingBadge();
 }
 
 // ── Toast (temporary on-screen info, no bell) ────────────────
@@ -866,7 +890,7 @@ function initNotifBanners() {
       const _visibleNotif = n => !n.dismissed && (
         !['school_pending','event_pending','application_pending'].includes(n.type) ||
         (n.recipientUid === S.uid && n.requestedByUid !== S.uid)
-      ) && (n.type !== 'member_joined' || isParent());
+      ) && (n.type !== 'shopping_done' || !isKid());
       renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
       // Patch old school_pending notifications that are missing reqId
       if (isAdmin()) _patchMissingReqIds(_allNotifs);
@@ -910,7 +934,7 @@ function _updateBellBadge() {
   if (!badge) return;
   const count = _allNotifs.filter(n => !n.dismissed &&
     !['school_pending','event_pending','application_pending'].includes(n.type) &&
-    (n.type !== 'member_joined' || isParent())
+    (n.type !== 'shopping_done' || !isKid())
   ).length;
   badge.textContent = count > 9 ? '9+' : count;
   badge.classList.toggle('hidden', count === 0);
@@ -1197,7 +1221,10 @@ async function _fetchPendingBadge() {
 function renderMessageCenter() {
   const list = el('messageCenterList');
   if (!list) return;
-  const notifs = _allNotifs.filter(n => !['school_pending','event_pending','application_pending'].includes(n.type));
+  const notifs = _allNotifs.filter(n =>
+    !['school_pending','event_pending','application_pending'].includes(n.type) &&
+    (n.type !== 'shopping_done' || !isKid())
+  );
   el('mcCount').textContent = notifs.length ? `${notifs.length} הודעות` : '';
   el('mcDeleteAllBtn').style.display = notifs.length ? '' : 'none';
   const toolbar = el('mcSelectAllRow');
@@ -1207,8 +1234,8 @@ function renderMessageCenter() {
     return;
   }
   list.innerHTML = notifs.map(n => {
-    const isGood = n.type?.includes('approved');
-    const icon   = n.type === 'shopping_done' ? '🛒' : isGood ? '✅' : '❌';
+    const isGood = n.type?.includes('approved') || n.type === 'member_joined';
+    const icon   = n.type === 'shopping_done' ? '🛒' : n.type === 'member_joined' ? '👋' : isGood ? '✅' : '❌';
     const dt     = n.createdAt?.toDate ? n.createdAt.toDate().toLocaleString('he-IL', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
     const dimmed = n.dismissed ? 'opacity:0.55;' : '';
     return `<div class="mc-item" id="mcItem_${n.id}" style="${dimmed}">
@@ -1727,6 +1754,9 @@ const _ico = {
   plus: `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:13px;height:13px;display:block"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>`,
   list: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="width:15px;height:15px;display:block"><circle cx="3.5" cy="5" r="1" fill="currentColor" stroke="none"/><circle cx="3.5" cy="8.5" r="1" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1" fill="currentColor" stroke="none"/><line x1="6.5" y1="5" x2="13" y2="5"/><line x1="6.5" y1="8.5" x2="13" y2="8.5"/><line x1="6.5" y1="12" x2="11" y2="12"/></svg>`,
   cart: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;display:block"><path d="M1 1.5h2l1.8 7.5h7l1.7-5.5H4.5"/><circle cx="6.5" cy="13" r="1" fill="currentColor" stroke="none"/><circle cx="11" cy="13" r="1" fill="currentColor" stroke="none"/></svg>`,
+  clock:`<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-bottom:1px"><circle cx="7" cy="7" r="5.5"/><polyline points="7,4 7,7 9,8.5"/></svg>`,
+  pin:  `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-bottom:1px"><path d="M7 1a3.5 3.5 0 0 1 3.5 3.5C10.5 7.5 7 13 7 13S3.5 7.5 3.5 4.5A3.5 3.5 0 0 1 7 1z"/><circle cx="7" cy="4.5" r="1.2" fill="currentColor" stroke="none"/></svg>`,
+  pencil:`<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;display:block"><path d="M9.5 2a1.5 1.5 0 0 1 2 2L4 11H2V9L9.5 2z"/></svg>`,
 };
 
 // ════════════════════════════════════════
@@ -1886,6 +1916,7 @@ function renderMgmt() {
 // ── Members ──────────────────────────────
 function renderMgmtMembers() {
   const members = getMembers();
+  const isHe = getLang() === 'he';
   _mgmtEditEmoji = {};
   members.forEach((m, i) => { _mgmtEditEmoji[i] = m.emoji; });
 
@@ -1894,7 +1925,10 @@ function renderMgmtMembers() {
                    !(m.role==='parent' && getParents().length===1);
     return `
     <div class="mgmt-member-row">
-      <div class="mgmt-avatar">${getAvatar(m.name)}</div>
+      <div class="mgmt-avatar-wrap" onclick="pickPhoto('${esc(m.name)}')" title="${isHe ? 'החלף תמונה' : 'Change photo'}">
+        <div class="mgmt-avatar">${getAvatar(m.name)}</div>
+        <div class="mgmt-avatar-edit">${_ico.pencil}</div>
+      </div>
       <div class="mgmt-member-info">
         <div class="mgmt-member-name">${esc(m.name)}</div>
         <div class="mgmt-member-role">${m.role==='parent'?'הורה':'ילד/ה'}</div>
@@ -2729,7 +2763,7 @@ function renderPostCard(ev, cid) {
     </div>
     <div class="post-card-body">
       <div class="post-card-title">${esc(ev.title)}</div>
-      ${ev.location ? `<div class="post-card-location">📍 ${esc(ev.location)}</div>` : ''}
+      ${ev.location ? `<div class="post-card-location">${_ico.pin} ${esc(ev.location)}</div>` : ''}
       ${ev.note ? `<div class="post-card-note">${esc(ev.note)}</div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
@@ -2747,6 +2781,7 @@ const _REACTIONS = [
 ];
 
 function _reactionBtns(ev, scope, sid) {
+  const readOnly = isKid() && _isOwner(); // parent switched to kid view — not a real kid account
   return _REACTIONS.map(r => {
     // backward compat: treat likedBy as heart
     const arr = r.key === 'heart'
@@ -2755,28 +2790,42 @@ function _reactionBtns(ev, scope, sid) {
       : (ev.reactions?.[r.key] || []);
     const active = arr.includes(S.uid);
     const count  = arr.length;
-    return `<button class="post-reaction${active ? ' post-reaction-active' : ''}"
+    return `<button class="post-reaction${active ? ' post-reaction-active' : ''}${readOnly ? ' post-reaction-readonly' : ''}"
       data-reaction="${r.key}"
-      onclick="toggleReaction('${scope}','${sid}','${ev.id}','${r.key}')">
+      ${readOnly ? '' : `onclick="toggleReaction('${scope}','${sid}','${ev.id}','${r.key}')"`}>
       <span class="post-reaction-emoji">${r.emoji}</span>${count ? `<span class="post-reaction-count">${count}</span>` : ''}
     </button>`;
   }).join('');
 }
 
 async function toggleReaction(scope, scopeId, evId, reactionKey) {
+  if (isKid() && _isOwner()) return; // parent viewing as kid — read-only
   const collName = scope === 'grade' ? 'schoolGrades' : scope === 'school' ? 'schools' : 'schoolClasses';
   const ref = fbDb.collection(collName).doc(scopeId).collection('events').doc(evId);
   const allCached = Object.values(_commCache).flatMap(c => [...(c.events||[]),...(c.gradeEvents||[]),...(c.schoolEvents||[])]);
   const ev = allCached.find(e => e.id === evId);
   if (!ev) return;
 
-  const arr = reactionKey === 'heart'
-    ? [...(ev.reactions?.heart || []), ...(ev.likedBy || [])].filter((v,i,a) => a.indexOf(v) === i)
-    : (ev.reactions?.[reactionKey] || []);
-  const active = arr.includes(S.uid);
+  if (!ev.reactions) ev.reactions = {};
+
+  // Find which reaction (if any) the user already voted for
+  const prevKey = _REACTIONS.map(r => r.key).find(k => {
+    const a = k === 'heart'
+      ? [...(ev.reactions?.heart || []), ...(ev.likedBy || [])].filter((v,i,arr) => arr.indexOf(v) === i)
+      : (ev.reactions?.[k] || []);
+    return a.includes(S.uid);
+  }) || null;
+
+  const active = prevKey === reactionKey; // tapping own current reaction → deselect
 
   // Optimistic update — mutate cache immediately
-  if (!ev.reactions) ev.reactions = {};
+  // Remove from previous reaction key (if different)
+  if (prevKey && prevKey !== reactionKey) {
+    if (!ev.reactions[prevKey]) ev.reactions[prevKey] = [];
+    ev.reactions[prevKey] = ev.reactions[prevKey].filter(u => u !== S.uid);
+    if (prevKey === 'heart') ev.likedBy = (ev.likedBy || []).filter(u => u !== S.uid);
+  }
+  // Toggle on the tapped key
   if (!ev.reactions[reactionKey]) ev.reactions[reactionKey] = [];
   if (active) {
     ev.reactions[reactionKey] = ev.reactions[reactionKey].filter(u => u !== S.uid);
@@ -2802,9 +2851,16 @@ async function toggleReaction(scope, scopeId, evId, reactionKey) {
 
   // Sync to Firestore in background
   try {
-    const update = { [`reactions.${reactionKey}`]: active
+    const update = {};
+    // Remove from old reaction key in Firestore
+    if (prevKey && prevKey !== reactionKey) {
+      update[`reactions.${prevKey}`] = firebase.firestore.FieldValue.arrayRemove(S.uid);
+      if (prevKey === 'heart') update.likedBy = firebase.firestore.FieldValue.arrayRemove(S.uid);
+    }
+    // Add or remove the tapped key
+    update[`reactions.${reactionKey}`] = active
       ? firebase.firestore.FieldValue.arrayRemove(S.uid)
-      : firebase.firestore.FieldValue.arrayUnion(S.uid) };
+      : firebase.firestore.FieldValue.arrayUnion(S.uid);
     if (reactionKey === 'heart' && active && (ev.likedBy || []).includes(S.uid))
       update.likedBy = firebase.firestore.FieldValue.arrayRemove(S.uid);
     await ref.update(update);
@@ -2827,8 +2883,17 @@ function renderCommCard(kid) {
 
   const allEvs = [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])]
     .filter(e => matchesGenderFilter(e, kid.name));
-  const upcoming = allEvs.filter(e=>isEventUpcoming(e.date))
-    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  const _cutoff = new Date(); _cutoff.setDate(_cutoff.getDate() - 14);
+  const _today  = new Date().toISOString().slice(0,10);
+  const upcoming = allEvs.filter(e => {
+    if (!e.date) return true;
+    const [ey,em,ed] = e.date.split('-').map(Number);
+    return new Date(ey, em-1, ed) >= _cutoff;
+  }).sort((a,b) => {
+    const af = !a.date || a.date >= _today, bf = !b.date || b.date >= _today;
+    if (af !== bf) return af ? -1 : 1;        // upcoming before past
+    return (a.date||'').localeCompare(b.date||'');  // both asc
+  });
 
   return `<div class="card" id="commCard_${cid}">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
@@ -2916,10 +2981,10 @@ function renderCommCard(kid) {
     ${isParent() ? `
     <div class="comm-add-form${addOpen?' open':''}" id="commAddForm_${cid}">
       <div style="font-size:13px;font-weight:900;color:#1a202c;margin-bottom:10px">➕ ${t('commNewEvent')}</div>
-      <input class="auth-input" id="commEvTitle_${cid}" placeholder="${t('commEventTitle')}" style="margin-bottom:6px">
-      <div style="display:flex;gap:8px;margin-bottom:6px">
+      <input class="auth-input" id="commEvTitle_${cid}" placeholder="${t('commEventTitle')}" style="margin-bottom:6px" oninput="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
         <div style="flex:1;min-width:0">
-          <input type="date" class="auth-input" id="commEvDate_${cid}" style="margin-bottom:0;width:100%">
+          <input type="date" class="auth-input" id="commEvDate_${cid}" style="margin-bottom:0;width:100%" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
           <div id="commEvDateHint_${cid}" style="display:none;font-size:11px;color:var(--gray-400);font-weight:600;margin-top:3px;padding-right:2px">תאריך אופציונלי לסוג זה</div>
         </div>
         <input type="time" class="auth-input" id="commEvTime_${cid}" style="flex:0 0 110px;margin-bottom:0">
@@ -2950,6 +3015,7 @@ function renderCommCard(kid) {
       <input class="auth-input" id="commEvLocation_${cid}" placeholder="📍 מיקום (אופציונלי)" style="margin-bottom:6px">
       <input class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" style="margin-bottom:6px">
       <input class="auth-input" id="commEvPaybox_${cid}" placeholder="${t('commEventPaybox')}" style="margin-bottom:10px" type="url" dir="ltr">
+      <div id="commEvError_${cid}" style="display:none;font-size:12px;color:var(--error);font-weight:700;margin-bottom:8px;padding:6px 10px;background:var(--error-bg);border-radius:8px"></div>
       <div style="display:flex;gap:8px">
         <button class="auth-btn-main" style="flex:1;padding:10px" onclick="submitClassEvent('${cid}')">${t('commPost')}</button>
         <button class="auth-btn-back" style="flex:1;padding:10px" onclick="toggleCommAddForm('${cid}')">ביטול</button>
@@ -3018,8 +3084,8 @@ async function renderCommunity() {
   _commVisibleKids = kidsWithSchool
     .map(k => ({ name: k.name, cid: classIdFor(k.school) }))
     .filter(k => k.cid);
-  const adminBtn = isAdmin()
-    ? `<button class="admin-btn" onclick="openAdminPanel(true, true)">📋 היסטוריית אירועים</button>`
+  const adminBtn = (isCommittee() && !isKid())
+    ? `<button class="admin-btn" onclick="openAdminPanel(true, true)">📋 היסטוריית בקשות</button>`
     : '';
   const fabHtml = isParent() ? `
     <div class="comm-fab-wrap" id="commFabWrap">
@@ -3128,7 +3194,16 @@ async function submitClassEvent(cid) {
   const genderFilter = type === 'birthday'
     ? (document.querySelector(`input[name="commEvGender_${cid}"]:checked`)?.value || 'all')
     : 'all';
-  if (!title || (!date && !_DATE_OPTIONAL_TYPES.has(type))) return;
+  const _errEl   = el('commEvError_'   + cid);
+  const _titleEl = el('commEvTitle_'   + cid);
+  const _dateEl  = el('commEvDate_'    + cid);
+  const _showErr = (msg, fieldEl) => {
+    if (_errEl) { _errEl.textContent = msg; _errEl.style.display = ''; }
+    if (fieldEl) { fieldEl.classList.add('input-error'); fieldEl.focus(); }
+  };
+  if (!title) { _showErr('יש להזין כותרת לאירוע', _titleEl); return; }
+  if (!date && !_DATE_OPTIONAL_TYPES.has(type)) { _showErr('יש לבחור תאריך לסוג אירוע זה', _dateEl); return; }
+  if (_errEl) _errEl.style.display = 'none';
   const docData = { title, date, type, note, scope,
     postedBy: { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName||'' },
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -3194,7 +3269,7 @@ function openAdminPanel(showLog = true, historyOnly = false) {
   if (logSection) logSection.style.display = showLog ? '' : 'none';
   if (settingsSection) settingsSection.style.display = historyOnly ? 'none' : '';
   const titleEl = el('adminPanel').querySelector('.mgmt-header-title');
-  if (titleEl) titleEl.textContent = historyOnly ? '📋 היסטוריית אירועים' : '⚙️ הגדרות מערכת';
+  if (titleEl) titleEl.textContent = historyOnly ? '📋 היסטוריית בקשות' : '⚙️ הגדרות מערכת';
   renderAdminPanel(showLog);
 }
 function closeAdminPanel() { el('adminPanel').classList.add('hidden'); }
@@ -3384,8 +3459,12 @@ let _adminPanelCache = null;
 const _ADMIN_CACHE_TTL = 120_000; // 2 minutes
 
 function _adminLogHtml(combined) {
-  if (!combined.length) return '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין היסטוריה עדיין</div>';
-  return combined.map(entry => {
+  const items = isAdmin() ? combined : combined.filter(entry => {
+    if (entry._type === 'expired') return isCommitteeFor(entry.classId || '');
+    return entry.actionBy?.familyUid === S.uid;
+  });
+  if (!items.length) return '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין היסטוריה עדיין</div>';
+  return items.map(entry => {
     if (entry._type === 'expired') {
       return `<div class="admin-log-row" style="opacity:0.6">
         <div class="admin-log-title">
@@ -3755,23 +3834,6 @@ async function mgmtRemoveSubject(name) {
 // ════════════════════════════════════════
 let _photoTarget = null;
 
-function openPhotoModal() {
-  renderPhotoModal();
-  el('photoModal').style.display = 'flex';
-}
-function closePhotoModal() {
-  el('photoModal').style.display = 'none';
-}
-function renderPhotoModal() {
-  const members = getMembers().filter(m => isParent() || m.name === S.user);
-  el('photoMemberList').innerHTML = members.map(m => `
-    <div class="photo-member-row">
-      <div class="photo-member-avatar">${getAvatar(m.name)}</div>
-      <div class="photo-member-name">${esc(m.name)}</div>
-      <button class="photo-upload-btn" onclick="pickPhoto('${esc(m.name)}')">📷 ${m.photo ? 'החלף' : 'העלה'}</button>
-      ${m.photo ? `<button class="photo-remove-btn" onclick="removePhoto('${esc(m.name)}')">×</button>` : ''}
-    </div>`).join('');
-}
 function pickPhoto(name) {
   _photoTarget = name;
   el('photoInput').value = '';
@@ -3783,7 +3845,9 @@ async function handlePhotoFile(event) {
   const photo = await resizePhoto(file, 120);
   if (!photo) return;
   await saveMemberPhoto(_photoTarget, photo);
-  renderPhotoModal();
+  if (!el('mgmtScreen').classList.contains('hidden')) renderMgmtMembers();
+  renderHeader();
+  if (_menuOpen) renderMenu();
 }
 function resizePhoto(file, size) {
   return new Promise(resolve => {
@@ -3818,7 +3882,9 @@ async function removePhoto(name) {
   });
   if (familyData) familyData.members = members;
   await fbDb.collection('families').doc(S.uid).update({ members });
-  renderPhotoModal();
+  if (!el('mgmtScreen').classList.contains('hidden')) renderMgmtMembers();
+  renderHeader();
+  if (_menuOpen) renderMenu();
 }
 
 // ════════════════════════════════════════
@@ -3883,7 +3949,6 @@ function openMenu() {
     isParent() ? _drawerItem('mgmt',    isHe ? 'הגדרות' : 'Settings',           `closeMenu();openMgmt()`)          : '',
     isParent() ? _drawerItem('home_ed', isHe ? 'התאמת דף הבית' : 'Customize home', `closeMenu();openHomeEditor()`)   : '',
     isParent() ? _drawerItem('tabs',    isHe ? 'התאמת לשוניות' : 'Customize tabs', `closeMenu();openTabEditor()`)    : '',
-    _drawerItem('photos', isHe ? 'תמונות משפחה' : 'Family photos', `closeMenu();openPhotoModal()`),
     (gcalConnected() || gcalWasConnected()) ? _drawerItem('gcal', isHe ? 'נתק Google Calendar' : 'Disconnect GCal', `closeMenu();disconnectGCal()`) : '',
   ].filter(Boolean).join('');
 
@@ -3898,7 +3963,10 @@ function openMenu() {
   el('menuDropdown').innerHTML = `
     <div class="drawer-user-section">
       <div class="drawer-user-top">
-        <div class="drawer-avatar">${getAvatar(S.user) || getEmoji(S.user)}</div>
+        <div class="drawer-avatar-wrap">
+          <div class="drawer-avatar">${getAvatar(S.user) || getEmoji(S.user)}</div>
+          <button class="drawer-avatar-edit" onclick="pickPhoto('${esc(S.user)}')" title="${isHe ? 'החלף תמונה' : 'Change photo'}">${_ico.pencil}</button>
+        </div>
         <button class="drawer-lang-btn" onclick="closeMenu();toggleLang()" title="${isHe ? 'Switch to English' : 'עבור לעברית'}">${DRAWER_ICONS.lang}</button>
       </div>
       <div class="drawer-user-name">${esc(S.user)}</div>
@@ -4135,19 +4203,24 @@ function renderHomeUpcoming() {
   // Personal calendar events
   const personal = (S.events || [])
     .filter(e => isEventUpcoming(e.date))
+    .filter(e => isParent() || _calEventVisibleToKid(e, S.user))
     .map(e => ({ ...e, _src: 'personal' }));
 
   // Class/grade/school events from cache
   const classEvs = [];
+  const _seenHomeClassKeys = new Set();
   getKids().forEach(name => {
+    if (!isParent() && name !== S.user) return; // kids only see their own class
     const member = getMembers().find(m => m.name === name);
     if (!member?.school) return;
     const cid = classIdFor(member.school);
     if (!cid || !_commCache[cid]) return;
     const cache = _commCache[cid];
     [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])].forEach(ev => {
-      if (isEventUpcoming(ev.date) && matchesGenderFilter(ev, name))
-        classEvs.push({ ...ev, _src: 'class', _kid: name });
+      if (isEventUpcoming(ev.date) && matchesGenderFilter(ev, name)) {
+        const key = `${ev.id}_${name}`;
+        if (!_seenHomeClassKeys.has(key)) { _seenHomeClassKeys.add(key); classEvs.push({ ...ev, _src: 'class', _kid: name }); }
+      }
     });
   });
 
@@ -4175,7 +4248,7 @@ function renderHomeUpcoming() {
       <div class="home-event-icon">${eventTypeIcon(ev.type)}</div>
       <div class="home-event-body">
         <div class="home-event-title">${esc(ev.title)}${isClass ? scopeBadge(ev.scope) : ''}</div>
-        <div class="home-event-meta">${fmtDate(ev.date)}${ev.time ? ' · ' + ev.time : ''}${isClass && ev._kid ? ' · ' + esc(ev._kid) : ''}</div>
+        <div class="home-event-meta">${fmtDate(ev.date)}${ev.time ? ' · ' + ev.time : ''}${ev.location ? ' · ' + _ico.pin + ' ' + esc(ev.location) : ''}${isClass && ev._kid ? ' · ' + esc(ev._kid) : ''}</div>
       </div>
       <span class="home-chevron">›</span>
     </div>`;
@@ -4192,7 +4265,6 @@ function renderHomeShopping() {
     <div class="card-title">🛒 קניות מהירות</div>
     <div class="home-quick-ac-outer">
       <div class="home-quick-add-wrap">
-        <span class="home-quick-add-prefix">＋</span>
         <input class="home-quick-add-input" id="homeQuickAddInput" type="text"
           placeholder="${placeholder}" autocomplete="off"
           oninput="homeQuickAcInput(this)"
@@ -4255,7 +4327,7 @@ function homeQuickAddShop() {
   if (!pool) { input.focus(); return; }
   if (!S.shoppingList.some(x => x.poolId === pool.id)) {
     const qty = pool.lastQty || 1;
-    S.shoppingList.push({ id: Date.now(), poolId: pool.id, name: pool.name, category: pool.category, qty, qtyType: pool.qtyType || 'count' });
+    S.shoppingList.push({ id: Date.now(), poolId: pool.id, name: pool.name, category: pool.category, qty, qtyType: pool.qtyType || 'count', requestedQty: qty });
     saveGrocery();
     renderPool();
     renderShoppingList();
@@ -4447,7 +4519,7 @@ function renderHome() {
         <div class="check-box readonly"></div>
         <div class="task-body">
           <div class="task-text">${esc(h.desc)}</div>
-          <div class="task-sub">${isParent()?`${esc(h.child)} · `:''}${h.due?fmtDate(h.due):''}</div>
+          <div class="task-sub">${(()=>{const parts=[];if(isParent())parts.push(esc(h.child));if(h.subject)parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);if(h.due)parts.push(fmtDate(h.due));return parts.join(' · ');})()}</div>
         </div>
         <div class="home-type-icon home-type-hw">📚</div>
       </div>`).join('')
@@ -4498,7 +4570,7 @@ function renderChores() {
   _updateChoreFormAssignee();
   let items = S.filter==='All' ? S.chores : S.chores.filter(c=>c.assignee===S.filter);
   const active = items.filter(c=>!c.done);
-  if (fabWrap) fabWrap.style.display = (isParent() && (S.filter === 'All' || active.length > 0)) ? '' : 'none';
+  if (fabWrap) fabWrap.style.display = (S.tab === 'chores' && isParent() && (S.filter === 'All' || active.length > 0)) ? '' : 'none';
   const showAssignee = S.filter==='All';
   const inner = active.length ? active.map(c=>{
     const can = isParent()||c.assignee===S.user;
@@ -5140,6 +5212,7 @@ window.addEventListener('scroll', _updateScrollTopBtn, { passive: true });
 document.addEventListener('scroll', _updateScrollTopBtn, { passive: true });
 
 function switchGrocerySection(sec) {
+  if (!isParent() && sec !== 'shopping') sec = 'shopping';
   _grocerySection = sec;
   ['pool','shopping','history'].forEach(s => {
     el(`grocerySec-${s}`).style.display = s === sec ? '' : 'none';
@@ -5153,6 +5226,10 @@ function switchGrocerySection(sec) {
 }
 
 function renderSupermarket() {
+  const kidMode = !isParent();
+  el('gtab-pool')?.style.setProperty('display', kidMode ? 'none' : '');
+  el('gtab-history')?.style.setProperty('display', kidMode ? 'none' : '');
+  if (kidMode && _grocerySection !== 'shopping') switchGrocerySection('shopping');
   renderPool();
   if (_grocerySection === 'shopping') renderShoppingList();
   else if (_grocerySection === 'history') renderShoppingHistory();
@@ -5358,7 +5435,7 @@ function addPoolItemNow(poolId) {
   const pool = S.groceryPool.find(p => p.id === poolId);
   if (!pool) return;
   const qty = pool.lastQty || 1;
-  S.shoppingList.push({ id: Date.now(), poolId, name: pool.name, category: pool.category, qty, qtyType: pool.qtyType || 'count' });
+  S.shoppingList.push({ id: Date.now(), poolId, name: pool.name, category: pool.category, qty, qtyType: pool.qtyType || 'count', requestedQty: qty });
   _poolQtyActiveId = poolId;
   saveGrocery();
   renderPool();
@@ -5467,11 +5544,17 @@ function renderShoppingList() {
   function listItemHtml(item) {
     const isKg = item.qtyType === 'kg';
     const unitLabel = isKg ? 'ק"ג' : 'יח\'';
-    const qtyBadge = `<span class="unit-badge" style="background:#e9f5ff;color:#2b6cb0">${fmtQty(item.qty||1, item.qtyType)}</span>`;
+    const requested = item.requestedQty ?? item.qty ?? 1;
+    const actual = item.qty ?? 1;
+    const hasGap = actual < requested;
+    const badgeStyle = hasGap
+      ? 'background:#fff3e0;color:#e65100'
+      : 'background:#e9f5ff;color:#2b6cb0';
+    const qtyBadge = `<span class="unit-badge slist-req-badge" style="${badgeStyle}">${fmtQty(requested, item.qtyType)}</span>`;
     return `<div class="slist-item">
       <div class="slist-item-name">${esc(item.name)} ${qtyBadge}</div>
       <input class="qty-input${isKg?' kg':''}" type="number"
-        min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${item.qty||1}"
+        min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${actual}"
         onfocus="this.select()"
         ${isKg?`oninput="this.value=this.value.replace(/(\\\.\\d{1})\\d+/,'$1')"`:``}
         onchange="updateListQty(${item.id},this.value)">
@@ -5505,10 +5588,17 @@ function renderShoppingList() {
   // Items already in cart
   if (S.inCart.length) {
     html += `<div class="super-section-label">✅ ${t('inCartLabel')} (${S.inCart.length})</div>`;
-    html += S.inCart.map(item => `<div class="cart-item">
-      <div class="cart-item-name">${esc(item.name)} <span class="unit-badge" style="background:var(--gray-100);color:var(--gray-500)">${fmtQty(item.qty||1, item.qtyType)}</span></div>
-      <button class="return-to-list-btn" onclick="returnToList(${item.id})">${t('returnToList')}</button>
-    </div>`).join('');
+    html += S.inCart.map(item => {
+      const requested = item.requestedQty ?? item.qty ?? 1;
+      const actual = item.qty ?? 1;
+      const gapHtml = actual !== requested
+        ? `<span class="cart-req-qty">מ-${fmtQty(requested, item.qtyType)}</span>`
+        : '';
+      return `<div class="cart-item">
+        <div class="cart-item-name">${esc(item.name)} <span class="unit-badge" style="background:var(--gray-100);color:var(--gray-500)">${fmtQty(actual, item.qtyType)}</span>${gapHtml}</div>
+        <button class="return-to-list-btn" onclick="returnToList(${item.id})">${t('returnToList')}</button>
+      </div>`;
+    }).join('');
   }
 
   el('shoppingListEl').innerHTML = html;
@@ -5520,10 +5610,20 @@ function moveToCart(id) {
   const idx = S.shoppingList.findIndex(x => x.id === id);
   if (idx === -1) return;
   const item = S.shoppingList.splice(idx, 1)[0];
-  S.inCart.push({ ...item, id: Date.now() });
+  S.inCart.push({ ...item, id: Date.now(), requestedQty: item.requestedQty ?? item.qty ?? 1 });
   saveGrocery();
   renderShoppingList();
   renderPool();
+}
+
+function updateCartQty(id, val) {
+  const item = S.inCart.find(x => x.id === id);
+  if (!item) return;
+  item.qty = item.qtyType === 'kg'
+    ? Math.max(0.1, Math.round(parseFloat(val) * 10) / 10 || 0.1)
+    : Math.max(1, parseInt(val) || 1);
+  saveGrocery();
+  renderShoppingList();
 }
 
 function removeFromShoppingList(id) {
@@ -5549,10 +5649,15 @@ function updateListQty(id, val) {
   const parsed = isKg ? parseFloat(parseFloat(val).toFixed(1)) : parseInt(val);
   if (!isNaN(parsed) && parsed > 0) {
     item.qty = isKg ? Math.max(0.1, parsed) : Math.max(1, parsed);
-    // Update badge in-place without full re-render
+    // Update badge color in-place (text stays as requestedQty, only color reflects gap)
     const inp = document.querySelector(`input[onchange="updateListQty(${id},this.value)"]`);
-    const badge = inp?.closest('.slist-item')?.querySelector('.unit-badge');
-    if (badge) badge.textContent = fmtQty(item.qty, item.qtyType);
+    const badge = inp?.closest('.slist-item')?.querySelector('.slist-req-badge');
+    if (badge) {
+      const requested = item.requestedQty ?? item.qty;
+      const hasGap = item.qty < requested;
+      badge.style.background = hasGap ? '#fff3e0' : '#e9f5ff';
+      badge.style.color      = hasGap ? '#e65100' : '#2b6cb0';
+    }
     saveGrocery();
   }
 }
@@ -5630,7 +5735,7 @@ function _histEntryHtml(entry, searchTerm) {
   };
 
   const boughtHtml = entry.bought.map(x =>
-    `${hl(x.name)}<span class="hist-qty"> ${fmtQty(x.qty, x.qtyType)}</span>`
+    `<span class="hist-item"><bdi>${hl(x.name)}</bdi><span class="hist-qty">${fmtQty(x.qty, x.qtyType)}</span></span>`
   ).join('<span class="hist-sep"> · </span>');
   const missedHtml = entry.missed.length
     ? `<div class="hist-missed-text"><span class="hist-missed-label">${t('historyMissed')}:</span> `
@@ -5711,6 +5816,7 @@ function fmtDoneAt(ts) {
 }
 
 function renderHomework(){
+  if (!isParent() && S.child !== S.user) { S.child = S.user; }
   const kids=isParent()?getKids():getKids().filter(k=>k===S.user);
   const childTabsEl=el('childTabsContainer');
   const showKidChips = kids.length >= 2;
@@ -5732,7 +5838,7 @@ function renderHomework(){
   if(subjChipsEl){
     const classNotDone=classHw.filter(h=>!(h.doneBy&&h.doneBy[S.child]));
     const allSubjs=[...new Set([...classNotDone,...allPending].map(h=>h.subject).filter(Boolean))];
-    if(allSubjs.length>1){
+    if(allSubjs.length>=1){
       if(_hwSubjectFilter&&!allSubjs.includes(_hwSubjectFilter))_hwSubjectFilter=null;
       subjChipsEl.style.display='';
       subjChipsEl.innerHTML=allSubjs.map(s=>
@@ -5874,7 +5980,7 @@ function toggleHwHistory() {
   renderHwHistory(S.child);
 }
 
-function switchChild(c){S.child=c;_hwSubjectFilter=null;renderHomework();}
+function switchChild(c){if(!isParent()&&c!==S.user)return;S.child=c;_hwSubjectFilter=null;renderHomework();}
 function switchHwSubject(s){_hwSubjectFilter=(_hwSubjectFilter===s)?null:s;renderHomework();}
 function _hwScopePick(val) {
   _hwScope = val;
@@ -5960,7 +6066,9 @@ function toggleHW(id){
 
 function deleteHW(id){if(!isParent())return;S.homework=S.homework.filter(x=>x.id!==id);save();renderHomework();renderHome();}
 function addHomework(){
-  const desc=el('hwDesc').value.trim();if(!desc)return;
+  const descEl=el('hwDesc');
+  const desc=descEl.value.trim();
+  if(!desc){descEl.focus();descEl.classList.add('input-shake');setTimeout(()=>descEl.classList.remove('input-shake'),500);return;}
   if(_hwScope==='class'){
     if(!isParent())return;
     S.homework.push({id:Date.now(),scope:'class',subject:el('hwSubject').value,desc,due:el('hwDue').value,doneBy:{},doneAtBy:{}});
@@ -5976,7 +6084,7 @@ function addHomework(){
 //  CALENDAR
 // ════════════════════════════════════════
 let _calClassEventsOn = {}; // { [kidName]: bool }
-let _calClassOnly = false;  // true = show class events only
+let _calFilter = 'all'; // 'all' | 'class' | 'family'
 let _syncedClassEvents = {}; // { [firestoreEventId]: gcalId }
 
 function loadSyncedClassEvents(){
@@ -5999,10 +6107,18 @@ async function unsyncClassEvent(evId){
   renderCalendar();
 }
 
+function _calEventVisibleToKid(ev, kidName) {
+  if (ev.gcal) return true;
+  const ps = eventPersons(ev);
+  return ps.includes('All') || ps.includes(kidName);
+}
+
 function allCalEvents(){
   const anyClassOn=Object.values(_calClassEventsOn).some(Boolean);
   const classEvs=[];
+  const _seenClassEvKeys=new Set();
   getKids().forEach(name=>{
+    if(!isParent() && name !== S.user) return; // kids only see their own class
     if(!_calClassEventsOn[name])return;
     const member=getMembers().find(m=>m.name===name);
     if(!member?.school)return;
@@ -6013,27 +6129,48 @@ function allCalEvents(){
     [...(cache.events||[]),...(cache.gradeEvents||[]),...(cache.schoolEvents||[])].forEach(ev=>{
       if(!ev.date)return;
       if(!matchesGenderFilter(ev,name))return;
+      const key=`${ev.id}_${name}`;
+      if(_seenClassEvKeys.has(key))return;
+      _seenClassEvKeys.add(key);
       classEvs.push({...ev,classEvent:true,classKid:name,_cid:cid});
     });
   });
-  if(anyClassOn&&_calClassOnly) return classEvs;
+  if(anyClassOn&&_calFilter==='class') return classEvs;
   const syncedIds=new Set(S.events.filter(e=>e.gcalId).map(e=>e.gcalId));
-  const base=[...S.events.filter(e=>!e.gcalId),...S.events.filter(e=>e.gcalId),...gcal.events.filter(e=>!syncedIds.has(e.gcalId))];
-  return [...base,...classEvs];
+  let personalEvs=[...S.events.filter(e=>!e.gcalId),...S.events.filter(e=>e.gcalId),...gcal.events.filter(e=>!syncedIds.has(e.gcalId))];
+  if(!isParent()) personalEvs=personalEvs.filter(e=>_calEventVisibleToKid(e,S.user));
+  if(_calFilter==='family') return personalEvs;
+  return [...personalEvs,...classEvs];
 }
 
 function renderCalClassToggles(){
   const wrap=el('calClassToggles');
   if(!wrap)return;
+  const isHe=getLang()==='he';
+
+  if(!isParent()){
+    // Kid view: just "All events" / "Class only" seg control
+    const member=getMembers().find(m=>m.name===S.user);
+    if(!member?.school?.city||!member?.school?.grade){wrap.innerHTML='';return;}
+    wrap.innerHTML=`<div class="cal-view-seg" style="margin-bottom:8px">
+      <div class="cal-view-seg-btn ${_calFilter==='all'?'active':''}"    onclick="kidCalViewAll()">${isHe?'הכל':'All'}</div>
+      <div class="cal-view-seg-btn ${_calFilter==='class'?'active':''}"  onclick="kidCalViewClass()">${isHe?'כיתה':'כיתה'}</div>
+      <div class="cal-view-seg-btn ${_calFilter==='family'?'active':''}" onclick="kidCalViewFamily()">${isHe?'משפחה':'Family'}</div>
+    </div>`;
+    // Auto-enable class events for this kid if not yet on
+    if(!_calClassEventsOn[S.user]) kidCalViewAll();
+    return;
+  }
+
   const kids=getKids()
     .map(name=>getMembers().find(m=>m.name===name))
     .filter(m=>m?.school?.city&&m?.school?.grade);
   if(!kids.length){wrap.innerHTML='';return;}
   const anyOn=Object.values(_calClassEventsOn).some(Boolean);
-  const isHe=getLang()==='he';
   const segControl=anyOn?`<div class="cal-view-seg">
-    <div class="cal-view-seg-btn ${!_calClassOnly?'active':''}" onclick="setCalClassOnly(false)">${isHe?'כל האירועים':'All events'}</div>
-    <div class="cal-view-seg-btn ${_calClassOnly?'active':''}" onclick="setCalClassOnly(true)">${isHe?'כיתה בלבד':'Class only'}</div>
+    <div class="cal-view-seg-btn ${_calFilter==='all'?'active':''}"    onclick="setCalFilter('all')">${isHe?'הכל':'All'}</div>
+    <div class="cal-view-seg-btn ${_calFilter==='class'?'active':''}"  onclick="setCalFilter('class')">${isHe?'כיתה':'Class'}</div>
+    <div class="cal-view-seg-btn ${_calFilter==='family'?'active':''}" onclick="setCalFilter('family')">${isHe?'משפחה':'Family'}</div>
   </div>`:'';
   wrap.innerHTML=`<div class="cal-class-toggles">${kids.map(m=>{
     const on=_calClassEventsOn[m.name];
@@ -6048,8 +6185,23 @@ function renderCalClassToggles(){
   }).join('')}</div>${segControl}`;
 }
 
-function setCalClassOnly(val){
-  _calClassOnly=val;
+async function _ensureKidClassLoaded(){
+  if(!_calClassEventsOn[S.user]){
+    _calClassEventsOn[S.user]=true;
+    const member=getMembers().find(m=>m.name===S.user);
+    if(member?.school){
+      const cid=classIdFor(member.school);
+      if(cid&&(!_commCache[cid]||(Date.now()-(_commCache[cid].loadedAt||0))>120000))
+        await loadCommunityData([member]);
+    }
+  }
+}
+async function kidCalViewAll()   { await _ensureKidClassLoaded(); _calFilter='all';    renderCalendar(); }
+async function kidCalViewClass() { await _ensureKidClassLoaded(); _calFilter='class';  renderCalendar(); }
+async function kidCalViewFamily(){ _calFilter='family'; renderCalendar(); }
+
+function setCalFilter(val){
+  _calFilter=val;
   renderCalendar();
 }
 
@@ -6099,7 +6251,7 @@ function selectDay(dateStr){S.calSelected=dateStr;const di=el('newEventDate');if
 function renderDayPanel(events){
   const evs=(events||allCalEvents()).filter(e=>e.date===S.calSelected).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
   const title=S.calSelected===today?t('todayLabel'):fmtDateLong(S.calSelected);
-  let html=`<div class="day-panel-title">📆 ${title}</div>`;
+  let html=`<div class="day-panel-title"><span style="display:inline-flex;vertical-align:middle;width:16px;height:16px;margin-inline-end:5px">${TAB_ICONS.calendar}</span>${title}</div>`;
   if(!evs.length){html+=`<div class="empty" style="padding:12px">${t('noEvents')}</div>`;}
   else html+=evs.map(e=>{
     if(e.classEvent){
@@ -6114,7 +6266,7 @@ function renderDayPanel(events){
       return `<div class="event-item" style="border-inline-start-color:${col};flex-wrap:wrap">
         <div class="event-body" style="width:100%">
           <div class="event-title">${eventTypeIcon(e.type)} ${esc(e.title)}</div>
-          <div class="event-meta">${e.time?'🕐 '+e.time:t('allDay')}${e.note?` · ${esc(e.note)}`:''}</div>
+          <div class="event-meta">${e.time?_ico.clock+' '+e.time:t('allDay')}${e.location?' · '+_ico.pin+' '+esc(e.location):''}${e.note?` · ${esc(e.note)}`:''}</div>
           ${payBtn}
         </div>
         <span class="event-person-chip" style="background:${col}22;color:${col}">🏫 ${esc(e.classKid)}</span>
@@ -6127,11 +6279,11 @@ function renderDayPanel(events){
     const personLabel=e.gcal?'':isAll
       ?`👨‍👩‍👧‍👧 ${t('everyone')}`
       :ps.map(n=>getEmoji(n)+' '+n).join(' · ');
-    const canDel=isParent()&&(!e.gcal||gcalConnected());
+    const canDel=(isAll&&isParent()&&(!e.gcal||gcalConnected()))||(!isAll&&ps.includes(S.user));
     return `<div class="event-item ${e.gcal?'gcal-event':''}" style="border-inline-start-color:${color}">
       <div class="event-body">
         <div class="event-title">${e.gcal?'<span class="g-badge">G</span>':''}${esc(e.title)}</div>
-        <div class="event-meta">${e.time?'🕐 '+e.time:t('allDay')}${e.location?' · 📍 '+esc(e.location):''}${e.gcal?' '+t('gcalSource'):''}</div>
+        <div class="event-meta">${e.time?_ico.clock+' '+e.time:t('allDay')}${e.location?' · '+_ico.pin+' '+esc(e.location):''}${e.gcal?' '+t('gcalSource'):''}</div>
       </div>
       ${personLabel?`<span class="event-person-chip" style="background:${color}22;color:${color}">${personLabel}</span>`:''}
       ${canDel?`<button class="del-btn" onclick="deleteEvent(${e.id},'${e.gcalId||''}')">${_ico.x}</button>`:''}</div>`;
@@ -6142,7 +6294,7 @@ function calShift(d){S.calMonth+=d;if(S.calMonth>11){S.calMonth=0;S.calYear++;}i
 async function addEvent(){
   const title=el('newEventTitle').value.trim(),date=el('newEventDate').value;
   if(!title||!date)return;
-  const person = _eventPersons.length===1&&_eventPersons[0]==='All' ? 'All' : _eventPersons;
+  const person = _eventPersons.includes('All') ? 'All' : [...new Set([..._eventPersons, S.user])];
   const location=el('newEventLocation')?.value.trim()||'';
   const ev={id:Date.now(),title,date,time:el('newEventTime').value,person,...(location&&{location})};
   const syncGcal=gcalConnected()&&isParent()&&el('gcalSyncCheck').checked;
@@ -6153,6 +6305,23 @@ async function addEvent(){
   save();if(syncGcal)await fetchGCalEvents();else renderCalendar();
 }
 async function deleteEvent(id,gcalId){
+  const ev=typeof id==='number'?S.events.find(x=>x.id===id):null;
+  if(ev){
+    const ps=eventPersons(ev);
+    if(!ps.includes('All')){
+      // personal event — remove self only
+      const remaining=ps.filter(n=>n!==S.user);
+      if(remaining.length===0){
+        if(gcalId&&gcalConnected())await gcalDeleteEvent(gcalId);
+        S.events=S.events.filter(x=>x.id!==id);
+      } else {
+        ev.person=remaining;
+      }
+      save();if(gcalConnected())await fetchGCalEvents();else renderCalendar();
+      return;
+    }
+  }
+  // 'All' event or legacy — full delete, parents only
   if(!isParent())return;
   if(gcalId&&gcalConnected())await gcalDeleteEvent(gcalId);
   if(typeof id==='number')S.events=S.events.filter(x=>x.id!==id);
@@ -6221,7 +6390,7 @@ const TAB_IDX = { home:0, chores:1, grocery:2, homework:3, calendar:4, community
 function tabLabel(id) { return t('tabs')[TAB_IDX[id]] || id; }
 
 function getActiveTabs() {
-  const visible = ALL_TABS.filter(t => !t.adminOnly || isAdmin());
+  const visible = ALL_TABS.filter(t => !t.adminOnly || (isAdmin() && !isKid()));
   if (!S.uid || !S.user) return visible.map(t => t.id);
   // Prefer Firestore-synced prefs (available after familyData loads)
   const firestorePrefs = familyData?.tabPrefs?.[S.user];
@@ -6291,7 +6460,7 @@ function navToCalendarDate(dateStr, src, kid) {
   if (src === 'class' && kid) {
     _calClassEventsOn[kid] = true;  // ensure kid's class events toggle is on
   } else {
-    _calClassOnly = false;           // ensure personal events aren't hidden
+    _calFilter = 'all';              // ensure personal events aren't hidden
   }
   switchTab('calendar');
   renderCalendar();
@@ -6327,6 +6496,8 @@ function switchTab(tab) {
   el('tabScroll')?.querySelector('.tab.active')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   updateTabArrows();
   _updateScrollTopBtn();
+  if (tab !== 'chores') el('choreFabWrap')?.style.setProperty('display', 'none');
+  if (tab === 'chores') renderChores();
   if (tab === 'community') renderCommunity();
   if (tab === 'analytics') renderAnalytics();
   if (tab === 'homework' && getKids().includes(S.filter)) S.child = S.filter;
