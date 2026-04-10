@@ -857,8 +857,8 @@ body {
 .pool-add-btn:hover { background: var(--primary-50); color: var(--primary-500); border-color: var(--primary-200); }
 .pool-add-btn.in-list { color: var(--primary-500); border-color: var(--primary-300); background: var(--primary-50); }
 .pool-item-in-list { background: var(--primary-50); }
-.pool-item-in-list .pool-item-name { color: var(--gray-500); font-weight: 500; }
-.pool-item-in-list .unit-badge { opacity: 0.5; }
+.pool-item-in-list .pool-item-name { color: var(--gray-600); font-weight: 600; }
+.pool-item-in-list .unit-badge { opacity: 0.8; }
 .pool-item-in-cart { background: var(--gray-50); opacity: 0.5; }
 .pool-item-in-cart .pool-item-name { color: var(--gray-400); font-weight: 500; text-decoration: line-through; }
 .pool-in-cart-check { font-size: 13px; font-weight: 700; color: #22c55e; flex-shrink: 0; }
