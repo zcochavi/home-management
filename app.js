@@ -4946,6 +4946,7 @@ function renderPool() {
           <div class="pool-qty-inline" onclick="event.stopPropagation()">
             <input class="qty-input${isKg?' kg':''}" type="number"
               min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${qtyVal}"
+              onfocus="this.select()"
               oninput="updatePoolQty(${p.id},this.value)${isKg?";this.value=this.value.replace(/(\\..{1})./g,'$1')":""}">
             <span class="qty-unit-label">${unitLabel}</span>
           </div>
@@ -5079,10 +5080,6 @@ function addPoolItemNow(poolId) {
   saveGrocery();
   renderPool();
   renderShoppingList();
-  requestAnimationFrame(() => {
-    const inp = document.querySelector(`[data-pool-id="${poolId}"] .qty-input`);
-    if (inp) { inp.focus(); inp.select(); }
-  });
 }
 
 function removePoolItemFromList(poolId) {
@@ -5192,6 +5189,7 @@ function renderShoppingList() {
       <div class="slist-item-name">${esc(item.name)} ${qtyBadge}</div>
       <input class="qty-input${isKg?' kg':''}" type="number"
         min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${item.qty||1}"
+        onfocus="this.select()"
         ${isKg?`oninput="this.value=this.value.replace(/(\\\.\\d{1})\\d+/,'$1')"`:``}
         onchange="updateListQty(${item.id},this.value)">
       <span class="qty-unit-label">${unitLabel}</span>
