@@ -4749,7 +4749,7 @@ let _poolNewQtyType = 'count';  // unit for next new pool item: 'count' | 'kg'
 const _collapsedPoolCats     = new Set();
 const _collapsedShoppingCats = new Set();
 let _poolSearch = '';
-let _poolCatFilter = null;
+let _poolCatFilter = new Set();
 let _poolChipsOpen = false;
 let _historySearch = '';
 const _expandedHistoryDates = new Set();
@@ -4772,7 +4772,9 @@ function onPoolSearch(val) {
 }
 
 function pickPoolCat(name) {
-  _poolCatFilter = _poolCatFilter === name ? null : name;
+  if (!name) { _poolCatFilter.clear(); }
+  else if (_poolCatFilter.has(name)) { _poolCatFilter.delete(name); }
+  else { _poolCatFilter.add(name); }
   renderPool();
 }
 function togglePoolChips() {
@@ -4983,28 +4985,25 @@ function renderPool() {
   if (chipsEl) {
     const chipCount = chipCats.length + (hasOrphans ? 1 : 0);
     if (chipCount > 1) {
-      const activeLabel = _poolCatFilter
-        ? (cats.find(c => c.name === _poolCatFilter)
-            ? `${cats.find(c=>c.name===_poolCatFilter).emoji} ${esc(_poolCatFilter)}`
-            : _poolCatFilter === '__other__' ? 'אחר' : '')
-        : '';
-      const clearX = `<span class="cat-chip-x" onclick="pickPoolCat(null);event.stopPropagation()">×</span>`;
-      const toggleLabel = activeLabel
-        ? `<span class="cat-chips-active-label">${activeLabel}${clearX}</span>`
-        : '';
+      const hasFilter = _poolCatFilter.size > 0;
+      const clearX = (name) => `<span class="cat-chip-x" onclick="pickPoolCat('${name}');event.stopPropagation()">×</span>`;
+      const toggleLabel = _poolCatFilter.size === 1
+        ? (() => { const n = [..._poolCatFilter][0]; const c = cats.find(x=>x.name===n); return ` · ${c ? c.emoji+' '+esc(n) : n==='__other__'?'אחר':esc(n)}`; })()
+        : _poolCatFilter.size > 1 ? ` · ${_poolCatFilter.size}` : '';
       const chevron = _poolChipsOpen ? '▴' : '▾';
-      const allChip = `<button class="cat-chip${!_poolCatFilter?' active':''}" onclick="pickPoolCat(null)">הכל</button>`;
-      const catChips = chipCats.map(c =>
-        `<button class="cat-chip${_poolCatFilter===c.name?' active':''}" onclick="pickPoolCat('${esc(c.name)}')">${c.emoji} ${esc(c.name)}${_poolCatFilter===c.name ? clearX : ''}</button>`
-      ).join('');
+      const allChip = `<button class="cat-chip${!hasFilter?' active':''}" onclick="pickPoolCat(null)">הכל</button>`;
+      const catChips = chipCats.map(c => {
+        const active = _poolCatFilter.has(c.name);
+        return `<button class="cat-chip${active?' active':''}" onclick="pickPoolCat('${esc(c.name)}')">${c.emoji} ${esc(c.name)}${active ? clearX(c.name) : ''}</button>`;
+      }).join('');
       const orphanChip = hasOrphans
-        ? `<button class="cat-chip${_poolCatFilter==='__other__'?' active':''}" onclick="pickPoolCat('__other__')">אחר${_poolCatFilter==='__other__' ? clearX : ''}</button>`
+        ? (() => { const active = _poolCatFilter.has('__other__'); return `<button class="cat-chip${active?' active':''}" onclick="pickPoolCat('__other__')">אחר${active ? clearX('__other__') : ''}</button>`; })()
         : '';
       const chipsRow = _poolChipsOpen
         ? `<div class="cat-chips">${allChip}${catChips}${orphanChip}</div>`
         : '';
       chipsEl.innerHTML = `
-        <button class="cat-chips-toggle${_poolCatFilter?' has-filter':''}" onclick="togglePoolChips()">
+        <button class="cat-chips-toggle${hasFilter?' has-filter':''}" onclick="togglePoolChips()">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="4" x2="14" y2="4"/><line x1="4" y1="8" x2="12" y2="8"/><line x1="6" y1="12" x2="10" y2="12"/></svg>
           סינון${toggleLabel}
           <span class="cat-chips-chevron">${chevron}</span>
@@ -5019,10 +5018,11 @@ function renderPool() {
   let poolItems = _poolSearch.length > 0
     ? S.groceryPool.filter(p => p.name.toLowerCase().includes(_poolSearch))
     : S.groceryPool;
-  if (_poolCatFilter) {
-    poolItems = _poolCatFilter === '__other__'
-      ? poolItems.filter(p => !knownCats.has(p.category))
-      : poolItems.filter(p => p.category === _poolCatFilter);
+  if (_poolCatFilter.size > 0) {
+    poolItems = poolItems.filter(p =>
+      (_poolCatFilter.has('__other__') && !knownCats.has(p.category)) ||
+      _poolCatFilter.has(p.category)
+    );
   }
 
   function poolCatHtml(emoji, name, items) {
