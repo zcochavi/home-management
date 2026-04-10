@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260413bu') location.reload(true);
+        if (v !== '20260413ce') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260413bu">
+  <link rel="stylesheet" href="styles.css?v=20260413ce">
 </head>
 <body>
 
@@ -416,9 +416,7 @@
           </button>
         </div>
         <div class="chore-qa-controls-row">
-          <select id="newChoreAssignee" style="display:none"></select>
-          <div class="soft-dd" id="ddAssignee"></div>
-          <div class="chore-qa-sep" id="choreQaSep"></div>
+          <div id="choreAssigneeLabel" class="chore-qa-assignee-label" style="display:none"></div>
           <select id="newChorePriority" style="display:none"></select>
           <div class="pri-seg" id="priSegControl">
             <button class="pri-seg-btn" data-val="high"   onclick="_priSegPick('high')">גבוהה</button>
@@ -428,9 +426,12 @@
         </div>
       </div>
       <div id="choreHistoryWrap"></div>
-      <button class="chore-fab" onclick="choreFabClick()" aria-label="הוסף משימה">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
-      </button>
+      <div class="chore-fab-wrap" id="choreFabWrap">
+        <div class="chore-fab-picker" id="choreFabPicker"></div>
+        <button class="chore-fab" id="choreFab" onclick="choreFabClick()" aria-label="הוסף משימה">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+        </button>
+      </div>
     </div>
 
     <!-- GROCERY / SUPERMARKET -->
@@ -487,6 +488,7 @@
     <!-- HOMEWORK -->
     <div id="tab-homework" class="tab-content">
       <div class="tab-chips-row" id="childTabsContainer"></div>
+      <div class="tab-chips-row" id="hwSubjectChips" style="display:none;flex-wrap:wrap;gap:8px"></div>
       <div class="card hw-class-card" id="hwClassSection" style="display:none">
         <div class="hw-section-hdr">🏫 שיעורי בית של הכיתה</div>
         <div id="hwClassList"></div>
@@ -501,7 +503,8 @@
           </div>
           <input class="add-input" id="hwDesc" type="text">
           <div class="form-row">
-            <select id="hwSubject" style="flex:1"></select>
+            <div id="ddHwSubject" style="flex:1;min-width:0"></div>
+            <select id="hwSubject" style="display:none"></select>
             <input type="date" id="hwDue" style="flex:1">
             <button class="btn-sm" id="addHwBtn" onclick="addHomework()"></button>
           </div>
@@ -564,7 +567,7 @@
 <button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
 </button>
-<script src="app.js?v=20260413bu"></script>
+<script src="app.js?v=20260413ce"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>

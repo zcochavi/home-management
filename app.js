@@ -2733,7 +2733,7 @@ function renderPostCard(ev, cid) {
       ${ev.note ? `<div class="post-card-note">${esc(ev.note)}</div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
-    ${ev.date ? `<div class="post-card-date">📅 ${fmtEventDate(ev.date)}</div>` : ''}
+    ${ev.date || ev.time ? `<div class="post-card-date">${ev.date ? '📅 ' + fmtEventDate(ev.date) : ''}${ev.time ? (ev.date ? ' · ' : '') + '🕐 ' + ev.time : ''}</div>` : ''}
     <div class="post-card-reactions">
       ${_reactionBtns(ev, scope, sid)}
     </div>
@@ -2918,8 +2918,14 @@ function renderCommCard(kid) {
       <div style="font-size:13px;font-weight:900;color:#1a202c;margin-bottom:10px">➕ ${t('commNewEvent')}</div>
       <input class="auth-input" id="commEvTitle_${cid}" placeholder="${t('commEventTitle')}" style="margin-bottom:6px">
       <div style="display:flex;gap:8px;margin-bottom:6px">
-        <input type="date" class="auth-input" id="commEvDate_${cid}" style="flex:1">
-        <div id="commEvTypeDd_${cid}" style="flex:1;min-width:0"></div>
+        <div style="flex:1;min-width:0">
+          <input type="date" class="auth-input" id="commEvDate_${cid}" style="margin-bottom:0;width:100%">
+          <div id="commEvDateHint_${cid}" style="display:none;font-size:11px;color:var(--gray-400);font-weight:600;margin-top:3px;padding-right:2px">תאריך אופציונלי לסוג זה</div>
+        </div>
+        <input type="time" class="auth-input" id="commEvTime_${cid}" style="flex:0 0 110px;margin-bottom:0">
+      </div>
+      <div style="margin-bottom:6px">
+        <div id="commEvTypeDd_${cid}" style="width:100%"></div>
         <select id="commEvType_${cid}" style="display:none" onchange="onCommEvTypeChange('${cid}')">
           ${EVENT_TYPES.map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
         </select>
@@ -3031,10 +3037,14 @@ async function renderCommunity() {
   });
 }
 
+const _DATE_OPTIONAL_TYPES = new Set(['announcement', 'other']);
+
 function onCommEvTypeChange(cid) {
   const type = el('commEvType_' + cid)?.value;
-  const wrap = el('commEvGenderWrap_' + cid);
-  if (wrap) wrap.style.display = type === 'birthday' ? '' : 'none';
+  const genderWrap = el('commEvGenderWrap_' + cid);
+  if (genderWrap) genderWrap.style.display = type === 'birthday' ? '' : 'none';
+  const dateHint = el('commEvDateHint_' + cid);
+  if (dateHint) dateHint.style.display = _DATE_OPTIONAL_TYPES.has(type) ? '' : 'none';
 }
 
 function matchesGenderFilter(ev, kidName) {
@@ -3108,6 +3118,7 @@ function _commHidePicker() {
 async function submitClassEvent(cid) {
   const title      = el('commEvTitle_'  + cid)?.value.trim();
   const date       = el('commEvDate_'   + cid)?.value;
+  const time       = el('commEvTime_'   + cid)?.value || '';
   const type       = el('commEvType_'   + cid)?.value || 'other';
   const scope      = el('commEvScope_'  + cid)?.value || 'class';
   const location   = el('commEvLocation_'+ cid)?.value.trim() || '';
@@ -3117,12 +3128,13 @@ async function submitClassEvent(cid) {
   const genderFilter = type === 'birthday'
     ? (document.querySelector(`input[name="commEvGender_${cid}"]:checked`)?.value || 'all')
     : 'all';
-  if (!title || !date) return;
+  if (!title || (!date && !_DATE_OPTIONAL_TYPES.has(type))) return;
   const docData = { title, date, type, note, scope,
     postedBy: { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName||'' },
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     genderFilter,
   };
+  if (time) docData.time = time;
   if (location) docData.location = location;
   if (payboxUrl) docData.payboxUrl = payboxUrl;
 
@@ -4041,17 +4053,11 @@ function renderStatic() {
   _buildSoftDd('ddPoolCat', 'poolCatSelect');
   el('hwSubject').innerHTML = getSubjects().map(s =>
     `<option value="${esc(s.name)}">${esc(subjectLabel(s.name))}</option>`).join('');
-  // Dynamic member dropdowns
-  el('newChoreAssignee').innerHTML = getAllMemberNames().map(n =>
-    `<option value="${esc(n)}">${esc(n)}</option>`).join('');
-  _buildSoftDd('ddAssignee', 'newChoreAssignee');
+  _buildSoftDd('ddHwSubject', 'hwSubject');
   renderEventPersonPicker();
 }
 
 function applyRoleUI() {
-  // Kids can add chores for themselves but can't pick assignee
-  const ddA = el('ddAssignee');
-  if (ddA) ddA.style.display = isParent() ? '' : 'none';
   el('poolAddTrigger').style.display = isParent()?'':'none';
   el('poolAddForm').style.display = 'none';
 }
@@ -4486,20 +4492,13 @@ let _chore3dotActiveId = null;
 function renderChores() {
   const choresChipsEl = el('choresChips');
   if (choresChipsEl) choresChipsEl.innerHTML = _allMemberChipsHtml();
-  const fab = document.querySelector('.chore-fab');
-  if (fab) fab.style.display = isParent() ? '' : 'none';
-  // Show assignee select only when parent is viewing all members
-  const showAssigneeSelect = isParent() && S.filter === 'All';
-  const ddAssigneeEl = el('ddAssignee');
-  const sepEl = el('choreQaSep');
-  if (ddAssigneeEl) ddAssigneeEl.style.display = showAssigneeSelect ? '' : 'none';
-  if (sepEl)        sepEl.style.display        = showAssigneeSelect ? '' : 'none';
-  const choreInput = el('newChoreText');
-  if (choreInput) {
-    choreInput.placeholder = S.filter === 'All' ? t('chorePlaceholder') : `הוסף משימה ל${S.filter}...`;
-  }
+  const fabWrap = el('choreFabWrap');
+  // Reset assignee state when filter changes
+  if (S.filter !== 'All') { _choreFabAssignee = null; }
+  _updateChoreFormAssignee();
   let items = S.filter==='All' ? S.chores : S.chores.filter(c=>c.assignee===S.filter);
   const active = items.filter(c=>!c.done);
+  if (fabWrap) fabWrap.style.display = (isParent() && (S.filter === 'All' || active.length > 0)) ? '' : 'none';
   const showAssignee = S.filter==='All';
   const inner = active.length ? active.map(c=>{
     const can = isParent()||c.assignee===S.user;
@@ -4921,19 +4920,77 @@ function _initChoreSwipes() {
     });
   });
 }
+let _choreFabAssignee = null;
+
+function _updateChoreFormAssignee() {
+  const lbl = el('choreAssigneeLabel');
+  const inp = el('newChoreText');
+  const name = S.filter !== 'All' ? S.filter : _choreFabAssignee;
+  if (lbl) {
+    if (name && isParent()) {
+      lbl.style.display = '';
+      lbl.innerHTML = `<span class="chore-qa-av">${getAvatar(name, 18)}</span>${esc(name)}`;
+    } else {
+      lbl.style.display = 'none';
+    }
+  }
+  if (inp) inp.placeholder = name ? `הוסף משימה ל${name}...` : t('chorePlaceholder');
+}
+
 function choreFabClick() {
+  if (!isParent() || S.filter !== 'All') {
+    _choreOpenForm();
+    return;
+  }
+  // All view — show member picker
+  const picker = el('choreFabPicker');
+  if (!picker) return;
+  if (picker.classList.contains('open')) { _choreHidePicker(); return; }
+  picker.innerHTML = getAllMemberNames().map(name =>
+    `<button class="comm-fab-pick-item" onclick="_choreFabPick('${esc(name)}')">
+      <span class="comm-fab-pick-avatar">${getAvatar(name)}</span>
+      <span>${esc(name)}</span>
+    </button>`
+  ).join('');
+  picker.classList.add('open');
+  el('choreFab')?.classList.add('chore-fab-open');
+  setTimeout(() => {
+    document.addEventListener('click', function _h(e) {
+      if (!el('choreFabWrap')?.contains(e.target)) { _choreHidePicker(); document.removeEventListener('click', _h); }
+    });
+  }, 0);
+}
+
+function _choreFabPick(name) {
+  _choreFabAssignee = name;
+  _choreHidePicker();
+  _updateChoreFormAssignee();
+  _choreOpenForm();
+}
+
+function _choreHidePicker() {
+  el('choreFabPicker')?.classList.remove('open');
+  el('choreFab')?.classList.remove('chore-fab-open');
+}
+
+function _choreOpenForm() {
   const card = el('addChoreCard');
   if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
   setTimeout(() => el('newChoreText')?.focus(), 300);
 }
 
 function addChore(){
-  const text=el('newChoreText').value.trim();if(!text)return;
-  const assignee=isParent()
-    ?(S.filter!=='All'?S.filter:el('newChoreAssignee').value)
-    :S.user;
+  const text = el('newChoreText').value.trim();
+  if (!text) return;
+  const assignee = isParent()
+    ? (S.filter !== 'All' ? S.filter : (_choreFabAssignee || getAllMemberNames()[0]))
+    : S.user;
   S.chores.push({id:Date.now(),text,assignee,priority:el('newChorePriority').value,done:false});
-  el('newChoreText').value=''; _priSegPick('medium'); save();renderHome();renderChores();
+  el('newChoreText').value='';
+  _priSegPick('medium');
+  _choreFabAssignee = null;
+  _updateChoreFormAssignee();
+  save(); renderHome(); renderChores();
 }
 
 // ════════════════════════════════════════
@@ -5643,6 +5700,7 @@ function renderShoppingHistory() {
 let _hwHistOpen = false;
 let _hwHistSearch = '';
 let _hwScope      = 'personal';
+let _hwSubjectFilter = null;
 
 function fmtDoneAt(ts) {
   if (!ts) return '';
@@ -5655,7 +5713,7 @@ function fmtDoneAt(ts) {
 function renderHomework(){
   const kids=isParent()?getKids():getKids().filter(k=>k===S.user);
   const childTabsEl=el('childTabsContainer');
-  const showKidChips = kids.length >= 2 && _hwScope !== 'class';
+  const showKidChips = kids.length >= 2;
   childTabsEl.style.display = showKidChips ? '' : 'none';
   if (showKidChips) childTabsEl.innerHTML = _hwKidChipsHtml(kids);
 
@@ -5663,8 +5721,34 @@ function renderHomework(){
   const scopeEl=el('hwScopeSeg');
   if(scopeEl)scopeEl.style.display=isParent()?'':'none';
 
+  // Build full (unfiltered) lists first for subject chip computation
+  let classHw=S.homework.filter(h=>h.scope==='class');
+  const allPending=S.child
+    ? S.homework.filter(h=>(!h.scope||h.scope==='personal')&&h.child===S.child&&!h.done)
+    : [];
+
+  // Subject filter chips — union of subjects with at least one pending item
+  const subjChipsEl=el('hwSubjectChips');
+  if(subjChipsEl){
+    const classNotDone=classHw.filter(h=>!(h.doneBy&&h.doneBy[S.child]));
+    const allSubjs=[...new Set([...classNotDone,...allPending].map(h=>h.subject).filter(Boolean))];
+    if(allSubjs.length>1){
+      if(_hwSubjectFilter&&!allSubjs.includes(_hwSubjectFilter))_hwSubjectFilter=null;
+      subjChipsEl.style.display='';
+      subjChipsEl.innerHTML=allSubjs.map(s=>
+        `<div class="hw-subj-chip${_hwSubjectFilter===s?' active':''}" style="${subjectBadgeStyle(s)}" onclick="switchHwSubject('${esc(s)}')">${esc(subjectLabel(s))}</div>`
+      ).join('');
+    } else {
+      subjChipsEl.style.display='none';
+      _hwSubjectFilter=null;
+    }
+  }
+
+  // Apply subject filter
+  if(_hwSubjectFilter) classHw=classHw.filter(h=>h.subject===_hwSubjectFilter);
+  const pending=_hwSubjectFilter ? allPending.filter(h=>h.subject===_hwSubjectFilter) : allPending;
+
   // Class homework section
-  const classHw=S.homework.filter(h=>h.scope==='class');
   const classSec=el('hwClassSection');
   const classListEl=el('hwClassList');
   if(classSec&&classListEl){
@@ -5682,9 +5766,9 @@ function renderHomework(){
           <div class="hw-head">
             <div class="check-box ${myDone?'done':''} ${can&&!myDone?'':'readonly'}" ${can&&!myDone?`onclick="toggleHW(${h.id})"`:''}>
             </div>
-            <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
             <div class="hw-desc-text ${myDone?'done':''}">${esc(h.desc)}</div>
             ${doneCount>0?`<span class="hw-done-count">${doneCount}/${allKids.length}</span>`:''}
+            <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
             ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}
           </div>
           ${h.due?`<div class="hw-due">${t('hwDueLabel',fmtDate(h.due))}</div>`:''}
@@ -5705,15 +5789,14 @@ function renderHomework(){
   const canAdd=isParent()||S.child===S.user;
   el('addHwForm').style.display=canAdd?'':'none';
 
-  const pending=S.homework.filter(h=>(!h.scope||h.scope==='personal')&&h.child===S.child&&!h.done);
   el('hwList').innerHTML=pending.length?pending.map(h=>{
     const can=isParent()||h.child===S.user;
     return `<div class="hw-item" data-hw-id="${h.id}">
       <div class="hw-head">
         <div class="check-box ${can?'':'readonly'}" ${can?`onclick="toggleHW(${h.id})"`:''}>
         </div>
-        <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
         <div class="hw-desc-text">${esc(h.desc)}</div>
+        <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
         ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}</div>
       ${h.due?`<div class="hw-due">${t('hwDueLabel',fmtDate(h.due))}</div>`:''}</div>`;
   }).join(''):`<div class="empty">${t('noHw')}</div>`;
@@ -5734,15 +5817,18 @@ function renderHwHistory(child) {
   if (!allDone.length) { wrap.innerHTML = ''; return; }
 
   const q = _hwHistSearch.toLowerCase();
-  const filtered = q ? allDone.filter(h=>
-    h.desc.toLowerCase().includes(q) || subjectLabel(h.subject).toLowerCase().includes(q)
-  ) : allDone;
+  const filtered = allDone.filter(h=>{
+    if(_hwSubjectFilter&&h.subject!==_hwSubjectFilter)return false;
+    if(!q)return true;
+    return h.desc.toLowerCase().includes(q)||subjectLabel(h.subject).toLowerCase().includes(q);
+  });
+  const visibleCount = _hwSubjectFilter ? filtered.length : allDone.length;
 
   wrap.innerHTML = `<div class="card" style="margin-top:10px">
     <div class="hw-hist-hdr" onclick="toggleHwHistory()">
       <span style="color:#a0aec0;font-size:12px;margin-inline-end:6px">${_hwHistOpen?'▲':'▼'}</span>
       <span class="hw-hist-title">${t('hwHistory')}</span>
-      <span class="hw-hist-count">${allDone.length}</span>
+      <span class="hw-hist-count">${visibleCount}</span>
     </div>
     ${_hwHistOpen ? `
       <input class="hw-hist-search" placeholder="${t('hwHistorySearch')}"
@@ -5755,15 +5841,15 @@ function renderHwHistory(child) {
 function hwHistListHTML(filtered) {
   return filtered.length ? filtered.map(h=>`
     <div class="hw-hist-item" data-hw-id="${h.id}">
-      <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
       ${h._isClass?`<span class="hw-class-badge">כיתה</span>`:''}
       <div class="hw-hist-desc">${esc(h.desc)}</div>
+      <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
       <span class="hw-hist-ts">${fmtDoneAt(h._doneAt)}</span>
       ${isParent()&&!h._isClass?`<button class="del-btn" title="בטל סימון" onclick="toggleHW(${h.id})">${_ico.undo}</button>`:''}
       ${h._isClass?`<button class="del-btn" title="בטל סימון" onclick="toggleHW(${h.id})">${_ico.undo}</button>`:''}
       ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}
     </div>`).join('')
-  : `<div class="empty" style="padding:8px 0">${t('hwHistoryEmpty')}</div>`;
+  : `<div class="empty" style="padding:8px 0">${t('hwHistoryEmpty')}${_hwSubjectFilter ? ' ב' + esc(subjectLabel(_hwSubjectFilter)) : ''}</div>`;
 }
 function filterHwHistory(child) {
   const listEl = el('hwHistList');
@@ -5776,9 +5862,11 @@ function filterHwHistory(child) {
     .map(h=>({...h,_doneAt:h.doneAtBy&&h.doneAtBy[child],_isClass:true}));
   const allDone=[...personalDone,...classDone].sort((a,b)=>(b._doneAt||0)-(a._doneAt||0));
   const q = _hwHistSearch.toLowerCase();
-  const filtered = q ? allDone.filter(h=>
-    h.desc.toLowerCase().includes(q) || subjectLabel(h.subject).toLowerCase().includes(q)
-  ) : allDone;
+  const filtered = allDone.filter(h=>{
+    if(_hwSubjectFilter&&h.subject!==_hwSubjectFilter)return false;
+    if(!q)return true;
+    return h.desc.toLowerCase().includes(q)||subjectLabel(h.subject).toLowerCase().includes(q);
+  });
   listEl.innerHTML = hwHistListHTML(filtered);
 }
 function toggleHwHistory() {
@@ -5786,7 +5874,8 @@ function toggleHwHistory() {
   renderHwHistory(S.child);
 }
 
-function switchChild(c){S.child=c;renderHomework();}
+function switchChild(c){S.child=c;_hwSubjectFilter=null;renderHomework();}
+function switchHwSubject(s){_hwSubjectFilter=(_hwSubjectFilter===s)?null:s;renderHomework();}
 function _hwScopePick(val) {
   _hwScope = val;
   document.querySelectorAll('#hwScopeSeg .hw-scope-btn').forEach(b =>
@@ -5794,7 +5883,7 @@ function _hwScopePick(val) {
   const childTabsEl = el('childTabsContainer');
   if (childTabsEl) {
     const kids = isParent() ? getKids() : getKids().filter(k => k === S.user);
-    childTabsEl.style.display = (kids.length >= 2 && val !== 'class') ? '' : 'none';
+    childTabsEl.style.display = kids.length >= 2 ? '' : 'none';
   }
   const hwDescEl = el('hwDesc');
   if (hwDescEl) hwDescEl.placeholder = val === 'class' ? 'שיעור בית לכל הכיתה...' : t('hwPlaceholder');
