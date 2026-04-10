@@ -2902,6 +2902,8 @@ function renderCommCard(kid) {
 async function renderCommunity() {
   const container = el('communityContent');
   if (!container) return;
+  const commChipsEl = el('communityChips');
+  if (commChipsEl) commChipsEl.innerHTML = _kidChipsHtml();
 
   const filteredKids = (S.filter !== 'All' && getKids().includes(S.filter))
     ? [S.filter] : getKids();
@@ -3878,15 +3880,38 @@ function renderHeader() {
   const g = h<12?t('greetMorning'):h<17?t('greetAfternoon'):t('greetEvening');
   el('headerGreeting').innerHTML = `${esc(g)}, <strong>${esc(S.user)}</strong>! <span style="display:inline-flex;vertical-align:middle;margin:0 2px;">${getAvatar(S.user, 22)}</span>&nbsp;<span class="header-role-badge">${currentUserRoleBadge()}</span>`;
   el('headerDate').textContent = new Date().toLocaleDateString(t('locale'),{weekday:'long',month:'long',day:'numeric'});
+}
+
+// ── Tab chip helpers ──────────────────────────
+function _allMemberChipsHtml() {
+  if (!isParent()) return '';
   const allNames = getAllMemberNames();
-  const members = isParent()
-    ? [{name:'All',emoji:'👨‍👩‍👧‍👧'}, ...allNames.map(n=>({name:n,emoji:getEmoji(n)}))]
-    : [{name:'All',emoji:'👨‍👩‍👧‍👧'}, {name:S.user,emoji:getEmoji(S.user)}];
-  el('avatarRow').innerHTML = members.map(f => `
-    <div class="avatar-chip ${f.name==='All'?'avatar-chip-all':''} ${S.filter===f.name?'active':''}" onclick="setFilter('${esc(f.name)}')">
-      <div class="avatar-bubble">${f.name==='All' ? '👨‍👩‍👧‍👧' : getAvatar(f.name)}</div>
-      <div class="avatar-label">${f.name==='All'?t('all'):f.name}</div>
+  if (allNames.length < 2) return ''; // single chip rule
+  const members = [{name:'All'}, ...allNames.map(n=>({name:n}))];
+  return members.map(f => {
+    const isAll = f.name === 'All';
+    return `<div class="avatar-chip${isAll?' avatar-chip-all':''}${S.filter===f.name?' active':''}" onclick="setFilter('${esc(f.name)}')">
+      <div class="avatar-bubble">${isAll ? '👨‍👩‍👧‍👧' : getAvatar(f.name)}</div>
+      <div class="avatar-label">${isAll ? t('all') : esc(f.name)}</div>
+    </div>`;
+  }).join('');
+}
+
+function _kidChipsHtml() {
+  if (!isParent()) return '';
+  const kids = getKids();
+  if (kids.length < 2) return ''; // single chip rule
+  return kids.map(k => `
+    <div class="avatar-chip${S.filter===k?' active':''}" onclick="setFilter('${esc(k)}')">
+      <div class="avatar-bubble">${getAvatar(k)}</div>
+      <div class="avatar-label">${esc(k)}</div>
     </div>`).join('');
+}
+
+function _hwKidChipsHtml(kids) {
+  return kids.map(k =>
+    `<button class="hw-kid-chip${S.child===k?' active':''}" onclick="switchChild('${esc(k)}')">${getAvatar(k, 18)} ${esc(k)}</button>`
+  ).join('');
 }
 
 // ════════════════════════════════════════
@@ -4122,6 +4147,8 @@ function renderWeatherWidget() {
 }
 
 function renderHome() {
+  const homeChipsEl = el('homeChips');
+  if (homeChipsEl) homeChipsEl.innerHTML = _allMemberChipsHtml();
   const bannerEl = el('welcomeBanner');
   if (isKid()) {
     const col = getKidGradient(S.user);
@@ -4215,6 +4242,8 @@ let _snackTimer = null;
 let _chore3dotActiveId = null;
 
 function renderChores() {
+  const choresChipsEl = el('choresChips');
+  if (choresChipsEl) choresChipsEl.innerHTML = _allMemberChipsHtml();
   // Show assignee select only when parent is viewing all members
   const showAssigneeSelect = isParent() && S.filter === 'All';
   const ddAssigneeEl = el('ddAssignee');
@@ -5340,12 +5369,10 @@ function fmtDoneAt(ts) {
 
 function renderHomework(){
   const kids=isParent()?getKids():getKids().filter(k=>k===S.user);
-  const filterActive=getKids().includes(S.filter);
   const childTabsEl=el('childTabsContainer');
-  childTabsEl.style.display=(filterActive||_hwScope==='class')?'none':'';
-  childTabsEl.innerHTML=kids.map(k=>
-    `<div class="child-tab ${S.child===k?'active':''}" onclick="switchChild('${esc(k)}')"><span style="display:inline-flex;vertical-align:middle;width:15px;height:15px;margin-inline-end:4px;opacity:0.85;">${_memberPersonSVG('kid')}</span>${k}</div>`
-  ).join('');
+  const showKidChips = kids.length >= 2 && _hwScope !== 'class';
+  childTabsEl.style.display = showKidChips ? '' : 'none';
+  if (showKidChips) childTabsEl.innerHTML = _hwKidChipsHtml(kids);
 
   // Scope toggle: parents only
   const scopeEl=el('hwScopeSeg');
@@ -5481,8 +5508,8 @@ function _hwScopePick(val) {
     b.classList.toggle('active', b.dataset.val === val));
   const childTabsEl = el('childTabsContainer');
   if (childTabsEl) {
-    const filterActive = getKids().includes(S.filter);
-    childTabsEl.style.display = (filterActive || val === 'class') ? 'none' : '';
+    const kids = isParent() ? getKids() : getKids().filter(k => k === S.user);
+    childTabsEl.style.display = (kids.length >= 2 && val !== 'class') ? '' : 'none';
   }
   const hwDescEl = el('hwDesc');
   if (hwDescEl) hwDescEl.placeholder = val === 'class' ? 'שיעור בית לכל הכיתה...' : t('hwPlaceholder');
@@ -5888,14 +5915,20 @@ function switchTab(tab) {
   const enterClass = newIdx >= oldIdx ? 'tab-enter-right' : 'tab-enter-left';
 
   S.tab = tab;
+  window.scrollTo(0, 0); // reset scroll before layout changes to prevent jump
   el('tabBar').querySelectorAll('.tab').forEach(e =>
     e.classList.toggle('active', e.dataset.tab === tab));
   document.querySelectorAll('.tab-content').forEach(e =>
     e.classList.remove('active', 'tab-enter-right', 'tab-enter-left'));
   const newContent = el('tab-' + tab);
   if (newContent) {
-    newContent.classList.add('active', enterClass);
-    setTimeout(() => newContent.classList.remove('tab-enter-right', 'tab-enter-left'), 220);
+    newContent.classList.add('active');
+    // rAF ensures display:block is committed before animation starts,
+    // so the browser captures the correct 'from' keyframe
+    requestAnimationFrame(() => {
+      newContent.classList.add(enterClass);
+      setTimeout(() => newContent.classList.remove('tab-enter-right', 'tab-enter-left'), 220);
+    });
   }
   // Scroll active tab button into view
   el('tabScroll')?.querySelector('.tab.active')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });

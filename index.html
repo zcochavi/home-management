@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260413o') location.reload(true);
+        if (v !== '20260413r') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260413o">
+  <link rel="stylesheet" href="styles.css?v=20260413r">
 </head>
 <body>
 
@@ -371,7 +371,6 @@
     <div class="header-body" id="headerBody">
       <div class="header-date" id="headerDate"></div>
       <div id="notifBanners"></div>
-      <div class="avatar-row" id="avatarRow"></div>
     </div>
     <button class="header-collapse-btn" id="headerCollapseBtn" onclick="toggleHeaderCollapse()" aria-label="הסתר/הצג כותרת">▾</button>
   </div>
@@ -381,6 +380,7 @@
   <div class="content">
     <!-- HOME -->
     <div id="tab-home" class="tab-content active">
+      <div class="tab-chips-row" id="homeChips"></div>
       <div id="welcomeBanner"></div>
       <div id="weatherWidget"></div>
       <div id="homeSection-chores">
@@ -403,6 +403,7 @@
 
     <!-- CHORES -->
     <div id="tab-chores" class="tab-content">
+      <div class="tab-chips-row" id="choresChips"></div>
       <div id="choresContent"></div>
       <div class="card chore-quick-add" id="addChoreCard">
         <div class="chore-qa-input-row">
@@ -477,7 +478,7 @@
 
     <!-- HOMEWORK -->
     <div id="tab-homework" class="tab-content">
-      <div class="child-tabs" id="childTabsContainer"></div>
+      <div class="hw-kid-chips" id="childTabsContainer"></div>
       <div class="card hw-class-card" id="hwClassSection" style="display:none">
         <div class="hw-section-hdr">🏫 שיעורי בית של הכיתה</div>
         <div id="hwClassList"></div>
@@ -503,6 +504,7 @@
 
     <!-- COMMUNITY -->
     <div id="tab-community" class="tab-content">
+      <div class="tab-chips-row" id="communityChips"></div>
       <div id="communityContent"></div>
     </div>
 
@@ -553,7 +555,7 @@
 <button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
 </button>
-<script src="app.js?v=20260413o"></script>
+<script src="app.js?v=20260413r"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>

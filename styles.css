@@ -313,9 +313,18 @@ body {
 
 .header-date { font-size: 12px; color: var(--gray-400); font-weight: 600; margin-bottom: 6px; }
 
-/* Avatar row */
+/* Avatar row (header, legacy) */
 .avatar-row { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 2px; }
 .avatar-row::-webkit-scrollbar { display: none; }
+
+/* Tab-internal chip row (home, chores, community) */
+.tab-chips-row { display: flex; gap: 10px; overflow-x: auto; margin-bottom: 14px; padding-bottom: 2px; scrollbar-width: none; }
+.tab-chips-row::-webkit-scrollbar { display: none; }
+
+/* Homework kid chips — evenly spread full width */
+.hw-kid-chips { display: flex; gap: 8px; margin-bottom: 14px; }
+.hw-kid-chip { flex: 1; padding: 9px 8px; border-radius: var(--r-pill); background: var(--gray-100); font-size: 13px; font-weight: 700; color: var(--gray-500); cursor: pointer; transition: all var(--t-normal); user-select: none; text-align: center; border: none; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 5px; white-space: nowrap; }
+.hw-kid-chip.active { background: var(--primary-500); color: white; box-shadow: var(--shadow-primary); }
 .avatar-chip { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex-shrink: 0; transition: transform var(--t-normal), opacity var(--t-normal); opacity: 0.45; }
 .avatar-chip:active { transform: scale(0.9); }
 .avatar-chip.active { transform: scale(1.05); opacity: 1; }
@@ -484,8 +493,8 @@ body {
 .tab-content.active { display: block; }
 @keyframes tab-slide-in-right { from { transform: translateX(20px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes tab-slide-in-left  { from { transform: translateX(-20px); opacity: 0; } to { transform: none; opacity: 1; } }
-.tab-content.tab-enter-right { animation: tab-slide-in-right 0.2s ease-out; }
-.tab-content.tab-enter-left  { animation: tab-slide-in-left  0.2s ease-out; }
+.tab-content.tab-enter-right { animation: tab-slide-in-right 0.2s ease-out; will-change: transform, opacity; }
+.tab-content.tab-enter-left  { animation: tab-slide-in-left  0.2s ease-out; will-change: transform, opacity; }
 
 /* ═══════════════════════════════════════════
    CONTENT + CARDS
@@ -676,6 +685,7 @@ body {
 .chore-dot-med  { background: #f59e0b; }
 .chore-dot-low  { background: #86efac; }
 .chore-pri-label { font-size: 11px; font-weight: 500; color: var(--gray-400); }
+@media (hover: none) { .chore-3dot, .pool-3dot { display: none !important; } }
 .chore-3dot { flex-shrink: 0; position: relative; display: flex; align-items: flex-start; padding-top: 2px; }
 .chore-3dot-btn { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; background: none; cursor: pointer; color: var(--gray-400); border-radius: 6px; transition: background var(--t-fast), color var(--t-fast); flex-shrink: 0; }
 .chore-3dot-btn:hover { background: var(--gray-100); color: var(--gray-600); }
