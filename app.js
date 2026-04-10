@@ -4746,6 +4746,7 @@ let _poolQtyActiveId = null;  // poolId whose inline qty control is visible (mob
 let _poolEditFor = null;     // poolId currently being edited
 let _poolEditQtyType = 'count'; // unit type in active edit row
 let _poolNewQtyType = 'count';  // unit for next new pool item: 'count' | 'kg'
+let _poolLastCat = null;        // last category chosen when adding a pool item
 const _collapsedPoolCats     = new Set();
 const _collapsedShoppingCats = new Set();
 let _poolSearch = '';
@@ -4797,7 +4798,13 @@ function togglePoolAddForm(forceOpen) {
   const open = forceOpen !== undefined ? forceOpen : form.style.display === 'none';
   form.style.display = open ? '' : 'none';
   if (trigger) trigger.classList.toggle('active', open);
-  if (open) setTimeout(() => el('poolItemInput')?.focus(), 30);
+  if (open) {
+    if (_poolLastCat) {
+      const sel = el('poolCatSelect');
+      if (sel) { sel.value = _poolLastCat; _buildSoftDd('ddPoolCat', 'poolCatSelect'); }
+    }
+    setTimeout(() => el('poolItemInput')?.focus(), 30);
+  }
 }
 
 function togglePoolNewQtyType() {
@@ -5060,6 +5067,7 @@ function addPoolItem() {
     return;
   }
   const category = el('poolCatSelect').value;
+  _poolLastCat = category;
   S.groceryPool.push({ id: Date.now(), name, category, qtyType: _poolNewQtyType });
   el('poolItemInput').value = '';
   saveGrocery();
