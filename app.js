@@ -5077,6 +5077,10 @@ function addPoolItemNow(poolId) {
   saveGrocery();
   renderPool();
   renderShoppingList();
+  requestAnimationFrame(() => {
+    const inp = document.querySelector(`[data-pool-id="${poolId}"] .qty-input`);
+    if (inp) { inp.focus(); inp.select(); }
+  });
 }
 
 function removePoolItemFromList(poolId) {
