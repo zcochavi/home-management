@@ -3711,10 +3711,11 @@ const DRAWER_ICONS = {
 function _drawerItem(icon, label, onclick, opts = {}) {
   const cls = ['menu-item', opts.active ? 'active' : '', opts.danger ? 'danger' : ''].filter(Boolean).join(' ');
   const badge = opts.badge ? `<span class="menu-item-badge">${opts.badge}</span>` : '';
+  const keyBadge = opts.adminKey ? `<span class="menu-item-key">🔑</span>` : '';
   return `<button class="${cls}" onclick="${onclick}">
     <span class="menu-item-icon">${DRAWER_ICONS[icon] || ''}</span>
     <span class="menu-item-label">${label}</span>
-    ${badge}
+    ${keyBadge}${badge}
   </button>`;
 }
 
@@ -3738,7 +3739,7 @@ function openMenu() {
   const secondaryItems = [
     !S.lockedMember ? _drawerItem('switch', isHe ? 'החלף משתמש' : 'Switch member', `closeMenu();switchUser()`) : '',
     _drawerItem('install', isHe ? 'הוסף לדף הבית' : 'Add to home screen', `closeMenu();installApp()`),
-    isAdmin() ? _drawerItem('admin', isHe ? 'הגדרות מערכת' : 'System settings', `closeMenu();openAdminPanel(false)`) : '',
+    isAdmin() ? _drawerItem('admin', isHe ? 'הגדרות מערכת' : 'System settings', `closeMenu();openAdminPanel(false)`, { adminKey: true }) : '',
   ].filter(Boolean).join('');
 
   const signoutItem = _drawerItem('signout', isHe ? 'יציאה מהחשבון' : 'Sign out', `closeMenu();authSignOut()`, { danger: true });
