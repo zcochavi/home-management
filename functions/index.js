@@ -1198,6 +1198,24 @@ exports.getClassParents = functions.https.onCall(async (data, context) => {
   return result;
 });
 
+exports.submitFeedback = functions.https.onCall(async (data, context) => {
+  if (!context.auth?.uid) throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  const { topic, topicLabel, text, senderName, familyName } = data;
+  if (!text?.trim()) throw new functions.https.HttpsError('invalid-argument', 'Missing text');
+
+  await db.collection('adminMessages').add({
+    topic:      topic      || 'other',
+    topicLabel: topicLabel || '',
+    text:       text.trim(),
+    familyUid:  context.auth.uid,
+    senderName: senderName || '',
+    familyName: familyName || '',
+    createdAt:  admin.firestore.FieldValue.serverTimestamp(),
+    read: false,
+  });
+  return { ok: true };
+});
+
 exports.onAdminMessageCreated = functions.firestore
   .document('adminMessages/{msgId}')
   .onCreate(async (snap, ctx) => {
@@ -1226,54 +1244,51 @@ exports.adminDeleteFamily = functions.https.onCall(async (data, context) => {
   if (!famSnap.exists) throw new functions.https.HttpsError('not-found', 'Family not found');
   const famData = famSnap.data();
   const familyName = famData.familyName || familyUid;
+  const members = famData.members || [];
 
-  // 1. Delete fcmTokens subcollection
-  const fcmSnap = await famRef.collection('fcmTokens').get();
-  await Promise.all(fcmSnap.docs.map(d => d.ref.delete()));
-
-  // 2. Delete notifications subcollection
-  const notifSnap = await famRef.collection('notifications').get();
-  await Promise.all(notifSnap.docs.map(d => d.ref.delete()));
-
-  // 3. Remove family from all schoolClasses member lists
-  const classSnap = await db.collectionGroup('members')
-    .where('familyUid', '==', familyUid).get();
-  await Promise.all(classSnap.docs.map(d => d.ref.delete()));
-
-  // 4. Delete presence docs
-  const presenceSnap = await db.collection('presence')
-    .where('familyUid', '==', familyUid).get();
-  await Promise.all(presenceSnap.docs.map(d => d.ref.delete()));
-
-  // 5. Delete family joinCode (owner)
-  const familyCode = famData.familyCode;
-  if (familyCode) {
-    await db.collection('joinCodes').doc(familyCode).delete().catch(() => {});
+  // 1. Delete subcollections (fcmTokens, notifications)
+  for (const subCol of ['fcmTokens', 'notifications']) {
+    const snap = await famRef.collection(subCol).get();
+    await Promise.all(snap.docs.map(d => d.ref.delete()));
   }
 
-  // 6. Delete kid joinCodes
-  const kidCodes = (famData.members || [])
-    .filter(m => m.role === 'kid' && m.joinCode)
-    .map(m => m.joinCode);
-  await Promise.all(kidCodes.map(code =>
-    db.collection('joinCodes').doc(code).delete().catch(() => {})
+  // 2. Remove kid class memberships using direct paths (avoids collectionGroup index)
+  const kids = members.filter(m => m.role === 'kid' && m.school?.city && m.school?.grade);
+  await Promise.all(kids.map(async kid => {
+    const classId = classIdFor(kid.school);
+    if (!classId) return;
+    const memberDocId = classMemberDocId(familyUid, kid.name);
+    await db.collection('schoolClasses').doc(classId)
+      .collection('members').doc(memberDocId).delete().catch(() => {});
+  }));
+
+  // 3. Delete presence docs (keyed as familyUid_memberName)
+  await Promise.all(members.map(m =>
+    db.collection('presence').doc(familyUid + '_' + m.name).delete().catch(() => {})
   ));
 
-  // 7. Delete kid Auth users
+  // 4. Delete family invite joinCode
+  if (famData.familyCode) {
+    await db.collection('joinCodes').doc(famData.familyCode).delete().catch(() => {});
+  }
+
+  // 5. Delete kid joinCodes + their Auth accounts
+  const kidCodes = members.filter(m => m.role === 'kid' && m.joinCode).map(m => m.joinCode);
   await Promise.all(kidCodes.map(async code => {
+    await db.collection('joinCodes').doc(code).delete().catch(() => {});
     try {
-      const email = code + '@fh.familyhub';
-      const user  = await admin.auth().getUserByEmail(email).catch(() => null);
-      if (user) await admin.auth().deleteUser(user.uid);
+      const kidUser = await admin.auth().getUserByEmail(code + '@fh.familyhub').catch(() => null);
+      if (kidUser) await admin.auth().deleteUser(kidUser.uid);
     } catch(e) { console.warn('deleteKidAuth:', code, e.message); }
   }));
 
-  // 8. Delete family Firestore doc
+  // 6. Delete family Firestore doc
   await famRef.delete();
 
-  // 9. Delete family Auth user
-  try { await admin.auth().deleteUser(familyUid); }
-  catch(e) { console.warn('deleteOwnerAuth:', familyUid, e.message); }
+  // 7. Delete family owner Auth account
+  await admin.auth().deleteUser(familyUid).catch(e =>
+    console.warn('deleteOwnerAuth:', familyUid, e.message)
+  );
 
   console.log(`adminDeleteFamily: deleted ${familyUid} (${familyName})`);
   return { ok: true, familyName };

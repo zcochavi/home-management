@@ -3504,17 +3504,21 @@ function closeFeedback() { el('feedbackPanel').classList.add('hidden'); }
 function _renderFeedbackTopicDD() {
   const wrap = el('ddFeedbackTopic');
   if (!wrap) return;
-  wrap.innerHTML = `<div class="soft-dd-trigger" onclick="_toggleFeedbackTopicDD(this)">
+  wrap.style.cssText = 'position:relative';
+  wrap.innerHTML = `
+  <div onclick="_toggleFeedbackTopicDD(this)"
+    style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--r-sm);background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">
     <span>${FEEDBACK_TOPICS.find(t=>t.id===_feedbackTopicVal)?.label || FEEDBACK_TOPICS[0].label}</span>
     <span style="font-size:10px;color:var(--gray-400)">▼</span>
   </div>
-  <div class="soft-dd-list" style="display:none">
-    ${FEEDBACK_TOPICS.map(t=>`<div class="soft-dd-item${t.id===_feedbackTopicVal?' selected':''}" onclick="_pickFeedbackTopic('${t.id}')">${t.label}</div>`).join('')}
+  <div style="display:none;position:absolute;top:calc(100% + 4px);inset-inline-start:0;inset-inline-end:0;background:var(--surface);border:1.5px solid var(--gray-200);border-radius:var(--r-sm);box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:200;overflow:hidden">
+    ${FEEDBACK_TOPICS.map(t=>`<div onclick="_pickFeedbackTopic('${t.id}')"
+      style="padding:10px 14px;font-size:14px;font-weight:700;cursor:pointer;background:${t.id===_feedbackTopicVal?'var(--primary-50,#eff6ff)':'transparent'}">${t.label}</div>`).join('')}
   </div>`;
 }
 
 function _toggleFeedbackTopicDD(trigger) {
-  const list = trigger.nextElementSibling;
+  const list = trigger.parentElement.children[1];
   list.style.display = list.style.display === 'none' ? '' : 'none';
 }
 
@@ -3536,15 +3540,12 @@ async function sendFeedback() {
   const btn = el('feedbackPanel').querySelector('button.btn');
   if (btn) btn.disabled = true;
   try {
-    await fbDb.collection('adminMessages').add({
-      topic: _feedbackTopicVal,
+    await fbFunctions.httpsCallable('submitFeedback')({
+      topic:      _feedbackTopicVal,
       topicLabel: FEEDBACK_TOPICS.find(t=>t.id===_feedbackTopicVal)?.label || '',
       text,
-      familyUid: S.uid,
       senderName: S.user,
       familyName: familyData?.familyName || '',
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      read: false,
     });
     el('feedbackForm').style.display = 'none';
     el('feedbackSuccess').style.display = '';
