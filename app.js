@@ -1480,7 +1480,7 @@ function shareInvite() {
   } else {
     navigator.clipboard.writeText(text).then(() => {
       const btn = el('shareBtn');
-      if (btn) { btn.textContent = '✓ הועתק!'; setTimeout(() => { if(el('shareBtn')) el('shareBtn').textContent = '📤 שתף'; }, 2200); }
+      if (btn) { btn.textContent = '✓ הועתק!'; setTimeout(() => { if(el('shareBtn')) el('shareBtn').textContent = 'שתף'; }, 2200); }
     }).catch(() => prompt('העתק את הקוד:', text));
   }
 }
@@ -2056,13 +2056,13 @@ function renderMgmtMembers() {
         ${m.role === 'kid' && m.joinCode ? `
           <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
             <span style="font-size:11px;color:#6a11cb;font-weight:700;background:#f0e6ff;padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
-            <button style="background:none;border:none;font-size:13px;cursor:pointer;padding:2px 4px" onclick="shareKidCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד">📤</button>
+            <button style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#718096;display:flex;align-items:center" onclick="shareKidCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
           </div>` : ''}
         ${m.role === 'parent' && m.name !== S.user ? (m.joinCode ? `
           <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
             <span style="font-size:10px;color:#718096;margin-left:2px">🔑</span>
             <span style="font-size:11px;color:var(--primary-600);font-weight:700;background:var(--primary-50);padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
-            <button style="background:none;border:none;font-size:13px;cursor:pointer;padding:2px 4px" onclick="shareSpouseCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד">📤</button>
+            <button style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#718096;display:flex;align-items:center" onclick="shareSpouseCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
             <button data-spouse-regen="${esc(m.name)}" style="font-size:11px;background:#fff5f5;color:#c53030;border:1px solid #fed7d7;border-radius:8px;padding:2px 8px;cursor:pointer;font-family:inherit" onclick="regenSpouseCode('${esc(m.name)}')" title="צור קוד חדש">🔄</button>
           </div>` : `
           <div style="margin-top:4px">
