@@ -1060,6 +1060,7 @@ mark { background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px; 
 .btn-sm {
   width: 36px; height: 36px; padding: 0; border: none; border-radius: var(--r-pill);
   background: var(--primary-500); color: white;
+  display: flex; align-items: center; justify-content: center;
   display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0; cursor: pointer; transition: background var(--t-normal);
 }
