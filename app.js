@@ -3236,7 +3236,7 @@ async function renderCommunity() {
     container.innerHTML = `<div class="card"><div class="empty" style="padding:20px 0;text-align:center">
       <div style="font-size:40px;margin-bottom:10px">🏫</div>
       <div style="font-weight:800;color:#4a5568;font-size:15px">${t('commNoSchool')}</div>
-      <div style="font-size:12px;color:#a0aec0;margin-top:4px">${t('commNoSchoolHint')}</div>
+      <div style="font-size:12px;color:var(--primary-500);margin-top:4px;cursor:pointer;font-weight:700;text-decoration:underline" onclick="closeMenu();openMgmt()">${t('commNoSchoolHint')}</div>
     </div></div>`;
     return;
   }
