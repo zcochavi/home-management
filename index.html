@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260413ei') location.reload(true);
+        if (v !== '20260413ej') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260413ei">
+  <link rel="stylesheet" href="styles.css?v=20260413ej">
 </head>
 <body>
 
@@ -115,7 +115,7 @@
       </div>
       <button class="auth-btn-main su2-self-btn" id="su2AddBtn" onclick="addDraftMember()">הוסף את עצמי ←</button>
       <div class="member-preview" id="memberPreview"></div>
-      <div class="su2-more-divider" id="su2MoreDivider" style="display:none">הוסף בני משפחה נוספים <span class="su2-optional">(אופציונלי)</span></div>
+      <div class="su2-more-divider" id="su2MoreDivider" style="display:none"><span>הוסף בני משפחה נוספים <span class="su2-optional">(אופציונלי)</span></span></div>
       <div id="su2Error" class="auth-error"></div>
       <div class="auth-btns-row" id="su2CreateRow" style="display:none">
         <button class="auth-btn-back" onclick="signupBack()">‹ חזור</button>
@@ -556,7 +556,7 @@
 <button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
 </button>
-<script src="app.js?v=20260413ei"></script>
+<script src="app.js?v=20260413ej"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
