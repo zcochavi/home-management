@@ -4645,7 +4645,12 @@ function homeQuickAddShop() {
   if (!name) { input.focus(); return; }
   let pool = _homeQuickPickId ? S.groceryPool.find(p => p.id === _homeQuickPickId) : null;
   if (!pool) pool = S.groceryPool.find(p => p.name.toLowerCase() === name.toLowerCase());
-  if (!pool) { input.focus(); return; }
+  if (!pool) {
+    // Auto-create pool item under כללי with qty 1
+    const newItem = { id: Date.now(), name, category: 'כללי', qtyType: 'count' };
+    S.groceryPool.push(newItem);
+    pool = newItem;
+  }
   if (!S.shoppingList.some(x => x.poolId === pool.id)) {
     const qty = pool.lastQty || 1;
     S.shoppingList.push({ id: Date.now(), poolId: pool.id, name: pool.name, category: pool.category, qty, qtyType: pool.qtyType || 'count', requestedQty: qty });
