@@ -73,7 +73,7 @@ const STRINGS = {
     doneShoppingMsg: (name, bought, missedNames) => missedNames.length ? `${name} סיים לקנות — לא הביא: ${missedNames.join(', ')}` : `${name} סיים לקנות (${bought} פריטים)`,
     shoppingList:'🛒 רשימת קניות', addItemPlaceholder:'הוסף פריט...',
     clearChecked:'🗑 נקה מסומנים', groceryEmpty:'🛒 הרשימה ריקה!',
-    cats:{ 'Fruit & Veg':'פירות וירקות','Dairy & Eggs':'חלב וביצים','Pantry':'מזווה','Meat & Fish':'בשר ודגים' },
+    cats:{ 'Fruit & Veg':'פירות וירקות','Dairy & Eggs':'חלב וביצים','Pantry':'מזווה','Meat & Fish':'בשר ודגים','פירות וירקות':'פירות וירקות','חלב וביצים':'חלב וביצים','מזווה':'מזווה','בשר ודגים':'בשר ודגים','כללי':'כללי' },
     hwTitle: n => `📖 שיעורים של ${n}`,
     hwPlaceholder:'תיאור המשימה...', noHw:'🎉 אין שיעורים!',
     hwDueLabel: d => `📅 להגשה: ${d}`,
@@ -329,10 +329,11 @@ function getKidGradient(name) {
 //  CONSTANTS
 // ════════════════════════════════════════
 const DEFAULT_GROCERY_CATS = [
-  { name:'Fruit & Veg', emoji:'🥦' },
-  { name:'Dairy & Eggs', emoji:'🥛' },
-  { name:'Pantry', emoji:'🥫' },
-  { name:'Meat & Fish', emoji:'🥩' },
+  { name:'כללי', emoji:'🛒' },
+  { name:'פירות וירקות', emoji:'🥦' },
+  { name:'חלב וביצים', emoji:'🥛' },
+  { name:'מזווה', emoji:'🥫' },
+  { name:'בשר ודגים', emoji:'🥩' },
 ];
 const DEFAULT_SUBJECTS = [
   { name:'Maths',   nameHe:'מתמטיקה', bg:'#f0f4ff', color:'#4a65cc' },
