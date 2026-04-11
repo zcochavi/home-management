@@ -1057,13 +1057,14 @@ function renderNotifBanners(undismissed) {
     if (existing.has('notifBanner_' + n.id)) return;
     const REQUEST_TYPES = ['school_pending','event_pending','application_pending'];
     const isRequest  = REQUEST_TYPES.includes(n.type);
+    const isAdminMsg = n.type === 'admin_message';
     const isInfo     = n.type === 'shopping_done';
     const isGood     = n.type?.includes('approved') || n.type === 'member_joined' || n.type === 'class_member_joined';
     const isDenied   = n.type?.includes('denied') || n.type?.includes('rejected');
-    const bg     = isDenied ? '#fff5f5' : '#ebf8ff';
-    const border = isDenied ? '#feb2b2' : '#90cdf4';
-    const color  = isDenied ? '#c53030' : '#2b6cb0';
-    const icon   = isInfo ? '🛒' : isGood ? '✅' : isDenied ? '❌' : isRequest ? '📋' : '🔔';
+    const bg     = isDenied ? '#fff5f5' : isAdminMsg ? '#faf5ff' : '#ebf8ff';
+    const border = isDenied ? '#feb2b2' : isAdminMsg ? '#d6bcfa' : '#90cdf4';
+    const color  = isDenied ? '#c53030' : isAdminMsg ? '#6b21a8' : '#2b6cb0';
+    const icon   = isInfo ? '🛒' : isGood ? '✅' : isDenied ? '❌' : isRequest ? '📋' : isAdminMsg ? '💬' : '🔔';
     const div = document.createElement('div');
     div.className = 'notif-banner notif-banner-in';
     div.id = 'notifBanner_' + n.id;
@@ -1087,10 +1088,13 @@ function renderNotifBanners(undismissed) {
              </div>`;
       }
     }
+    const adminMsgAction = isAdminMsg
+      ? `<div class="notif-banner-actions"><button class="notif-banner-act approve" onclick="_openAdminMsgFromNotif('${n.id}',this)" title="פתח">פתח</button></div>`
+      : '';
     div.innerHTML = `<span class="notif-banner-icon">${icon}</span>
       <span class="notif-banner-text">${esc(n.message)}</span>
-      ${requestActions}
-      ${isRequest ? '' : `<button class="notif-banner-dismiss" onclick="dismissNotifBanner('${n.id}',this)" title="סגור">×</button>`}`;
+      ${requestActions}${adminMsgAction}
+      <button class="notif-banner-dismiss" onclick="dismissNotifBanner('${n.id}',this)" title="סגור">×</button>`;
     container.appendChild(div);
   });
 }
@@ -1149,6 +1153,11 @@ async function quickDenyReq(notifId, type, reqId, btn) {
     }
     await _dismissNotifById(notifId);
   } catch(e) { console.error('quickDenyReq:', e); showToast('שגיאה: ' + e.message, 'error'); }
+}
+
+function _openAdminMsgFromNotif(id, btn) {
+  openAdminPanel(false);
+  dismissNotifBanner(id, btn?.closest('.notif-banner'));
 }
 
 // ── Message center ────────────────────────────────────────────
@@ -1345,14 +1354,6 @@ function _renderCommPendingBanner(el) {
   } else {
     el.innerHTML = `<div style="text-align:end;margin-bottom:4px"><button class="comm-history-link" onclick="openAdminPanel(true,true)">📋 היסטוריית בקשות</button></div>`;
   }
-}
-
-function openMessageCenter() {
-  el('messageCenterPanel').classList.remove('hidden');
-  renderMessageCenter();
-}
-function closeMessageCenter() {
-  el('messageCenterPanel').classList.add('hidden');
 }
 
 function renderMessageCenter() {

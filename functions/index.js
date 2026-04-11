@@ -1377,14 +1377,25 @@ exports.onAdminMessageCreated = functions.firestore
     const msg = snap.data();
     console.log(`onAdminMessageCreated: from ${msg.senderName} (${msg.familyUid}), topic=${msg.topic}`);
     if (!ADMIN_UID) return;
-    const tokens = await getTokens(ADMIN_UID, true);
     const topicLabel = msg.topicLabel || msg.topic || '';
     const senderLabel = [msg.senderName, msg.familyName].filter(Boolean).join(' · ');
-    await sendToTokens(tokens,
-      `💬 פנייה חדשה: ${topicLabel}`,
-      senderLabel || 'משתמש',
-      { type: 'adminMessage', msgId: ctx.params.msgId }
-    );
+    const notifText = `💬 פנייה חדשה: ${topicLabel}${senderLabel ? ' · ' + senderLabel : ''}`;
+
+    // In-app notification (shows as banner + bell badge)
+    await writeNotif(ADMIN_UID, 'admin_message', notifText, {
+      recipientUid: ADMIN_UID,
+      msgId: ctx.params.msgId,
+    });
+
+    // Push notification
+    const tokens = await getTokens(ADMIN_UID, true);
+    if (tokens.length) {
+      await sendToTokens(tokens,
+        `💬 פנייה חדשה: ${topicLabel}`,
+        senderLabel || 'משתמש',
+        { type: 'adminMessage', msgId: ctx.params.msgId }
+      );
+    }
   });
 
 exports.adminDeleteFamily = functions.https.onCall(async (data, context) => {
