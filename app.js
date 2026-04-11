@@ -682,7 +682,7 @@ function removeDraftMember(i) {
 function renderMemberPreview() {
   el('memberPreview').innerHTML = _draftMembers.map((m, i) => {
     const genderLabel = m.gender === 'boy' ? ' · 👦' : m.gender === 'girl' ? ' · 👧' : '';
-    const dobLabel    = m.dob ? ' · ' + m.dob : '';
+    const dobLabel    = m.dob ? ' · ' + m.dob.split('-').reverse().join('/') : '';
     const isSelf      = i === 0 && _draftSelfAdded;
     return `<div class="member-chip${isSelf ? ' member-chip-first' : ''}">
       <span class="member-chip-emoji">${m.emoji}</span>
@@ -3666,23 +3666,23 @@ async function renderAdminMessages() {
   if (!wrap) return;
   wrap.innerHTML = '<div style="font-size:12px;color:var(--gray-400);padding:8px 0">טוען...</div>';
   try {
-    const snap = await fbDb.collection('adminMessages').orderBy('createdAt', 'desc').limit(50).get();
-    if (snap.empty) {
+    const result = await fbFunctions.httpsCallable('getAdminMessages')();
+    const msgs = result.data || [];
+    if (!msgs.length) {
       wrap.innerHTML = '<div style="font-size:12px;color:var(--gray-400);padding:8px 0">אין פניות עדיין</div>';
       return;
     }
     wrap.innerHTML = `<div class="card" style="padding:0;overflow:hidden">` +
-      snap.docs.map((doc, i) => {
-        const m = doc.data();
-        const ts = m.createdAt?.toDate ? m.createdAt.toDate() : null;
+      msgs.map((m, i) => {
+        const ts = m.createdAt ? new Date(m.createdAt) : null;
         const dateStr = ts ? ts.toLocaleDateString('he-IL') + ' ' + ts.toLocaleTimeString('he-IL', { hour:'2-digit', minute:'2-digit' }) : '';
         const unread = m.read === false;
-        return `<div style="padding:12px${i < snap.size-1 ? ';border-bottom:1px solid var(--gray-100)' : ''}${unread ? ';background:var(--primary-50,#eff6ff)' : ''}">
+        return `<div id="adminMsg_${m.id}" style="padding:12px${i < msgs.length-1 ? ';border-bottom:1px solid var(--gray-100)' : ''}${unread ? ';background:var(--primary-50,#eff6ff)' : ''}">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            ${unread ? '<span style="width:8px;height:8px;border-radius:50%;background:var(--primary-500);flex-shrink:0;display:inline-block"></span>' : ''}
+            ${unread ? `<span class="adminmsg-dot" style="width:8px;height:8px;border-radius:50%;background:var(--primary-500);flex-shrink:0;display:inline-block"></span>` : ''}
             <span style="font-size:13px;font-weight:900;color:var(--gray-900);flex:1">${esc(m.topicLabel || m.topic || '—')}</span>
             <span style="font-size:11px;color:var(--gray-400)">${dateStr}</span>
-            ${unread ? `<button onclick="markAdminMsgRead('${doc.id}',this)" style="font-size:11px;border:none;background:none;color:var(--primary-500);cursor:pointer;font-family:inherit;font-weight:700;padding:0">סמן כנקרא</button>` : ''}
+            ${unread ? `<button onclick="markAdminMsgRead('${m.id}')" style="font-size:11px;border:none;background:none;color:var(--primary-500);cursor:pointer;font-family:inherit;font-weight:700;padding:0">סמן כנקרא</button>` : ''}
           </div>
           <div style="font-size:12px;color:var(--gray-500);margin-bottom:4px">${esc(m.senderName || '')}${m.familyName ? ' · ' + esc(m.familyName) : ''}</div>
           <div style="font-size:13px;color:var(--gray-700);white-space:pre-wrap">${esc(m.text || '')}</div>
@@ -3693,13 +3693,15 @@ async function renderAdminMessages() {
   }
 }
 
-async function markAdminMsgRead(id, btn) {
+async function markAdminMsgRead(id) {
   try {
-    await fbDb.collection('adminMessages').doc(id).update({ read: true });
-    btn.closest('div[style]').style.background = '';
-    const dot = btn.closest('div[style]').querySelector('span[style*="border-radius:50%"]');
-    if (dot) dot.remove();
-    btn.remove();
+    await fbFunctions.httpsCallable('markAdminMessageRead')({ msgId: id });
+    const row = el('adminMsg_' + id);
+    if (row) {
+      row.style.background = '';
+      row.querySelector('.adminmsg-dot')?.remove();
+      row.querySelector('button[onclick*="markAdminMsgRead"]')?.remove();
+    }
   } catch(e) { console.error('markAdminMsgRead:', e); }
 }
 

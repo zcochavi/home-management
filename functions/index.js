@@ -1198,6 +1198,27 @@ exports.getClassParents = functions.https.onCall(async (data, context) => {
   return result;
 });
 
+exports.getAdminMessages = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const snap = await db.collection('adminMessages')
+    .orderBy('createdAt', 'desc').limit(50).get();
+  return snap.docs.map(d => ({
+    id: d.id,
+    ...d.data(),
+    createdAt: d.data().createdAt?.toMillis?.() || null,
+  }));
+});
+
+exports.markAdminMessageRead = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const { msgId } = data;
+  if (!msgId) throw new functions.https.HttpsError('invalid-argument', 'Missing msgId');
+  await db.collection('adminMessages').doc(msgId).update({ read: true });
+  return { ok: true };
+});
+
 exports.submitFeedback = functions.https.onCall(async (data, context) => {
   if (!context.auth?.uid) throw new functions.https.HttpsError('unauthenticated', 'Login required');
   const { topic, topicLabel, text, senderName, familyName } = data;
