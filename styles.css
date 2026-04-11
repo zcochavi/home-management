@@ -1086,7 +1086,7 @@ mark { background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px; 
    FORMS + INPUTS
 ═══════════════════════════════════════════ */
 .add-form { margin-top: 12px; padding-top: 12px; border-top: 1.5px dashed var(--gray-200); display: flex; flex-direction: column; gap: 8px; }
-.form-row { display: flex; gap: 7px; }
+.form-row { display: flex; gap: 7px; align-items: center; }
 
 .add-input {
   flex: 1; padding: 10px 14px; border: 1.5px solid var(--gray-200); border-radius: var(--r-input);

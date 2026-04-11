@@ -767,7 +767,14 @@ async function doSignUp() {
   el('su2Error').textContent = '';
   const validMembers = _draftMembers.filter(m => m.name.trim());
   if (validMembers.length === 0) { el('su2Error').textContent = 'יש להוסיף לפחות איש משפחה אחד'; return; }
-  const members = validMembers.map(m => ({ name:m.name.trim(), emoji:m.emoji, role:m.role }));
+  const members = validMembers.map(m => {
+    const entry = { name: m.name.trim(), emoji: m.emoji, role: m.role };
+    if (m.role === 'kid') {
+      if (m.gender) entry.gender = m.gender;
+      if (m.dob)    entry.dob    = m.dob;
+    }
+    return entry;
+  });
   const familyName = el('suFamily').value.trim();
   const email      = el('suEmail').value.trim();
   const pwd        = el('suPwd').value;
