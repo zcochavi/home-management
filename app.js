@@ -3717,12 +3717,24 @@ function renderMaintenanceTools() {
       <div id="migrateCommitteeResult" style="font-size:12px;margin-top:8px;color:#276749"></div>
     </div>
     <div class="card" style="margin-bottom:12px;padding:12px;border:1.5px solid var(--error-light,#fed7d7)">
-      <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--error)">🗑 איפוס נתוני משפחה</div>
-      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוחק את כל המשימות, הקניות, השיעורים, האירועים והכוכבים של משפחה — שומר חברי משפחה וקוד הצטרפות.</div>
-      <div style="font-size:11px;color:#718096;margin-bottom:6px">ה-UID שלך: <code style="user-select:all;background:#f7fafc;padding:1px 4px;border-radius:4px">${S.uid}</code> <button onclick="el('resetFamilyUidInput').value='${S.uid}'" style="border:none;background:none;font-size:11px;color:var(--primary-500);cursor:pointer;padding:0;font-family:inherit;font-weight:700">← הכנס</button></div>
-      <input class="auth-input" id="resetFamilyUidInput" placeholder="Family UID" style="margin-bottom:8px;font-family:monospace;font-size:13px">
-      <button class="admin-btn" id="resetFamilyBtn" onclick="adminResetFamilyData()" style="width:100%;padding:9px;font-size:13px;background:var(--error);color:#fff;border-color:var(--error)">איפוס נתונים ◀</button>
-      <div id="resetFamilyResult" style="font-size:12px;margin-top:8px"></div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:var(--error)">🗑 פעולות מחיקה</div>
+      <div style="font-size:11px;color:#718096;margin-bottom:10px">ה-UID שלך: <code style="user-select:all;background:#f7fafc;padding:1px 4px;border-radius:4px">${S.uid}</code> <button onclick="el('resetFamilyUidInput').value='${S.uid}';el('deleteFamilyUidInput').value='${S.uid}'" style="border:none;background:none;font-size:11px;color:var(--primary-500);cursor:pointer;padding:0;font-family:inherit;font-weight:700">← הכנס</button></div>
+
+      <div style="border-bottom:1px solid var(--error-light,#fed7d7);padding-bottom:12px;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">איפוס נתונים</div>
+        <div style="font-size:12px;color:#718096;margin-bottom:8px">מוחק משימות, קניות, שיעורים, אירועים וכוכבים — שומר חברי משפחה וקוד.</div>
+        <input class="auth-input" id="resetFamilyUidInput" placeholder="Family UID" style="margin-bottom:8px;font-family:monospace;font-size:13px">
+        <button class="admin-btn" id="resetFamilyBtn" onclick="adminResetFamilyData()" style="width:100%;padding:8px;font-size:13px;background:var(--error);color:#fff;border-color:var(--error)">איפוס נתונים ◀</button>
+        <div id="resetFamilyResult" style="font-size:12px;margin-top:6px"></div>
+      </div>
+
+      <div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">מחיקת משפחה מלאה</div>
+        <div style="font-size:12px;color:#718096;margin-bottom:8px">מוחק את כל נתוני המשפחה, חשבון ה-Auth, קודי הצטרפות ורישום בכיתות. פעולה בלתי הפיכה לחלוטין.</div>
+        <input class="auth-input" id="deleteFamilyUidInput" placeholder="Family UID" style="margin-bottom:8px;font-family:monospace;font-size:13px">
+        <button class="admin-btn" id="deleteFamilyBtn" onclick="adminDeleteFamily()" style="width:100%;padding:8px;font-size:13px;background:#7b2020;color:#fff;border-color:#7b2020">מחיקה מלאה ◀</button>
+        <div id="deleteFamilyResult" style="font-size:12px;margin-top:6px"></div>
+      </div>
     </div>`;
 }
 
@@ -3764,6 +3776,31 @@ async function adminResetFamilyData() {
     const msg = e?.details?.message || e?.message || String(e);
     res.textContent = 'שגיאה: ' + msg;
     console.error('adminResetFamilyData:', e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function adminDeleteFamily() {
+  const uid = el('deleteFamilyUidInput').value.trim();
+  const res = el('deleteFamilyResult');
+  const btn = el('deleteFamilyBtn');
+  if (!uid) { res.style.color = 'var(--error)'; res.textContent = 'יש להזין Family UID'; return; }
+  if (uid === S.uid) { res.style.color = 'var(--error)'; res.textContent = 'לא ניתן למחוק את המשפחה הנוכחית'; return; }
+  if (!await _confirm(`למחוק לצמיתות את המשפחה ${uid}?\n\nכל הנתונים, חשבון Auth, קודי הצטרפות ורישום בכיתות יימחקו.\n\nפעולה זו בלתי הפיכה לחלוטין.`, { danger: true, okLabel: 'מחק לצמיתות' })) return;
+  btn.disabled = true;
+  res.style.color = '#718096';
+  res.textContent = 'מוחק...';
+  try {
+    const result = await fbFunctions.httpsCallable('adminDeleteFamily')({ familyUid: uid });
+    res.style.color = '#276749';
+    res.textContent = `✓ המשפחה "${result.data?.familyName || uid}" נמחקה בהצלחה`;
+    el('deleteFamilyUidInput').value = '';
+  } catch(e) {
+    res.style.color = 'var(--error)';
+    const msg = e?.details?.message || e?.message || String(e);
+    res.textContent = 'שגיאה: ' + msg;
+    console.error('adminDeleteFamily:', e);
   } finally {
     btn.disabled = false;
   }
