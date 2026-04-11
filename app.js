@@ -1094,7 +1094,7 @@ function renderNotifBanners(undismissed) {
     div.innerHTML = `<span class="notif-banner-icon">${icon}</span>
       <span class="notif-banner-text">${esc(n.message)}</span>
       ${requestActions}${adminMsgAction}
-      ${isRequest || isAdminMsg ? '' : `<button class="notif-banner-dismiss" onclick="dismissNotifBanner('${n.id}',this)" title="סגור">×</button>`}`;
+      ${isRequest ? '' : `<button class="notif-banner-dismiss" onclick="dismissNotifBanner('${n.id}',this)" title="סגור">×</button>`}`;
     container.appendChild(div);
   });
 }
