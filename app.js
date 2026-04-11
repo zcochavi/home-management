@@ -2701,11 +2701,11 @@ async function renderMgmtCommunity() {
 
 // ── Community Tab ─────────────────────────
 const _DEFAULT_EVENT_TYPES = [
-  { id:'birthday',     icon:'🎂', labelHe:'יום הולדת', labelEn:'Birthday',    mDate:true,  mTime:true,  mLoc:true  },
-  { id:'trip',         icon:'🚌', labelHe:'טיול',       labelEn:'Trip',        mDate:true,  mTime:false, mLoc:false },
-  { id:'party',        icon:'🎉', labelHe:'מסיבה',      labelEn:'Party',       mDate:true,  mTime:true,  mLoc:true  },
-  { id:'announcement', icon:'📢', labelHe:'הודעה',      labelEn:'Announcement',mDate:false, mTime:false, mLoc:false },
-  { id:'other',        icon:'📝', labelHe:'אחר',         labelEn:'Other',       mDate:false, mTime:false, mLoc:false },
+  { id:'birthday',     icon:'🎂', labelHe:'יום הולדת', labelEn:'Birthday',    mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:true  },
+  { id:'trip',         icon:'🚌', labelHe:'טיול',       labelEn:'Trip',        mDate:true,  mTime:false, mLoc:false, hasGenderFilter:false },
+  { id:'party',        icon:'🎉', labelHe:'מסיבה',      labelEn:'Party',       mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:false },
+  { id:'announcement', icon:'📢', labelHe:'הודעה',      labelEn:'Announcement',mDate:false, mTime:false, mLoc:false, hasGenderFilter:false },
+  { id:'other',        icon:'📝', labelHe:'אחר',         labelEn:'Other',       mDate:false, mTime:false, mLoc:false, hasGenderFilter:false },
 ];
 let _eventTypesCfg = _DEFAULT_EVENT_TYPES.map(t => ({ ...t, enabled:true }));
 let _evtCfgLoaded  = false;
@@ -3194,7 +3194,7 @@ function renderCommCard(kid) {
           ${getEventTypes().map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
         </select>
       </div>
-      <div id="commEvGenderWrap_${cid}" style="margin-bottom:6px">
+      <div id="commEvGenderWrap_${cid}" style="margin-bottom:6px;display:${(getEventTypes()[0]?.hasGenderFilter) ? '' : 'none'}">
         <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">מי מוזמן?</div>
         <div style="display:flex;gap:8px">
           <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" value="all"   checked> כולם</label>
@@ -3308,7 +3308,7 @@ function onCommEvTypeChange(cid) {
   const type    = el('commEvType_' + cid)?.value;
   const typeCfg = _eventTypesCfg.find(t => t.id === type) || {};
   const genderWrap = el('commEvGenderWrap_' + cid);
-  if (genderWrap) genderWrap.style.display = type === 'birthday' ? '' : 'none';
+  if (genderWrap) genderWrap.style.display = typeCfg.hasGenderFilter ? '' : 'none';
   const dateHint = el('commEvDateHint_' + cid);
   if (dateHint) dateHint.style.display = typeCfg.mDate ? 'none' : '';
 }
@@ -3391,10 +3391,10 @@ async function submitClassEvent(cid) {
   const note       = el('commEvNote_'   + cid)?.value.trim() || '';
   const payboxRaw  = el('commEvPaybox_' + cid)?.value.trim() || '';
   const payboxUrl  = payboxRaw && (payboxRaw.startsWith('http://') || payboxRaw.startsWith('https://')) ? payboxRaw : '';
-  const genderFilter = type === 'birthday'
+  const typeCfg  = _eventTypesCfg.find(t => t.id === type) || {};
+  const genderFilter = typeCfg.hasGenderFilter
     ? (document.querySelector(`input[name="commEvGender_${cid}"]:checked`)?.value || 'all')
     : 'all';
-  const typeCfg  = _eventTypesCfg.find(t => t.id === type) || {};
   const _errEl   = el('commEvError_'   + cid);
   const _titleEl = el('commEvTitle_'   + cid);
   const _dateEl  = el('commEvDate_'    + cid);
@@ -3760,10 +3760,11 @@ function renderAdminEventTypes() {
   const container = el('adminEventTypes');
   if (!container) return;
   const mFields = [['mDate','תאריך'],['mTime','שעה'],['mLoc','מיקום']];
+  const chkStyle = 'display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap';
   container.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+    <div class="card" style="padding:0;margin-bottom:8px;overflow:hidden">
       ${_eventTypesCfg.map((t, i) => `
-        <div class="card" style="padding:12px">
+        <div style="padding:12px${i < _eventTypesCfg.length - 1 ? ';border-bottom:1px solid var(--gray-100)' : ''}">
           <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
             <input id="evtIcon_${i}" value="${esc(t.icon)}" maxlength="2"
               style="width:38px;text-align:center;font-size:20px;border:1.5px solid var(--gray-200);border-radius:8px;padding:4px 2px;font-family:inherit;background:var(--surface)">
@@ -3772,21 +3773,26 @@ function renderAdminEventTypes() {
             <input id="evtLabelEn_${i}" value="${esc(t.labelEn)}" placeholder="English" dir="ltr"
               style="flex:1;padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;background:var(--surface)">
           </div>
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap">
-            <span style="font-size:12px;font-weight:700;color:var(--gray-500)">שדות חובה:</span>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:700;color:var(--gray-400)">שדות חובה:</span>
             ${mFields.map(([key,lbl]) => `
-              <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer">
-                <input type="checkbox" id="evt_${key}_${i}" ${t[key] ? 'checked' : ''} style="width:16px;height:16px">
+              <label style="${chkStyle}">
+                <input type="checkbox" id="evt_${key}_${i}" ${t[key] ? 'checked' : ''} style="width:15px;height:15px">
                 ${lbl}
               </label>`).join('')}
-            <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer;margin-right:auto">
-              <input type="checkbox" id="evtEnabled_${i}" ${t.enabled !== false ? 'checked' : ''} style="width:16px;height:16px">
+            <span style="font-size:11px;font-weight:700;color:var(--gray-400);margin-right:4px">פילטר:</span>
+            <label style="${chkStyle}">
+              <input type="checkbox" id="evtGender_${i}" ${t.hasGenderFilter ? 'checked' : ''} style="width:15px;height:15px">
+              בנים/בנות
+            </label>
+            <label style="${chkStyle};margin-right:auto">
+              <input type="checkbox" id="evtEnabled_${i}" ${t.enabled !== false ? 'checked' : ''} style="width:15px;height:15px">
               פעיל
             </label>
           </div>
           <div style="display:flex;gap:8px">
-            <button class="admin-btn" onclick="saveEventTypeRow(${i})" style="flex:1;padding:7px;font-size:12px">💾 שמור</button>
-            <button onclick="deleteEventType('${esc(t.id)}')" style="padding:7px 12px;background:var(--error-bg);color:var(--error);border:none;border-radius:var(--r-sm);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">🗑</button>
+            <button class="admin-btn" onclick="saveEventTypeRow(${i})" style="flex:1;padding:6px;font-size:12px">💾 שמור</button>
+            <button onclick="deleteEventType('${esc(t.id)}')" style="padding:6px 12px;background:var(--error-bg);color:var(--error);border:none;border-radius:var(--r-sm);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">🗑</button>
           </div>
         </div>`).join('')}
     </div>
@@ -3807,13 +3813,14 @@ function renderAdminEventTypes() {
 async function saveEventTypeRow(i) {
   const t = _eventTypesCfg[i];
   if (!t) return;
-  t.icon    = el(`evtIcon_${i}`)?.value.trim()    || t.icon;
-  t.labelHe = el(`evtLabelHe_${i}`)?.value.trim() || t.labelHe;
-  t.labelEn = el(`evtLabelEn_${i}`)?.value.trim() || t.labelEn;
-  t.enabled = el(`evtEnabled_${i}`)?.checked ?? true;
-  t.mDate   = el(`evt_mDate_${i}`)?.checked ?? false;
-  t.mTime   = el(`evt_mTime_${i}`)?.checked ?? false;
-  t.mLoc    = el(`evt_mLoc_${i}`)?.checked  ?? false;
+  t.icon            = el(`evtIcon_${i}`)?.value.trim()    || t.icon;
+  t.labelHe         = el(`evtLabelHe_${i}`)?.value.trim() || t.labelHe;
+  t.labelEn         = el(`evtLabelEn_${i}`)?.value.trim() || t.labelEn;
+  t.enabled         = el(`evtEnabled_${i}`)?.checked ?? true;
+  t.mDate           = el(`evt_mDate_${i}`)?.checked ?? false;
+  t.mTime           = el(`evt_mTime_${i}`)?.checked ?? false;
+  t.mLoc            = el(`evt_mLoc_${i}`)?.checked  ?? false;
+  t.hasGenderFilter = el(`evtGender_${i}`)?.checked ?? false;
   try {
     await _saveEventTypesCfg();
     showToast((getLang()==='he' ? 'נשמר ✓' : 'Saved ✓'), 'success');
@@ -3837,7 +3844,7 @@ async function addEventType() {
   const labelEn = el('newEvtLabelEn')?.value.trim() || '';
   if (!labelHe) { el('newEvtLabelHe')?.classList.add('input-error'); el('newEvtLabelHe')?.focus(); return; }
   const id = 'custom_' + Date.now();
-  _eventTypesCfg.push({ id, icon, labelHe, labelEn: labelEn || labelHe, mDate:false, mTime:false, mLoc:false, enabled:true });
+  _eventTypesCfg.push({ id, icon, labelHe, labelEn: labelEn || labelHe, mDate:false, mTime:false, mLoc:false, hasGenderFilter:false, enabled:true });
   try {
     await _saveEventTypesCfg();
     renderAdminEventTypes();
