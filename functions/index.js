@@ -1198,6 +1198,39 @@ exports.getClassParents = functions.https.onCall(async (data, context) => {
   return result;
 });
 
+exports.onAdminMessageCreated = functions.firestore
+  .document('adminMessages/{msgId}')
+  .onCreate(async (snap, ctx) => {
+    const msg = snap.data();
+    console.log(`onAdminMessageCreated: from ${msg.senderName} (${msg.familyUid}), topic=${msg.topic}`);
+    if (!ADMIN_UID) return;
+    const tokens = await getTokens(ADMIN_UID, true);
+    const topicLabel = msg.topicLabel || msg.topic || '';
+    const senderLabel = [msg.senderName, msg.familyName].filter(Boolean).join(' · ');
+    await sendToTokens(tokens,
+      `💬 פנייה חדשה: ${topicLabel}`,
+      senderLabel || 'משתמש',
+      { type: 'adminMessage', msgId: ctx.params.msgId }
+    );
+  });
+
+exports.adminResetFamily = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const { familyUid } = data;
+  if (!familyUid) throw new functions.https.HttpsError('invalid-argument', 'Missing familyUid');
+
+  const famDoc = await db.collection('families').doc(familyUid).get();
+  if (!famDoc.exists) throw new functions.https.HttpsError('not-found', 'Family not found');
+  const familyName = famDoc.data().familyName || familyUid;
+
+  await db.collection('families').doc(familyUid).update({
+    chores: [], grocery: [], homework: [], events: [], stars: {},
+    groceryPool: [], shoppingList: [], inCart: [], shoppingHistory: [],
+  });
+  return { ok: true, familyName };
+});
+
 exports.getFamilyDetails = functions.https.onCall(async (data, context) => {
   if (context.auth?.uid !== ADMIN_UID) {
     throw new functions.https.HttpsError('permission-denied', 'Admins only');

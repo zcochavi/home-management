@@ -3479,6 +3479,83 @@ function openAdminPanel(showLog = true, historyOnly = false) {
 }
 function closeAdminPanel() { el('adminPanel').classList.add('hidden'); }
 
+// ── Feedback / Contact Admin ──────────────────────────────
+const FEEDBACK_TOPICS = [
+  { id:'improvement', label:'💡 הצעות לשיפור' },
+  { id:'bug',         label:'🐛 דיווח על תקלה' },
+  { id:'question',    label:'❓ שאלה' },
+  { id:'praise',      label:'🌟 מחמאה' },
+  { id:'other',       label:'💬 אחר' },
+];
+let _feedbackTopicVal = FEEDBACK_TOPICS[0].id;
+
+function openFeedback() {
+  el('feedbackPanel').classList.remove('hidden');
+  el('feedbackForm').style.display = '';
+  el('feedbackSuccess').style.display = 'none';
+  el('feedbackError').style.display = 'none';
+  el('feedbackText').value = '';
+  _feedbackTopicVal = FEEDBACK_TOPICS[0].id;
+  _renderFeedbackTopicDD();
+}
+
+function closeFeedback() { el('feedbackPanel').classList.add('hidden'); }
+
+function _renderFeedbackTopicDD() {
+  const wrap = el('ddFeedbackTopic');
+  if (!wrap) return;
+  wrap.innerHTML = `<div class="soft-dd-trigger" onclick="_toggleFeedbackTopicDD(this)">
+    <span>${FEEDBACK_TOPICS.find(t=>t.id===_feedbackTopicVal)?.label || FEEDBACK_TOPICS[0].label}</span>
+    <span style="font-size:10px;color:var(--gray-400)">▼</span>
+  </div>
+  <div class="soft-dd-list" style="display:none">
+    ${FEEDBACK_TOPICS.map(t=>`<div class="soft-dd-item${t.id===_feedbackTopicVal?' selected':''}" onclick="_pickFeedbackTopic('${t.id}')">${t.label}</div>`).join('')}
+  </div>`;
+}
+
+function _toggleFeedbackTopicDD(trigger) {
+  const list = trigger.nextElementSibling;
+  list.style.display = list.style.display === 'none' ? '' : 'none';
+}
+
+function _pickFeedbackTopic(id) {
+  _feedbackTopicVal = id;
+  _renderFeedbackTopicDD();
+}
+
+async function sendFeedback() {
+  const text = el('feedbackText').value.trim();
+  const errEl = el('feedbackError');
+  errEl.style.display = 'none';
+  if (!text) {
+    errEl.textContent = 'יש להזין הודעה לפני השליחה';
+    errEl.style.display = '';
+    el('feedbackText').focus();
+    return;
+  }
+  const btn = el('feedbackPanel').querySelector('button.btn');
+  if (btn) btn.disabled = true;
+  try {
+    await fbDb.collection('adminMessages').add({
+      topic: _feedbackTopicVal,
+      topicLabel: FEEDBACK_TOPICS.find(t=>t.id===_feedbackTopicVal)?.label || '',
+      text,
+      familyUid: S.uid,
+      senderName: S.user,
+      familyName: familyData?.familyName || '',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      read: false,
+    });
+    el('feedbackForm').style.display = 'none';
+    el('feedbackSuccess').style.display = '';
+  } catch(e) {
+    errEl.textContent = 'שגיאה בשליחה: ' + (e.message || String(e));
+    errEl.style.display = '';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 const NOTIF_DEFAULTS = {
   committeeApplications: { expiryDays: 5, reminderHoursBeforeExpiry: 24, notifyOnDecision: true },
   pendingEvents:         { expiryDays: 7, reminderHoursBeforeExpiry: 24, notifyOnDecision: true },
@@ -3581,6 +3658,48 @@ async function saveLeaderboardSettings() {
     _adminPanelCache = null;
     _alert('הגדרות נשמרו');
   } catch(e) { _alert('שגיאה: ' + e.message); }
+}
+
+async function renderAdminMessages() {
+  const wrap = el('adminMessages');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="font-size:12px;color:var(--gray-400);padding:8px 0">טוען...</div>';
+  try {
+    const snap = await fbDb.collection('adminMessages').orderBy('createdAt', 'desc').limit(50).get();
+    if (snap.empty) {
+      wrap.innerHTML = '<div style="font-size:12px;color:var(--gray-400);padding:8px 0">אין פניות עדיין</div>';
+      return;
+    }
+    wrap.innerHTML = `<div class="card" style="padding:0;overflow:hidden">` +
+      snap.docs.map((doc, i) => {
+        const m = doc.data();
+        const ts = m.createdAt?.toDate ? m.createdAt.toDate() : null;
+        const dateStr = ts ? ts.toLocaleDateString('he-IL') + ' ' + ts.toLocaleTimeString('he-IL', { hour:'2-digit', minute:'2-digit' }) : '';
+        const unread = m.read === false;
+        return `<div style="padding:12px${i < snap.size-1 ? ';border-bottom:1px solid var(--gray-100)' : ''}${unread ? ';background:var(--primary-50,#eff6ff)' : ''}">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            ${unread ? '<span style="width:8px;height:8px;border-radius:50%;background:var(--primary-500);flex-shrink:0;display:inline-block"></span>' : ''}
+            <span style="font-size:13px;font-weight:900;color:var(--gray-900);flex:1">${esc(m.topicLabel || m.topic || '—')}</span>
+            <span style="font-size:11px;color:var(--gray-400)">${dateStr}</span>
+            ${unread ? `<button onclick="markAdminMsgRead('${doc.id}',this)" style="font-size:11px;border:none;background:none;color:var(--primary-500);cursor:pointer;font-family:inherit;font-weight:700;padding:0">סמן כנקרא</button>` : ''}
+          </div>
+          <div style="font-size:12px;color:var(--gray-500);margin-bottom:4px">${esc(m.senderName || '')}${m.familyName ? ' · ' + esc(m.familyName) : ''}</div>
+          <div style="font-size:13px;color:var(--gray-700);white-space:pre-wrap">${esc(m.text || '')}</div>
+        </div>`;
+      }).join('') + `</div>`;
+  } catch(e) {
+    wrap.innerHTML = `<div style="font-size:12px;color:var(--error);padding:8px 0">שגיאה: ${esc(e.message)}</div>`;
+  }
+}
+
+async function markAdminMsgRead(id, btn) {
+  try {
+    await fbDb.collection('adminMessages').doc(id).update({ read: true });
+    btn.closest('div[style]').style.background = '';
+    const dot = btn.closest('div[style]').querySelector('span[style*="border-radius:50%"]');
+    if (dot) dot.remove();
+    btn.remove();
+  } catch(e) { console.error('markAdminMsgRead:', e); }
 }
 
 function renderMaintenanceTools() {
@@ -3754,6 +3873,7 @@ function _applyAdminPanelCache(data, showLog) {
   renderShoppingHistorySettings();
   renderMaintenanceTools();
   renderAdminEventTypes();
+  renderAdminMessages();
 }
 
 function renderAdminEventTypes() {
@@ -4271,7 +4391,8 @@ const DRAWER_ICONS = {
   install: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
   admin:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
   gcal:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
-  signout: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  signout:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  feedback: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>`,
 };
 
 function _drawerItem(icon, label, onclick, opts = {}) {
@@ -4303,7 +4424,8 @@ function openMenu() {
 
   const secondaryItems = [
     !S.lockedMember ? _drawerItem('switch', isHe ? 'החלף משתמש' : 'Switch member', `closeMenu();switchUser()`) : '',
-    _drawerItem('install', isHe ? 'הוסף לדף הבית' : 'Add to home screen', `closeMenu();installApp()`),
+    _drawerItem('install',  isHe ? 'הוסף לדף הבית' : 'Add to home screen', `closeMenu();installApp()`),
+    _drawerItem('feedback', isHe ? 'פנייה למנהל המערכת' : 'Contact admin', `closeMenu();openFeedback()`),
     isAdmin() ? _drawerItem('admin', isHe ? 'הגדרות מערכת' : 'System settings', `closeMenu();openAdminPanel(false)`, { adminKey: true }) : '',
   ].filter(Boolean).join('');
 

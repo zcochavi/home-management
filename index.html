@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260413fb') location.reload(true);
+        if (v !== '20260413fc') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260413fb">
+  <link rel="stylesheet" href="styles.css?v=20260413fc">
 </head>
 <body>
 
@@ -241,6 +241,8 @@
       <div id="adminLeaderboardSettings"></div>
       <div class="comm-section-label" style="margin-top:4px">🛒 היסטוריית קניות</div>
       <div id="adminShoppingHistorySettings"></div>
+      <div class="comm-section-label" style="margin-top:4px">💬 פניות משתמשים</div>
+      <div id="adminMessages"></div>
       <div class="comm-section-label" style="margin-top:4px">🔧 כלי תחזוקה</div>
       <div id="adminMaintenance"></div>
     </div>
@@ -248,6 +250,37 @@
 </div>
 
 <!-- MANAGEMENT SCREEN -->
+<div id="feedbackPanel" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeFeedback()">×</button>
+    <div class="mgmt-header-title">💬 פנייה למנהל המערכת</div>
+  </div>
+  <div style="padding:16px;max-width:520px;margin:0 auto">
+    <div id="feedbackForm">
+      <div class="comm-section-label" style="margin-bottom:12px">יש לך משהו לומר? שלח/י לנו!</div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:700;color:var(--gray-500);display:block;margin-bottom:6px">נושא</label>
+        <div id="ddFeedbackTopic"></div>
+        <select id="feedbackTopicSelect" style="display:none"></select>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:700;color:var(--gray-500);display:block;margin-bottom:6px">הודעה</label>
+        <textarea id="feedbackText" rows="5"
+          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--r-sm);font-family:inherit;font-size:14px;resize:vertical;background:var(--surface);color:var(--gray-900)"
+          placeholder="ספר/י לנו מה עלי דעתך, מה כדאי לשנות, מה לא עובד..."></textarea>
+      </div>
+      <button class="btn" onclick="sendFeedback()" style="width:100%;padding:12px;font-size:15px;font-weight:700">📨 שלח פנייה</button>
+      <div id="feedbackError" style="color:var(--error);font-size:13px;font-weight:700;margin-top:8px;text-align:center;display:none"></div>
+    </div>
+    <div id="feedbackSuccess" style="display:none;text-align:center;padding:32px 16px">
+      <div style="font-size:48px;margin-bottom:12px">✅</div>
+      <div style="font-size:18px;font-weight:900;color:var(--gray-900);margin-bottom:8px">הפנייה נשלחה!</div>
+      <div style="font-size:14px;color:var(--gray-500);margin-bottom:24px">תודה על הפנייה, נחזור אליך בהקדם.</div>
+      <button class="btn-ghost" onclick="closeFeedback()" style="padding:10px 24px;font-size:14px">סגור</button>
+    </div>
+  </div>
+</div>
+
 <div id="mgmtScreen" class="hidden">
   <div class="mgmt-header">
     <button class="mgmt-back-btn" onclick="closeMgmt()">×</button>
@@ -556,7 +589,7 @@
 <button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
 </button>
-<script src="app.js?v=20260413fb"></script>
+<script src="app.js?v=20260413fc"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
