@@ -337,16 +337,20 @@ const DEFAULT_GROCERY_CATS = [
 ];
 const DEFAULT_SUBJECTS = [
   { name:'Maths',   nameHe:'מתמטיקה', bg:'#f0f4ff', color:'#4a65cc' },
-  { name:'English', nameHe:'אנגלית',  bg:'#f3f4f6', color:'#6b7280' },
-  { name:'Science', nameHe:'מדעים',   bg:'#f3f4f6', color:'#6b7280' },
-  { name:'History', nameHe:'היסטוריה',bg:'#f3f4f6', color:'#6b7280' },
-  { name:'Art',     nameHe:'אמנות',   bg:'#f3f4f6', color:'#6b7280' },
+  { name:'English', nameHe:'אנגלית',  bg:'#fdf2f8', color:'#9d174d' },
+  { name:'Science', nameHe:'מדעים',   bg:'#ecfdf5', color:'#065f46' },
+  { name:'History', nameHe:'היסטוריה',bg:'#fff7ed', color:'#9a3412' },
+  { name:'Art',     nameHe:'אמנות',   bg:'#fef9c3', color:'#854d0e' },
 ];
 const SUBJECT_COLOR_POOL = [
-  { bg:'#f0f4ff', color:'#4a65cc' },{ bg:'#f3f4f6', color:'#6b7280' },
-  { bg:'#f3f4f6', color:'#6b7280' },{ bg:'#f0f4ff', color:'#4a65cc' },
-  { bg:'#f3f4f6', color:'#6b7280' },{ bg:'#f3f4f6', color:'#6b7280' },
-  { bg:'#f3f4f6', color:'#6b7280' },{ bg:'#f0f4ff', color:'#4a65cc' },
+  { bg:'#f0f4ff', color:'#4a65cc' },
+  { bg:'#fdf2f8', color:'#9d174d' },
+  { bg:'#ecfdf5', color:'#065f46' },
+  { bg:'#fff7ed', color:'#9a3412' },
+  { bg:'#fef9c3', color:'#854d0e' },
+  { bg:'#f0fdfa', color:'#0f766e' },
+  { bg:'#faf5ff', color:'#7e22ce' },
+  { bg:'#fff1f2', color:'#9f1239' },
 ];
 
 // Keyword → emoji suggestions for grocery category names
@@ -1701,9 +1705,25 @@ async function _notifyFirstJoin(memberName) {
   }
 }
 
+function _migrateSubjectColors() {
+  const subs = familyData?.subjects;
+  if (!subs?.length) return;
+  const grey = '#f3f4f6';
+  const needsPatch = subs.some(s => s.bg === grey);
+  if (!needsPatch) return;
+  const patched = subs.map((s, i) => {
+    if (s.bg !== grey) return s;
+    const pool = SUBJECT_COLOR_POOL[i % SUBJECT_COLOR_POOL.length];
+    return { ...s, bg: pool.bg, color: pool.color };
+  });
+  familyData.subjects = patched;
+  fbDb.collection('families').doc(S.uid).update({ subjects: patched }).catch(() => {});
+}
+
 function afterLoad() {
   const kids = getKids();
   if (!S.child || !kids.includes(S.child)) S.child = kids[0] || null;
+  _migrateSubjectColors();
   el('loadingScreen').classList.add('hidden');
   if (S.lockedMember && getAllMemberNames().includes(S.lockedMember)) {
     // First-join detection: if member has no joinedAt, this is their first time
