@@ -3636,19 +3636,14 @@ async function adminResetFamilyData() {
   res.style.color = '#718096';
   res.textContent = 'מאפס...';
   try {
-    const famDoc = await fbDb.collection('families').doc(uid).get();
-    if (!famDoc.exists) { res.style.color = 'var(--error)'; res.textContent = 'לא נמצאה משפחה עם UID זה'; return; }
-    const { members, familyCode, familyName, email, committeeClasses, createdAt } = famDoc.data();
-    await fbDb.collection('families').doc(uid).update({
-      chores: [], grocery: [], homework: [], events: [], stars: {},
-      groceryPool: [], shoppingList: [], inCart: [], shoppingHistory: [],
-    });
+    const result = await fbFunctions.httpsCallable('adminResetFamily')({ familyUid: uid });
     res.style.color = '#276749';
-    res.textContent = `✓ הנתונים של "${familyName || uid}" אופסו בהצלחה`;
+    res.textContent = `✓ הנתונים של "${result.data?.familyName || uid}" אופסו בהצלחה`;
     el('resetFamilyUidInput').value = '';
   } catch(e) {
     res.style.color = 'var(--error)';
-    res.textContent = 'שגיאה: ' + (e.message || String(e));
+    const msg = e?.details?.message || e?.message || String(e);
+    res.textContent = 'שגיאה: ' + msg;
     console.error('adminResetFamilyData:', e);
   } finally {
     btn.disabled = false;
