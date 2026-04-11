@@ -422,6 +422,12 @@ body {
 .drawer-user-sub {
   font-size: 12px; font-weight: 600; color: var(--gray-400); margin-top: -6px;
 }
+.drawer-user-uid {
+  font-size: 10px; font-family: monospace; color: var(--gray-300);
+  margin-top: 4px; cursor: pointer; user-select: all;
+  transition: color var(--t-fast);
+}
+.drawer-user-uid:hover { color: var(--gray-500); }
 
 /* Drawer navigation */
 .drawer-nav { flex: 1; overflow-y: auto; padding: 12px 12px 0; display: flex; flex-direction: column; gap: 2px; }

@@ -911,6 +911,8 @@ function setAuthLoading(on) {
   ['signinPanel','signupPanel1','signupPanel2','joinPanel'].forEach(id => {
     const e = el(id); if (e) e.style.pointerEvents = on ? 'none' : '';
   });
+  // Hide secondary action links while a request is in flight
+  document.querySelectorAll('#signinPanel .auth-link-btn').forEach(b => b.style.visibility = on ? 'hidden' : '');
 }
 
 function getAuthError(code) {
@@ -3570,6 +3572,7 @@ function renderMaintenanceTools() {
     <div class="card" style="margin-bottom:12px;padding:12px;border:1.5px solid var(--error-light,#fed7d7)">
       <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--error)">🗑 איפוס נתוני משפחה</div>
       <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוחק את כל המשימות, הקניות, השיעורים, האירועים והכוכבים של משפחה — שומר חברי משפחה וקוד הצטרפות.</div>
+      <div style="font-size:11px;color:#718096;margin-bottom:6px">ה-UID שלך: <code style="user-select:all;background:#f7fafc;padding:1px 4px;border-radius:4px">${S.uid}</code> <button onclick="el('resetFamilyUidInput').value='${S.uid}'" style="border:none;background:none;font-size:11px;color:var(--primary-500);cursor:pointer;padding:0;font-family:inherit;font-weight:700">← הכנס</button></div>
       <input class="auth-input" id="resetFamilyUidInput" placeholder="Family UID" style="margin-bottom:8px;font-family:monospace;font-size:13px">
       <button class="admin-btn" id="resetFamilyBtn" onclick="adminResetFamilyData()" style="width:100%;padding:9px;font-size:13px;background:var(--error);color:#fff;border-color:var(--error)">איפוס נתונים ◀</button>
       <div id="resetFamilyResult" style="font-size:12px;margin-top:8px"></div>
@@ -4287,6 +4290,7 @@ function openMenu() {
       </div>
       <div class="drawer-user-name">${esc(S.user)}</div>
       <div class="drawer-user-sub">${esc(familyName)}</div>
+      <div class="drawer-user-uid" onclick="navigator.clipboard?.writeText('${S.uid}').then(()=>showToast('${isHe?'UID הועתק':'UID copied'}','info'))" title="${isHe?'לחץ להעתקה':'Click to copy'}">${S.uid}</div>
     </div>
     <nav class="drawer-nav">
       ${mainItems}
