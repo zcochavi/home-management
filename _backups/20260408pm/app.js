@@ -53,9 +53,9 @@ const STRINGS = {
     wbHi: n => `שלום ${n}!`,
     wbStars: n => `יש לך ${n} ⭐ כוכבים השבוע`,
     addChoreTitle:'➕ הוסף משימה', chorePlaceholder:'מה צריך לעשות...',
-    noChores:'זה זמן טוב להוסיף משהו קטן 🙂',
-    choreHistory:'📋 היסטוריה', choreHistoryEmpty:'אין משימות שהושלמו עדיין', choreHistorySearch:'חיפוש בהיסטוריה...',
-    high:'גבוהה', medium:'בינונית', low:'נמוכה',
+    noChores:'🎉 אין משימות להציג',
+    choreHistory:'✅ היסטוריה', choreHistoryEmpty:'אין משימות שהושלמו עדיין', choreHistorySearch:'חיפוש בהיסטוריה...',
+    high:'גבוה', medium:'בינוני', low:'נמוך',
     youLabel:'(את/ה)', add:'הוסף',
     superPoolTitle:'🏪 מאגר', superListTitle:'🛒 רשימת קניות', superCartTitle:'🧺 בעגלה',
     poolAddPlaceholder:'שם הפריט...',
@@ -73,7 +73,7 @@ const STRINGS = {
     doneShoppingMsg: (name, bought, missedNames) => missedNames.length ? `${name} סיים לקנות — לא הביא: ${missedNames.join(', ')}` : `${name} סיים לקנות (${bought} פריטים)`,
     shoppingList:'🛒 רשימת קניות', addItemPlaceholder:'הוסף פריט...',
     clearChecked:'🗑 נקה מסומנים', groceryEmpty:'🛒 הרשימה ריקה!',
-    cats:{ 'Fruit & Veg':'פירות וירקות','Dairy & Eggs':'חלב וביצים','Pantry':'מזווה','Meat & Fish':'בשר ודגים','פירות וירקות':'פירות וירקות','חלב וביצים':'חלב וביצים','מזווה':'מזווה','בשר ודגים':'בשר ודגים','כללי':'כללי' },
+    cats:{ 'Fruit & Veg':'פירות וירקות','Dairy & Eggs':'חלב וביצים','Pantry':'מזווה','Meat & Fish':'בשר ודגים' },
     hwTitle: n => `📖 שיעורים של ${n}`,
     hwPlaceholder:'תיאור המשימה...', noHw:'🎉 אין שיעורים!',
     hwDueLabel: d => `📅 להגשה: ${d}`,
@@ -126,8 +126,6 @@ const STRINGS = {
     commApplicationDeny:'✕ דחה',
     commMyApplication:'המועמדות שלך',
     commApplicationExpires: d => `פג תוקף: ${d}`,
-    commCancelApplication:'בטל מועמדות',
-    commLeaveCommittee:'עזוב ועד',
   },
   en: {
     dir:'ltr', locale:'en-US',
@@ -147,8 +145,8 @@ const STRINGS = {
     wbHi: n => `Hi ${n}!`,
     wbStars: n => `You have ${n} ⭐ star${n!==1?'s':''} this week`,
     addChoreTitle:'➕ Add Chore', chorePlaceholder:'What needs doing…',
-    noChores:'A good time to add something small 🙂',
-    choreHistory:'📋 History', choreHistoryEmpty:'No completed chores yet', choreHistorySearch:'Search history…',
+    noChores:'🎉 No chores to show',
+    choreHistory:'✅ History', choreHistoryEmpty:'No completed chores yet', choreHistorySearch:'Search history…',
     high:'high', medium:'medium', low:'low',
     youLabel:'(you)', add:'Add',
     superPoolTitle:'🏪 Pool', superListTitle:'🛒 Shopping List', superCartTitle:'🧺 In Cart',
@@ -220,8 +218,6 @@ const STRINGS = {
     commApplicationDeny:'✕ Deny',
     commMyApplication:'Your Application',
     commApplicationExpires: d => `Expires: ${d}`,
-    commCancelApplication:'Cancel Application',
-    commLeaveCommittee:'Leave Committee',
   },
 };
 
@@ -259,57 +255,15 @@ function getKids()           { return getMembers().filter(m => m.role === 'kid')
 function getParents()        { return getMembers().filter(m => m.role === 'parent').map(m => m.name); }
 function getAllMemberNames()  { return getMembers().map(m => m.name); }
 function getEmoji(name)      { return getMembers().find(m => m.name === name)?.emoji || '👤'; }
-// Phosphor-style person SVG per role (matches tab icon style)
-function _memberPersonSVG(role, gender) {
-  if (role === 'kid') {
-    if (gender === 'girl') {
-      // girl: face + two pigtails
-      return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">
-        <circle cx="12" cy="13" r="8"/>
-        <path d="M7 5.5C7 3.5 8.5 2 10.5 2S12 3 12 3s-.5-1 1.5-1S17 3.5 17 5.5" stroke-width="1.8"/>
-        <path d="M7 5.5C5 6 4 7.5 4 9" stroke-width="1.8"/>
-        <path d="M17 5.5C19 6 20 7.5 20 9" stroke-width="1.8"/>
-        <circle cx="9.5" cy="12" r="1" fill="currentColor" stroke="none"/>
-        <circle cx="14.5" cy="12" r="1" fill="currentColor" stroke="none"/>
-        <path d="M9.5 16.5c.6.8 1.4 1.2 2.5 1.2s1.9-.4 2.5-1.2"/>
-      </svg>`;
-    }
-    // boy: smiley face in circle
-    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">
-      <circle cx="12" cy="12" r="9"/>
-      <circle cx="9" cy="10.5" r="1" fill="currentColor" stroke="none"/>
-      <circle cx="15" cy="10.5" r="1" fill="currentColor" stroke="none"/>
-      <path d="M9.5 15.5c.6.8 1.4 1.2 2.5 1.2s1.9-.4 2.5-1.2"/>
-    </svg>`;
-  }
-  if (gender === 'female') {
-    // female adult: bust + shoulder curves suggesting hair
-    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">
-      <circle cx="12" cy="7" r="4"/>
-      <path d="M3 21c0-4.4 4-8 9-8s9 3.6 9 8"/>
-      <path d="M8 4C8 2.5 10 1.5 12 1.5S16 2.5 16 4" stroke-width="1.6"/>
-    </svg>`;
-  }
-  // male / default adult
-  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">
-    <circle cx="12" cy="7" r="4"/>
-    <path d="M3 21c0-4.4 4-8 9-8s9 3.6 9 8"/>
-  </svg>`;
-}
-// Returns <img> if member has a photo, else an SVG person icon.
-// sizePx = explicit px for standalone use; omit to fill container (width/height 100%).
+// Returns <img> if member has a photo, else emoji string.
+// sizePx = explicit px (for inline/text contexts); omit to fill container (width/height 100%).
 function getAvatar(name, sizePx) {
   const member = getMembers().find(m => m.name === name);
   if (member?.photo) {
     const s = sizePx != null ? `width:${sizePx}px;height:${sizePx}px` : 'width:100%;height:100%';
     return `<img src="${esc(member.photo)}" style="${s};object-fit:cover;border-radius:50%;display:block">`;
   }
-  const color = getPersonColor(name);
-  const role = member?.role || 'parent';
-  const dim = sizePx != null ? `${sizePx}px` : '100%';
-  const bg = sizePx != null ? `background:${color}1a;` : '';
-  const gender = member?.gender || null;
-  return `<span style="display:flex;align-items:center;justify-content:center;width:${dim};height:${dim};border-radius:50%;${bg}color:${color};"><span style="width:62%;height:62%;display:flex;">${_memberPersonSVG(role, gender)}</span></span>`;
+  return member?.emoji || '👤';
 }
 
 const COLOR_PALETTE  = ['#c471ed','#4facfe','#fa709a','#43e97b','#f9d423','#f5576c','#667eea','#48bb78'];
@@ -329,28 +283,23 @@ function getKidGradient(name) {
 //  CONSTANTS
 // ════════════════════════════════════════
 const DEFAULT_GROCERY_CATS = [
-  { name:'כללי', emoji:'🛒' },
-  { name:'פירות וירקות', emoji:'🥦' },
-  { name:'חלב וביצים', emoji:'🥛' },
-  { name:'מזווה', emoji:'🥫' },
-  { name:'בשר ודגים', emoji:'🥩' },
+  { name:'Fruit & Veg', emoji:'🥦' },
+  { name:'Dairy & Eggs', emoji:'🥛' },
+  { name:'Pantry', emoji:'🥫' },
+  { name:'Meat & Fish', emoji:'🥩' },
 ];
 const DEFAULT_SUBJECTS = [
-  { name:'Maths',   nameHe:'מתמטיקה', bg:'#f0f4ff', color:'#4a65cc' },
-  { name:'English', nameHe:'אנגלית',  bg:'#fdf2f8', color:'#9d174d' },
-  { name:'Science', nameHe:'מדעים',   bg:'#ecfdf5', color:'#065f46' },
-  { name:'History', nameHe:'היסטוריה',bg:'#fff7ed', color:'#9a3412' },
-  { name:'Art',     nameHe:'אמנות',   bg:'#fef9c3', color:'#854d0e' },
+  { name:'Maths',   nameHe:'מתמטיקה', bg:'#3b82f6', color:'#ffffff' },
+  { name:'English', nameHe:'אנגלית',  bg:'#10b981', color:'#ffffff' },
+  { name:'Science', nameHe:'מדעים',   bg:'#8b5cf6', color:'#ffffff' },
+  { name:'History', nameHe:'היסטוריה',bg:'#f59e0b', color:'#ffffff' },
+  { name:'Art',     nameHe:'אמנות',   bg:'#ec4899', color:'#ffffff' },
 ];
 const SUBJECT_COLOR_POOL = [
-  { bg:'#f0f4ff', color:'#4a65cc' },
-  { bg:'#fdf2f8', color:'#9d174d' },
-  { bg:'#ecfdf5', color:'#065f46' },
-  { bg:'#fff7ed', color:'#9a3412' },
-  { bg:'#fef9c3', color:'#854d0e' },
-  { bg:'#f0fdfa', color:'#0f766e' },
-  { bg:'#faf5ff', color:'#7e22ce' },
-  { bg:'#fff1f2', color:'#9f1239' },
+  { bg:'#ef4444', color:'#ffffff' },{ bg:'#14b8a6', color:'#ffffff' },
+  { bg:'#f97316', color:'#ffffff' },{ bg:'#6366f1', color:'#ffffff' },
+  { bg:'#84cc16', color:'#ffffff' },{ bg:'#06b6d4', color:'#ffffff' },
+  { bg:'#a855f7', color:'#ffffff' },{ bg:'#0ea5e9', color:'#ffffff' },
 ];
 
 // Keyword → emoji suggestions for grocery category names
@@ -411,7 +360,7 @@ function getSubjects() {
 function subjectBadgeStyle(name) {
   const s = getSubjects().find(s => s.name === name);
   if (s) return `background:${s.bg};color:${s.color}`;
-  return 'background:#f3f4f6;color:#6b7280';
+  return 'background:#f0f4ff;color:#718096';
 }
 function subjectLabel(name) {
   const s = getSubjects().find(s => s.name === name);
@@ -419,42 +368,9 @@ function subjectLabel(name) {
   return s?.name || name;
 }
 
-const _now       = new Date();
-const today      = _now.toISOString().slice(0,10);
-const tomorrow   = new Date(_now.getTime()+864e5).toISOString().slice(0,10);
-const yesterday  = new Date(_now.getTime()-864e5).toISOString().slice(0,10);
-
-function _choreWhen(id) {
-  const d = new Date(id).toISOString().slice(0,10);
-  if (d === today)     return 'היום';
-  if (d === yesterday) return 'אתמול';
-  return fmtDate(d);
-}
-function _choreDueLabel(due) {
-  if (!due) return null;
-  const isHe = getLang() === 'he';
-  if (due < today)      return isHe ? `עבר: ${fmtDate(due)}`  : `overdue: ${fmtDate(due)}`;
-  if (due === today)    return isHe ? 'היום'  : 'Today';
-  if (due === tomorrow) return isHe ? 'מחר'   : 'Tomorrow';
-  return fmtDate(due);
-}
-
-// Chore sort score: combines priority + due-date urgency.
-// Priority penalty (days): high=0, medium=5, low=12.
-// Due-date days: negative if overdue (urgent bonus), 0=today, N=N days out, no-due=30.
-// Lower score → appears first.
-const _CHORE_PRI_PENALTY = { high: 0, medium: 5, low: 12 };
-function _choreSortScore(c) {
-  const pri = _CHORE_PRI_PENALTY[c.priority] ?? 5;
-  let dueDays;
-  if (c.due) {
-    const msPerDay = 864e5;
-    dueDays = Math.round((new Date(c.due + 'T00:00:00') - new Date(today + 'T00:00:00')) / msPerDay);
-  } else {
-    dueDays = 30; // no due date: treated as ~a month out
-  }
-  return pri + dueDays;
-}
+const _now     = new Date();
+const today    = _now.toISOString().slice(0,10);
+const tomorrow = new Date(_now.getTime()+864e5).toISOString().slice(0,10);
 
 // ════════════════════════════════════════
 //  STATE
@@ -566,37 +482,11 @@ let _joining = false;
 
 const EMOJI_OPTIONS = ['👩','👨','👧','👦','🧒','👶','🧑','👵','👴','🧔','🧑‍🍼','👱'];
 const GRADE_OPTIONS = ['','א','ב','ג','ד','ה','ו','ז','ח','ט','י','י"א','י"ב'];
-let _draftMembers   = [];
-let _draftSelfAdded = false;
+let _draftMembers = [];
 let _mbRole   = 'parent';
 let _mbEmoji  = EMOJI_OPTIONS[0];
 let _mbGender = null;
 let _mbDob    = '';
-
-function _enterSu2SelfMode() {
-  el('su2Title').textContent         = 'קודם כל, הפרטים שלך';
-  el('su2Subtitle').style.display    = '';
-  el('su2RoleRow').style.display     = 'none';
-  el('mbName').placeholder           = 'השם שלך';
-  el('su2AddBtn').className          = 'auth-btn-main su2-self-btn';
-  el('su2AddBtn').textContent        = 'הוסף את עצמי ←';
-  el('su2MoreDivider').style.display = 'none';
-  el('su2CreateRow').style.display   = 'none';
-  el('su2BackLink').style.display    = '';
-  if (el('mbKidExtras')) el('mbKidExtras').style.display = 'none';
-}
-
-function _enterSu2MoreMode() {
-  el('su2Title').textContent         = 'הוסף בני משפחה נוספים';
-  el('su2Subtitle').style.display    = 'none';
-  el('su2RoleRow').style.display     = '';
-  el('mbName').placeholder           = 'שם';
-  el('su2AddBtn').className          = 'auth-btn-add';
-  el('su2AddBtn').textContent        = '+ הוסף';
-  el('su2MoreDivider').style.display = '';
-  el('su2CreateRow').style.display   = '';
-  el('su2BackLink').style.display    = 'none';
-}
 
 function generateFamilyCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -649,10 +539,8 @@ function setMbGender(g) {
 function addDraftMember() {
   const name = el('mbName').value.trim();
   if (!name) { el('mbName').focus(); return; }
-  // Phase 1 (self): always parent — role toggle is hidden
-  const role  = _draftSelfAdded ? _mbRole : 'parent';
-  const entry = { name, emoji: _mbEmoji, role };
-  if (role === 'kid') {
+  const entry = { name, emoji: _mbEmoji, role: _mbRole };
+  if (_mbRole === 'kid') {
     if (_mbGender) entry.gender = _mbGender;
     const dob = el('mbDob')?.value;
     if (dob) entry.dob = dob;
@@ -661,19 +549,9 @@ function addDraftMember() {
   el('mbName').value = '';
   if (el('mbDob')) el('mbDob').value = '';
   _mbGender = null;
-  _mbRole = 'parent';
   el('mbGenderBoy') ?.classList.remove('active');
   el('mbGenderGirl')?.classList.remove('active');
-  el('mbRoleParent')?.classList.add('active');
-  el('mbRoleKid')   ?.classList.remove('active');
-  if (el('mbKidExtras')) el('mbKidExtras').style.display = 'none';
   renderMemberPreview();
-  if (!_draftSelfAdded) {
-    _draftSelfAdded = true;
-    _enterSu2MoreMode();
-    initEmojiRow();
-    setTimeout(() => el('mbName')?.focus(), 50);
-  }
 }
 function removeDraftMember(i) {
   _draftMembers.splice(i, 1);
@@ -682,14 +560,12 @@ function removeDraftMember(i) {
 function renderMemberPreview() {
   el('memberPreview').innerHTML = _draftMembers.map((m, i) => {
     const genderLabel = m.gender === 'boy' ? ' · 👦' : m.gender === 'girl' ? ' · 👧' : '';
-    const dobLabel    = m.dob ? ' · ' + m.dob.split('-').reverse().join('/') : '';
-    const isSelf      = i === 0 && _draftSelfAdded;
-    return `<div class="member-chip${isSelf ? ' member-chip-first' : ''}">
+    const dobLabel    = m.dob ? ' · ' + m.dob : '';
+    return `<div class="member-chip">
       <span class="member-chip-emoji">${m.emoji}</span>
       <span class="member-chip-name">${esc(m.name)}${genderLabel}${dobLabel}</span>
-      ${isSelf ? '<span class="member-chip-self">אני</span>' : ''}
       <span class="member-chip-role">${m.role==='parent'?'הורה':'ילד/ה'}</span>
-      ${isSelf ? '' : `<button class="member-chip-del" onclick="removeDraftMember(${i})">×</button>`}
+      <button class="member-chip-del" onclick="removeDraftMember(${i})">×</button>
     </div>`;
   }).join('');
 }
@@ -718,20 +594,13 @@ function signupNext() {
   if (pwd.length < 6) { el('su1Error').textContent = 'הסיסמה חייבת להיות לפחות 6 תווים'; return; }
   el('signupPanel1').style.display = 'none';
   el('signupPanel2').style.display = '';
-  _draftMembers   = [];
-  _draftSelfAdded = false;
-  _mbRole   = 'parent';
-  _mbGender = null;
+  _draftMembers = [];
   renderMemberPreview();
   initEmojiRow();
-  _enterSu2SelfMode();
-  setTimeout(() => el('mbName')?.focus(), 50);
 }
 function signupBack() {
   el('signupPanel2').style.display = 'none';
   el('signupPanel1').style.display = '';
-  _draftSelfAdded = false;
-  _draftMembers   = [];
 }
 
 async function doSignIn() {
@@ -746,19 +615,6 @@ async function doSignIn() {
   } catch(e) {
     setAuthLoading(false);
     el('siError').textContent = getAuthError(e.code);
-    const isPwdErr = e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential';
-    const isEmailErr = e.code === 'auth/user-not-found' || e.code === 'auth/invalid-email';
-    const pwdEl   = el('siPwd');
-    const emailEl = el('siEmail');
-    if (isPwdErr) {
-      pwdEl.classList.add('input-error');
-      pwdEl.select();
-      pwdEl.addEventListener('input', () => pwdEl.classList.remove('input-error'), { once: true });
-    } else if (isEmailErr) {
-      emailEl.classList.add('input-error');
-      emailEl.select();
-      emailEl.addEventListener('input', () => emailEl.classList.remove('input-error'), { once: true });
-    }
   }
 }
 
@@ -767,14 +623,7 @@ async function doSignUp() {
   el('su2Error').textContent = '';
   const validMembers = _draftMembers.filter(m => m.name.trim());
   if (validMembers.length === 0) { el('su2Error').textContent = 'יש להוסיף לפחות איש משפחה אחד'; return; }
-  const members = validMembers.map(m => {
-    const entry = { name: m.name.trim(), emoji: m.emoji, role: m.role };
-    if (m.role === 'kid') {
-      if (m.gender) entry.gender = m.gender;
-      if (m.dob)    entry.dob    = m.dob;
-    }
-    return entry;
-  });
+  const members = validMembers.map(m => ({ name:m.name.trim(), emoji:m.emoji, role:m.role }));
   const familyName = el('suFamily').value.trim();
   const email      = el('suEmail').value.trim();
   const pwd        = el('suPwd').value;
@@ -794,10 +643,14 @@ async function doSignUp() {
       await secondaryApp.delete();
     }
     // 3. Write family doc + join code lookup
+    const localRaw = localStorage.getItem('familyhub_v3');
+    let init = { chores:[], grocery:[], homework:[], events:[], stars:{} };
+    if (localRaw) { try { Object.assign(init, JSON.parse(localRaw)); } catch(e){} }
     await fbDb.collection('families').doc(ownerUid).set({
       familyName, email, members, familyCode: code,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      chores: [], grocery: [], homework: [], events: [], stars: {},
+      chores: init.chores||[], grocery: init.grocery||[],
+      homework: init.homework||[], events: init.events||[], stars: init.stars||{},
       groceryPool: [], shoppingList: [], inCart: [], shoppingHistory: [],
     });
     await fbDb.collection('joinCodes').doc(code).set({ ownerUid });
@@ -923,20 +776,18 @@ function setAuthLoading(on) {
   ['signinPanel','signupPanel1','signupPanel2','joinPanel'].forEach(id => {
     const e = el(id); if (e) e.style.pointerEvents = on ? 'none' : '';
   });
-  // Hide secondary action links while a request is in flight
-  document.querySelectorAll('#signinPanel .auth-link-btn').forEach(b => b.style.visibility = on ? 'hidden' : '');
 }
 
 function getAuthError(code) {
   const m = {
-    'auth/user-not-found':         'לא נמצא חשבון עם כתובת אימייל זו — בדוק שהכתבת נכון',
-    'auth/wrong-password':         'סיסמה שגויה — בדוק אותיות גדולות/קטנות ונסה שוב',
-    'auth/invalid-credential':     'אימייל או סיסמה שגויים — בדוק ונסה שוב',
-    'auth/email-already-in-use':   'כתובת האימייל כבר רשומה במערכת',
+    'auth/user-not-found':         'לא נמצא חשבון עם אימייל זה',
+    'auth/wrong-password':         'סיסמה שגויה',
+    'auth/invalid-credential':     'אימייל או סיסמה שגויים',
+    'auth/email-already-in-use':   'כתובת האימייל כבר בשימוש',
     'auth/invalid-email':          'כתובת אימייל לא תקינה',
-    'auth/weak-password':          'הסיסמה קצרה מדי — נדרשים לפחות 6 תווים',
-    'auth/network-request-failed': 'בעיית חיבור לרשת — בדוק את האינטרנט ונסה שוב',
-    'auth/too-many-requests':      'יותר מדי ניסיונות כושלים — נסה שוב עוד כמה דקות',
+    'auth/weak-password':          'הסיסמה חלשה מדי (6 תווים לפחות)',
+    'auth/network-request-failed': 'בעיית חיבור לרשת',
+    'auth/too-many-requests':      'יותר מדי ניסיונות, נסה שוב מאוחר יותר',
     'permission-denied':           'אין הרשאה לכתוב למסד הנתונים — יש לעדכן את חוקי האבטחה ב-Firebase Console',
   };
   return m[code] || 'שגיאה: ' + code;
@@ -947,8 +798,8 @@ let _sessionStartMs  = null;
 
 function _applyAdminUI() {
   const btn = el('pendingReqBtn');
-  if (btn) btn.style.display = 'none'; // moved to community tab badge + in-tab banner
-  if (isCommittee() && !isKid()) _fetchPendingBadge();
+  if (btn) btn.style.display = isCommittee() ? '' : 'none';
+  if (isCommittee()) _fetchPendingBadge();
 }
 
 // ── Toast (temporary on-screen info, no bell) ────────────────
@@ -957,11 +808,11 @@ function showToast(msg, type = 'info', duration = 4000) {
   if (!wrap) {
     wrap = document.createElement('div');
     wrap.id = 'toastWrap';
-    wrap.style.cssText = 'position:fixed;bottom:calc(var(--tab-bar-h,68px) + env(safe-area-inset-bottom,0px) + 12px);right:50%;transform:translateX(50%);z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;width:90%;max-width:360px';
+    wrap.style.cssText = 'position:fixed;bottom:24px;right:50%;transform:translateX(50%);z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;width:90%;max-width:360px';
     document.body.appendChild(wrap);
   }
   const t = document.createElement('div');
-  const bg = type === 'error' ? '#c53030' : type === 'success' ? '#4CAF84' : '#4a65cc';
+  const bg = type === 'error' ? '#c53030' : type === 'success' ? '#276749' : '#4a6fa5';
   t.style.cssText = `background:${bg};color:#fff;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.18);opacity:0;transition:opacity .25s;text-align:center;pointer-events:none`;
   t.textContent = msg;
   wrap.appendChild(t);
@@ -973,8 +824,7 @@ function showToast(msg, type = 'info', duration = 4000) {
 }
 
 // ── Notification system (banners + message center) ───────────
-let _allNotifs    = []; // cached for message center
-let _pendingCount = 0; // pending requests count for committee tab badge
+let _allNotifs = []; // cached for message center
 
 function initNotifBanners() {
   if (_notifUnsubscribe) { _notifUnsubscribe(); _notifUnsubscribe = null; }
@@ -989,11 +839,11 @@ function initNotifBanners() {
       const _visibleNotif = n => !n.dismissed && (
         !['school_pending','event_pending','application_pending'].includes(n.type) ||
         (n.recipientUid === S.uid && n.requestedByUid !== S.uid)
-      ) && (n.type !== 'shopping_done' || !isKid());
+      ) && (n.type !== 'member_joined' || isParent());
       renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
+      // Patch old school_pending notifications that are missing reqId
       if (isAdmin()) _patchMissingReqIds(_allNotifs);
       _updateBellBadge();
-      if (!el('messageCenterPanel')?.classList.contains('hidden')) renderMessageCenter();
       if (isCommittee()) _fetchPendingBadge();
       if (!el('messageCenterPanel')?.classList.contains('hidden')) renderMessageCenter();
     }, err => console.error('[notif] onSnapshot error:', err.code, err.message));
@@ -1033,7 +883,7 @@ function _updateBellBadge() {
   if (!badge) return;
   const count = _allNotifs.filter(n => !n.dismissed &&
     !['school_pending','event_pending','application_pending'].includes(n.type) &&
-    (n.type !== 'shopping_done' || !isKid())
+    (n.type !== 'member_joined' || isParent())
   ).length;
   badge.textContent = count > 9 ? '9+' : count;
   badge.classList.toggle('hidden', count === 0);
@@ -1057,43 +907,30 @@ function renderNotifBanners(undismissed) {
     if (existing.has('notifBanner_' + n.id)) return;
     const REQUEST_TYPES = ['school_pending','event_pending','application_pending'];
     const isRequest  = REQUEST_TYPES.includes(n.type);
-    const isAdminMsg = n.type === 'admin_message';
     const isInfo     = n.type === 'shopping_done';
-    const isGood     = n.type?.includes('approved') || n.type === 'member_joined' || n.type === 'class_member_joined';
+    const isGood     = n.type?.includes('approved') || n.type === 'member_joined';
     const isDenied   = n.type?.includes('denied') || n.type?.includes('rejected');
-    const bg     = isDenied ? '#fff5f5' : isAdminMsg ? '#faf5ff' : '#ebf8ff';
-    const border = isDenied ? '#feb2b2' : isAdminMsg ? '#d6bcfa' : '#90cdf4';
-    const color  = isDenied ? '#c53030' : isAdminMsg ? '#6b21a8' : '#2b6cb0';
-    const icon   = isInfo ? '🛒' : isGood ? '✅' : isDenied ? '❌' : isRequest ? '📋' : isAdminMsg ? '💬' : '🔔';
+    const bg     = isInfo ? '#fffbeb' : isGood ? '#f0fff4' : isDenied ? '#fff5f5' : '#ebf8ff';
+    const border = isInfo ? '#f6e05e' : isGood ? '#9ae6b4' : isDenied ? '#feb2b2' : '#90cdf4';
+    const color  = isInfo ? '#744210' : isGood ? '#276749' : isDenied ? '#c53030' : '#2b6cb0';
+    const icon   = isInfo ? '🛒' : isGood ? '✅' : isDenied ? '❌' : isRequest ? '📋' : '🔔';
     const div = document.createElement('div');
     div.className = 'notif-banner notif-banner-in';
     div.id = 'notifBanner_' + n.id;
     div.style.cssText = `background:${bg};border-color:${border};color:${color}`;
-    let requestActions = '';
-    if (isRequest && isAdmin()) {
-      if (!n.reqId) {
-        requestActions = `<div class="notif-banner-actions"><button class="notif-banner-act approve" onclick="closeMenu();openPendingPanel()" title="פתח בקשות">📋</button></div>`;
-      } else {
-        let evExpired = false;
-        if (n.type === 'event_pending') {
-          const [cid, pendingId] = n.reqId.split('|');
-          const cachedEv = _commCache[cid]?.pendingEvents?.find(e => e.id === pendingId);
-          evExpired = !!(cachedEv && !isEventUpcoming(cachedEv.date));
-        }
-        requestActions = evExpired
-          ? `<div class="notif-banner-actions"><span style="font-size:11px;color:var(--gray-400);font-weight:600">פג תוקף</span></div>`
-          : `<div class="notif-banner-actions">
+    const requestActions = isRequest && isAdmin()
+      ? (n.reqId
+          ? `<div class="notif-banner-actions">
                <button class="notif-banner-act approve" onclick="quickApproveReq('${n.id}','${n.type}','${n.reqId}',this)" title="אישור">✓</button>
                <button class="notif-banner-act deny"    onclick="quickDenyReq('${n.id}','${n.type}','${n.reqId}',this)"    title="דחייה">✗</button>
-             </div>`;
-      }
-    }
-    const adminMsgAction = isAdminMsg
-      ? `<div class="notif-banner-actions"><button class="notif-banner-act approve" onclick="_openAdminMsgFromNotif('${n.id}',this)" title="פתח">פתח</button></div>`
+             </div>`
+          : `<div class="notif-banner-actions">
+               <button class="notif-banner-act approve" onclick="closeMenu();openPendingPanel()" title="פתח בקשות">📋</button>
+             </div>`)
       : '';
     div.innerHTML = `<span class="notif-banner-icon">${icon}</span>
       <span class="notif-banner-text">${esc(n.message)}</span>
-      ${requestActions}${adminMsgAction}
+      ${requestActions}
       ${isRequest ? '' : `<button class="notif-banner-dismiss" onclick="dismissNotifBanner('${n.id}',this)" title="סגור">×</button>`}`;
     container.appendChild(div);
   });
@@ -1134,12 +971,7 @@ async function quickApproveReq(notifId, type, reqId, btn) {
 }
 
 async function quickDenyReq(notifId, type, reqId, btn) {
-  if (type === 'event_pending') {
-    const [cid, pendingId] = reqId.split('|');
-    const cachedEv = _commCache[cid]?.pendingEvents?.find(e => e.id === pendingId);
-    if (cachedEv && !isEventUpcoming(cachedEv.date)) return; // expired — silently ignore
-  }
-  if (!await _confirm('לדחות את הבקשה?', { danger: true, okLabel: 'דחה' })) return;
+  if (!confirm('לדחות את הבקשה?')) return;
   btn.closest('.notif-banner-actions').querySelectorAll('button').forEach(b => b.disabled = true);
   try {
     if (type === 'school_pending') {
@@ -1153,11 +985,6 @@ async function quickDenyReq(notifId, type, reqId, btn) {
     }
     await _dismissNotifById(notifId);
   } catch(e) { console.error('quickDenyReq:', e); showToast('שגיאה: ' + e.message, 'error'); }
-}
-
-function _openAdminMsgFromNotif(id, btn) {
-  openAdminPanel(false);
-  dismissNotifBanner(id, btn?.closest('.notif-banner'));
 }
 
 // ── Message center ────────────────────────────────────────────
@@ -1211,22 +1038,18 @@ async function renderPendingPanel() {
     const committeeClasses = familyData?.committeeClasses || [];
     const allPending = pendingSnap.docs.map(d => ({ id: d.id, classId: d.ref.parent.parent.id, ...d.data() }));
     const pending = admin ? allPending : allPending.filter(ev => isCommitteeFor(ev.classId));
-    const activePending  = pending.filter(ev => !ev.date || isEventUpcoming(ev.date));
-    const expiredPending = pending.filter(ev => ev.date && !isEventUpcoming(ev.date));
-
-    const pendingRowHtml = ev => `<div class="pending-event-row">
-      <div class="pending-event-info">
-        <span class="pending-event-title">${esc(ev.title)}</span>
-        <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + fmtEventDate(ev.date) : ''} · ${esc(classLabelFromId(ev.classId))}</span>
-      </div>
-      <div class="pending-event-actions">
-        <button class="pending-approve-btn" onclick="approveEvent('${ev.classId}','${ev.id}')">${t('pendingApprove')}</button>
-        <button class="pending-reject-btn"  onclick="rejectEvent('${ev.classId}','${ev.id}')">${t('pendingReject')}</button>
-      </div>
-    </div>`;
-
-    el('ppEventsList').innerHTML = activePending.length
-      ? activePending.map(pendingRowHtml).join('')
+    el('ppEventsList').innerHTML = pending.length
+      ? pending.map(ev => `
+          <div class="pending-event-row">
+            <div class="pending-event-info">
+              <span class="pending-event-title">${esc(ev.title)}</span>
+              <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + ev.date : ''} · ${esc(classLabelFromId(ev.classId))}</span>
+            </div>
+            <div class="pending-event-actions">
+              <button class="pending-approve-btn" onclick="approveEvent('${ev.classId}','${ev.id}')">${t('pendingApprove')}</button>
+              <button class="pending-reject-btn"  onclick="rejectEvent('${ev.classId}','${ev.id}')">${t('pendingReject')}</button>
+            </div>
+          </div>`).join('')
       : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין בקשות ממתינות</div>';
 
     // Committee applications
@@ -1296,7 +1119,7 @@ async function renderPendingPanel() {
 
     // Update badge
     const adminCount = admin ? ((appsSnap?.docs.length || 0) + (schoolsSnap?.docs.length || 0)) : 0;
-    const total = activePending.length + adminCount;
+    const total = pending.length + adminCount;
     const badge = el('pendingReqBadge');
     if (badge) { badge.textContent = total || ''; badge.classList.toggle('hidden', !total); }
   } catch(e) { console.error('renderPendingPanel:', e); }
@@ -1313,56 +1136,19 @@ async function _fetchPendingBadge() {
       );
     }
     const [evSnap, appsSnap, schoolsSnap] = await Promise.all(fetches);
-    const activeDocs = evSnap.docs.filter(d => {
-      const data = d.data();
-      return !data.date || isEventUpcoming(data.date);
-    });
     const evCount = admin
-      ? activeDocs.length
-      : activeDocs.filter(d => isCommitteeFor(d.ref.parent.parent.id)).length;
+      ? evSnap.size
+      : evSnap.docs.filter(d => isCommitteeFor(d.ref.parent.parent.id)).length;
     const total = evCount + (appsSnap?.size || 0) + (schoolsSnap?.size || 0);
-    _pendingCount = total;
     const badge = el('pendingReqBadge');
     if (badge) { badge.textContent = total || ''; badge.classList.toggle('hidden', !total); }
-    _updateCommTabBadge();
-    // Update community banner if tab is open
-    const banner = el('commPendingBanner');
-    if (banner) _renderCommPendingBanner(banner);
   } catch(e) {}
-}
-
-function _updateCommTabBadge() {
-  const btn = document.querySelector('.tab[data-tab="community"]');
-  if (!btn) return;
-  let dot = btn.querySelector('.tab-comm-badge');
-  if (_pendingCount > 0 && isCommittee() && !isKid()) {
-    if (!dot) { dot = document.createElement('span'); dot.className = 'tab-comm-badge'; btn.appendChild(dot); }
-    dot.textContent = _pendingCount;
-  } else if (dot) {
-    dot.remove();
-  }
-}
-
-function _renderCommPendingBanner(el) {
-  if (!isCommittee() || isKid()) { el.innerHTML = ''; return; }
-  if (_pendingCount > 0) {
-    el.innerHTML = `<div class="comm-pending-banner" onclick="openPendingPanel()">
-      <span class="comm-pending-icon">📋</span>
-      <span class="comm-pending-text">יש <strong>${_pendingCount}</strong> בקשות ממתינות לאישור</span>
-      <span class="comm-pending-arrow">←</span>
-    </div>`;
-  } else {
-    el.innerHTML = `<div style="text-align:end;margin-bottom:4px"><button class="comm-history-link" onclick="openAdminPanel(true,true)">📋 היסטוריית בקשות</button></div>`;
-  }
 }
 
 function renderMessageCenter() {
   const list = el('messageCenterList');
   if (!list) return;
-  const notifs = _allNotifs.filter(n =>
-    !['school_pending','event_pending','application_pending'].includes(n.type) &&
-    (n.type !== 'shopping_done' || !isKid())
-  );
+  const notifs = _allNotifs.filter(n => !['school_pending','event_pending','application_pending'].includes(n.type));
   el('mcCount').textContent = notifs.length ? `${notifs.length} הודעות` : '';
   el('mcDeleteAllBtn').style.display = notifs.length ? '' : 'none';
   const toolbar = el('mcSelectAllRow');
@@ -1372,8 +1158,8 @@ function renderMessageCenter() {
     return;
   }
   list.innerHTML = notifs.map(n => {
-    const isGood = n.type?.includes('approved') || n.type === 'member_joined';
-    const icon   = n.type === 'shopping_done' ? '🛒' : n.type === 'member_joined' ? '👋' : isGood ? '✅' : '❌';
+    const isGood = n.type?.includes('approved');
+    const icon   = n.type === 'shopping_done' ? '🛒' : isGood ? '✅' : '❌';
     const dt     = n.createdAt?.toDate ? n.createdAt.toDate().toLocaleString('he-IL', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
     const dimmed = n.dismissed ? 'opacity:0.55;' : '';
     return `<div class="mc-item" id="mcItem_${n.id}" style="${dimmed}">
@@ -1500,7 +1286,7 @@ function shareInvite() {
   } else {
     navigator.clipboard.writeText(text).then(() => {
       const btn = el('shareBtn');
-      if (btn) { btn.textContent = '✓ הועתק!'; setTimeout(() => { if(el('shareBtn')) el('shareBtn').textContent = 'שתף'; }, 2200); }
+      if (btn) { btn.textContent = '✓ הועתק!'; setTimeout(() => { if(el('shareBtn')) el('shareBtn').textContent = '📤 שתף'; }, 2200); }
     }).catch(() => prompt('העתק את הקוד:', text));
   }
 }
@@ -1512,7 +1298,7 @@ function shareKidCode(name, code) {
     navigator.share({ title: 'FamilyHub', text });
   } else {
     navigator.clipboard.writeText(text).then(() => {
-      _alert('✓ הועתק!');
+      alert('✓ הועתק!');
     }).catch(() => prompt('העתק את הקוד:', text));
   }
 }
@@ -1528,7 +1314,7 @@ async function generateSpouseCode(memberName) {
     renderMgmtMembers();
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = 'צור קוד'; }
-    _alert('שגיאה ביצירת קוד: ' + e.message);
+    alert('שגיאה ביצירת קוד: ' + e.message);
   }
 }
 
@@ -1543,7 +1329,7 @@ async function regenSpouseCode(memberName) {
     renderMgmtMembers();
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = '🔄'; }
-    _alert('שגיאה: ' + e.message);
+    alert('שגיאה: ' + e.message);
   }
 }
 
@@ -1554,7 +1340,7 @@ function shareSpouseCode(name, code) {
     navigator.share({ title: 'FamilyHub', text });
   } else {
     navigator.clipboard.writeText(text).then(() => {
-      _alert('✓ הועתק!');
+      alert('✓ הועתק!');
     }).catch(() => prompt('העתק את הקוד:', text));
   }
 }
@@ -1666,7 +1452,6 @@ function showNotifToast(title, body) {
 }
 
 function subscribeToFamily(uid) {
-  if (!_evtCfgLoaded) { _evtCfgLoaded = true; loadEventTypesCfg(); }
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
   fbUnsubscribe = fbDb.collection('families').doc(uid).onSnapshot(snap => {
     if (!snap.exists) {
@@ -1721,25 +1506,9 @@ async function _notifyFirstJoin(memberName) {
   }
 }
 
-function _migrateSubjectColors() {
-  const subs = familyData?.subjects;
-  if (!subs?.length) return;
-  const grey = '#f3f4f6';
-  const needsPatch = subs.some(s => s.bg === grey);
-  if (!needsPatch) return;
-  const patched = subs.map((s, i) => {
-    if (s.bg !== grey) return s;
-    const pool = SUBJECT_COLOR_POOL[i % SUBJECT_COLOR_POOL.length];
-    return { ...s, bg: pool.bg, color: pool.color };
-  });
-  familyData.subjects = patched;
-  fbDb.collection('families').doc(S.uid).update({ subjects: patched }).catch(() => {});
-}
-
 function afterLoad() {
   const kids = getKids();
   if (!S.child || !kids.includes(S.child)) S.child = kids[0] || null;
-  _migrateSubjectColors();
   el('loadingScreen').classList.add('hidden');
   if (S.lockedMember && getAllMemberNames().includes(S.lockedMember)) {
     // First-join detection: if member has no joinedAt, this is their first time
@@ -1898,22 +1667,6 @@ function fmtDateLong(str) {
 }
 function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function el(id){ return document.getElementById(id); }
-function fhSpinnerHTML(){ return `<span class="fh-spinner">${'<span></span>'.repeat(8)}</span>`; }
-
-// ── Action icon SVGs ──────────────────────────
-const _ico = {
-  x:    `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:13px;height:13px;display:block"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>`,
-  undo: `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:block"><path d="M4 8L2 5l2-3"/><path d="M2 5h6a4 4 0 0 1 0 8H6"/></svg>`,
-  edit: `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:block"><path d="M9.5 2a1.5 1.5 0 0 1 2 2L4 11H2V9L9.5 2z"/></svg>`,
-  trash:`<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:block"><line x1="2" y1="4" x2="12" y2="4"/><path d="M5 4V2.5h4V4"/><path d="M4 4l.7 7.5h4.6L10 4"/></svg>`,
-  plus: `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:13px;height:13px;display:block"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg>`,
-  list: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="width:15px;height:15px;display:block"><circle cx="3.5" cy="5" r="1" fill="currentColor" stroke="none"/><circle cx="3.5" cy="8.5" r="1" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1" fill="currentColor" stroke="none"/><line x1="6.5" y1="5" x2="13" y2="5"/><line x1="6.5" y1="8.5" x2="13" y2="8.5"/><line x1="6.5" y1="12" x2="11" y2="12"/></svg>`,
-  cart: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;display:block"><path d="M1 1.5h2l1.8 7.5h7l1.7-5.5H4.5"/><circle cx="6.5" cy="13" r="1" fill="currentColor" stroke="none"/><circle cx="11" cy="13" r="1" fill="currentColor" stroke="none"/></svg>`,
-  clock:`<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-bottom:1px"><circle cx="7" cy="7" r="5.5"/><polyline points="7,4 7,7 9,8.5"/></svg>`,
-  pin:  `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-bottom:1px"><path d="M7 1a3.5 3.5 0 0 1 3.5 3.5C10.5 7.5 7 13 7 13S3.5 7.5 3.5 4.5A3.5 3.5 0 0 1 7 1z"/><circle cx="7" cy="4.5" r="1.2" fill="currentColor" stroke="none"/></svg>`,
-  pencil:`<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;display:block"><path d="M9.5 2a1.5 1.5 0 0 1 2 2L4 11H2V9L9.5 2z"/></svg>`,
-  fam:   `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;display:inline-block;vertical-align:middle;color:#a0aec0"><circle cx="13" cy="7" r="2.5"/><path d="M18 17c0-2.8-2.7-5-6-5"/><circle cx="7" cy="7" r="2.5"/><path d="M1 17c0-2.8 2.7-5 6-5s6 2.2 6 5"/></svg>`,
-};
 
 // ════════════════════════════════════════
 //  LOGIN / MEMBER PICKER
@@ -2010,17 +1763,13 @@ function renderEventPersonPicker() {
   if (!picker) return;
   const others = getAllMemberNames().filter(n => n !== S.user);
   const chips = [
-    { key:'All', label:t('everyone') },
-    ...others.map(n => ({ key:n, label:n })),
+    { key:'All', label:t('everyone'), emoji:'👨‍👩‍👧‍👧' },
+    ...others.map(n => ({ key:n, label:n, emoji:getEmoji(n) })),
   ];
-  picker.innerHTML = chips.map(c => {
-    const sel = _eventPersons.includes(c.key);
-    const avatarHTML = c.key === 'All' ? _allGroupAvatar() : getAvatar(c.key);
-    return `<div class="ep-chip ${sel?'selected':''}" onclick="toggleEventPerson('${esc(c.key)}')">
-      <span class="ep-chip-avatar">${avatarHTML}</span>
-      <span>${esc(c.label)}</span>
-    </div>`;
-  }).join('');
+  picker.innerHTML = chips.map(c =>
+    `<div class="ep-chip ${_eventPersons.includes(c.key)?'selected':''}" onclick="toggleEventPerson('${esc(c.key)}')">
+       <span>${c.emoji}</span><span>${esc(c.label)}</span>
+     </div>`).join('');
 }
 
 function toggleEventPerson(key) {
@@ -2072,7 +1821,6 @@ function renderMgmt() {
 // ── Members ──────────────────────────────
 function renderMgmtMembers() {
   const members = getMembers();
-  const isHe = getLang() === 'he';
   _mgmtEditEmoji = {};
   members.forEach((m, i) => { _mgmtEditEmoji[i] = m.emoji; });
 
@@ -2081,24 +1829,21 @@ function renderMgmtMembers() {
                    !(m.role==='parent' && getParents().length===1);
     return `
     <div class="mgmt-member-row">
-      <div class="mgmt-avatar-wrap" onclick="pickPhoto('${esc(m.name)}')" title="${isHe ? 'החלף תמונה' : 'Change photo'}">
-        <div class="mgmt-avatar">${getAvatar(m.name)}</div>
-        <div class="mgmt-avatar-edit">${_ico.pencil}</div>
-      </div>
+      <div class="mgmt-avatar">${getAvatar(m.name)}</div>
       <div class="mgmt-member-info">
         <div class="mgmt-member-name">${esc(m.name)}</div>
         <div class="mgmt-member-role">${m.role==='parent'?'הורה':'ילד/ה'}</div>
-        ${m.role==='kid'&&m.school?.city ? `<div class="mgmt-school-info">🏫 ${esc(m.school.city)}${m.school.name?', '+esc(m.school.name):''}${m.school.grade?', כיתה '+esc(m.school.grade)+(m.school.classNum?'\''+esc(m.school.classNum):''):''} ${m.schoolPending?'<span style="background:var(--gray-100);color:var(--gray-500);font-size:10px;padding:1px 6px;border-radius:8px;font-weight:700">⏳ ממתין</span>':''}</div>` : ''}
+        ${m.role==='kid'&&m.school?.city ? `<div class="mgmt-school-info">🏫 ${esc(m.school.city)}${m.school.name?', '+esc(m.school.name):''}${m.school.grade?', כיתה '+esc(m.school.grade)+(m.school.classNum?'\''+esc(m.school.classNum):''):''} ${m.schoolPending?'<span style="background:#fef3c7;color:#92400e;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:700">⏳ ממתין</span>':''}</div>` : ''}
         ${m.role === 'kid' && m.joinCode ? `
           <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
             <span style="font-size:11px;color:#6a11cb;font-weight:700;background:#f0e6ff;padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
-            <button style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#718096;display:flex;align-items:center" onclick="shareKidCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
+            <button style="background:none;border:none;font-size:13px;cursor:pointer;padding:2px 4px" onclick="shareKidCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד">📤</button>
           </div>` : ''}
         ${m.role === 'parent' && m.name !== S.user ? (m.joinCode ? `
           <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
             <span style="font-size:10px;color:#718096;margin-left:2px">🔑</span>
-            <span style="font-size:11px;color:var(--primary-600);font-weight:700;background:var(--primary-50);padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
-            <button style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#718096;display:flex;align-items:center" onclick="shareSpouseCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
+            <span style="font-size:11px;color:#276749;font-weight:700;background:#c6f6d5;padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
+            <button style="background:none;border:none;font-size:13px;cursor:pointer;padding:2px 4px" onclick="shareSpouseCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד">📤</button>
             <button data-spouse-regen="${esc(m.name)}" style="font-size:11px;background:#fff5f5;color:#c53030;border:1px solid #fed7d7;border-radius:8px;padding:2px 8px;cursor:pointer;font-family:inherit" onclick="regenSpouseCode('${esc(m.name)}')" title="צור קוד חדש">🔄</button>
           </div>` : `
           <div style="margin-top:4px">
@@ -2318,15 +2063,7 @@ async function saveMgmtEdit(i, originalName) {
   // Rename in existing data if member name changed
   if (newName !== originalName) {
     S.chores   = S.chores.map(c   => c.assignee===originalName ? {...c,assignee:newName} : c);
-    S.homework = S.homework.map(h => {
-      if(h.scope==='class'){
-        const doneBy={...(h.doneBy||{})},doneAtBy={...(h.doneAtBy||{})};
-        if(originalName in doneBy){doneBy[newName]=doneBy[originalName];delete doneBy[originalName];}
-        if(originalName in doneAtBy){doneAtBy[newName]=doneAtBy[originalName];delete doneAtBy[originalName];}
-        return {...h,doneBy,doneAtBy};
-      }
-      return h.child===originalName?{...h,child:newName}:h;
-    });
+    S.homework = S.homework.map(h => h.child===originalName    ? {...h,child:newName}    : h);
     S.stars    = Object.fromEntries(Object.entries(S.stars).map(([k,v]) => [k===originalName?newName:k, v]));
     if (S.user   === originalName) S.user   = newName;
     if (S.filter === originalName) S.filter = newName;
@@ -2353,20 +2090,13 @@ async function saveMgmtEdit(i, originalName) {
 }
 
 async function mgmtRemoveMember(name) {
-  if (!await _confirm(`הסר את ${name}?`, { danger: true, okLabel: 'הסר' })) return;
+  if (!confirm(`הסר את ${name}?`)) return;
   const removedMember = getMembers().find(m => m.name === name);
   if (removedMember?.role === 'kid' && removedMember?.school)
     unregisterFromClass(name, removedMember.school); // fire-and-forget
   const members = getMembers().filter(m => m.name !== name);
   S.chores   = S.chores.filter(c   => c.assignee !== name);
-  S.homework = S.homework
-    .filter(h => h.scope==='class' || h.child !== name)
-    .map(h => {
-      if(h.scope!=='class')return h;
-      const doneBy={...(h.doneBy||{})},doneAtBy={...(h.doneAtBy||{})};
-      delete doneBy[name];delete doneAtBy[name];
-      return {...h,doneBy,doneAtBy};
-    });
+  S.homework = S.homework.filter(h => h.child    !== name);
   const stars = { ...S.stars }; delete stars[name];
   S.stars = stars;
   if (familyData) familyData.members = members;
@@ -2699,7 +2429,7 @@ async function renderMgmtCommunity() {
       </div>
       ${classmates.length ? classmates.map(c=>`
         <div class="comm-mate">
-          ${_ico.fam}
+          <span style="font-size:18px">👨‍👩‍👧</span>
           <span class="comm-mate-family">${esc(c.familyName||'משפחה')}</span>
           <span class="comm-mate-kid">${esc(c.kidName)}</span>
         </div>`).join('')
@@ -2709,34 +2439,17 @@ async function renderMgmtCommunity() {
 }
 
 // ── Community Tab ─────────────────────────
-const _DEFAULT_EVENT_TYPES = [
-  { id:'birthday',     icon:'🎂', labelHe:'יום הולדת', labelEn:'Birthday',    mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:true  },
-  { id:'trip',         icon:'🚌', labelHe:'טיול',       labelEn:'Trip',        mDate:true,  mTime:false, mLoc:false, hasGenderFilter:false },
-  { id:'party',        icon:'🎉', labelHe:'מסיבה',      labelEn:'Party',       mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:false },
-  { id:'announcement', icon:'📢', labelHe:'הודעה',      labelEn:'Announcement',mDate:false, mTime:false, mLoc:false, hasGenderFilter:false },
-  { id:'other',        icon:'📝', labelHe:'אחר',         labelEn:'Other',       mDate:false, mTime:false, mLoc:false, hasGenderFilter:false },
+const EVENT_TYPES = [
+  { id:'birthday',     icon:'🎂' },
+  { id:'trip',         icon:'🚌' },
+  { id:'party',        icon:'🎉' },
+  { id:'announcement', icon:'📢' },
+  { id:'other',        icon:'📝' },
 ];
-let _eventTypesCfg = _DEFAULT_EVENT_TYPES.map(t => ({ ...t, enabled:true }));
-let _evtCfgLoaded  = false;
-
-async function loadEventTypesCfg() {
-  try {
-    const snap = await fbDb.collection('appConfig').doc('eventTypes').get();
-    if (snap.exists && Array.isArray(snap.data().types) && snap.data().types.length) {
-      _eventTypesCfg = snap.data().types;
-    }
-  } catch(e) { /* keep defaults */ }
-}
-async function _saveEventTypesCfg() {
-  await fbDb.collection('appConfig').doc('eventTypes').set({ types: _eventTypesCfg });
-}
-const getEventTypes = () => _eventTypesCfg.filter(t => t.enabled !== false);
-
-function eventTypeIcon(type) { return _eventTypesCfg.find(e=>e.id===type)?.icon || '📝'; }
+function eventTypeIcon(type) { return EVENT_TYPES.find(e=>e.id===type)?.icon||'📝'; }
 function eventTypeName(type) {
-  const cfg = _eventTypesCfg.find(e => e.id === type);
-  if (cfg) return getLang() === 'he' ? (cfg.labelHe || cfg.id) : (cfg.labelEn || cfg.labelHe || cfg.id);
-  return type;
+  const keys = { birthday:'evBirthday', trip:'evTrip', party:'evParty', announcement:'evAnnouncement', other:'evOther' };
+  return t(keys[type]||'evOther');
 }
 function classLabelFromId(classId) {
   if (!classId) return '';
@@ -2755,19 +2468,6 @@ function isEventUpcoming(dateStr) {
   const [y,m,d] = dateStr.split('-').map(Number);
   return new Date(y, m-1, d+1) >= new Date();
 }
-function timeAgo(ts) {
-  if (!ts) return '';
-  const d = ts?.toDate ? ts.toDate() : (ts instanceof Date ? ts : new Date(ts));
-  const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (mins < 2)   return 'עכשיו';
-  if (mins < 60)  return `לפני ${mins} דק'`;
-  const h = Math.floor(mins / 60);
-  if (h < 24)     return `לפני ${h} שע'`;
-  const days = Math.floor(h / 24);
-  if (days === 1) return 'אתמול';
-  if (days < 7)   return `לפני ${days} ימים`;
-  return fmtDate(d.toISOString().slice(0, 10));
-}
 function fmtEventDate(dateStr) {
   if (!dateStr) return '';
   const [y,m,d] = dateStr.split('-').map(Number);
@@ -2781,11 +2481,9 @@ function fmtEventDate(dateStr) {
   return date.toLocaleDateString(t('locale'), {month:'short', day:'numeric'});
 }
 
-let _commCache       = {}; // { [classId]: { classmates, events, loadedAt, error? } }
-let _commListeners   = {}; // { [classId]: [unsubFn, ...] }
-let _commAddOpen     = {}; // { [classId]: bool }
-let _commVisibleCids = []; // cids currently rendered in community tab
-let _commVisibleKids = []; // { name, cid } for kids currently rendered
+let _commCache     = {}; // { [classId]: { classmates, events, loadedAt, error? } }
+let _commListeners = {}; // { [classId]: [unsubFn, ...] }
+let _commAddOpen   = {}; // { [classId]: bool }
 
 function _unsubCommClass(cid) {
   (_commListeners[cid] || []).forEach(fn => fn());
@@ -2832,38 +2530,6 @@ function subscribeToCommClass(cid) {
         _commCache[cid].applications = snap.docs.map(d => ({id:d.id,...d.data()}));
         rerender();
       }, e => console.warn('[community] applications:', e.code))
-  );
-
-  // Live: class members — updates classmates list in real-time and notifies on new joins
-  let _membersInited = false;
-  _commListeners[cid].push(
-    fbDb.collection('schoolClasses').doc(cid).collection('members')
-      .onSnapshot(snap => {
-        if (!_commCache[cid]) return;
-        const all = snap.docs.map(d => d.data()).filter(m => m.familyUid !== S.uid);
-        if (!_membersInited) {
-          _membersInited = true;
-          _commCache[cid].classmates = all;
-        } else {
-          const prev = new Set(_commCache[cid].classmates.map(m => m.familyUid + '__' + (m.kidName||m.name)));
-          all.forEach(m => {
-            const key = m.familyUid + '__' + (m.kidName||m.name);
-            if (!prev.has(key)) {
-              const isHe = getLang() === 'he';
-              fbDb.collection('families').doc(S.uid).collection('notifications').add({
-                type: 'class_member_joined',
-                message: isHe
-                  ? `🎉 ${esc(m.kidName||m.name)} הצטרף/ה לכיתה!`
-                  : `🎉 ${esc(m.kidName||m.name)} joined the class!`,
-                dismissed: false,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-              }).catch(() => {});
-            }
-          });
-          _commCache[cid].classmates = all;
-        }
-        rerender();
-      }, e => console.warn('[community] members:', e.code))
   );
 }
 
@@ -2928,148 +2594,27 @@ async function loadCommunityData(kidsWithSchool) {
 }
 
 function scopeBadge(scope) {
-  if (!scope || scope === 'class') return ''; // class is the default — no badge needed
+  if (!scope || scope === 'class') return `<span class="scope-badge scope-class">${t('commScopeClass')}</span>`;
   if (scope === 'grade')  return `<span class="scope-badge scope-grade">${t('commScopeGrade')}</span>`;
   if (scope === 'school') return `<span class="scope-badge scope-school">${t('commScopeSchool')}</span>`;
   return '';
 }
-// Colored initial avatar for posters from other families
-function _authorAvatar(name) {
-  const palette = ['#6C8CFF','#FFB86B','#6DD3A0','#f093fb','#fa709a','#4facfe','#f9d423','#667eea'];
-  const color = palette[(name||'?').charCodeAt(0) % palette.length];
-  const letter = (name||'?')[0].toUpperCase();
-  return `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:${color}22;color:${color};font-size:18px;font-weight:800;border-radius:50%">${letter}</span>`;
-}
-
-function renderPostCard(ev, cid) {
-  const cache    = _commCache[cid] || {};
-  const canDel   = isParent() && ev.postedBy?.familyUid === S.uid;
-  const sid      = ev.scopeId || cid;
-  const scope    = ev.scope || 'class';
-  const author   = personFullName(ev.postedBy) || 'הורה';
-  // Poster's child: look up by familyUid in classmates
-  const classmate = cache.classmates?.find(c => c.familyUid === ev.postedBy?.familyUid);
-  const kidName   = classmate?.kidName || '';
-  const ago      = timeAgo(ev.createdAt);
-  const avatarHtml   = ev.postedBy?.familyUid === S.uid
-    ? getAvatar(ev.postedBy.firstName)
-    : _authorAvatar(ev.postedBy?.firstName || '?');
-
-  const scopeTag = scopeBadge(scope);
-  return `<div class="post-card" data-ev-id="${ev.id}">
-    <div class="post-card-header">
-      <div class="post-card-avatar">${avatarHtml}</div>
-      <div class="post-card-meta">
-        <div class="post-card-author">${esc(author)}</div>
-        ${kidName ? `<div class="post-card-child">${esc(kidName)}</div>` : ''}
-        <div class="post-card-sub">${eventTypeIcon(ev.type)} ${esc(classLabelFromId(cid))}${ago ? ' · ' + ago : ''}${scopeTag ? ' ' + scopeTag : ''}</div>
+function renderEventRow(ev, cid, isPast) {
+  const canDel = isParent() && ev.postedBy?.familyUid === S.uid;
+  const sid = ev.scopeId || cid;
+  return `<div class="comm-event${isPast?' comm-past-event':''}">
+    <div class="comm-event-icon">${eventTypeIcon(ev.type)}</div>
+    <div class="comm-event-body">
+      <div class="comm-event-title">${esc(ev.title)}${scopeBadge(ev.scope)}</div>
+      <div class="comm-event-meta">
+        <span class="comm-event-date">${fmtEventDate(ev.date)}</span>
+        ${ev.postedBy ? ` · ${esc(personFullName(ev.postedBy))}` : ''}
       </div>
-      ${canDel ? `<button class="post-card-del" onclick="deleteClassEvent('${scope}','${sid}','${ev.id}')">×</button>` : ''}
-    </div>
-    <div class="post-card-body">
-      <div class="post-card-title">${esc(ev.title)}</div>
-      ${ev.location ? `<div class="post-card-location">${_ico.pin} ${esc(ev.location)}</div>` : ''}
-      ${ev.note ? `<div class="post-card-note">${esc(ev.note)}</div>` : ''}
+      ${ev.note ? `<div class="comm-event-note">${esc(ev.note)}</div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
-    ${ev.date || ev.time ? `<div class="post-card-date">${ev.date ? '📅 ' + fmtEventDate(ev.date) : ''}${ev.time ? (ev.date ? ' · ' : '') + '🕐 ' + ev.time : ''}</div>` : ''}
-    <div class="post-card-reactions">
-      ${_reactionBtns(ev, scope, sid)}
-    </div>
+    ${canDel ? `<button class="del-btn" onclick="deleteClassEvent('${ev.scope||'class'}','${sid}','${ev.id}')">×</button>` : ''}
   </div>`;
-}
-
-const _REACTIONS = [
-  { key: 'thumbsUp', emoji: '👍' },
-  { key: 'heart',    emoji: '❤️' },
-  { key: 'party',    emoji: '🎉' },
-];
-
-function _reactionBtns(ev, scope, sid) {
-  const readOnly = isKid() && _isOwner(); // parent switched to kid view — not a real kid account
-  return _REACTIONS.map(r => {
-    // backward compat: treat likedBy as heart
-    const arr = r.key === 'heart'
-      ? [...(ev.reactions?.heart || []), ...(ev.likedBy || [])]
-        .filter((v, i, a) => a.indexOf(v) === i)  // dedupe
-      : (ev.reactions?.[r.key] || []);
-    const active = arr.includes(S.uid);
-    const count  = arr.length;
-    return `<button class="post-reaction${active ? ' post-reaction-active' : ''}${readOnly ? ' post-reaction-readonly' : ''}"
-      data-reaction="${r.key}"
-      ${readOnly ? '' : `onclick="toggleReaction('${scope}','${sid}','${ev.id}','${r.key}')"`}>
-      <span class="post-reaction-emoji">${r.emoji}</span>${count ? `<span class="post-reaction-count">${count}</span>` : ''}
-    </button>`;
-  }).join('');
-}
-
-async function toggleReaction(scope, scopeId, evId, reactionKey) {
-  if (isKid() && _isOwner()) return; // parent viewing as kid — read-only
-  const collName = scope === 'grade' ? 'schoolGrades' : scope === 'school' ? 'schools' : 'schoolClasses';
-  const ref = fbDb.collection(collName).doc(scopeId).collection('events').doc(evId);
-  const allCached = Object.values(_commCache).flatMap(c => [...(c.events||[]),...(c.gradeEvents||[]),...(c.schoolEvents||[])]);
-  const ev = allCached.find(e => e.id === evId);
-  if (!ev) return;
-
-  if (!ev.reactions) ev.reactions = {};
-
-  // Find which reaction (if any) the user already voted for
-  const prevKey = _REACTIONS.map(r => r.key).find(k => {
-    const a = k === 'heart'
-      ? [...(ev.reactions?.heart || []), ...(ev.likedBy || [])].filter((v,i,arr) => arr.indexOf(v) === i)
-      : (ev.reactions?.[k] || []);
-    return a.includes(S.uid);
-  }) || null;
-
-  const active = prevKey === reactionKey; // tapping own current reaction → deselect
-
-  // Optimistic update — mutate cache immediately
-  // Remove from previous reaction key (if different)
-  if (prevKey && prevKey !== reactionKey) {
-    if (!ev.reactions[prevKey]) ev.reactions[prevKey] = [];
-    ev.reactions[prevKey] = ev.reactions[prevKey].filter(u => u !== S.uid);
-    if (prevKey === 'heart') ev.likedBy = (ev.likedBy || []).filter(u => u !== S.uid);
-  }
-  // Toggle on the tapped key
-  if (!ev.reactions[reactionKey]) ev.reactions[reactionKey] = [];
-  if (active) {
-    ev.reactions[reactionKey] = ev.reactions[reactionKey].filter(u => u !== S.uid);
-    if (reactionKey === 'heart') ev.likedBy = (ev.likedBy || []).filter(u => u !== S.uid);
-  } else {
-    if (!ev.reactions[reactionKey].includes(S.uid))
-      ev.reactions[reactionKey] = [...ev.reactions[reactionKey], S.uid];
-  }
-
-  // Re-render just the reactions row for this card + animate the tapped button
-  const cardEl = document.querySelector(`.post-card[data-ev-id="${evId}"]`);
-  if (cardEl) {
-    const row = cardEl.querySelector('.post-card-reactions');
-    if (row) {
-      row.innerHTML = _reactionBtns(ev, scope, scopeId);
-      const btn = row.querySelector(`[data-reaction="${reactionKey}"]`);
-      if (btn && !active) {
-        btn.classList.add('post-reaction-bounce');
-        btn.addEventListener('animationend', () => btn.classList.remove('post-reaction-bounce'), { once: true });
-      }
-    }
-  }
-
-  // Sync to Firestore in background
-  try {
-    const update = {};
-    // Remove from old reaction key in Firestore
-    if (prevKey && prevKey !== reactionKey) {
-      update[`reactions.${prevKey}`] = firebase.firestore.FieldValue.arrayRemove(S.uid);
-      if (prevKey === 'heart') update.likedBy = firebase.firestore.FieldValue.arrayRemove(S.uid);
-    }
-    // Add or remove the tapped key
-    update[`reactions.${reactionKey}`] = active
-      ? firebase.firestore.FieldValue.arrayRemove(S.uid)
-      : firebase.firestore.FieldValue.arrayUnion(S.uid);
-    if (reactionKey === 'heart' && active && (ev.likedBy || []).includes(S.uid))
-      update.likedBy = firebase.firestore.FieldValue.arrayRemove(S.uid);
-    await ref.update(update);
-  } catch(e) { console.error('toggleReaction:', e); }
 }
 
 function filterClassmates(cid, q) {
@@ -3088,17 +2633,8 @@ function renderCommCard(kid) {
 
   const allEvs = [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])]
     .filter(e => matchesGenderFilter(e, kid.name));
-  const _cutoff = new Date(); _cutoff.setDate(_cutoff.getDate() - 14);
-  const _today  = new Date().toISOString().slice(0,10);
-  const upcoming = allEvs.filter(e => {
-    if (!e.date) return true;
-    const [ey,em,ed] = e.date.split('-').map(Number);
-    return new Date(ey, em-1, ed) >= _cutoff;
-  }).sort((a,b) => {
-    const af = !a.date || a.date >= _today, bf = !b.date || b.date >= _today;
-    if (af !== bf) return af ? -1 : 1;        // upcoming before past
-    return (a.date||'').localeCompare(b.date||'');  // both asc
-  });
+  const upcoming = allEvs.filter(e=>isEventUpcoming(e.date))
+    .sort((a,b)=>(a.date||'').localeCompare(b.date||''));
 
   return `<div class="card" id="commCard_${cid}">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
@@ -3110,32 +2646,27 @@ function renderCommCard(kid) {
       <button onclick="refreshCommunity()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#c8d3e8;padding:4px;line-height:1" title="רענן">↻</button>
     </div>
 
-    ${isCommitteeFor(cid) && !isAdmin() ? `<div style="text-align:end;margin:-4px 0 8px"><button class="comm-leave-btn" onclick="leaveCommittee('${cid}')">${t('commLeaveCommittee')}</button></div>` : ''}
-
+    <div class="comm-section-label">📅 ${t('commClassEvents')}</div>
     ${upcoming.length
-      ? `<div class="post-feed">${upcoming.map(ev=>renderPostCard(ev,cid)).join('')}</div>`
-      : `<div class="post-feed-empty">${t('commNoEvents')}</div>`}
+      ? upcoming.map(ev=>renderEventRow(ev,cid,false)).join('')
+      : `<div style="font-size:13px;color:#a0aec0;padding:6px 0;font-weight:600">${t('commNoEvents')}</div>`}
 
-    ${(() => {
-      if (!isCommitteeFor(cid) || !cache.pendingEvents?.length) return '';
-      const activePend  = cache.pendingEvents.filter(ev => !ev.date || isEventUpcoming(ev.date));
-      const expiredPend = cache.pendingEvents.filter(ev => ev.date && !isEventUpcoming(ev.date));
-      return activePend.length ? `
-        <div class="comm-section-label" style="margin-top:16px;display:flex;align-items:center;gap:8px">
-          <span>${t('pendingSection')}</span>
-          <span class="comm-count">${activePend.length}</span>
+    ${isCommitteeFor(cid) && cache.pendingEvents?.length ? `
+    <div class="comm-section-label" style="margin-top:16px;display:flex;align-items:center;gap:8px;color:#92400e">
+      <span>${t('pendingSection')}</span>
+      <span class="comm-count" style="background:#fef3c7;color:#92400e">${cache.pendingEvents.length}</span>
+    </div>
+    ${cache.pendingEvents.map(ev=>`
+      <div class="pending-event-row">
+        <div class="pending-event-info">
+          <span class="pending-event-title">${esc(ev.title)}</span>
+          <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + ev.date : ''}</span>
         </div>
-        ${activePend.map(ev => `<div class="pending-event-row">
-          <div class="pending-event-info">
-            <span class="pending-event-title">${esc(ev.title)}</span>
-            <span class="pending-event-meta">${esc(personFullName(ev.postedBy))}${ev.date ? ' · ' + fmtEventDate(ev.date) : ''}</span>
-          </div>
-          <div class="pending-event-actions">
-            <button class="pending-approve-btn" onclick="approveEvent('${cid}','${ev.id}')">${t('pendingApprove')}</button>
-            <button class="pending-reject-btn"  onclick="rejectEvent('${cid}','${ev.id}')">${t('pendingReject')}</button>
-          </div>
-        </div>`).join('')}` : '';
-    })()}
+        <div class="pending-event-actions">
+          <button class="pending-approve-btn" onclick="approveEvent('${cid}','${ev.id}')">${t('pendingApprove')}</button>
+          <button class="pending-reject-btn"  onclick="rejectEvent('${cid}','${ev.id}')">${t('pendingReject')}</button>
+        </div>
+      </div>`).join('')}` : ''}
 
     ${(() => {
   const apps = cache.applications || [];
@@ -3158,7 +2689,6 @@ function renderCommCard(kid) {
         <div class="application-meta">${myApp.voteCount||0}/15 תמיכות${exp ? ' · ' + t('commApplicationExpires',exp) : ''}</div>
         <div class="application-progress"><div class="application-progress-fill" style="width:${pct}%"></div></div>
       </div>
-      <button class="comm-cancel-app-btn" onclick="cancelCommitteeApplication('${myApp.id}','${cid}')">${t('commCancelApplication')}</button>
     </div>`;
   }
   otherApps.forEach(app => {
@@ -3168,7 +2698,7 @@ function renderCommCard(kid) {
     const approveBtn = isAdmin() ? `<button class="pending-approve-btn" onclick="adminApproveApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationApprove')}</button><button class="pending-reject-btn" onclick="adminDenyApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationDeny')}</button>` : '';
     const voteBtn = !isAdmin() && !isCommitteeFor(cid) && isParent()
       ? (voted
-          ? `<span style="font-size:12px;font-weight:700;color:var(--gray-400)">${t('commApplicationVoted')}</span>`
+          ? `<span style="font-size:12px;font-weight:800;color:#48bb78">${t('commApplicationVoted')}</span>`
           : `<button class="pending-approve-btn" onclick="voteForApplication('${app.id}','${cid}')">${t('commApplicationVote')}</button>`)
       : '';
     html += `<div class="application-row">
@@ -3189,21 +2719,14 @@ function renderCommCard(kid) {
     ${isParent() ? `
     <div class="comm-add-form${addOpen?' open':''}" id="commAddForm_${cid}">
       <div style="font-size:13px;font-weight:900;color:#1a202c;margin-bottom:10px">➕ ${t('commNewEvent')}</div>
-      <input class="auth-input" id="commEvTitle_${cid}" placeholder="${t('commEventTitle')}" style="margin-bottom:6px" oninput="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
-      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
-        <div style="flex:1;min-width:0">
-          <input type="date" class="auth-input" id="commEvDate_${cid}" style="margin-bottom:0;width:100%" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
-          <div id="commEvDateHint_${cid}" style="display:none;font-size:11px;color:var(--gray-400);font-weight:600;margin-top:3px;padding-right:2px">תאריך אופציונלי לסוג זה</div>
-        </div>
-        <input type="time" class="auth-input" id="commEvTime_${cid}" style="flex:0 0 110px;margin-bottom:0" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
-      </div>
-      <div style="margin-bottom:6px">
-        <div id="commEvTypeDd_${cid}" style="width:100%"></div>
-        <select id="commEvType_${cid}" style="display:none" onchange="onCommEvTypeChange('${cid}')">
-          ${getEventTypes().map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
+      <input class="auth-input" id="commEvTitle_${cid}" placeholder="${t('commEventTitle')}" style="margin-bottom:6px">
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <input type="date" class="auth-input" id="commEvDate_${cid}" style="flex:1">
+        <select class="auth-input" id="commEvType_${cid}" style="flex:1" onchange="onCommEvTypeChange('${cid}')">
+          ${EVENT_TYPES.map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
         </select>
       </div>
-      <div id="commEvGenderWrap_${cid}" style="margin-bottom:6px;display:${(getEventTypes()[0]?.hasGenderFilter) ? '' : 'none'}">
+      <div id="commEvGenderWrap_${cid}" style="display:none;margin-bottom:6px">
         <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">מי מוזמן?</div>
         <div style="display:flex;gap:8px">
           <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" value="all"   checked> כולם</label>
@@ -3220,16 +2743,16 @@ function renderCommCard(kid) {
           <option value="school">🏛 ${t('commScopeSchool')}</option>
         </select>
       </div>` : `<input type="hidden" id="commEvScope_${cid}" value="class">`}
-      <input class="auth-input" id="commEvLocation_${cid}" placeholder="📍 מיקום (אופציונלי)" style="margin-bottom:6px" oninput="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
       <input class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" style="margin-bottom:6px">
       <input class="auth-input" id="commEvPaybox_${cid}" placeholder="${t('commEventPaybox')}" style="margin-bottom:10px" type="url" dir="ltr">
-      <div id="commEvError_${cid}" style="display:none;font-size:12px;color:var(--error);font-weight:700;margin-bottom:8px;padding:6px 10px;background:var(--error-bg);border-radius:8px"></div>
       <div style="display:flex;gap:8px">
         <button class="auth-btn-main" style="flex:1;padding:10px" onclick="submitClassEvent('${cid}')">${t('commPost')}</button>
         <button class="auth-btn-back" style="flex:1;padding:10px" onclick="toggleCommAddForm('${cid}')">ביטול</button>
       </div>
     </div>
-` : ''}
+    <button class="btn-ghost" style="width:100%;margin-top:8px" id="commAddBtn_${cid}" onclick="toggleCommAddForm('${cid}')">
+      ${addOpen ? '✕ סגור' : t('commAddEvent')}
+    </button>` : ''}
 
     <div class="comm-section-label" style="margin-top:16px;display:flex;align-items:center;gap:8px">
       <span>👥 ${t('commClassmates')}</span>
@@ -3246,7 +2769,7 @@ function renderCommCard(kid) {
             const anyComm = familyInfo.parents.some(p => p.isCommittee)
               || (familyInfo.legacyComm||[]).includes(cid);
             return `<div class="comm-mate" data-name="${esc((c.kidName+' '+(c.familyName||'')).toLowerCase())}">
-              ${_ico.fam}
+              <span style="font-size:18px">👨‍👩‍👧</span>
               <span class="comm-mate-name">${esc(c.kidName)} ${esc(c.familyName||'')}</span>
               ${anyComm ? `<span class="role-badge-committee">${t('roleCommittee')}</span>` : ''}
             </div>`;
@@ -3259,8 +2782,6 @@ function renderCommCard(kid) {
 async function renderCommunity() {
   const container = el('communityContent');
   if (!container) return;
-  const commChipsEl = el('communityChips');
-  if (commChipsEl) commChipsEl.innerHTML = _kidChipsHtml();
 
   const filteredKids = (S.filter !== 'All' && getKids().includes(S.filter))
     ? [S.filter] : getKids();
@@ -3272,7 +2793,7 @@ async function renderCommunity() {
     container.innerHTML = `<div class="card"><div class="empty" style="padding:20px 0;text-align:center">
       <div style="font-size:40px;margin-bottom:10px">🏫</div>
       <div style="font-weight:800;color:#4a5568;font-size:15px">${t('commNoSchool')}</div>
-      <div style="font-size:12px;color:var(--primary-500);margin-top:4px;cursor:pointer;font-weight:700;text-decoration:underline" onclick="closeMenu();openMgmt()">${t('commNoSchoolHint')}</div>
+      <div style="font-size:12px;color:#a0aec0;margin-top:4px">${t('commNoSchoolHint')}</div>
     </div></div>`;
     return;
   }
@@ -3288,38 +2809,16 @@ async function renderCommunity() {
 
   await loadCommunityData(kidsWithSchool);
   renderHomeUpcoming();
-  _commVisibleCids = kidsWithSchool.map(k => classIdFor(k.school)).filter(Boolean);
-  _commVisibleKids = kidsWithSchool
-    .map(k => ({ name: k.name, cid: classIdFor(k.school) }))
-    .filter(k => k.cid);
-  const adminBtn = (isCommittee() && !isKid())
-    ? `<div id="commPendingBanner"></div>`
+  const adminBtn = isAdmin()
+    ? `<button class="admin-btn" onclick="openAdminPanel(true, true)">📋 היסטוריית אירועים</button>`
     : '';
-  const fabHtml = isParent() ? `
-    <div class="comm-fab-wrap" id="commFabWrap">
-      <div class="comm-fab-picker" id="commFabPicker"></div>
-      <button class="comm-fab${Object.values(_commAddOpen).some(v=>v)?' comm-fab-open':''}" id="commFab" onclick="commFabClick()" title="${t('commAddEvent')}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-      </button>
-    </div>` : '';
-  container.innerHTML = adminBtn + kidsWithSchool.map(kid => renderCommCard(kid)).join('') + fabHtml;
-  const bannerEl = el('commPendingBanner');
-  if (bannerEl) _renderCommPendingBanner(bannerEl);
-  kidsWithSchool.forEach(kid => {
-    const cid = classIdFor(kid.school);
-    if (cid) _buildSoftDd('commEvTypeDd_' + cid, 'commEvType_' + cid);
-  });
+  container.innerHTML = adminBtn + kidsWithSchool.map(kid => renderCommCard(kid)).join('');
 }
 
 function onCommEvTypeChange(cid) {
-  const type    = el('commEvType_' + cid)?.value;
-  const typeCfg = _eventTypesCfg.find(t => t.id === type) || {};
-  const genderWrap = el('commEvGenderWrap_' + cid);
-  if (genderWrap) genderWrap.style.display = typeCfg.hasGenderFilter ? '' : 'none';
-  const dateHint = el('commEvDateHint_' + cid);
-  if (dateHint) dateHint.style.display = typeCfg.mDate ? 'none' : '';
+  const type = el('commEvType_' + cid)?.value;
+  const wrap = el('commEvGenderWrap_' + cid);
+  if (wrap) wrap.style.display = type === 'birthday' ? '' : 'none';
 }
 
 function matchesGenderFilter(ev, kidName) {
@@ -3336,95 +2835,28 @@ function matchesGenderFilter(ev, kidName) {
 
 function toggleCommAddForm(cid) {
   _commAddOpen[cid] = !_commAddOpen[cid];
-  const form = el('commAddForm_' + cid);
-  form?.classList.toggle('open', !!_commAddOpen[cid]);
-  if (_commAddOpen[cid]) {
-    setTimeout(() => {
-      _buildSoftDd('commEvTypeDd_' + cid, 'commEvType_' + cid);
-      form?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }, 50);
-  }
-  // Sync FAB icon
-  const fab = el('commFab');
-  if (fab) fab.classList.toggle('comm-fab-open', Object.values(_commAddOpen).some(v => v));
-}
-
-function commFabClick() {
-  if (!_commVisibleCids.length) return;
-  // If any form already open — close it and hide picker
-  const openCid = _commVisibleCids.find(c => _commAddOpen[c]);
-  if (openCid) { toggleCommAddForm(openCid); _commHidePicker(); return; }
-  // Single kid — open directly
-  if (_commVisibleKids.length <= 1) {
-    toggleCommAddForm(_commVisibleCids[0]);
-    return;
-  }
-  // Multiple kids — toggle picker
-  const picker = el('commFabPicker');
-  if (!picker) return;
-  if (picker.classList.contains('open')) { _commHidePicker(); return; }
-  picker.innerHTML = _commVisibleKids.map(k =>
-    `<button class="comm-fab-pick-item" onclick="_commPickKid('${k.cid}')">
-      <span class="comm-fab-pick-avatar">${getAvatar(k.name)}</span>
-      <span>${esc(k.name)}</span>
-    </button>`
-  ).join('');
-  picker.classList.add('open');
-  el('commFab')?.classList.add('comm-fab-open');
-  setTimeout(() => {
-    document.addEventListener('click', function _h(e) {
-      if (!el('commFabWrap')?.contains(e.target)) { _commHidePicker(); document.removeEventListener('click', _h); }
-    });
-  }, 0);
-}
-
-function _commPickKid(cid) {
-  _commHidePicker();
-  toggleCommAddForm(cid);
-}
-
-function _commHidePicker() {
-  const picker = el('commFabPicker');
-  if (picker) picker.classList.remove('open');
-  if (!_commVisibleCids.some(c => _commAddOpen[c]))
-    el('commFab')?.classList.remove('comm-fab-open');
+  el('commAddForm_' + cid)?.classList.toggle('open', !!_commAddOpen[cid]);
+  const btn = el('commAddBtn_' + cid);
+  if (btn) btn.textContent = _commAddOpen[cid] ? '✕ סגור' : t('commAddEvent');
 }
 
 async function submitClassEvent(cid) {
   const title      = el('commEvTitle_'  + cid)?.value.trim();
   const date       = el('commEvDate_'   + cid)?.value;
-  const time       = el('commEvTime_'   + cid)?.value || '';
   const type       = el('commEvType_'   + cid)?.value || 'other';
   const scope      = el('commEvScope_'  + cid)?.value || 'class';
-  const location   = el('commEvLocation_'+ cid)?.value.trim() || '';
   const note       = el('commEvNote_'   + cid)?.value.trim() || '';
   const payboxRaw  = el('commEvPaybox_' + cid)?.value.trim() || '';
   const payboxUrl  = payboxRaw && (payboxRaw.startsWith('http://') || payboxRaw.startsWith('https://')) ? payboxRaw : '';
-  const typeCfg  = _eventTypesCfg.find(t => t.id === type) || {};
-  const genderFilter = typeCfg.hasGenderFilter
+  const genderFilter = type === 'birthday'
     ? (document.querySelector(`input[name="commEvGender_${cid}"]:checked`)?.value || 'all')
     : 'all';
-  const _errEl   = el('commEvError_'   + cid);
-  const _titleEl = el('commEvTitle_'   + cid);
-  const _dateEl  = el('commEvDate_'    + cid);
-  const _locEl   = el('commEvLocation_'+ cid);
-  const _timeEl  = el('commEvTime_'   + cid);
-  const _showErr = (msg, fieldEl) => {
-    if (_errEl) { _errEl.textContent = msg; _errEl.style.display = ''; }
-    if (fieldEl) { fieldEl.classList.add('input-error'); fieldEl.focus(); }
-  };
-  if (!title)              { _showErr('יש להזין כותרת לאירוע', _titleEl);             return; }
-  if (typeCfg.mDate && !date)     { _showErr('יש לבחור תאריך לסוג אירוע זה', _dateEl);  return; }
-  if (typeCfg.mTime && !time)     { _showErr('יש להזין שעה לסוג אירוע זה', _timeEl);    return; }
-  if (typeCfg.mLoc  && !location) { _showErr('יש להזין מיקום לסוג אירוע זה', _locEl);   return; }
-  if (_errEl) _errEl.style.display = 'none';
+  if (!title || !date) return;
   const docData = { title, date, type, note, scope,
     postedBy: { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName||'' },
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     genderFilter,
   };
-  if (time) docData.time = time;
-  if (location) docData.location = location;
   if (payboxUrl) docData.payboxUrl = payboxUrl;
 
   // Resolve target collection and document ID
@@ -3439,7 +2871,7 @@ async function submitClassEvent(cid) {
     } else {
       // Regular parent: send to pending queue for committee/admin approval (class scope only)
       await fbDb.collection('schoolClasses').doc(cid).collection('pendingEvents').add({ ...docData, status: 'pending' });
-      _alert(t('pendingSubmitted'));
+      alert(t('pendingSubmitted'));
     }
     _commAddOpen[cid] = false;
     // onSnapshot will update the cache and re-render automatically
@@ -3468,7 +2900,7 @@ async function approveEvent(cid, pendingId) {
 }
 
 async function rejectEvent(cid, pendingId) {
-  if (!await _confirm('לדחות את הבקשה?', { danger: true, okLabel: 'דחה' })) return;
+  if (!confirm('לדחות את הבקשה?')) return;
   try {
     await fbFunctions.httpsCallable('rejectEvent')({ cid, pendingId });
     await renderPendingPanel();
@@ -3483,89 +2915,10 @@ function openAdminPanel(showLog = true, historyOnly = false) {
   if (logSection) logSection.style.display = showLog ? '' : 'none';
   if (settingsSection) settingsSection.style.display = historyOnly ? 'none' : '';
   const titleEl = el('adminPanel').querySelector('.mgmt-header-title');
-  if (titleEl) titleEl.textContent = historyOnly ? '📋 היסטוריית בקשות' : '⚙️ הגדרות מערכת';
+  if (titleEl) titleEl.textContent = historyOnly ? '📋 היסטוריית אירועים' : '⚙️ הגדרות מערכת';
   renderAdminPanel(showLog);
 }
 function closeAdminPanel() { el('adminPanel').classList.add('hidden'); }
-
-// ── Feedback / Contact Admin ──────────────────────────────
-const FEEDBACK_TOPICS = [
-  { id:'improvement', label:'💡 הצעות לשיפור' },
-  { id:'bug',         label:'🐛 דיווח על תקלה' },
-  { id:'question',    label:'❓ שאלה' },
-  { id:'praise',      label:'🌟 מחמאה' },
-  { id:'other',       label:'💬 אחר' },
-];
-let _feedbackTopicVal = FEEDBACK_TOPICS[0].id;
-
-function openFeedback() {
-  el('feedbackPanel').classList.remove('hidden');
-  el('feedbackForm').style.display = '';
-  el('feedbackSuccess').style.display = 'none';
-  el('feedbackError').style.display = 'none';
-  el('feedbackText').value = '';
-  _feedbackTopicVal = FEEDBACK_TOPICS[0].id;
-  _renderFeedbackTopicDD();
-}
-
-function closeFeedback() { el('feedbackPanel').classList.add('hidden'); }
-
-function _renderFeedbackTopicDD() {
-  const wrap = el('ddFeedbackTopic');
-  if (!wrap) return;
-  wrap.style.cssText = 'position:relative';
-  wrap.innerHTML = `
-  <div onclick="_toggleFeedbackTopicDD(this)"
-    style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:var(--r-sm);background:var(--surface);cursor:pointer;font-size:14px;font-weight:700">
-    <span>${FEEDBACK_TOPICS.find(t=>t.id===_feedbackTopicVal)?.label || FEEDBACK_TOPICS[0].label}</span>
-    <span style="font-size:10px;color:var(--gray-400)">▼</span>
-  </div>
-  <div style="display:none;position:absolute;top:calc(100% + 4px);inset-inline-start:0;inset-inline-end:0;background:var(--surface);border:1.5px solid var(--gray-200);border-radius:var(--r-sm);box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:200;overflow:hidden">
-    ${FEEDBACK_TOPICS.map(t=>`<div onclick="_pickFeedbackTopic('${t.id}')"
-      style="padding:10px 14px;font-size:14px;font-weight:700;cursor:pointer;background:${t.id===_feedbackTopicVal?'var(--primary-50,#eff6ff)':'transparent'}">${t.label}</div>`).join('')}
-  </div>`;
-}
-
-function _toggleFeedbackTopicDD(trigger) {
-  const list = trigger.parentElement.children[1];
-  list.style.display = list.style.display === 'none' ? '' : 'none';
-}
-
-function _pickFeedbackTopic(id) {
-  _feedbackTopicVal = id;
-  _renderFeedbackTopicDD();
-}
-
-async function sendFeedback() {
-  const text = el('feedbackText').value.trim();
-  const errEl = el('feedbackError');
-  errEl.style.display = 'none';
-  if (!text) {
-    errEl.textContent = 'יש להזין הודעה לפני השליחה';
-    errEl.style.display = '';
-    el('feedbackText').focus();
-    return;
-  }
-  const btn = el('feedbackPanel').querySelector('button.btn');
-  const btnLabel = btn?.textContent || '';
-  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="fh-spinner" style="margin:0 auto"><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span></div>'; }
-  try {
-    await fbFunctions.httpsCallable('submitFeedback')({
-      topic:      _feedbackTopicVal,
-      topicLabel: FEEDBACK_TOPICS.find(t=>t.id===_feedbackTopicVal)?.label || '',
-      text,
-      senderName: S.user,
-      familyName: familyData?.familyName || '',
-    });
-    el('feedbackForm').style.display = 'none';
-    el('feedbackSuccess').style.display = '';
-  } catch(e) {
-    errEl.textContent = 'שגיאה בשליחה: ' + (e.message || String(e));
-    errEl.style.display = '';
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
-  }
-}
 
 const NOTIF_DEFAULTS = {
   committeeApplications: { expiryDays: 5, reminderHoursBeforeExpiry: 24, notifyOnDecision: true },
@@ -3583,7 +2936,8 @@ async function loadNotifSettings() {
   } catch(e) { return NOTIF_DEFAULTS; }
 }
 
-function _renderNotifSettingsFromCfg(cfg) {
+async function renderNotifSettings() {
+  const cfg = await loadNotifSettings();
   const types = [
     { key: 'committeeApplications', label: '🗳️ מועמדויות לוועד' },
     { key: 'pendingEvents',         label: '📋 אירועים ממתינים לאישור' },
@@ -3610,15 +2964,11 @@ function _renderNotifSettingsFromCfg(cfg) {
         </label>
         <div style="display:flex;gap:8px;margin-top:4px">
           <button class="admin-btn" onclick="saveNotifSettings('${key}')" style="flex:1;padding:8px;font-size:13px">💾 שמור</button>
-          <button class="admin-btn" onclick="nudgePendingNow('${key}')" style="flex:1;padding:8px;font-size:13px">🔔 שלח תזכורת עכשיו</button>
+          <button class="admin-btn" onclick="nudgePendingNow('${key}')" style="flex:1;padding:8px;font-size:13px;background:#f0fff4;color:#276749;border-color:#9ae6b4">🔔 שלח תזכורת עכשיו</button>
         </div>
       </div>
     </div>`;
   }).join('');
-}
-
-async function renderNotifSettings() {
-  _renderNotifSettingsFromCfg(await loadNotifSettings());
 }
 
 async function saveNotifSettings(key) {
@@ -3630,20 +2980,21 @@ async function saveNotifSettings(key) {
       { [key]: { expiryDays, reminderHoursBeforeExpiry, notifyOnDecision } },
       { merge: true }
     );
-    _adminPanelCache = null;
-    _alert('הגדרות נשמרו');
-  } catch(e) { _alert('שגיאה: ' + e.message); }
+    alert('הגדרות נשמרו');
+  } catch(e) { alert('שגיאה: ' + e.message); }
 }
 
 async function nudgePendingNow(type) {
   try {
     const nudge = fbFunctions.httpsCallable('nudgePending');
     const result = await nudge({ type });
-    _alert(`נשלחו ${result.data.sent} תזכורות`);
-  } catch(e) { _alert('שגיאה: ' + e.message); }
+    alert(`נשלחו ${result.data.sent} תזכורות`);
+  } catch(e) { alert('שגיאה: ' + e.message); }
 }
 
-function _renderLeaderboardFromDays(days) {
+async function renderLeaderboardSettings() {
+  const snap = await fbDb.collection('appConfig').doc('leaderboard').get().catch(() => null);
+  const days = snap?.exists ? (snap.data().days || 30) : 30;
   el('adminLeaderboardSettings').innerHTML = `
     <div class="card" style="margin-bottom:12px;padding:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:10px">🏆 לוח המובילים</div>
@@ -3657,69 +3008,12 @@ function _renderLeaderboardFromDays(days) {
     </div>`;
 }
 
-async function renderLeaderboardSettings() {
-  const snap = await fbDb.collection('appConfig').doc('leaderboard').get().catch(() => null);
-  _renderLeaderboardFromDays(snap?.exists ? (snap.data().days || 30) : 30);
-}
-
 async function saveLeaderboardSettings() {
   const days = parseInt(el('leaderboardDaysInput')?.value) || 30;
   try {
     await fbDb.collection('appConfig').doc('leaderboard').set({ days }, { merge: true });
-    _adminPanelCache = null;
-    _alert('הגדרות נשמרו');
-  } catch(e) { _alert('שגיאה: ' + e.message); }
-}
-
-async function renderAdminMessages() {
-  const wrap = el('adminMessages');
-  if (!wrap) return;
-  wrap.innerHTML = '<div style="font-size:12px;color:var(--gray-400);padding:8px 0">טוען...</div>';
-  try {
-    const result = await fbFunctions.httpsCallable('getAdminMessages')();
-    const msgs = result.data || [];
-    if (!msgs.length) {
-      wrap.innerHTML = '<div style="font-size:12px;color:var(--gray-400);padding:8px 0">אין פניות עדיין</div>';
-      return;
-    }
-    wrap.innerHTML = `<div class="card" style="padding:0;overflow:hidden">` +
-      msgs.map((m, i) => {
-        const ts = m.createdAt ? new Date(m.createdAt) : null;
-        const dateStr = ts ? ts.toLocaleDateString('he-IL') + ' ' + ts.toLocaleTimeString('he-IL', { hour:'2-digit', minute:'2-digit' }) : '';
-        const unread = m.read === false;
-        return `<div id="adminMsg_${m.id}" style="padding:12px${i < msgs.length-1 ? ';border-bottom:1px solid var(--gray-100)' : ''}${unread ? ';background:var(--primary-50,#eff6ff)' : ''}">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            ${unread ? `<span class="adminmsg-dot" style="width:8px;height:8px;border-radius:50%;background:var(--primary-500);flex-shrink:0;display:inline-block"></span>` : ''}
-            <span style="font-size:13px;font-weight:900;color:var(--gray-900);flex:1">${esc(m.topicLabel || m.topic || '—')}</span>
-            <span style="font-size:11px;color:var(--gray-400)">${dateStr}</span>
-            ${unread ? `<button onclick="markAdminMsgRead('${m.id}',this)" style="font-size:11px;border:none;background:none;color:var(--primary-500);cursor:pointer;font-family:inherit;font-weight:700;padding:0;min-width:70px;text-align:end">סמן כנקרא</button>` : ''}
-          </div>
-          <div style="font-size:12px;color:var(--gray-500);margin-bottom:4px">${esc(m.senderName || '')}${m.familyName ? ' · ' + esc(m.familyName) : ''}</div>
-          <div style="font-size:13px;color:var(--gray-700);white-space:pre-wrap;margin-bottom:8px">${esc(m.text || '')}</div>
-          <div style="text-align:start">
-            <button onclick="createChoreFromFeedback(${JSON.stringify(m.text||'').replace(/"/g,'&quot;')})" style="font-size:11px;border:none;background:var(--gray-100);color:var(--gray-600);cursor:pointer;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:var(--r-pill)">🧹 צור משימה</button>
-          </div>
-        </div>`;
-      }).join('') + `</div>`;
-  } catch(e) {
-    wrap.innerHTML = `<div style="font-size:12px;color:var(--error);padding:8px 0">שגיאה: ${esc(e.message)}</div>`;
-  }
-}
-
-async function markAdminMsgRead(id, btn) {
-  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="fh-spinner" style="transform:scale(0.45);display:inline-block;vertical-align:middle;margin:-9px -9px -9px 0"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>'; }
-  try {
-    await fbFunctions.httpsCallable('markAdminMessageRead')({ msgId: id });
-    const row = el('adminMsg_' + id);
-    if (row) {
-      row.style.background = '';
-      row.querySelector('.adminmsg-dot')?.remove();
-      row.querySelector('button[onclick*="markAdminMsgRead"]')?.remove();
-    }
-  } catch(e) {
-    if (btn) { btn.disabled = false; btn.textContent = 'סמן כנקרא'; }
-    console.error('markAdminMsgRead:', e);
-  }
+    alert('הגדרות נשמרו');
+  } catch(e) { alert('שגיאה: ' + e.message); }
 }
 
 function renderMaintenanceTools() {
@@ -3735,47 +3029,6 @@ function renderMaintenanceTools() {
       <div style="font-size:13px;color:#4a5568;margin-bottom:10px">המר משפחות עם <code>role:'committee'</code> ישן ל-<code>committeeClasses</code> לפי כיתות ילדיהן.</div>
       <button class="admin-btn" id="migrateCommitteeBtn" onclick="migrateCommitteeRoles()" style="width:100%;padding:9px;font-size:13px">נרמל תפקידי ועד ◀</button>
       <div id="migrateCommitteeResult" style="font-size:12px;margin-top:8px;color:#276749"></div>
-    </div>
-    <div class="card" style="margin-bottom:12px;padding:12px;border:1.5px solid var(--error-light,#fed7d7)">
-      <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:var(--error)">🏫 מחיקת עיר / בית ספר</div>
-      <div style="font-size:12px;color:#718096;margin-bottom:10px">מוחק כיתות ורישומי ילדים — לא מוחק את הילדים עצמם.</div>
-
-      <div style="border-bottom:1px solid var(--error-light,#fed7d7);padding-bottom:12px;margin-bottom:12px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:4px">מחיקת עיר</div>
-        <div style="font-size:12px;color:#718096;margin-bottom:8px">מוחק את כל בתי הספר, הכיתות ורישומי הילדים של העיר מהמערכת.</div>
-        <input class="auth-input" id="deleteCityInput" placeholder="שם העיר" style="margin-bottom:8px;text-align:right">
-        <button class="admin-btn" id="deleteCityBtn" onclick="adminDeleteCity()" style="width:100%;padding:8px;font-size:13px;background:var(--error);color:#fff;border-color:var(--error)">מחק עיר ◀</button>
-        <div id="deleteCityResult" style="font-size:12px;margin-top:6px"></div>
-      </div>
-
-      <div>
-        <div style="font-size:13px;font-weight:700;margin-bottom:4px">מחיקת בית ספר</div>
-        <div style="font-size:12px;color:#718096;margin-bottom:8px">מוחק את כל הכיתות ורישומי הילדים של בית הספר.</div>
-        <input class="auth-input" id="deleteSchoolCityInput" placeholder="שם העיר" style="margin-bottom:6px;text-align:right">
-        <input class="auth-input" id="deleteSchoolNameInput" placeholder="שם בית הספר" style="margin-bottom:8px;text-align:right">
-        <button class="admin-btn" id="deleteSchoolBtn" onclick="adminDeleteSchool()" style="width:100%;padding:8px;font-size:13px;background:var(--error);color:#fff;border-color:var(--error)">מחק בית ספר ◀</button>
-        <div id="deleteSchoolResult" style="font-size:12px;margin-top:6px"></div>
-      </div>
-    </div>
-    <div class="card" style="margin-bottom:12px;padding:12px;border:1.5px solid var(--error-light,#fed7d7)">
-      <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:var(--error)">🗑 פעולות מחיקה</div>
-      <div style="font-size:11px;color:#718096;margin-bottom:10px">ה-UID שלך: <code style="user-select:all;background:#f7fafc;padding:1px 4px;border-radius:4px">${S.uid}</code> <button onclick="el('resetFamilyUidInput').value='${S.uid}';el('deleteFamilyUidInput').value='${S.uid}'" style="border:none;background:none;font-size:11px;color:var(--primary-500);cursor:pointer;padding:0;font-family:inherit;font-weight:700">← הכנס</button></div>
-
-      <div style="border-bottom:1px solid var(--error-light,#fed7d7);padding-bottom:12px;margin-bottom:12px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:4px">איפוס נתונים</div>
-        <div style="font-size:12px;color:#718096;margin-bottom:8px">מוחק משימות, קניות, שיעורים, אירועים וכוכבים — שומר חברי משפחה וקוד.</div>
-        <input class="auth-input" id="resetFamilyUidInput" placeholder="Family UID" style="margin-bottom:8px;font-family:monospace;font-size:13px">
-        <button class="admin-btn" id="resetFamilyBtn" onclick="adminResetFamilyData()" style="width:100%;padding:8px;font-size:13px;background:var(--error);color:#fff;border-color:var(--error)">איפוס נתונים ◀</button>
-        <div id="resetFamilyResult" style="font-size:12px;margin-top:6px"></div>
-      </div>
-
-      <div>
-        <div style="font-size:13px;font-weight:700;margin-bottom:4px">מחיקת משפחה מלאה</div>
-        <div style="font-size:12px;color:#718096;margin-bottom:8px">מוחק את כל נתוני המשפחה, חשבון ה-Auth, קודי הצטרפות ורישום בכיתות. פעולה בלתי הפיכה לחלוטין.</div>
-        <input class="auth-input" id="deleteFamilyUidInput" placeholder="Family UID" style="margin-bottom:8px;font-family:monospace;font-size:13px">
-        <button class="admin-btn" id="deleteFamilyBtn" onclick="adminDeleteFamily()" style="width:100%;padding:8px;font-size:13px;background:#7b2020;color:#fff;border-color:#7b2020">מחיקה מלאה ◀</button>
-        <div id="deleteFamilyResult" style="font-size:12px;margin-top:6px"></div>
-      </div>
     </div>`;
 }
 
@@ -3796,105 +3049,6 @@ async function migrateKidCodes() {
   } finally {
     btn.disabled = false;
   }
-}
-
-async function adminResetFamilyData() {
-  const uid = el('resetFamilyUidInput').value.trim();
-  const res = el('resetFamilyResult');
-  const btn = el('resetFamilyBtn');
-  if (!uid) { res.style.color = 'var(--error)'; res.textContent = 'יש להזין Family UID'; return; }
-  if (!await _confirm(`למחוק את כל הנתונים של המשפחה ${uid}?\n\nפעולה זו בלתי הפיכה.`, { danger: true, okLabel: 'אפס נתונים' })) return;
-  btn.disabled = true;
-  res.style.color = '#718096';
-  res.textContent = 'מאפס...';
-  try {
-    const result = await fbFunctions.httpsCallable('adminResetFamily')({ familyUid: uid });
-    res.style.color = '#276749';
-    res.textContent = `✓ הנתונים של "${result.data?.familyName || uid}" אופסו בהצלחה`;
-    el('resetFamilyUidInput').value = '';
-  } catch(e) {
-    res.style.color = 'var(--error)';
-    const msg = e?.details?.message || e?.message || String(e);
-    res.textContent = 'שגיאה: ' + msg;
-    console.error('adminResetFamilyData:', e);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function adminDeleteCity() {
-  const city = el('deleteCityInput').value.trim();
-  const res  = el('deleteCityResult');
-  const btn  = el('deleteCityBtn');
-  if (!city) { res.style.color = 'var(--error)'; res.textContent = 'יש להזין שם עיר'; return; }
-  if (!await _confirm(`למחוק את העיר "${city}" ואת כל בתי הספר והכיתות שלה?\n\nרישומי הילדים יוסרו, אך הילדים עצמם לא יימחקו.`, { danger: true, okLabel: 'מחק עיר' })) return;
-  btn.disabled = true; res.style.color = '#718096'; res.textContent = 'מוחק...';
-  try {
-    const r = await fbFunctions.httpsCallable('adminDeleteCity')({ city });
-    res.style.color = '#276749';
-    res.textContent = `✓ העיר "${city}" נמחקה — ${r.data.classesDeleted} כיתות, ${r.data.kidsUnlinked} ילדים שוחררו`;
-    el('deleteCityInput').value = '';
-  } catch(e) {
-    res.style.color = 'var(--error)';
-    res.textContent = 'שגיאה: ' + (e?.details?.message || e?.message || String(e));
-  } finally { btn.disabled = false; }
-}
-
-async function adminDeleteSchool() {
-  const city       = el('deleteSchoolCityInput').value.trim();
-  const schoolName = el('deleteSchoolNameInput').value.trim();
-  const res = el('deleteSchoolResult');
-  const btn = el('deleteSchoolBtn');
-  if (!city || !schoolName) { res.style.color = 'var(--error)'; res.textContent = 'יש להזין עיר ושם בית ספר'; return; }
-  if (!await _confirm(`למחוק את "${schoolName}" (${city}) ואת כל הכיתות שלו?\n\nרישומי הילדים יוסרו, אך הילדים עצמם לא יימחקו.`, { danger: true, okLabel: 'מחק בית ספר' })) return;
-  btn.disabled = true; res.style.color = '#718096'; res.textContent = 'מוחק...';
-  try {
-    const r = await fbFunctions.httpsCallable('adminDeleteSchool')({ city, schoolName });
-    res.style.color = '#276749';
-    res.textContent = `✓ "${schoolName}" נמחק — ${r.data.classesDeleted} כיתות, ${r.data.kidsUnlinked} ילדים שוחררו`;
-    el('deleteSchoolCityInput').value = ''; el('deleteSchoolNameInput').value = '';
-  } catch(e) {
-    res.style.color = 'var(--error)';
-    res.textContent = 'שגיאה: ' + (e?.details?.message || e?.message || String(e));
-  } finally { btn.disabled = false; }
-}
-
-async function adminDeleteFamily() {
-  const uid = el('deleteFamilyUidInput').value.trim();
-  const res = el('deleteFamilyResult');
-  const btn = el('deleteFamilyBtn');
-  if (!uid) { res.style.color = 'var(--error)'; res.textContent = 'יש להזין Family UID'; return; }
-  if (uid === S.uid) { res.style.color = 'var(--error)'; res.textContent = 'לא ניתן למחוק את המשפחה הנוכחית'; return; }
-  if (!await _confirm(`למחוק לצמיתות את המשפחה ${uid}?\n\nכל הנתונים, חשבון Auth, קודי הצטרפות ורישום בכיתות יימחקו.\n\nפעולה זו בלתי הפיכה לחלוטין.`, { danger: true, okLabel: 'מחק לצמיתות' })) return;
-  btn.disabled = true;
-  res.style.color = '#718096';
-  res.textContent = 'מוחק...';
-  try {
-    const result = await fbFunctions.httpsCallable('adminDeleteFamily')({ familyUid: uid });
-    res.style.color = '#276749';
-    res.textContent = `✓ המשפחה "${result.data?.familyName || uid}" נמחקה בהצלחה`;
-    el('deleteFamilyUidInput').value = '';
-  } catch(e) {
-    res.style.color = 'var(--error)';
-    const msg = e?.details?.message || e?.message || String(e);
-    res.textContent = 'שגיאה: ' + msg;
-    console.error('adminDeleteFamily:', e);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-function createChoreFromFeedback(text) {
-  closeAdminPanel();
-  switchTab('home');
-  setTimeout(() => {
-    const inp = el('newChoreText');
-    if (!inp) return;
-    inp.value = text;
-    inp.style.height = inp.scrollHeight + 'px';
-    inp.focus();
-    inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, 200);
 }
 
 async function migrateCommitteeRoles() {
@@ -3939,191 +3093,41 @@ async function adminSaveHistoryTtl() {
   if (msg) { msg.textContent = 'נשמר ✓'; setTimeout(() => { msg.textContent = ''; }, 2000); }
 }
 
-let _adminPanelCache = null;
-const _ADMIN_CACHE_TTL = 120_000; // 2 minutes
-
-function _adminLogHtml(combined) {
-  const items = isAdmin() ? combined : combined.filter(entry => {
-    if (entry._type === 'expired') return isCommitteeFor(entry.classId || '');
-    return entry.actionBy?.familyUid === S.uid;
-  });
-  if (!items.length) return '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין היסטוריה עדיין</div>';
-  return items.map(entry => {
-    if (entry._type === 'expired') {
-      return `<div class="admin-log-row" style="opacity:0.6">
-        <div class="admin-log-title">
-          <span class="admin-log-badge" style="background:#f3f4f6;color:#6b7280">⏱ פג תוקף</span>${esc(entry.title||'')}
-        </div>
-        <div class="admin-log-meta">הוגש על ידי: ${esc(personFullName(entry.postedBy)||'?')} · תאריך: ${entry.date ? fmtEventDate(entry.date) : '?'}</div>
-        <div class="admin-log-meta">כיתה: ${esc(classLabelFromId(entry.classId||''))}</div>
-      </div>`;
-    }
-    const approved = entry.action === 'approved';
-    const dt = entry.actionAt?.toDate ? entry.actionAt.toDate().toLocaleString('he-IL') : '';
-    return `<div class="admin-log-row">
-      <div class="admin-log-title">
-        <span class="admin-log-badge ${approved ? 'approved' : 'rejected'}">${approved ? '✓ אושר' : '✕ נדחה'}</span>${esc(entry.eventTitle)}
-      </div>
-      <div class="admin-log-meta">הוגש על ידי: ${esc(personFullName(entry.submittedBy)||'?')} · ${approved ? 'אושר' : 'נדחה'} על ידי: ${esc(personFullName(entry.actionBy)||'?')} · ${dt}</div>
-      <div class="admin-log-meta">כיתה: ${esc(classLabelFromId(entry.classId||''))}</div>
-    </div>`;
-  }).join('');
-}
-
-async function _fetchAdminPanelData() {
-  const [logSnap, expiredSnap, notifSnap, lbSnap] = await Promise.all([
-    fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get(),
-    fbDb.collectionGroup('pendingEvents').get(),
-    fbDb.collection('appConfig').doc('notifications').get().catch(() => null),
-    fbDb.collection('appConfig').doc('leaderboard').get().catch(() => null),
-  ]);
-  const log = logSnap.docs.map(d => ({ _type: 'log', ...d.data() }));
-  const expiredPending = expiredSnap.docs
-    .map(d => ({ _type: 'expired', id: d.id, classId: d.ref.parent.parent.id, ...d.data() }))
-    .filter(ev => ev.date && !isEventUpcoming(ev.date));
-  const sortKey = e => e._type === 'log'
-    ? (e.actionAt?.toDate?.() || new Date(0)).getTime()
-    : new Date(e.date || 0).getTime();
-  const combined = [...log, ...expiredPending].sort((a, b) => sortKey(b) - sortKey(a));
-  const notifData = notifSnap?.exists ? notifSnap.data() : {};
-  const notifCfg = {
-    committeeApplications: { ...NOTIF_DEFAULTS.committeeApplications, ...(notifData.committeeApplications || {}) },
-    pendingEvents:         { ...NOTIF_DEFAULTS.pendingEvents,         ...(notifData.pendingEvents || {}) },
-  };
-  const lbDays = lbSnap?.exists ? (lbSnap.data().days || 30) : 30;
-  return { combined, notifCfg, lbDays, ts: Date.now() };
-}
-
-function _applyAdminPanelCache(data, showLog) {
-  if (showLog) el('adminLogList').innerHTML = _adminLogHtml(data.combined);
-  _renderNotifSettingsFromCfg(data.notifCfg);
-  _renderLeaderboardFromDays(data.lbDays);
-  renderShoppingHistorySettings();
-  renderMaintenanceTools();
-  renderAdminEventTypes();
-  renderAdminMessages();
-}
-
-function renderAdminEventTypes() {
-  const container = el('adminEventTypes');
-  if (!container) return;
-  const mFields = [['mDate','תאריך'],['mTime','שעה'],['mLoc','מיקום']];
-  const chkStyle = 'display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap';
-  container.innerHTML = `
-    <div class="card" style="padding:0;margin-bottom:8px;overflow:hidden">
-      ${_eventTypesCfg.map((t, i) => `
-        <div style="padding:12px${i < _eventTypesCfg.length - 1 ? ';border-bottom:1px solid var(--gray-100)' : ''}">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-            <input id="evtIcon_${i}" value="${esc(t.icon)}" maxlength="2"
-              style="width:38px;text-align:center;font-size:20px;border:1.5px solid var(--gray-200);border-radius:8px;padding:4px 2px;font-family:inherit;background:var(--surface)">
-            <input id="evtLabelHe_${i}" value="${esc(t.labelHe)}" placeholder="שם בעברית"
-              style="flex:1;padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;text-align:right;background:var(--surface)">
-            <input id="evtLabelEn_${i}" value="${esc(t.labelEn)}" placeholder="English" dir="ltr"
-              style="flex:1;padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;background:var(--surface)">
-          </div>
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
-            <span style="font-size:11px;font-weight:700;color:var(--gray-400)">שדות חובה:</span>
-            ${mFields.map(([key,lbl]) => `
-              <label style="${chkStyle}">
-                <input type="checkbox" id="evt_${key}_${i}" ${t[key] ? 'checked' : ''} style="width:15px;height:15px">
-                ${lbl}
-              </label>`).join('')}
-            <span style="font-size:11px;font-weight:700;color:var(--gray-400);margin-right:4px">פילטר:</span>
-            <label style="${chkStyle}">
-              <input type="checkbox" id="evtGender_${i}" ${t.hasGenderFilter ? 'checked' : ''} style="width:15px;height:15px">
-              בנים/בנות
-            </label>
-            <label style="${chkStyle};margin-right:auto">
-              <input type="checkbox" id="evtEnabled_${i}" ${t.enabled !== false ? 'checked' : ''} style="width:15px;height:15px">
-              פעיל
-            </label>
-          </div>
-          <div style="display:flex;gap:8px">
-            <button class="admin-btn" onclick="saveEventTypeRow(${i})" style="flex:1;padding:6px;font-size:12px">💾 שמור</button>
-            <button onclick="deleteEventType('${esc(t.id)}')" style="padding:6px 12px;background:var(--error-bg);color:var(--error);border:none;border-radius:var(--r-sm);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">🗑</button>
-          </div>
-        </div>`).join('')}
-    </div>
-    <div class="card" style="padding:12px">
-      <div style="font-size:13px;font-weight:900;color:var(--gray-900);margin-bottom:10px">➕ הוסף סוג אירוע</div>
-      <div style="display:flex;gap:8px;margin-bottom:8px">
-        <input id="newEvtIcon" maxlength="2" placeholder="📝"
-          style="width:44px;text-align:center;font-size:20px;border:1.5px solid var(--gray-200);border-radius:8px;padding:6px 2px;font-family:inherit;background:var(--surface)">
-        <input id="newEvtLabelHe" placeholder="שם בעברית"
-          style="flex:1;padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;text-align:right;background:var(--surface)">
-        <input id="newEvtLabelEn" placeholder="English" dir="ltr"
-          style="flex:1;padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;background:var(--surface)">
-      </div>
-      <button class="admin-btn" onclick="addEventType()" style="width:100%;padding:8px">+ הוסף</button>
-    </div>`;
-}
-
-async function saveEventTypeRow(i) {
-  const t = _eventTypesCfg[i];
-  if (!t) return;
-  t.icon            = el(`evtIcon_${i}`)?.value.trim()    || t.icon;
-  t.labelHe         = el(`evtLabelHe_${i}`)?.value.trim() || t.labelHe;
-  t.labelEn         = el(`evtLabelEn_${i}`)?.value.trim() || t.labelEn;
-  t.enabled         = el(`evtEnabled_${i}`)?.checked ?? true;
-  t.mDate           = el(`evt_mDate_${i}`)?.checked ?? false;
-  t.mTime           = el(`evt_mTime_${i}`)?.checked ?? false;
-  t.mLoc            = el(`evt_mLoc_${i}`)?.checked  ?? false;
-  t.hasGenderFilter = el(`evtGender_${i}`)?.checked ?? false;
-  try {
-    await _saveEventTypesCfg();
-    showToast((getLang()==='he' ? 'נשמר ✓' : 'Saved ✓'), 'success');
-  } catch(e) { showToast('שגיאה בשמירה', 'error'); }
-}
-
-async function deleteEventType(id) {
-  const t = _eventTypesCfg.find(x => x.id === id);
-  const name = t ? (getLang()==='he' ? t.labelHe : t.labelEn) : id;
-  if (!await _confirm(`למחוק את סוג האירוע "${name}"?`, { okLabel: 'מחק' })) return;
-  _eventTypesCfg = _eventTypesCfg.filter(x => x.id !== id);
-  try {
-    await _saveEventTypesCfg();
-    renderAdminEventTypes();
-  } catch(e) { showToast('שגיאה בשמירה', 'error'); }
-}
-
-async function addEventType() {
-  const icon    = el('newEvtIcon')?.value.trim()    || '📝';
-  const labelHe = el('newEvtLabelHe')?.value.trim() || '';
-  const labelEn = el('newEvtLabelEn')?.value.trim() || '';
-  if (!labelHe) { el('newEvtLabelHe')?.classList.add('input-error'); el('newEvtLabelHe')?.focus(); return; }
-  const id = 'custom_' + Date.now();
-  _eventTypesCfg.push({ id, icon, labelHe, labelEn: labelEn || labelHe, mDate:false, mTime:false, mLoc:false, hasGenderFilter:false, enabled:true });
-  try {
-    await _saveEventTypesCfg();
-    renderAdminEventTypes();
-  } catch(e) { showToast('שגיאה בשמירה', 'error'); }
-}
-
 async function renderAdminPanel(showLog = true) {
-  const cached = _adminPanelCache;
-  if (cached) {
-    // Render immediately from cache — user sees content with no wait
-    _applyAdminPanelCache(cached, showLog);
-    // Refresh in background if stale
-    if (Date.now() - cached.ts > _ADMIN_CACHE_TTL) {
-      _fetchAdminPanelData().then(data => {
-        _adminPanelCache = data;
-        if (!el('adminPanel')?.classList.contains('hidden')) {
-          _applyAdminPanelCache(data, showLog);
-        }
-      }).catch(e => console.error('adminPanel bg refresh:', e));
-    }
+  if (!showLog) {
+    await renderNotifSettings();
+    await renderLeaderboardSettings();
+    renderShoppingHistorySettings();
+    renderMaintenanceTools();
     return;
   }
-  // First load — show spinner, fetch all 4 in parallel, cache and render
-  if (showLog) el('adminLogList').innerHTML = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
+  el('adminLogList').innerHTML = '<div style="color:#a0aec0;font-size:13px;padding:8px 0">טוען...</div>';
   try {
-    const data = await _fetchAdminPanelData();
-    _adminPanelCache = data;
-    _applyAdminPanelCache(data, showLog);
+    const logSnap = await fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get();
+
+    // Log
+    const log = logSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    el('adminLogList').innerHTML = log.length
+      ? log.map(entry => {
+          const approved = entry.action === 'approved';
+          const dt = entry.actionAt?.toDate ? entry.actionAt.toDate().toLocaleString('he-IL') : '';
+          return `<div class="admin-log-row">
+            <div class="admin-log-title">
+              <span class="admin-log-badge ${approved ? 'approved' : 'rejected'}">${approved ? '✓ אושר' : '✕ נדחה'}</span>${esc(entry.eventTitle)}
+            </div>
+            <div class="admin-log-meta">הוגש על ידי: ${esc(personFullName(entry.submittedBy)||'?')} · ${approved ? 'אושר' : 'נדחה'} על ידי: ${esc(personFullName(entry.actionBy)||'?')} · ${dt}</div>
+            <div class="admin-log-meta">כיתה: ${esc(classLabelFromId(entry.classId||''))}</div>
+          </div>`;
+        }).join('')
+      : '<div style="font-size:13px;color:#a0aec0;padding:6px 0">אין היסטוריה עדיין</div>';
+
+    await renderNotifSettings();
+    await renderLeaderboardSettings();
+    renderShoppingHistorySettings();
+    renderMaintenanceTools();
   } catch(e) {
     console.error('renderAdminPanel:', e);
-    if (showLog) el('adminLogList').innerHTML = `<div style="color:#e53e3e;font-size:12px">${e.message}</div>`;
+    el('adminLogList').innerHTML = `<div style="color:#e53e3e;font-size:12px">${e.message}</div>`;
   }
 }
 
@@ -4171,7 +3175,7 @@ async function setCommitteeRoleLegacy(familyUid, grant, cid) {
 }
 
 async function applyForCommittee(cid) {
-  if (!await _confirm('להגיש מועמדות לוועד ההורים?', { okLabel: 'הגש' })) return;
+  if (!confirm('להגיש מועמדות לוועד ההורים?')) return;
   try {
     await fbDb.collection('committeeApplications').add({
       applicantUid: S.uid,
@@ -4184,22 +3188,6 @@ async function applyForCommittee(cid) {
     });
     // onSnapshot handles re-render
   } catch(e) { console.error('applyForCommittee:', e); }
-}
-
-async function cancelCommitteeApplication(appId, cid) {
-  if (!await _confirm('לבטל את המועמדות לוועד?', { danger: true, okLabel: 'בטל מועמדות' })) return;
-  try {
-    await fbDb.collection('committeeApplications').doc(appId).delete();
-    // onSnapshot handles re-render
-  } catch(e) { console.error('cancelCommitteeApplication:', e); }
-}
-
-async function leaveCommittee(cid) {
-  if (!await _confirm('לעזוב את ועד ההורים של כיתה זו?', { danger: true, okLabel: 'עזוב ועד' })) return;
-  try {
-    await setCommitteeRole(S.uid, S.user, false, cid);
-    // setCommitteeRole handles re-render
-  } catch(e) { console.error('leaveCommittee:', e); }
 }
 
 async function voteForApplication(appId, cid) {
@@ -4233,7 +3221,7 @@ async function adminApproveApplication(appId, cid) {
 }
 
 async function adminDenyApplication(appId, cid) {
-  if (!await _confirm('לדחות מועמדות זו?', { danger: true, okLabel: 'דחה' })) return;
+  if (!confirm('לדחות מועמדות זו?')) return;
   try {
     await fbFunctions.httpsCallable('adminDenyApplication')({ appId });
     await renderPendingPanel();
@@ -4249,14 +3237,14 @@ async function approveSchoolPart(id, part) {
     }
     await fbFunctions.httpsCallable('resolveSchoolPart')({ id, part, action: 'approved', adminName: myFullName() });
     await renderPendingPanel();
-  } catch(e) { console.error('approveSchoolPart:', e); _alert('שגיאה: ' + e.message); }
+  } catch(e) { console.error('approveSchoolPart:', e); alert('שגיאה: ' + e.message); }
 }
 
 async function denySchoolPart(id, part) {
   try {
     await fbFunctions.httpsCallable('resolveSchoolPart')({ id, part, action: 'denied', adminName: myFullName() });
     await renderPendingPanel();
-  } catch(e) { console.error('denySchoolPart:', e); _alert('שגיאה: ' + e.message); }
+  } catch(e) { console.error('denySchoolPart:', e); alert('שגיאה: ' + e.message); }
 }
 
 async function approveSchool(id) {
@@ -4268,14 +3256,14 @@ async function approveSchool(id) {
     // registerInClass is now handled by the Cloud Function with the correct familyUid
     await fbFunctions.httpsCallable('approveSchoolRequest')({ id, adminName: myFullName() });
     await renderPendingPanel();
-  } catch(e) { console.error('approveSchool:', e); _alert('שגיאה: ' + e.message); }
+  } catch(e) { console.error('approveSchool:', e); alert('שגיאה: ' + e.message); }
 }
 
 async function denySchool(id) {
   try {
     await fbFunctions.httpsCallable('denySchoolRequest')({ id, adminName: myFullName() });
     await renderPendingPanel();
-  } catch(e) { console.error('denySchool:', e); _alert('שגיאה: ' + e.message); }
+  } catch(e) { console.error('denySchool:', e); alert('שגיאה: ' + e.message); }
 }
 
 async function refreshCommunity() {
@@ -4431,6 +3419,23 @@ async function mgmtRemoveSubject(name) {
 // ════════════════════════════════════════
 let _photoTarget = null;
 
+function openPhotoModal() {
+  renderPhotoModal();
+  el('photoModal').style.display = 'flex';
+}
+function closePhotoModal() {
+  el('photoModal').style.display = 'none';
+}
+function renderPhotoModal() {
+  const members = getMembers().filter(m => isParent() || m.name === S.user);
+  el('photoMemberList').innerHTML = members.map(m => `
+    <div class="photo-member-row">
+      <div class="photo-member-avatar">${getAvatar(m.name)}</div>
+      <div class="photo-member-name">${esc(m.name)}</div>
+      <button class="photo-upload-btn" onclick="pickPhoto('${esc(m.name)}')">📷 ${m.photo ? 'החלף' : 'העלה'}</button>
+      ${m.photo ? `<button class="photo-remove-btn" onclick="removePhoto('${esc(m.name)}')">×</button>` : ''}
+    </div>`).join('');
+}
 function pickPhoto(name) {
   _photoTarget = name;
   el('photoInput').value = '';
@@ -4442,9 +3447,7 @@ async function handlePhotoFile(event) {
   const photo = await resizePhoto(file, 120);
   if (!photo) return;
   await saveMemberPhoto(_photoTarget, photo);
-  if (!el('mgmtScreen').classList.contains('hidden')) renderMgmtMembers();
-  renderHeader();
-  if (_menuOpen) renderMenu();
+  renderPhotoModal();
 }
 function resizePhoto(file, size) {
   return new Promise(resolve => {
@@ -4479,9 +3482,7 @@ async function removePhoto(name) {
   });
   if (familyData) familyData.members = members;
   await fbDb.collection('families').doc(S.uid).update({ members });
-  if (!el('mgmtScreen').classList.contains('hidden')) renderMgmtMembers();
-  renderHeader();
-  if (_menuOpen) renderMenu();
+  renderPhotoModal();
 }
 
 // ════════════════════════════════════════
@@ -4508,91 +3509,86 @@ function _initHeaderCollapse() {
 }
 let _installPrompt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _installPrompt = e; });
-// SVG icons for the drawer menu
-const DRAWER_ICONS = {
-  mgmt:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>`,
-  photos:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>`,
-  tabs:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
-  home_ed: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>`,
-  lang:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>`,
-  switch:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/><line x1="20" y1="8" x2="23" y2="11"/><line x1="20" y1="14" x2="23" y2="11"/></svg>`,
-  install: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
-  admin:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
-  gcal:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
-  signout:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
-  feedback: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>`,
-};
-
-function _drawerItem(icon, label, onclick, opts = {}) {
-  const cls = ['menu-item', opts.active ? 'active' : '', opts.danger ? 'danger' : ''].filter(Boolean).join(' ');
-  const badge = opts.badge ? `<span class="menu-item-badge">${opts.badge}</span>` : '';
-  const keyBadge = opts.adminKey ? `<span class="menu-item-key">🔑</span>` : '';
-  return `<button class="${cls}" onclick="${onclick}">
-    <span class="menu-item-icon">${DRAWER_ICONS[icon] || ''}</span>
-    <span class="menu-item-label">${label}</span>
-    ${keyBadge}${badge}
-  </button>`;
-}
-
 function toggleMenu(btn) { _menuOpen ? closeMenu() : openMenu(btn); }
-
-function openMenu() {
+function openMenu(btn) {
   _menuOpen = true;
-  const isHe = getLang() === 'he';
-  const familyName = familyData?.familyName || '';
-  const notifCount = parseInt(el('notifBellBadge')?.textContent || '0') || 0;
-  const pendingCount = parseInt(el('pendingReqBadge')?.textContent || '0') || 0;
-
-  const mainItems = [
-    isParent() ? _drawerItem('mgmt',    isHe ? 'הגדרות' : 'Settings',           `closeMenu();openMgmt()`)          : '',
-    isParent() ? _drawerItem('home_ed', isHe ? 'התאמת דף הבית' : 'Customize home', `closeMenu();openHomeEditor()`)   : '',
-    isParent() ? _drawerItem('tabs',    isHe ? 'התאמת לשוניות' : 'Customize tabs', `closeMenu();openTabEditor()`)    : '',
-    (gcalConnected() || gcalWasConnected()) ? _drawerItem('gcal', isHe ? 'נתק Google Calendar' : 'Disconnect GCal', `closeMenu();disconnectGCal()`) : '',
-  ].filter(Boolean).join('');
-
-  const secondaryItems = [
-    !S.lockedMember ? _drawerItem('switch', isHe ? 'החלף משתמש' : 'Switch member', `closeMenu();switchUser()`) : '',
-    _drawerItem('install',  isHe ? 'הוסף לדף הבית' : 'Add to home screen', `closeMenu();installApp()`),
-    _drawerItem('feedback', isHe ? 'פנייה למנהל המערכת' : 'Contact admin', `closeMenu();openFeedback()`),
-    isAdmin() ? _drawerItem('admin', isHe ? 'הגדרות מערכת' : 'System settings', `closeMenu();openAdminPanel(false)`, { adminKey: true }) : '',
-  ].filter(Boolean).join('');
-
-  const signoutItem = _drawerItem('signout', isHe ? 'יציאה מהחשבון' : 'Sign out', `closeMenu();authSignOut()`, { danger: true });
-
-  el('menuDropdown').innerHTML = `
-    <div class="drawer-user-section">
-      <div class="drawer-user-top">
-        <div class="drawer-avatar-wrap">
-          <div class="drawer-avatar">${getAvatar(S.user) || getEmoji(S.user)}</div>
-          <button class="drawer-avatar-edit" onclick="pickPhoto('${esc(S.user)}')" title="${isHe ? 'החלף תמונה' : 'Change photo'}">${_ico.pencil}</button>
-        </div>
-        <button class="drawer-lang-btn" onclick="closeMenu();toggleLang()" title="${isHe ? 'Switch to English' : 'עבור לעברית'}">${DRAWER_ICONS.lang}</button>
-      </div>
-      <div class="drawer-user-name">${esc(S.user)}</div>
-      <div class="drawer-user-sub">${esc(familyName)}</div>
-      <div class="drawer-user-uid" onclick="navigator.clipboard?.writeText('${S.uid}').then(()=>showToast('${isHe?'UID הועתק':'UID copied'}','info'))" title="${isHe?'לחץ להעתקה':'Click to copy'}">${S.uid}</div>
+  const lang = getLang();
+  const isHe = lang === 'he';
+  const parentItems = isParent() ? `
+    <div class="menu-item" onclick="closeMenu();openMgmt()">
+      <span class="menu-item-icon">⚙️</span>
+      <span>${isHe ? 'ניהול' : 'Management'}</span>
     </div>
-    <nav class="drawer-nav">
-      ${mainItems}
-      <div class="drawer-nav-sep"></div>
-      ${secondaryItems}
-    </nav>
-    <div class="drawer-footer">
-      ${signoutItem}
+    <div class="menu-sep"></div>` : '';
+  const gcalItem = (gcalConnected() || gcalWasConnected()) ? `
+    <div class="menu-item" onclick="closeMenu();disconnectGCal()" style="color:#4285f4">
+      <span class="menu-item-icon">📅</span>
+      <span>${isHe ? 'נתק Google Calendar' : 'Disconnect Google Calendar'}</span>
+    </div>
+    <div class="menu-sep"></div>` : '';
+  const adminItem = isAdmin() ? `
+    <div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();openAdminPanel(false)">
+      <span class="menu-item-icon">🔧</span>
+      <span>${isHe ? 'הגדרות מערכת' : 'System settings'}</span>
+    </div>` : '';
+  el('menuDropdown').innerHTML = parentItems + gcalItem + `
+    <div class="menu-item" onclick="closeMenu();openPhotoModal()">
+      <span class="menu-item-icon">📷</span>
+      <span>${isHe ? 'תמונות משפחה' : 'Family photos'}</span>
+    </div>
+    <div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();openTabEditor()">
+      <span class="menu-item-icon">🗂</span>
+      <span>${isHe ? 'התאמת לשוניות' : 'Customize tabs'}</span>
+    </div>
+    <div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();openHomeEditor()">
+      <span class="menu-item-icon">✏️</span>
+      <span>${isHe ? 'התאמת דף הבית' : 'Customize home'}</span>
+    </div>` + adminItem + `
+    <div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();toggleLang()">
+      <span class="menu-item-icon">🌐</span>
+      <span>${isHe ? 'Switch to English' : 'עבור לעברית'}</span>
+    </div>
+    ${!S.lockedMember ? `<div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();switchUser()">
+      <span class="menu-item-icon">👤</span>
+      <span>${isHe ? 'החלף משתמש' : 'Switch member'}</span>
+    </div>` : ''}
+    <div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();installApp()">
+      <span class="menu-item-icon">📲</span>
+      <span>${isHe ? 'הוסף לדף הבית' : 'Add to home screen'}</span>
+    </div>
+    <div class="menu-sep"></div>
+    <div class="menu-item" onclick="closeMenu();authSignOut()" style="color:#e53e3e">
+      <span class="menu-item-icon">🚪</span>
+      <span>${isHe ? 'יציאה מהחשבון' : 'Sign out'}</span>
     </div>`;
-
+  // Position dropdown relative to the ☰ button
   const dd = el('menuDropdown');
-  dd.style.display = 'flex';
-  requestAnimationFrame(() => dd.classList.add('open'));
-  el('menuOverlay').classList.add('open');
+  dd.style.display = 'block';
+  const r = btn ? btn.getBoundingClientRect() : el('menuDropdown').getBoundingClientRect();
+  const ddW = dd.offsetWidth || 200;
+  // Align to whichever edge of the button is closer to the nearest app boundary
+  const spaceRight = window.innerWidth - r.right;
+  const spaceLeft  = r.left;
+  if (spaceRight >= spaceLeft) {
+    dd.style.left  = r.left + 'px';
+    dd.style.right = '';
+  } else {
+    dd.style.right = (window.innerWidth - r.right) + 'px';
+    dd.style.left  = '';
+  }
+  dd.style.top = (r.bottom + 6) + 'px';
+  el('menuOverlay').style.display = 'block';
 }
-
 function closeMenu() {
   _menuOpen = false;
-  const dd = el('menuDropdown');
-  dd.classList.remove('open');
-  el('menuOverlay').classList.remove('open');
-  setTimeout(() => { if (!_menuOpen) dd.style.display = 'none'; }, 280);
+  el('menuDropdown').style.display = 'none';
+  el('menuOverlay').style.display  = 'none';
 }
 
 async function installApp() {
@@ -4629,72 +3625,6 @@ async function installApp() {
   );
 }
 
-// ── Priority segmented control ────────────
-function _priSegPick(val) {
-  const sel = el('newChorePriority');
-  if (sel) sel.value = val;
-  document.querySelectorAll('#priSegControl .pri-seg-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.val === val));
-}
-
-// ── Soft Card Dropdown ────────────────────
-function _buildSoftDd(ddId, selectId, dotMap) {
-  const dd = el(ddId);
-  const sel = el(selectId);
-  if (!dd || !sel) return;
-  const options = Array.from(sel.options);
-  const curVal  = sel.value || (options[0]?.value || '');
-  const curText = options.find(o => o.value === curVal)?.text || '';
-  const items = options.map(o => {
-    const dot = dotMap?.[o.value] ? `<span class="chore-dot ${dotMap[o.value]}" style="flex-shrink:0;margin-inline-end:8px"></span>` : '';
-    return `<button class="sd-item${o.value===curVal?' sd-selected':''}" data-val="${esc(o.value)}" onclick="_softDdPick('${ddId}','${selectId}','${esc(o.value)}')">${dot}${esc(o.text)}</button>`;
-  }).join('');
-  dd.innerHTML = `<button class="sd-trigger" onclick="_softDdToggle('${ddId}')"><span id="${ddId}Lbl">${esc(curText)}</span></button><div class="sd-panel" id="${ddId}Panel">${items}</div>`;
-}
-
-function _softDdToggle(ddId) {
-  const panel = el(ddId + 'Panel');
-  const dd    = el(ddId);
-  if (!panel || !dd) return;
-  document.querySelectorAll('.sd-panel.open').forEach(p => { if (p !== panel) p.classList.remove('open'); });
-  if (panel.classList.contains('open')) { panel.classList.remove('open'); return; }
-  const rect = dd.querySelector('.sd-trigger').getBoundingClientRect();
-  const vh = window.innerHeight;
-  const spaceBelow = vh - rect.bottom - 8;
-  const spaceAbove = rect.top - 8;
-  if (spaceBelow >= spaceAbove || spaceBelow >= 120) {
-    panel.style.top       = (rect.bottom + 4) + 'px';
-    panel.style.bottom    = 'auto';
-    panel.style.maxHeight = Math.min(vh * 0.6, spaceBelow) + 'px';
-  } else {
-    panel.style.bottom    = (vh - rect.top + 4) + 'px';
-    panel.style.top       = 'auto';
-    panel.style.maxHeight = Math.min(vh * 0.6, spaceAbove) + 'px';
-  }
-  panel.style.right = (window.innerWidth - rect.right) + 'px';
-  panel.style.left  = 'auto';
-  panel.classList.add('open');
-  setTimeout(() => {
-    document.addEventListener('click', function _h(e) {
-      if (!dd.contains(e.target)) { panel.classList.remove('open'); document.removeEventListener('click', _h); }
-    });
-  }, 0);
-}
-
-function _softDdPick(ddId, selectId, value) {
-  const sel = el(selectId);
-  if (!sel) return;
-  sel.value = value;
-  sel.dispatchEvent(new Event('change'));
-  const lbl = el(ddId + 'Lbl');
-  if (lbl) lbl.textContent = Array.from(sel.options).find(o => o.value === value)?.text || value;
-  const panel = el(ddId + 'Panel');
-  if (panel) {
-    panel.querySelectorAll('.sd-item').forEach(b => b.classList.toggle('sd-selected', b.dataset.val === value));
-    panel.classList.remove('open');
-  }
-}
-
 function renderStatic() {
   const lb=el('langBtn');   if(lb) lb.textContent = t('langToggle');
   const sb=el('switchBtn'); if(sb) sb.textContent = t('switchUser');
@@ -4702,87 +3632,55 @@ function renderStatic() {
   el('hwDueSoonTitle').textContent   = t('hwDueSoon');
   el('poolTitle').textContent        = t('superPoolTitle');
   el('shoppingListTitle').textContent = t('superListTitle');
+  el('addChoreTitle').textContent    = t('addChoreTitle');
   el('addEventTitle').textContent    = t('addEventTitle');
   el('newChoreText').placeholder  = t('chorePlaceholder');
   el('poolItemInput').placeholder = t('poolAddPlaceholder');
   el('hwDesc').placeholder        = t('hwPlaceholder');
   el('newEventTitle').placeholder = t('eventPlaceholder');
-  el('addHwBtn').innerHTML   = _ico.plus;
-  el('addPoolBtn').innerHTML = _ico.plus;
+  el('addChoreBtn').textContent  = t('add');
+  el('addHwBtn').textContent     = t('add');
   el('addEventBtn').textContent  = t('add');
   el('doneShoppingBtn').textContent   = t('doneShopping');
   el('historyTitle').textContent      = t('shoppingHistoryTitle');
   const lbl=el('gcalSyncLabel');if(lbl)lbl.textContent=t('gcalSyncOption');
   el('newChorePriority').innerHTML = `
-    <option value="high">${t('high')}</option>
-    <option value="medium" selected>${t('medium')}</option>
-    <option value="low">${t('low')}</option>`;
+    <option value="high">🔴 ${t('high')}</option>
+    <option value="medium">🟡 ${t('medium')}</option>
+    <option value="low">🟢 ${t('low')}</option>`;
   el('poolCatSelect').innerHTML = getGroceryCats().map(c =>
     `<option value="${esc(c.name)}">${c.emoji} ${esc(c.name)}</option>`).join('');
-  _buildSoftDd('ddPoolCat', 'poolCatSelect');
   el('hwSubject').innerHTML = getSubjects().map(s =>
     `<option value="${esc(s.name)}">${esc(subjectLabel(s.name))}</option>`).join('');
-  _buildSoftDd('ddHwSubject', 'hwSubject');
+  // Dynamic member dropdowns
+  el('newChoreAssignee').innerHTML = getAllMemberNames().map(n =>
+    `<option value="${esc(n)}">${getEmoji(n)} ${esc(n)}</option>`).join('');
   renderEventPersonPicker();
 }
 
 function applyRoleUI() {
-  el('poolAddTrigger').style.display = isParent()?'':'none';
-  el('poolAddForm').style.display = 'none';
+  // Kids can add chores for themselves but can't pick assignee
+  el('newChoreAssignee').style.display = isParent()?'':'none';
+  el('poolAddForm').style.display      = isParent()?'':'none';
 }
 
 // ════════════════════════════════════════
 //  HEADER
 // ════════════════════════════════════════
 function renderHeader() {
-  const avatarBtn = el('headerAvatarBtn');
-  if (avatarBtn) avatarBtn.innerHTML = getAvatar(S.user, 28) || `<span style="font-size:18px">${getEmoji(S.user)||'👤'}</span>`;
-  const titleEl = el('headerTabTitle');
-  if (titleEl) titleEl.textContent = tabLabel(S.tab);
-}
-
-// ── Tab chip helpers ──────────────────────────
-function _allGroupAvatar() {
-  const svg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:100%;height:100%">
-    <circle cx="15" cy="8" r="3"/>
-    <path d="M22 20c0-3.3-3.1-6-7-6"/>
-    <circle cx="9" cy="8" r="3"/>
-    <path d="M2 20c0-3.3 3.1-6 7-6s7 2.7 7 6"/>
-  </svg>`;
-  return `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#a0aec0"><span style="width:72%;height:72%;display:flex">${svg}</span></span>`;
-}
-function _allMemberChipsHtml() {
-  if (!isParent()) return '';
+  const h = new Date().getHours();
+  const g = h<12?t('greetMorning'):h<17?t('greetAfternoon'):t('greetEvening');
+  el('headerGreeting').innerHTML = `${esc(g)}, ${esc(S.user)}! ${getEmoji(S.user)} <span class="header-role-badge">${currentUserRoleBadge()}</span>`;
+  el('headerDate').textContent = new Date().toLocaleDateString(t('locale'),{weekday:'long',year:'numeric',month:'long',day:'numeric'});
   const allNames = getAllMemberNames();
-  if (allNames.length < 2) return ''; // single chip rule
-  const members = [{name:'All'}, ...allNames.map(n=>({name:n}))];
-  return members.map(f => {
-    const isAll = f.name === 'All';
-    return `<div class="avatar-chip${isAll?' avatar-chip-all':''}${S.filter===f.name?' active':''}" onclick="setFilter('${esc(f.name)}')">
-      <div class="avatar-bubble">${isAll ? _allGroupAvatar() : getAvatar(f.name)}</div>
-      <div class="avatar-label">${isAll ? t('all') : esc(f.name)}</div>
-    </div>`;
-  }).join('');
-}
-
-function _kidChipsHtml() {
-  if (!isParent()) return '';
-  const kids = getKids();
-  if (kids.length < 2) return ''; // single chip rule
-  return kids.map(k => `
-    <div class="avatar-chip${S.filter===k?' active':''}" onclick="setFilter('${esc(k)}')">
-      <div class="avatar-bubble">${getAvatar(k)}</div>
-      <div class="avatar-label">${esc(k)}</div>
+  const members = isParent()
+    ? [{name:'All',emoji:'👨‍👩‍👧‍👧'}, ...allNames.map(n=>({name:n,emoji:getEmoji(n)}))]
+    : [{name:'All',emoji:'👨‍👩‍👧‍👧'}, {name:S.user,emoji:getEmoji(S.user)}];
+  el('avatarRow').innerHTML = members.map(f => `
+    <div class="avatar-chip ${S.filter===f.name?'active':''}" onclick="setFilter('${esc(f.name)}')">
+      <div class="avatar-bubble">${f.name==='All' ? '👨‍👩‍👧‍👧' : getAvatar(f.name)}</div>
+      <div class="avatar-label">${f.name==='All'?t('all'):f.name}</div>
     </div>`).join('');
-}
-
-function _hwKidChipsHtml(kids) {
-  return kids.map(k =>
-    `<div class="avatar-chip${S.child===k?' active':''}" onclick="switchChild('${esc(k)}')">
-      <div class="avatar-bubble">${getAvatar(k)}</div>
-      <div class="avatar-label">${esc(k)}</div>
-    </div>`
-  ).join('');
 }
 
 // ════════════════════════════════════════
@@ -4804,24 +3702,19 @@ function renderHomeUpcoming() {
   // Personal calendar events
   const personal = (S.events || [])
     .filter(e => isEventUpcoming(e.date))
-    .filter(e => isParent() || _calEventVisibleToKid(e, S.user))
     .map(e => ({ ...e, _src: 'personal' }));
 
   // Class/grade/school events from cache
   const classEvs = [];
-  const _seenHomeClassKeys = new Set();
   getKids().forEach(name => {
-    if (!isParent() && name !== S.user) return; // kids only see their own class
     const member = getMembers().find(m => m.name === name);
     if (!member?.school) return;
     const cid = classIdFor(member.school);
     if (!cid || !_commCache[cid]) return;
     const cache = _commCache[cid];
     [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])].forEach(ev => {
-      if (isEventUpcoming(ev.date) && matchesGenderFilter(ev, name)) {
-        const key = `${ev.id}_${name}`;
-        if (!_seenHomeClassKeys.has(key)) { _seenHomeClassKeys.add(key); classEvs.push({ ...ev, _src: 'class', _kid: name }); }
-      }
+      if (isEventUpcoming(ev.date) && matchesGenderFilter(ev, name))
+        classEvs.push({ ...ev, _src: 'class', _kid: name });
     });
   });
 
@@ -4830,7 +3723,7 @@ function renderHomeUpcoming() {
   const all = [...personal, ...classEvs]
     .filter(e => {
       if (!e.date) return false;
-      const key = `${e.title}_${e.date}_${e._kid || ''}`;
+      const key = (e.id || e.title) + '_' + e.date;
       if (seen.has(key)) return false;
       seen.add(key); return true;
     })
@@ -4844,108 +3737,15 @@ function renderHomeUpcoming() {
   card.style.display = '';
   container.innerHTML = all.map(ev => {
     const isClass = ev._src === 'class';
-    const kidArg = isClass && ev._kid ? esc(ev._kid).replace(/'/g,"\\'") : '';
-    return `<div class="home-event-row" onclick="navToCalendarDate('${ev.date}','${ev._src||''}','${kidArg}')">
-      <div class="home-event-icon">${eventTypeIcon(ev.type)}</div>
-      <div class="home-event-body">
-        <div class="home-event-title">${esc(ev.title)}${isClass ? scopeBadge(ev.scope) : ''}</div>
-        <div class="home-event-meta">${fmtDate(ev.date)}${ev.time ? ' · ' + ev.time : ''}${ev.location ? ' · ' + _ico.pin + ' ' + esc(ev.location) : ''}${isClass && ev._kid ? ' · ' + esc(ev._kid) : ''}</div>
+    return `<div class="task-row" style="gap:8px;padding:6px 0;align-items:flex-start">
+      <span style="font-size:18px;flex-shrink:0;line-height:1.4">${eventTypeIcon(ev.type)}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:#1a202c">${esc(ev.title)}${isClass ? scopeBadge(ev.scope) : ''}</div>
+        <div style="font-size:11px;color:#718096;font-weight:600;margin-top:2px">${fmtDate(ev.date)}${ev.time ? ' · ' + ev.time : ''}</div>
       </div>
-      <span class="home-chevron">›</span>
+      ${isClass && ev._kid ? `<span class="mini-avatar">${getAvatar(ev._kid)}</span>` : ''}
     </div>`;
   }).join('');
-}
-
-let _homeQuickPickId = null;
-let _quickAddConfirm = 0; // timestamp — renders ✓ while within 1.5s
-
-function renderHomeShopping() {
-  const sec = el('homeSection-shopping');
-  if (!sec) return;
-  const placeholder = t('locale') === 'he-IL' ? 'חפש מהמאגר...' : 'Search pool…';
-  sec.innerHTML = `<div class="card">
-    <div class="card-title">🛒 קניות מהירות</div>
-    <div class="home-quick-ac-outer">
-      <div class="home-quick-add-wrap">
-        <input class="home-quick-add-input" id="homeQuickAddInput" type="text"
-          placeholder="${placeholder}" autocomplete="off"
-          oninput="homeQuickAcInput(this)"
-          onblur="setTimeout(()=>{const d=el('homeQuickAcDrop');if(d)d.style.display='none'},160)"
-          onkeydown="homeQuickAcKey(event)">
-        ${Date.now() - _quickAddConfirm < 1500
-          ? `<button class="home-quick-add-btn" style="background:#38a169" onclick="homeQuickAddShop()"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:block"><polyline points="20 6 9 17 4 12"/></svg></button>`
-          : `<button class="home-quick-add-btn" onclick="homeQuickAddShop()"><svg viewBox="0 0 14 14" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" style="width:13px;height:13px;display:block"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg></button>`
-        }
-      </div>
-      <div class="home-quick-ac-drop" id="homeQuickAcDrop" style="display:none"></div>
-    </div>
-  </div>`;
-}
-
-function homeQuickAcInput(inp) {
-  _homeQuickPickId = null;
-  const q = inp.value.trim().toLowerCase();
-  const drop = el('homeQuickAcDrop');
-  if (!drop) return;
-  if (!q) { drop.style.display = 'none'; drop.innerHTML = ''; return; }
-  const matches = S.groceryPool.filter(p => p.name.toLowerCase().includes(q)).slice(0, 8);
-  if (!matches.length) { drop.style.display = 'none'; drop.innerHTML = ''; return; }
-  drop.innerHTML = matches.map(p => {
-    const inList = S.shoppingList.some(x => x.poolId === p.id);
-    const catLabel = p.category ? `<span class="home-quick-ac-cat">${esc(p.category)}</span>` : '';
-    const check = inList ? `<span class="home-ac-check">✓</span>` : '';
-    return `<div class="home-quick-ac-item${inList ? ' in-list' : ''}" onmousedown="homeQuickAcPick(${p.id})">
-      ${check}<span>${esc(p.name)}</span>${catLabel}
-    </div>`;
-  }).join('');
-  drop.style.display = 'block';
-}
-
-function homeQuickAcPick(poolId) {
-  const pool = S.groceryPool.find(p => p.id === poolId);
-  if (!pool) return;
-  _homeQuickPickId = poolId;
-  const inp = el('homeQuickAddInput');
-  if (inp) inp.value = pool.name;
-  const drop = el('homeQuickAcDrop');
-  if (drop) drop.style.display = 'none';
-  homeQuickAddShop();
-}
-
-function homeQuickAcKey(e) {
-  if (e.key === 'Enter') { homeQuickAddShop(); return; }
-  if (e.key === 'Escape') {
-    const drop = el('homeQuickAcDrop');
-    if (drop) drop.style.display = 'none';
-  }
-}
-
-function homeQuickAddShop() {
-  const input = el('homeQuickAddInput');
-  if (!input) return;
-  const name = input.value.trim();
-  if (!name) { input.focus(); return; }
-  let pool = _homeQuickPickId ? S.groceryPool.find(p => p.id === _homeQuickPickId) : null;
-  if (!pool) pool = S.groceryPool.find(p => p.name.toLowerCase() === name.toLowerCase());
-  if (!pool) {
-    // Auto-create pool item under כללי with qty 1
-    const newItem = { id: Date.now(), name, category: 'כללי', qtyType: 'count' };
-    S.groceryPool.push(newItem);
-    pool = newItem;
-  }
-  if (!S.shoppingList.some(x => x.poolId === pool.id)) {
-    const qty = pool.lastQty || 1;
-    S.shoppingList.push({ id: Date.now(), poolId: pool.id, name: pool.name, category: pool.category, qty, qtyType: pool.qtyType || 'count', requestedQty: qty });
-    saveGrocery();
-    renderPool();
-    renderShoppingList();
-  }
-  input.value = '';
-  _homeQuickPickId = null;
-  _quickAddConfirm = Date.now();
-  renderHomeShopping();
-  setTimeout(() => { _quickAddConfirm = 0; renderHomeShopping(); el('homeQuickAddInput')?.focus(); }, 1500);
-  input.focus();
 }
 
 // ════════════════════════════════════════
@@ -5064,21 +3864,25 @@ function _showWeatherLoading() {
   </div>`;
 }
 
-const _wxEmoji = { sunny:'☀️', night:'🌙', partly:'⛅', cloudy:'☁️', foggy:'🌫️', drizzle:'🌦️', rainy:'🌧️', snowy:'❄️', stormy:'⛈️' };
 function renderWeatherWidget() {
-  if (!_weatherCache) return;
-  const {temp, code, isDay} = _weatherCache;
-  const {type} = _wxInfo(code, isDay);
-  const emoji = _wxEmoji[type] || '🌡️';
-  const hw = el('headerWeather');
-  const sep = el('headerWeatherSep');
-  if (hw) hw.innerHTML = `<span class="header-weather-inline">${emoji} ${temp}°</span>`;
-  if (sep) sep.style.display = '';
+  const wx = el('weatherWidget');
+  if (!wx || !_weatherCache) return;
+  const {temp, code, isDay, city} = _weatherCache;
+  const {type, desc} = _wxInfo(code, isDay);
+  const allHidden = HOME_SECTIONS.every(s => getHomePrefs().hidden.includes(s.id));
+  const heroClass = allHidden ? ' hero' : '';
+  const cityHtml = city ? `<div class="wx-city">${esc(city)}</div>` : '';
+  wx.innerHTML = `<div class="wx-card wx-${type}${heroClass}">
+    <div class="wx-scene">${_wxSceneHTML(type)}</div>
+    <div class="wx-info">
+      <div class="wx-temp">${temp}°</div>
+      <div class="wx-desc">${desc}</div>
+      ${cityHtml}
+    </div>
+  </div>`;
 }
 
 function renderHome() {
-  const homeChipsEl = el('homeChips');
-  if (homeChipsEl) homeChipsEl.innerHTML = _allMemberChipsHtml();
   const bannerEl = el('welcomeBanner');
   if (isKid()) {
     const col = getKidGradient(S.user);
@@ -5087,15 +3891,7 @@ function renderHome() {
       <div class="wb-emoji">${getAvatar(S.user, 48)}</div>
       <div class="wb-name">${t('wbHi',S.user)}</div>
       <div class="wb-sub">${t('wbStars',n)}</div></div>`;
-  } else {
-    const h = new Date().getHours();
-    const g = h<12?t('greetMorning'):h<17?t('greetAfternoon'):t('greetEvening');
-    const dateStr = new Date().toLocaleDateString(t('locale'),{weekday:'long',month:'long',day:'numeric'});
-    bannerEl.innerHTML = `<div class="home-greeting-card">
-      <div class="hgc-line1">${esc(g)}, <strong>${esc(S.user)}</strong>! <span style="display:inline-flex;vertical-align:middle;margin:0 2px">${getAvatar(S.user, 20)}</span>&nbsp;<span class="header-role-badge">${currentUserRoleBadge()}</span></div>
-      <div class="hgc-line2"><span>${dateStr}</span><span class="header-date-sep" id="headerWeatherSep" style="display:none">·</span><span id="headerWeather"></span></div>
-    </div>`;
-  }
+  } else { bannerEl.innerHTML = ''; }
 
   renderWeatherWidget();
 
@@ -5105,17 +3901,12 @@ function renderHome() {
   el('homeTasks').innerHTML = tasks.length
     ? tasks.slice(0,8).map(c => {
         const can = isParent()||c.assignee===S.user;
-        const showSub = isParent() && c.assignee && c.assignee !== 'All';
-        return `<div class="task-row home-task-row">
+        return `<div class="task-row">
           <div class="check-box ${c.done?'done':''} ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
-            ${c.done?`<svg viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6 5,9 10,3"/></svg>`:''}
-          </div>
-          <div class="task-body">
-            <div class="task-text ${c.done?'done':''}">${esc(c.text)}</div>
-            ${showSub?`<div class="task-sub">${esc(c.assignee)}</div>`:''}
-          </div>
-          <div class="home-type-icon home-type-chore">🧹</div>
-        </div>`;
+            ${c.done?'✓':''}</div>
+          <div class="task-text ${c.done?'done':''}">${esc(c.text)}</div>
+          ${isParent()?`<div class="mini-avatar">${getAvatar(c.assignee)}</div>`:''}
+          <span class="pri pri-${c.priority}">${t(c.priority)}</span></div>`;
       }).join('')
     : t('allDone');
 
@@ -5133,18 +3924,14 @@ function renderHome() {
     return a.due.localeCompare(b.due);
   });
   el('hwSummary').innerHTML = hw.length
-    ? hw.map(h => `<div class="task-row home-task-row">
-        <div class="check-box readonly"></div>
-        <div class="task-body">
-          <div class="task-text">${esc(h.desc)}</div>
-          <div class="task-sub">${(()=>{const parts=[];if(isParent())parts.push(esc(h.child));if(h.subject)parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);if(h.due)parts.push(fmtDate(h.due));return parts.join(' · ');})()}</div>
-        </div>
-        <div class="home-type-icon home-type-hw">📚</div>
-      </div>`).join('')
+    ? hw.map(h => `<div class="task-row">
+        ${isParent()?`<div class="mini-avatar">${getAvatar(h.child)}</div>`:''}
+        <div class="task-text">${esc(h.desc)}</div>
+        ${h.due?`<span style="font-size:11px;color:#a0aec0;font-weight:600;white-space:nowrap">${fmtDate(h.due)}</span>`:''}
+        <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span></div>`).join('')
     : t('noPendingHw');
 
   renderHomeUpcoming();
-  renderHomeShopping();
   applyHomePrefs();
 }
 
@@ -5175,56 +3962,37 @@ function setStar(kid,val){
 // ── Chore history state ───────────────────
 let _choreHistOpen   = false;
 let _choreHistSearch = '';
-let _pendingDelete = null;
-let _snackTimer = null;
-let _chore3dotActiveId = null;
 
 function renderChores() {
-  const choresChipsEl = el('choresChips');
-  if (choresChipsEl) choresChipsEl.innerHTML = _allMemberChipsHtml();
-  const fabWrap = el('choreFabWrap');
-  // Reset assignee state when filter changes
-  if (S.filter !== 'All') { _choreFabAssignee = null; }
-  _updateChoreFormAssignee();
+  // Show assignee dropdown only when no specific member is focused
+  if (isParent()) {
+    const assigneeEl = el('newChoreAssignee');
+    if (assigneeEl) assigneeEl.style.display = S.filter === 'All' ? '' : 'none';
+  }
+  // Update add-chore title to reflect focused member
+  const choreTitleEl = el('addChoreTitle');
+  if (choreTitleEl) {
+    choreTitleEl.textContent = S.filter === 'All'
+      ? t('addChoreTitle')
+      : `➕ הוסף משימה ל${S.filter}`;
+  }
   let items = S.filter==='All' ? S.chores : S.chores.filter(c=>c.assignee===S.filter);
-  const active = items.filter(c=>!c.done).sort((a,b) => _choreSortScore(a) - _choreSortScore(b));
-  if (fabWrap) fabWrap.style.display = (S.tab === 'chores' && isParent() && (S.filter === 'All' || active.length > 0)) ? '' : 'none';
+  const active = items.filter(c=>!c.done);
   const showAssignee = S.filter==='All';
   const inner = active.length ? active.map(c=>{
     const can = isParent()||c.assignee===S.user;
-    const priDotCls = c.priority==='high' ? 'chore-dot-high' : c.priority==='medium' ? 'chore-dot-med' : 'chore-dot-low';
-    const priLabel = t(c.priority);
-    const whenMeta  = _choreDueLabel(c.due) || _choreWhen(c.id);
-    const dueClass  = c.due && c.due < today ? ' chore-meta-overdue' : '';
-    const threeDotSVG = `<svg viewBox="0 0 16 16" fill="currentColor" style="width:14px;height:14px;display:block"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>`;
-    return `<div class="chore-card" data-chore-id="${c.id}">
-      ${isParent()?`<div class="chore-reveal-zone">
-        <button class="chore-action-btn chore-action-delete" onclick="deleteChore(${c.id})">${_ico.trash}</button>
-        <div class="chore-action-sep"></div>
-        <button class="chore-action-btn chore-action-edit" onclick="startEditChore(${c.id})">${_ico.edit}</button>
-      </div>`:''}
-      <div class="chore-slide">
-        <div class="check-box chore-check ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
-          <svg viewBox="0 0 12 12"><polyline points="2,6 5,9 10,3" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    return `<div class="hw-item" data-chore-id="${c.id}">
+      <div class="hw-head">
+        <div class="check-box ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
         </div>
-        <div class="chore-body" id="choreBody_${c.id}">
-          <div class="chore-text" onclick="this.classList.toggle('expanded');event.stopPropagation()">${esc(c.text)}</div>
-          <div class="chore-meta-row">
-            <span class="chore-meta${dueClass}">${whenMeta}</span><span class="chore-meta-sep">•</span><span class="chore-dot ${priDotCls}"></span><span class="chore-pri-label">${priLabel}</span>
-          </div>
-        </div>
-        ${showAssignee && c.assignee ? `<div class="chore-assignee-av" title="${esc(c.assignee)}">${getAvatar(c.assignee, 30)}</div>` : ''}
-        ${isParent()?`<div class="chore-3dot" id="chore3dot_${c.id}">
-          <button class="chore-3dot-btn" onclick="_chore3dotToggle(${c.id});event.stopPropagation()">${threeDotSVG}</button>
-        </div>`:''}
+        ${showAssignee?`<span style="font-size:18px;flex-shrink:0;line-height:1">${getAvatar(c.assignee,20)}</span>`:''}
+        <div class="hw-desc-text" style="flex:1">${esc(c.text)}</div>
+        <span class="pri pri-${c.priority}">${t(c.priority)}</span>
+        ${isParent()?`<button class="del-btn" onclick="deleteChore(${c.id})">×</button>`:''}
       </div>
     </div>`;
-  }).join('') : `<div class="chore-empty-cta" onclick="el('newChoreText').focus()">
-    <div class="chore-empty-title">${S.filter==='All' ? 'אין משימות' : `אין משימות ל${S.filter}`} 🎉</div>
-    <div class="chore-empty-sub">${t('noChores')}</div>
-  </div>`;
-  el('choresContent').innerHTML = `<div class="chore-list">${inner}</div>`;
-  _initChoreSwipes();
+  }).join('') : `<div class="empty">${t('noChores')}</div>`;
+  el('choresContent').innerHTML = `<div class="card">${inner}</div>`;
   renderChoreHistory(S.filter);
 }
 
@@ -5241,9 +4009,9 @@ function renderChoreHistory(filter) {
   ) : allDone;
   wrap.innerHTML=`<div class="card" style="margin-top:0">
     <div class="hw-hist-hdr" onclick="toggleChoreHistory()">
-      <span style="color:#a0aec0;font-size:12px;margin-inline-end:6px">${_choreHistOpen?'▲':'▼'}</span>
       <span class="hw-hist-title">${t('choreHistory')}</span>
       <span class="hw-hist-count">${allDone.length}</span>
+      <span style="color:#a0aec0;font-size:12px;margin-inline-start:4px">${_choreHistOpen?'▲':'▼'}</span>
     </div>
     ${_choreHistOpen?`
       <input class="hw-hist-search" placeholder="${t('choreHistorySearch')}"
@@ -5259,8 +4027,8 @@ function choreHistListHTML(filtered, filter) {
       ${filter==='All'?`<span style="font-size:16px;flex-shrink:0">${getAvatar(c.assignee,16)}</span>`:''}
       <div class="hw-hist-desc" style="flex:1">${esc(c.text)}</div>
       <span class="hw-hist-ts">${fmtDoneAt(c.doneAt)}</span>
-      ${isParent()?`<button class="del-btn" title="בטל סימון" onclick="toggleChore(${c.id})">${_ico.undo}</button>`:''}
-      ${isParent()?`<button class="del-btn" onclick="deleteChore(${c.id})">${_ico.x}</button>`:''}</div>`
+      ${isParent()?`<button class="del-btn" style="opacity:0.5;font-size:14px" title="בטל סימון" onclick="toggleChore(${c.id})">↩</button>`:''}
+      ${isParent()?`<button class="del-btn" onclick="deleteChore(${c.id})">×</button>`:''}</div>`
   ).join('') : `<div class="empty" style="padding:8px 0">${t('choreHistoryEmpty')}</div>`;
 }
 
@@ -5322,404 +4090,31 @@ function toggleChore(id) {
   save(); renderChores(); renderHome();
 }
 
-function deleteChore(id) {
-  if (!isParent()) return;
-  const idx = S.chores.findIndex(x => x.id === id);
-  if (idx === -1) return;
-  const chore = S.chores.splice(idx, 1)[0];
-  if (_pendingDelete) { clearTimeout(_pendingDelete.timer); save(); }
-  _pendingDelete = { id, chore,
-    timer: setTimeout(() => { _pendingDelete = null; save(); renderHome(); }, 3000)
-  };
-  renderChores(); renderHome();
-  _showSnackbar('המשימה נמחקה', () => {
-    if (_pendingDelete && _pendingDelete.id === id) {
-      clearTimeout(_pendingDelete.timer);
-      S.chores.push(_pendingDelete.chore);
-      _pendingDelete = null;
-      save(); renderChores(); renderHome();
-    }
-  });
-}
-
-// ── Custom Modal ──────────────────────────────
-let _cmodalResolve = null;
-function _cmodalEl() {
-  let ov = document.getElementById('_cmodalOverlay');
-  if (!ov) {
-    ov = document.createElement('div');
-    ov.id = '_cmodalOverlay';
-    ov.className = 'cmodal-overlay';
-    ov.addEventListener('click', () => _cmodalClose(false));
-    document.body.appendChild(ov);
-    document.addEventListener('keydown', e => { if (e.key === 'Escape' && _cmodalResolve) _cmodalClose(false); });
-  }
-  return ov;
-}
-function _cmodalClose(val) {
-  const ov = document.getElementById('_cmodalOverlay');
-  if (!ov) return;
-  ov.classList.remove('cmodal-visible');
-  if (_cmodalResolve) { _cmodalResolve(val); _cmodalResolve = null; }
-}
-function _confirm(msg, opts = {}) {
-  const ov = _cmodalEl();
-  const dangerCls = opts.danger ? ' cmodal-danger' : '';
-  const cancelLbl = opts.cancelLabel || 'ביטול';
-  const okLbl     = opts.okLabel    || 'אישור';
-  ov.innerHTML = `<div class="cmodal-box" onclick="event.stopPropagation()">
-    <div class="cmodal-msg">${msg}</div>
-    <div class="cmodal-btns">
-      <button class="cmodal-btn cmodal-ok${dangerCls}" onclick="_cmodalClose(true)">${okLbl}</button>
-      <button class="cmodal-btn cmodal-cancel" onclick="_cmodalClose(false)">${cancelLbl}</button>
-    </div>
-  </div>`;
-  requestAnimationFrame(() => ov.classList.add('cmodal-visible'));
-  return new Promise(res => { _cmodalResolve = res; });
-}
-function _alert(msg, opts = {}) {
-  const ov = _cmodalEl();
-  const okLbl = opts.okLabel || 'סגור';
-  ov.innerHTML = `<div class="cmodal-box" onclick="event.stopPropagation()" style="max-width:320px">
-    <div class="cmodal-msg">${msg}</div>
-    <div class="cmodal-btns" style="justify-content:center">
-      <button class="cmodal-btn cmodal-ok" style="flex:0 0 auto;min-width:110px" onclick="_cmodalClose(true)">${okLbl}</button>
-    </div>
-  </div>`;
-  requestAnimationFrame(() => ov.classList.add('cmodal-visible'));
-  return new Promise(res => { _cmodalResolve = res; });
-}
-
-function _showSnackbar(msg, undoFn) {
-  let snack = el('appSnackbar');
-  if (!snack) {
-    snack = document.createElement('div');
-    snack.id = 'appSnackbar';
-    snack.className = 'snackbar';
-    document.body.appendChild(snack);
-  }
-  snack.innerHTML = `<span class="snack-msg">${esc(msg)}</span>${undoFn ? '<button class="snack-undo" onclick="_snackUndo()">בטל</button>' : ''}`;
-  snack._undoFn = undoFn;
-  snack.classList.add('show');
-  if (_snackTimer) clearTimeout(_snackTimer);
-  _snackTimer = setTimeout(_hideSnackbar, 3000);
-}
-function _snackUndo() {
-  const snack = el('appSnackbar');
-  if (snack && snack._undoFn) snack._undoFn();
-  _hideSnackbar();
-}
-function _hideSnackbar() {
-  const snack = el('appSnackbar');
-  if (snack) snack.classList.remove('show');
-  if (_snackTimer) { clearTimeout(_snackTimer); _snackTimer = null; }
-}
-function _chore3dotToggle(id) {
-  if (_chore3dotActiveId === id) { _chore3dotClose(); return; }
-  _chore3dotClose();
-  const cont = el('chore3dot_' + id);
-  if (!cont) return;
-  let panel = el('_choreGlobalMenu');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = '_choreGlobalMenu';
-    document.body.appendChild(panel);
-  }
-  Object.assign(panel.style, {
-    position:'fixed', zIndex:'9999', background:'#fff',
-    borderRadius:'14px', boxShadow:'0 8px 24px rgba(0,0,0,0.08)',
-    border:'1px solid #e5e7eb', padding:'6px',
-    display:'flex', flexDirection:'column', gap:'2px',
-    minWidth:'110px', opacity:'0', pointerEvents:'none',
-    transition:'opacity 160ms ease, transform 160ms ease',
-    transform:'translateY(-6px) scale(0.96)', transformOrigin:'top left',
-  });
-  const btn = (emoji, text, danger, cb) => {
-    const b = document.createElement('button');
-    b.style.cssText = `display:flex;align-items:center;gap:8px;white-space:nowrap;padding:6px 10px;min-height:36px;border-radius:8px;border:none;background:transparent;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;color:${danger?'#DC2626':'#111827'};width:100%;`;
-    b.innerHTML = `<span style="width:20px;text-align:center;flex-shrink:0">${emoji}</span><span>${text}</span>`;
-    b.onmouseenter = () => b.style.background = danger ? 'rgba(220,38,38,0.05)' : '#f9fafb';
-    b.onmouseleave = () => b.style.background = 'transparent';
-    b.onclick = cb;
-    return b;
-  };
-  panel.innerHTML = '';
-  panel.appendChild(btn('✏️', 'ערוך', false, () => { _chore3dotClose(); startEditChore(id); }));
-  panel.appendChild(btn('🗑', 'מחק',  true,  () => { _chore3dotClose(); deleteChore(id); }));
-  const rect = cont.querySelector('.chore-3dot-btn').getBoundingClientRect();
-  panel.style.top   = (rect.bottom + 6) + 'px';
-  panel.style.left  = rect.left + 'px';
-  panel.style.right = 'auto';
-  panel.style.opacity = '1';
-  panel.style.pointerEvents = 'auto';
-  panel.style.transform = 'translateY(0) scale(1)';
-  _chore3dotActiveId = id;
-  setTimeout(() => {
-    document.addEventListener('click', function _h(e) {
-      if (!panel.contains(e.target) && !cont.contains(e.target)) { _chore3dotClose(); document.removeEventListener('click', _h); }
-    });
-  }, 0);
-}
-function _chore3dotClose() {
-  const p = el('_choreGlobalMenu');
-  if (p) { p.style.opacity = '0'; p.style.pointerEvents = 'none'; p.style.transform = 'translateY(-6px) scale(0.96)'; }
-  _chore3dotActiveId = null;
-}
-
-let _pool3dotActiveId = null;
-function _pool3dotToggle(id) {
-  if (_pool3dotActiveId === id) { _pool3dotClose(); return; }
-  _pool3dotClose();
-  const cont = el('pool3dot_' + id);
-  if (!cont) return;
-  let panel = el('_poolGlobalMenu');
-  if (!panel) {
-    panel = document.createElement('div');
-    panel.id = '_poolGlobalMenu';
-    document.body.appendChild(panel);
-  }
-  Object.assign(panel.style, {
-    position:'fixed', zIndex:'9999', background:'#fff',
-    borderRadius:'14px', boxShadow:'0 8px 24px rgba(0,0,0,0.08)',
-    border:'1px solid #e5e7eb', padding:'6px',
-    display:'flex', flexDirection:'column', gap:'2px',
-    minWidth:'110px', opacity:'0', pointerEvents:'none',
-    transition:'opacity 160ms ease, transform 160ms ease',
-    transform:'translateY(-6px) scale(0.96)', transformOrigin:'top left',
-  });
-  const btn = (emoji, text, danger, cb) => {
-    const b = document.createElement('button');
-    b.style.cssText = `display:flex;align-items:center;gap:8px;white-space:nowrap;padding:6px 10px;min-height:36px;border-radius:8px;border:none;background:transparent;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;color:${danger?'#DC2626':'#111827'};width:auto;`;
-    b.innerHTML = `<span style="width:20px;text-align:center;flex-shrink:0">${emoji}</span><span>${text}</span>`;
-    b.onmouseenter = () => b.style.background = danger ? 'rgba(220,38,38,0.05)' : '#f9fafb';
-    b.onmouseleave = () => b.style.background = 'transparent';
-    b.onclick = cb;
-    return b;
-  };
-  panel.innerHTML = '';
-  panel.appendChild(btn('✏️', 'ערוך', false, () => { _pool3dotClose(); startEditPoolItem(id); }));
-  panel.appendChild(btn('🗑', 'מחק',  true,  () => { _pool3dotClose(); deletePoolItem(id); }));
-  const rect = cont.querySelector('.chore-3dot-btn').getBoundingClientRect();
-  panel.style.top  = (rect.bottom + 6) + 'px';
-  panel.style.left = rect.left + 'px';
-  panel.style.opacity = '1';
-  panel.style.pointerEvents = 'auto';
-  panel.style.transform = 'translateY(0) scale(1)';
-  _pool3dotActiveId = id;
-  setTimeout(() => {
-    document.addEventListener('click', function _h(e) {
-      if (!panel.contains(e.target) && !cont.contains(e.target)) { _pool3dotClose(); document.removeEventListener('click', _h); }
-    });
-  }, 0);
-}
-function _pool3dotClose() {
-  const p = el('_poolGlobalMenu');
-  if (p) { p.style.opacity = '0'; p.style.pointerEvents = 'none'; p.style.transform = 'translateY(-6px) scale(0.96)'; }
-  _pool3dotActiveId = null;
-}
-function _initPoolSwipes() {
-  if (!isParent()) return;
-  const REVEAL = 90;
-  document.querySelectorAll('.pool-item[data-pool-id]').forEach(row => {
-    const slide = row.querySelector('.pool-slide');
-    if (!slide) return;
-    let startX = 0, startY = 0, curX = 0, active = false, locked = false, isOpen = false;
-    slide.addEventListener('touchstart', e => {
-      startX = e.touches[0].clientX; startY = e.touches[0].clientY;
-      active = true; locked = false; slide.style.transition = 'none';
-    }, { passive: true });
-    slide.addEventListener('touchmove', e => {
-      if (!active) return;
-      const dx = e.touches[0].clientX - startX;
-      const dy = e.touches[0].clientY - startY;
-      if (!locked) {
-        if (Math.abs(dy) > Math.abs(dx)) { active = false; return; } // vertical scroll wins
-        locked = true;
-      }
-      const raw = isOpen ? dx + REVEAL : dx;
-      curX = Math.max(0, Math.min(REVEAL, raw));
-      slide.style.transform = `translateX(${curX}px)`;
-    }, { passive: true });
-    slide.addEventListener('touchend', () => {
-      active = false; slide.style.transition = 'transform 0.22s ease';
-      if (!isOpen && curX > REVEAL / 2) { slide.style.transform = `translateX(${REVEAL}px)`; isOpen = true; }
-      else if (isOpen && curX < REVEAL / 2) { slide.style.transform = 'translateX(0)'; isOpen = false; }
-      else { slide.style.transform = isOpen ? `translateX(${REVEAL}px)` : 'translateX(0)'; }
-      curX = 0;
-    });
-    slide.addEventListener('click', () => {
-      if (isOpen) { slide.style.transition = 'transform 0.22s ease'; slide.style.transform = 'translateX(0)'; isOpen = false; }
-    });
-  });
-}
-
-function startEditChore(id) {
-  // Snap slide back instantly (may be open from swipe reveal)
-  const slide = document.querySelector(`[data-chore-id="${id}"] .chore-slide`);
-  if (slide) { slide.style.transition = 'none'; slide.style.transform = 'translateX(0)'; }
-
-  const body = document.querySelector(`[data-chore-id="${id}"] .chore-body`);
-  const card = document.querySelector(`[data-chore-id="${id}"]`);
-  if (!body || !card) return;
-  const chore = S.chores.find(x => x.id === id);
-  if (!chore) return;
-  card.classList.add('editing');
-  body.innerHTML = `<input class="chore-edit-input" id="choreEditInput_${id}" value="${esc(chore.text)}" onkeydown="if(event.key==='Enter')saveEditChore(${id});if(event.key==='Escape')cancelEditChore(${id})"><div class="chore-edit-date-row"><label class="chore-edit-date-label">📅 תאריך יעד:</label><input type="date" class="chore-qa-date chore-edit-date" id="choreEditDate_${id}" value="${chore.due||''}"><button class="chore-edit-date-clear" onclick="el('choreEditDate_${id}').value=''" title="נקה תאריך">✕</button></div><div class="chore-edit-actions"><button class="chore-edit-save" onclick="saveEditChore(${id});event.stopPropagation()">שמור</button><button class="chore-edit-cancel" onclick="cancelEditChore(${id});event.stopPropagation()">ביטול</button></div>`;
-  const inp = el('choreEditInput_' + id);
-  if (inp) { inp.focus(); inp.select(); }
-}
-function saveEditChore(id) {
-  const inp = el('choreEditInput_' + id);
-  if (!inp) return;
-  const text = inp.value.trim();
-  if (!text) return;
-  const dateInp = el('choreEditDate_' + id);
-  const chore = S.chores.find(x => x.id === id);
-  if (chore) {
-    chore.text = text;
-    chore.due = dateInp ? (dateInp.value || null) : chore.due;
-  }
-  save(); renderChores(); renderHome();
-}
-function cancelEditChore(id) { renderChores(); }
-function _initChoreSwipes() {
-  if (!isParent()) return;
-  const REVEAL = 110;
-  document.querySelectorAll('.chore-card[data-chore-id]').forEach(row => {
-    const slide = row.querySelector('.chore-slide');
-    if (!slide) return;
-    let startX = 0, startY = 0, curX = 0, active = false, locked = false, isOpen = false;
-    slide.addEventListener('touchstart', e => {
-      startX = e.touches[0].clientX; startY = e.touches[0].clientY;
-      active = true; locked = false; slide.style.transition = 'none';
-    }, { passive: true });
-    slide.addEventListener('touchmove', e => {
-      if (!active) return;
-      const dx = e.touches[0].clientX - startX;
-      const dy = e.touches[0].clientY - startY;
-      if (!locked) {
-        if (Math.abs(dy) > Math.abs(dx)) { active = false; return; } // vertical scroll wins
-        locked = true;
-      }
-      curX = Math.max(0, Math.min(REVEAL, isOpen ? dx + REVEAL : dx));
-      slide.style.transform = `translateX(${curX}px)`;
-    }, { passive: true });
-    slide.addEventListener('touchend', () => {
-      active = false; slide.style.transition = 'transform 0.22s ease';
-      if (!isOpen && curX > REVEAL / 2) { slide.style.transform = `translateX(${REVEAL}px)`; isOpen = true; }
-      else if (isOpen && curX < REVEAL / 2) { slide.style.transform = 'translateX(0)'; isOpen = false; }
-      else { slide.style.transform = isOpen ? `translateX(${REVEAL}px)` : 'translateX(0)'; }
-      curX = 0;
-    });
-    slide.addEventListener('click', () => {
-      if (isOpen) { slide.style.transition = 'transform 0.22s ease'; slide.style.transform = 'translateX(0)'; isOpen = false; }
-    });
-  });
-}
-let _choreFabAssignee = null;
-
-function _updateChoreFormAssignee() {
-  const lbl = el('choreAssigneeLabel');
-  const inp = el('newChoreText');
-  const name = S.filter !== 'All' ? S.filter : _choreFabAssignee;
-  if (lbl) {
-    if (name && isParent()) {
-      lbl.style.display = '';
-      lbl.innerHTML = `<span class="chore-qa-av">${getAvatar(name, 18)}</span>${esc(name)}`;
-    } else {
-      lbl.style.display = 'none';
-    }
-  }
-  if (inp) inp.placeholder = name ? `הוסף משימה ל${name}...` : t('chorePlaceholder');
-}
-
-function choreFabClick() {
-  if (!isParent() || S.filter !== 'All') {
-    _choreOpenForm();
-    return;
-  }
-  // All view — show member picker
-  const picker = el('choreFabPicker');
-  if (!picker) return;
-  if (picker.classList.contains('open')) { _choreHidePicker(); return; }
-  picker.innerHTML = getAllMemberNames().map(name =>
-    `<button class="comm-fab-pick-item" onclick="_choreFabPick('${esc(name)}')">
-      <span class="comm-fab-pick-avatar">${getAvatar(name)}</span>
-      <span>${esc(name)}</span>
-    </button>`
-  ).join('');
-  picker.classList.add('open');
-  el('choreFab')?.classList.add('chore-fab-open');
-  setTimeout(() => {
-    document.addEventListener('click', function _h(e) {
-      if (!el('choreFabWrap')?.contains(e.target)) { _choreHidePicker(); document.removeEventListener('click', _h); }
-    });
-  }, 0);
-}
-
-function _choreFabPick(name) {
-  _choreFabAssignee = name;
-  _choreHidePicker();
-  _updateChoreFormAssignee();
-  _choreOpenForm();
-}
-
-function _choreHidePicker() {
-  el('choreFabPicker')?.classList.remove('open');
-  el('choreFab')?.classList.remove('chore-fab-open');
-}
-
-function _choreOpenForm() {
-  const card = el('addChoreCard');
-  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  setTimeout(() => el('newChoreText')?.focus(), 300);
-}
-
-function _choreInputGrow(ta) {
-  ta.style.height = 'auto';
-  const lineH = parseFloat(getComputedStyle(ta).lineHeight) || 21;
-  const padV  = parseFloat(getComputedStyle(ta).paddingTop) + parseFloat(getComputedStyle(ta).paddingBottom);
-  const maxH  = lineH * 2 + padV;
-  ta.style.overflowY = ta.scrollHeight > maxH ? 'auto' : 'hidden';
-  ta.style.height = Math.min(ta.scrollHeight, maxH) + 'px';
-}
-
-function addChore(){
-  const text = el('newChoreText').value.trim();
-  if (!text) return;
-  const assignee = isParent()
-    ? (S.filter !== 'All' ? S.filter : (_choreFabAssignee || getAllMemberNames()[0]))
-    : S.user;
-  const due = el('newChoreDate')?.value || '';
-  const chore = {id:Date.now(),text,assignee,priority:el('newChorePriority').value,done:false};
-  if (due) chore.due = due;
-  S.chores.push(chore);
-  const ta = el('newChoreText');
-  ta.value='';
-  ta.style.height='';
-  ta.style.overflowY='hidden';
-  const dateEl = el('newChoreDate');
-  if (dateEl) dateEl.value='';
-  _priSegPick('medium');
-  _choreFabAssignee = null;
-  _updateChoreFormAssignee();
+function deleteChore(id){
+  if(!isParent())return;
+  S.chores=S.chores.filter(x=>x.id!==id);
   save(); renderHome(); renderChores();
+}
+function addChore(){
+  const text=el('newChoreText').value.trim();if(!text)return;
+  const assignee=isParent()
+    ?(S.filter!=='All'?S.filter:el('newChoreAssignee').value)
+    :S.user;
+  S.chores.push({id:Date.now(),text,assignee,priority:el('newChorePriority').value,done:false});
+  el('newChoreText').value='';save();renderHome();renderChores();
 }
 
 // ════════════════════════════════════════
 //  SUPERMARKET
 // ════════════════════════════════════════
 let _grocerySection = 'pool';
-let _poolQtyActiveId = null;  // poolId whose inline qty control is visible (mobile)
+let _poolQtyFor = null;      // poolId currently showing qty input
 let _poolEditFor = null;     // poolId currently being edited
 let _poolEditQtyType = 'count'; // unit type in active edit row
 let _poolNewQtyType = 'count';  // unit for next new pool item: 'count' | 'kg'
-let _poolLastCat = null;        // last category chosen when adding a pool item
 const _collapsedPoolCats     = new Set();
 const _collapsedShoppingCats = new Set();
 let _poolSearch = '';
-let _poolCatFilter = new Set();
-let _poolChipsOpen = false;
 let _historySearch = '';
 const _expandedHistoryDates = new Set();
 
@@ -5740,39 +4135,12 @@ function onPoolSearch(val) {
   renderPool();
 }
 
-function pickPoolCat(name) {
-  if (!name) { _poolCatFilter.clear(); }
-  else if (_poolCatFilter.has(name)) { _poolCatFilter.delete(name); }
-  else { _poolCatFilter.add(name); }
-  renderPool();
-}
-function togglePoolChips() {
-  _poolChipsOpen = !_poolChipsOpen;
-  renderPool();
-}
-
 function toggleCatCollapse(el) {
   const sec = el.dataset.section;
   const cat = el.dataset.cat;
   const set = sec === 'pool' ? _collapsedPoolCats : _collapsedShoppingCats;
   if (set.has(cat)) set.delete(cat); else set.add(cat);
   if (sec === 'pool') renderPool(); else renderShoppingList();
-}
-
-function togglePoolAddForm(forceOpen) {
-  const form = el('poolAddForm');
-  const wrap = el('poolAddWrap');
-  if (!form) return;
-  const open = forceOpen !== undefined ? forceOpen : form.style.display === 'none';
-  form.style.display = open ? '' : 'none';
-  if (wrap) wrap.classList.toggle('active', open);
-  if (open) {
-    if (_poolLastCat) {
-      const sel = el('poolCatSelect');
-      if (sel) { sel.value = _poolLastCat; _buildSoftDd('ddPoolCat', 'poolCatSelect'); }
-    }
-    setTimeout(() => el('poolItemInput')?.focus(), 30);
-  }
 }
 
 function togglePoolNewQtyType() {
@@ -5835,42 +4203,18 @@ async function saveShoppingHistoryTtl(days) {
   pruneShoppingHistory();
 }
 
-function _scrollY() {
-  return window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
-}
-function _scrollToTop() {
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-  document.documentElement.scrollTo({ top: 0, behavior: 'smooth' });
-  document.body.scrollTo({ top: 0, behavior: 'smooth' });
-}
-function _updateScrollTopBtn() {
-  const btn = el('scrollTopBtn');
-  if (!btn) return;
-  const show = _scrollY() > 80 && (S.tab === 'chores' || (_grocerySection === 'pool' && S.tab === 'grocery'));
-  btn.classList.toggle('visible', show);
-}
-window.addEventListener('scroll', _updateScrollTopBtn, { passive: true });
-document.addEventListener('scroll', _updateScrollTopBtn, { passive: true });
-
 function switchGrocerySection(sec) {
-  if (!isParent() && sec !== 'shopping') sec = 'shopping';
   _grocerySection = sec;
   ['pool','shopping','history'].forEach(s => {
     el(`grocerySec-${s}`).style.display = s === sec ? '' : 'none';
     el(`gtab-${s}`)?.classList.toggle('active', s === sec);
   });
-  if (sec !== 'shopping') el('doneShoppingBtn').style.display = 'none';
   if (sec === 'pool')     renderPool();
   if (sec === 'shopping') renderShoppingList();
   if (sec === 'history')  renderShoppingHistory();
-  _updateScrollTopBtn();
 }
 
 function renderSupermarket() {
-  const kidMode = !isParent();
-  el('gtab-pool')?.style.setProperty('display', kidMode ? 'none' : '');
-  el('gtab-history')?.style.setProperty('display', kidMode ? 'none' : '');
-  if (kidMode && _grocerySection !== 'shopping') switchGrocerySection('shopping');
   renderPool();
   if (_grocerySection === 'shopping') renderShoppingList();
   else if (_grocerySection === 'history') renderShoppingHistory();
@@ -5883,9 +4227,8 @@ function renderPool() {
   let html = '';
 
   function poolItemHtml(p) {
-    const inShoppingList = S.shoppingList.some(x => x.poolId === p.id);
-    const inCartAlready  = !inShoppingList && S.inCart.some(x => x.poolId === p.id);
-    const inList = inShoppingList || inCartAlready;
+    const inList = S.shoppingList.some(x => x.poolId === p.id);
+    const qtyActive = _poolQtyFor === p.id;
     const isKg = p.qtyType === 'kg';
     const unitLabel = isKg ? 'ק"ג' : 'יח\'';
 
@@ -5897,8 +4240,7 @@ function renderPool() {
         <input class="g-input" id="poolEditName_${p.id}" value="${esc(p.name)}"
           style="flex:1;min-width:80px;padding:6px 10px"
           onkeydown="if(event.key==='Enter')confirmEditPoolItem(${p.id})">
-        <select id="poolEditCat_${p.id}" style="display:none">${catOptions}</select>
-        <div id="poolEditCatDd_${p.id}" style="flex-shrink:0"></div>
+        <select class="g-cat" id="poolEditCat_${p.id}">${catOptions}</select>
         <button class="unit-toggle${editIsKg?' kg':''}" id="poolEditUnit_${p.id}"
           onclick="togglePoolEditQtyType(${p.id})">${editIsKg?'ק"ג':'יח\''}</button>
         <button class="cart-btn" onclick="confirmEditPoolItem(${p.id})">✓</button>
@@ -5906,119 +4248,35 @@ function renderPool() {
       </div>`;
     }
 
-    const threeDotSVG = `<svg viewBox="0 0 16 16" fill="currentColor" style="width:14px;height:14px;display:block"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>`;
-    const listItem = S.shoppingList.find(x => x.poolId === p.id);
-    const qtyVal = listItem ? listItem.qty : (p.lastQty || 1);
-    const isActive = _poolQtyActiveId === p.id;
-
-    if (inCartAlready) {
-      return `<div class="pool-item pool-item-in-cart" data-pool-id="${p.id}">
-        ${ed?`<div class="pool-reveal-zone">
-          <button class="chore-action-btn chore-action-delete" onclick="deletePoolItem(${p.id})">${_ico.trash}</button>
-          <div class="chore-action-sep"></div>
-          <button class="chore-action-btn chore-action-edit" onclick="startEditPoolItem(${p.id})">${_ico.edit}</button>
-        </div>`:''}
-        <div class="pool-slide">
-          <span class="pool-in-cart-check">✓</span>
-          <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
-          ${ed?`<div class="pool-3dot" id="pool3dot_${p.id}"><button class="chore-3dot-btn" onclick="_pool3dotToggle(${p.id});event.stopPropagation()">${threeDotSVG}</button></div>`:''}
-        </div>
+    if (qtyActive) {
+      return `<div class="pool-item pool-item-qty-row">
+        <div class="pool-item-name">${esc(p.name)}</div>
+        <input class="qty-input${isKg?' kg':''}" id="poolQtyInput_${p.id}"
+          type="number" min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${p.lastQty||1}"
+          ${isKg?`oninput="this.value=this.value.replace(/(\\.\\d{1})\\d+/,'$1')"`:''}
+          onkeydown="if(event.key==='Enter')confirmAddToList(${p.id})">
+        <span class="qty-unit-label">${unitLabel}</span>
+        <button class="cart-btn" onclick="confirmAddToList(${p.id})">✓</button>
+        <button class="pool-add-btn" onclick="cancelAddToList()" style="border-color:#718096;color:#718096">✕</button>
       </div>`;
     }
-    if (inShoppingList) {
-      return `<div class="pool-item pool-item-in-list${isActive?' qty-active':''}" data-pool-id="${p.id}">
-        ${ed?`<div class="pool-reveal-zone">
-          <button class="chore-action-btn chore-action-delete" onclick="deletePoolItem(${p.id})">${_ico.trash}</button>
-          <div class="chore-action-sep"></div>
-          <button class="chore-action-btn chore-action-edit" onclick="startEditPoolItem(${p.id})">${_ico.edit}</button>
-        </div>`:''}
-        <div class="pool-slide pool-clickable" onclick="addPoolItemNow(${p.id})">
-          <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
-          <div class="pool-qty-inline" onclick="event.stopPropagation()">
-            <input class="qty-input${isKg?' kg':''}" type="number"
-              min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${qtyVal}"
-              onfocus="this.select()"
-              oninput="updatePoolQty(${p.id},this.value)${isKg?";this.value=this.value.replace(/(\\..{1})./g,'$1')":""}">
-            <span class="qty-unit-label">${unitLabel}</span>
-          </div>
-          ${ed?`<div class="pool-3dot" id="pool3dot_${p.id}"><button class="chore-3dot-btn" onclick="_pool3dotToggle(${p.id});event.stopPropagation()">${threeDotSVG}</button></div>`:''}
-        </div>
-      </div>`;
-    }
-    return `<div class="pool-item" data-pool-id="${p.id}">
-      ${ed?`<div class="pool-reveal-zone">
-        <button class="chore-action-btn chore-action-delete" onclick="deletePoolItem(${p.id})">${_ico.trash}</button>
-        <div class="chore-action-sep"></div>
-        <button class="chore-action-btn chore-action-edit" onclick="startEditPoolItem(${p.id})">${_ico.edit}</button>
-      </div>`:''}
-      <div class="pool-slide pool-clickable" onclick="addPoolItemNow(${p.id})">
-        <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
-        ${ed?`<div class="pool-3dot" id="pool3dot_${p.id}"><button class="chore-3dot-btn" onclick="_pool3dotToggle(${p.id});event.stopPropagation()">${threeDotSVG}</button></div>`:''}
-      </div>
+    return `<div class="pool-item">
+      <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
+      <button class="pool-add-btn${inList?' in-list':''}" onclick="togglePoolItem(${p.id})">${inList?t('inList'):t('addToList')}</button>
+      ${ed?`<button class="del-btn" style="color:#a0aec0" onclick="startEditPoolItem(${p.id})">✏️</button>`:''}
+      ${ed?`<button class="del-btn" onclick="deletePoolItem(${p.id})">🗑</button>`:''}
     </div>`;
   }
 
-  // Render category chips
-  const chipCats = cats.filter(c => S.groceryPool.some(p => p.category === c.name));
-  const hasOrphans = S.groceryPool.some(p => !knownCats.has(p.category));
-  const chipsEl = el('poolCatChips');
-  if (chipsEl) {
-    const prevChipsScroll = chipsEl.querySelector('.cat-chips')?.scrollLeft ?? 0;
-    const chipCount = chipCats.length + (hasOrphans ? 1 : 0);
-    if (chipCount > 1) {
-      const hasFilter = _poolCatFilter.size > 0;
-      const clearX = (name) => `<span class="cat-chip-x" onclick="pickPoolCat('${name}');event.stopPropagation()">×</span>`;
-      const chevron = _poolChipsOpen ? '▴' : '▾';
-      // Active chips always shown inline next to toggle button
-      const activeChips = [..._poolCatFilter].map(name => {
-        const c = cats.find(x => x.name === name);
-        const label = c ? `${c.emoji} ${esc(name)}` : name === '__other__' ? 'אחר' : esc(name);
-        return `<button class="cat-chip active" onclick="pickPoolCat('${esc(name)}')">${label}${clearX(name)}</button>`;
-      }).join('');
-      const allChip = `<button class="cat-chip${!hasFilter?' active':''}" onclick="pickPoolCat(null)">הכל</button>`;
-      const catChips = chipCats.map(c => {
-        const active = _poolCatFilter.has(c.name);
-        return `<button class="cat-chip${active?' active':''}" onclick="pickPoolCat('${esc(c.name)}')">${c.emoji} ${esc(c.name)}</button>`;
-      }).join('');
-      const orphanChip = hasOrphans
-        ? (() => { const active = _poolCatFilter.has('__other__'); return `<button class="cat-chip${active?' active':''}" onclick="pickPoolCat('__other__')">אחר</button>`; })()
-        : '';
-      const chipsRow = _poolChipsOpen
-        ? `<div class="cat-chips">${allChip}${catChips}${orphanChip}</div>`
-        : '';
-      chipsEl.innerHTML = `
-        <div class="cat-chips-bar">
-          <button class="cat-chips-toggle${hasFilter?' has-filter':''}" onclick="togglePoolChips()">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="2" y1="4" x2="14" y2="4"/><line x1="4" y1="8" x2="12" y2="8"/><line x1="6" y1="12" x2="10" y2="12"/></svg>
-            סינון
-            <span class="cat-chips-chevron">${chevron}</span>
-          </button>${activeChips}
-        </div>
-        ${chipsRow}`;
-      if (prevChipsScroll) {
-        const newChips = chipsEl.querySelector('.cat-chips');
-        if (newChips) newChips.scrollLeft = prevChipsScroll;
-      }
-    } else {
-      chipsEl.innerHTML = '';
-    }
-  }
-
   const searching = _poolSearch.length > 0;
-  let poolItems = _poolSearch.length > 0
+  const poolItems = searching
     ? S.groceryPool.filter(p => p.name.toLowerCase().includes(_poolSearch))
     : S.groceryPool;
-  if (_poolCatFilter.size > 0) {
-    poolItems = poolItems.filter(p =>
-      (_poolCatFilter.has('__other__') && !knownCats.has(p.category)) ||
-      _poolCatFilter.has(p.category)
-    );
-  }
 
   function poolCatHtml(emoji, name, items) {
     const collapsed = !searching && _collapsedPoolCats.has(name);
     return `<div class="cat-title cat-collapsible" data-section="pool" data-cat="${esc(name)}" onclick="toggleCatCollapse(this)">
-        <span class="cat-chevron">${collapsed?'▴':'▾'}</span>${emoji} ${esc(name)}<span class="cat-count">${collapsed?` (${items.length})`:''}</span>
+        <span class="cat-chevron">${collapsed?'◀':'▾'}</span>${emoji} ${esc(name)}<span class="cat-count">${collapsed?` (${items.length})`:''}</span>
       </div>${collapsed ? '' : items.map(poolItemHtml).join('')}`;
   }
 
@@ -6034,7 +4292,10 @@ function renderPool() {
     if (orphans.length) html += poolCatHtml('🛒', 'אחר', orphans);
   }
   el('poolList').innerHTML = html || `<div class="empty">${t('poolEmpty')}</div>`;
-  _initPoolSwipes();
+  if (_poolQtyFor !== null) {
+    const inp = el(`poolQtyInput_${_poolQtyFor}`);
+    if (inp) { inp.focus(); inp.select(); }
+  }
   if (_poolEditFor !== null) {
     const inp = el(`poolEditName_${_poolEditFor}`);
     if (inp) { inp.focus(); inp.select(); }
@@ -6050,12 +4311,10 @@ function addPoolItem() {
     return;
   }
   const category = el('poolCatSelect').value;
-  _poolLastCat = category;
   S.groceryPool.push({ id: Date.now(), name, category, qtyType: _poolNewQtyType });
   el('poolItemInput').value = '';
   saveGrocery();
   renderPool();
-  setTimeout(() => el('poolItemInput')?.focus(), 30);
 }
 
 function deletePoolItem(id) {
@@ -6066,76 +4325,47 @@ function deletePoolItem(id) {
   renderPool();
 }
 
-function addPoolItemNow(poolId) {
-  if (S.inCart.some(x => x.poolId === poolId)) return; // already in cart, ignore
-  if (S.shoppingList.some(x => x.poolId === poolId)) {
-    // Already in list — remove it (toggle off)
-    removePoolItemFromList(poolId);
-    return;
-  }
-  const pool = S.groceryPool.find(p => p.id === poolId);
-  if (!pool) return;
-  const qty = pool.lastQty || 1;
-  S.shoppingList.push({ id: Date.now(), poolId, name: pool.name, category: pool.category, qty, qtyType: pool.qtyType || 'count', requestedQty: qty });
-  _poolQtyActiveId = poolId;
-  saveGrocery();
-  renderPool();
-  renderShoppingList();
-}
-
-function removePoolItemFromList(poolId) {
-  if (!isParent()) return;
+function togglePoolItem(poolId) {
   const idx = S.shoppingList.findIndex(x => x.poolId === poolId);
-  if (idx === -1) return;
-  S.shoppingList.splice(idx, 1);
-  if (_poolQtyActiveId === poolId) _poolQtyActiveId = null;
-  saveGrocery();
-  renderPool();
-  renderShoppingList();
-}
-
-function setPoolQtyActive(poolId) {
-  if (_poolQtyActiveId === poolId) return;
-  // Update DOM classes directly — no full re-render
-  if (_poolQtyActiveId !== null) {
-    const old = document.querySelector(`[data-pool-id="${_poolQtyActiveId}"]`);
-    if (old) old.classList.remove('qty-active');
+  if (idx !== -1) {
+    // Already in list — remove it (parents only)
+    if (!isParent()) return;
+    S.shoppingList.splice(idx, 1);
+    saveGrocery();
+    renderPool();
+  } else {
+    // Show inline qty input
+    _poolQtyFor = poolId;
+    renderPool();
   }
-  _poolQtyActiveId = poolId;
-  const cur = document.querySelector(`[data-pool-id="${poolId}"]`);
-  if (cur) cur.classList.add('qty-active');
 }
 
-let _poolQtySaveTimer = null;
-function updatePoolQty(poolId, rawValue) {
+function confirmAddToList(poolId) {
   const pool = S.groceryPool.find(p => p.id === poolId);
   if (!pool) return;
+  const inp = el(`poolQtyInput_${poolId}`);
   const isKg = pool.qtyType === 'kg';
-  const raw = isKg ? parseFloat(parseFloat(rawValue).toFixed(1)) : parseInt(rawValue);
-  const qty = isKg ? Math.max(0.1, raw || 0.1) : Math.max(1, raw || 1);
-  const listItem = S.shoppingList.find(x => x.poolId === poolId);
-  if (listItem) listItem.qty = qty;
+  const raw = isKg ? parseFloat(parseFloat(inp?.value).toFixed(1)) : parseInt(inp?.value);
+  const qty = isKg ? Math.max(0.1, raw || 1) : Math.max(1, raw || 1);
   pool.lastQty = qty;
-  // Update the qty badge in the shopping list without a full re-render
-  clearTimeout(_poolQtySaveTimer);
-  _poolQtySaveTimer = setTimeout(() => { saveGrocery(); renderShoppingList(); }, 600);
+  S.shoppingList.push({ id: Date.now(), poolId, name: pool.name, category: pool.category, qty, qtyType: pool.qtyType || 'count' });
+  _poolQtyFor = null;
+  saveGrocery();
+  renderPool();
 }
 
-// Legacy stubs (no longer used but kept in case of any lingering references)
-function confirmAddToList() {}
-function cancelAddToList() {}
+function cancelAddToList() {
+  _poolQtyFor = null;
+  renderPool();
+}
 
 function startEditPoolItem(id) {
   const pool = S.groceryPool.find(p => p.id === id);
   if (!pool) return;
-  // Snap slide back instantly (may be open from swipe reveal)
-  const slide = document.querySelector(`[data-pool-id="${id}"] .pool-slide`);
-  if (slide) { slide.style.transition = 'none'; slide.style.transform = 'translateX(0)'; }
   _poolEditFor = id;
   _poolEditQtyType = pool.qtyType || 'count';
-  _poolQtyActiveId = null; // close any active qty control
+  _poolQtyFor = null; // close qty row if open
   renderPool();
-  setTimeout(() => _buildSoftDd('poolEditCatDd_' + id, 'poolEditCat_' + id), 0);
 }
 
 function togglePoolEditQtyType(id) {
@@ -6185,36 +4415,26 @@ function renderShoppingList() {
   function listItemHtml(item) {
     const isKg = item.qtyType === 'kg';
     const unitLabel = isKg ? 'ק"ג' : 'יח\'';
-    const requested = item.requestedQty ?? item.qty ?? 1;
-    const actual = item.qty ?? 1;
-    const hasGap = actual < requested;
-    const badgeStyle = hasGap
-      ? 'background:#fff3e0;color:#e65100'
-      : 'background:#e9f5ff;color:#2b6cb0';
-    const qtyBadge = `<span class="unit-badge slist-req-badge" style="${badgeStyle}">${fmtQty(requested, item.qtyType)}</span>`;
+    const qtyBadge = `<span class="unit-badge" style="background:#e9f5ff;color:#2b6cb0">${fmtQty(item.qty||1, item.qtyType)}</span>`;
     return `<div class="slist-item">
       <div class="slist-item-name">${esc(item.name)} ${qtyBadge}</div>
       <input class="qty-input${isKg?' kg':''}" type="number"
-        min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${actual}"
-        onfocus="this.select()"
+        min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${item.qty||1}"
         ${isKg?`oninput="this.value=this.value.replace(/(\\\.\\d{1})\\d+/,'$1')"`:``}
         onchange="updateListQty(${item.id},this.value)">
       <span class="qty-unit-label">${unitLabel}</span>
-      <button class="cart-btn" onclick="moveToCart(${item.id})" aria-label="${t('toCart')}">${_ico.cart}</button>
-      ${ed?`<button class="del-btn" onclick="removeFromShoppingList(${item.id})">${_ico.trash}</button>`:''}
+      <button class="cart-btn" onclick="moveToCart(${item.id})">${t('toCart')}</button>
+      ${ed?`<button class="del-btn" onclick="removeFromShoppingList(${item.id})">🗑</button>`:''}
     </div>`;
   }
 
   // Items still to grab
   if (S.shoppingList.length) {
-    html += `<div class="super-section-label" style="display:flex;align-items:center;justify-content:space-between">
-      <span>📋 ${t('stillNeed')} (${S.shoppingList.length})</span>
-      ${ed?`<button class="clear-list-btn" onclick="clearShoppingList()">× נקה</button>`:''}
-    </div>`;
+    html += `<div class="super-section-label">📋 ${t('stillNeed')} (${S.shoppingList.length})</div>`;
     function shoppingCatHtml(emoji, name, items) {
       const collapsed = _collapsedShoppingCats.has(name);
       return `<div class="cat-title cat-collapsible" data-section="shopping" data-cat="${esc(name)}" onclick="toggleCatCollapse(this)">
-          <span class="cat-chevron">${collapsed?'▴':'▾'}</span>${emoji} ${esc(name)}<span class="cat-count">${collapsed?` (${items.length})`:''}</span>
+          <span class="cat-chevron">${collapsed?'◀':'▾'}</span>${emoji} ${esc(name)}<span class="cat-count">${collapsed?` (${items.length})`:''}</span>
         </div>${collapsed ? '' : items.map(listItemHtml).join('')}`;
     }
     cats.forEach(cat => {
@@ -6229,21 +4449,14 @@ function renderShoppingList() {
   // Items already in cart
   if (S.inCart.length) {
     html += `<div class="super-section-label">✅ ${t('inCartLabel')} (${S.inCart.length})</div>`;
-    html += S.inCart.map(item => {
-      const requested = item.requestedQty ?? item.qty ?? 1;
-      const actual = item.qty ?? 1;
-      const gapHtml = actual !== requested
-        ? `<span class="cart-req-qty">מ-${fmtQty(requested, item.qtyType)}</span>`
-        : '';
-      return `<div class="cart-item">
-        <div class="cart-item-name">${esc(item.name)} <span class="unit-badge" style="background:var(--gray-100);color:var(--gray-500)">${fmtQty(actual, item.qtyType)}</span>${gapHtml}</div>
-        <button class="return-to-list-btn" onclick="returnToList(${item.id})">${t('returnToList')}</button>
-      </div>`;
-    }).join('');
+    html += S.inCart.map(item => `<div class="cart-item">
+      <div class="cart-item-name">${esc(item.name)} <span class="unit-badge" style="background:#c6f6d5;color:#276749">${fmtQty(item.qty||1, item.qtyType)}</span></div>
+      <button class="pool-add-btn" onclick="returnToList(${item.id})" style="border-color:#e53e3e;color:#e53e3e;font-size:11px">${t('returnToList')}</button>
+    </div>`).join('');
   }
 
   el('shoppingListEl').innerHTML = html;
-  el('doneShoppingBtn').style.display = (ed && hasContent && _grocerySection === 'shopping') ? '' : 'none';
+  el('doneShoppingBtn').style.display = (ed && hasContent) ? '' : 'none';
 }
 
 
@@ -6251,18 +4464,7 @@ function moveToCart(id) {
   const idx = S.shoppingList.findIndex(x => x.id === id);
   if (idx === -1) return;
   const item = S.shoppingList.splice(idx, 1)[0];
-  S.inCart.push({ ...item, id: Date.now(), requestedQty: item.requestedQty ?? item.qty ?? 1 });
-  saveGrocery();
-  renderShoppingList();
-  renderPool();
-}
-
-function updateCartQty(id, val) {
-  const item = S.inCart.find(x => x.id === id);
-  if (!item) return;
-  item.qty = item.qtyType === 'kg'
-    ? Math.max(0.1, Math.round(parseFloat(val) * 10) / 10 || 0.1)
-    : Math.max(1, parseInt(val) || 1);
+  S.inCart.push({ ...item, id: Date.now() });
   saveGrocery();
   renderShoppingList();
 }
@@ -6273,15 +4475,6 @@ function removeFromShoppingList(id) {
   saveGrocery();
   renderShoppingList();
 }
-async function clearShoppingList() {
-  if (!isParent()) return;
-  if (!await _confirm('לנקות את כל הרשימה?', { danger: true, okLabel: 'נקה' })) return;
-  S.shoppingList = [];
-  S.inCart = [];
-  saveGrocery();
-  renderShoppingList();
-  renderPool();
-}
 
 function updateListQty(id, val) {
   const item = S.shoppingList.find(x => x.id === id);
@@ -6290,15 +4483,10 @@ function updateListQty(id, val) {
   const parsed = isKg ? parseFloat(parseFloat(val).toFixed(1)) : parseInt(val);
   if (!isNaN(parsed) && parsed > 0) {
     item.qty = isKg ? Math.max(0.1, parsed) : Math.max(1, parsed);
-    // Update badge color in-place (text stays as requestedQty, only color reflects gap)
+    // Update badge in-place without full re-render
     const inp = document.querySelector(`input[onchange="updateListQty(${id},this.value)"]`);
-    const badge = inp?.closest('.slist-item')?.querySelector('.slist-req-badge');
-    if (badge) {
-      const requested = item.requestedQty ?? item.qty;
-      const hasGap = item.qty < requested;
-      badge.style.background = hasGap ? '#fff3e0' : '#e9f5ff';
-      badge.style.color      = hasGap ? '#e65100' : '#2b6cb0';
-    }
+    const badge = inp?.closest('.slist-item')?.querySelector('.unit-badge');
+    if (badge) badge.textContent = fmtQty(item.qty, item.qtyType);
     saveGrocery();
   }
 }
@@ -6321,7 +4509,6 @@ function returnToList(id) {
   S.shoppingList.push({ ...item, id: Date.now() });
   saveGrocery();
   renderShoppingList();
-  renderPool();
 }
 
 async function doneShopping() {
@@ -6329,7 +4516,7 @@ async function doneShopping() {
   const missed = [...S.shoppingList];
   const bought = S.inCart.length;
   const confirmMsg = t('doneShoppingConfirm', bought, missed.length);
-  if (!await _confirm(confirmMsg, { okLabel: 'סיימתי' })) return;
+  if (!confirm(confirmMsg)) return;
   const msg = t('doneShoppingMsg', S.user, bought, missed.map(x => x.name));
   try {
     await fbDb.collection('families').doc(S.uid)
@@ -6376,11 +4563,11 @@ function _histEntryHtml(entry, searchTerm) {
   };
 
   const boughtHtml = entry.bought.map(x =>
-    `<span class="hist-item"><bdi>${hl(x.name)}</bdi><span class="hist-qty">${fmtQty(x.qty, x.qtyType)}</span></span>`
-  ).join('<span class="hist-sep"> · </span>');
+    `<span class="hist-item bought">${hl(x.name)} <span class="hist-qty">${fmtQty(x.qty, x.qtyType)}</span></span>`
+  ).join('');
   const missedHtml = entry.missed.length
-    ? `<div class="hist-missed-text"><span class="hist-missed-label">${t('historyMissed')}:</span> `
-      + entry.missed.map(x => hl(x.name)).join(', ')
+    ? `<div class="hist-missed-row"><span class="hist-missed-label">${t('historyMissed')}:</span> `
+      + entry.missed.map(x => `<span class="hist-item missed">${hl(x.name)}</span>`).join('')
       + `</div>`
     : '';
 
@@ -6389,7 +4576,7 @@ function _histEntryHtml(entry, searchTerm) {
       <span class="hist-who">${emoji} ${esc(entry.by)}</span>
       <span class="hist-when">${datePrefix}${timeStr}</span>
     </div>
-    <div class="hist-items-text">${boughtHtml}</div>
+    <div class="hist-items-row">${boughtHtml}</div>
     ${missedHtml}
   </div>`;
 }
@@ -6431,7 +4618,7 @@ function renderShoppingHistory() {
     const expanded = _expandedHistoryDates.has(key);
     const count = entries.length;
     html += `<div class="hist-date-header" data-datekey="${esc(key)}" onclick="toggleHistoryDate(this)">
-      <span class="cat-chevron">${expanded ? '▾' : '▴'}</span>
+      <span class="cat-chevron">${expanded ? '▾' : '◀'}</span>
       <span class="hist-date-label">${key}</span>
       <span class="hist-date-count">${count} ${count > 1 ? 'קניות' : 'קנייה'}</span>
     </div>`;
@@ -6445,8 +4632,6 @@ function renderShoppingHistory() {
 // ════════════════════════════════════════
 let _hwHistOpen = false;
 let _hwHistSearch = '';
-let _hwScope      = 'personal';
-let _hwSubjectFilter = null;
 
 function fmtDoneAt(ts) {
   if (!ts) return '';
@@ -6457,96 +4642,38 @@ function fmtDoneAt(ts) {
 }
 
 function renderHomework(){
-  if (!isParent() && S.child !== S.user) { S.child = S.user; }
-  const kids=isParent()?getKids():getKids().filter(k=>k===S.user);
-  const childTabsEl=el('childTabsContainer');
-  const showKidChips = kids.length >= 2;
-  childTabsEl.style.display = showKidChips ? '' : 'none';
-  if (showKidChips) childTabsEl.innerHTML = _hwKidChipsHtml(kids);
+  const kids = isParent() ? getKids() : getKids().filter(k=>k===S.user);
+  const filterActive = getKids().includes(S.filter);
+  const childTabsEl = el('childTabsContainer');
+  childTabsEl.style.display = filterActive ? 'none' : '';
+  childTabsEl.innerHTML = kids.map(k =>
+    `<div class="child-tab ${S.child===k?'active':''}" onclick="switchChild('${esc(k)}')">${getEmoji(k)} ${k}</div>`
+  ).join('');
 
-  // Scope toggle: parents only
-  const scopeEl=el('hwScopeSeg');
-  if(scopeEl)scopeEl.style.display=isParent()?'':'none';
-
-  // Build full (unfiltered) lists first for subject chip computation
-  let classHw=S.homework.filter(h=>h.scope==='class');
-  const allPending=S.child
-    ? S.homework.filter(h=>(!h.scope||h.scope==='personal')&&h.child===S.child&&!h.done)
-    : [];
-
-  // Subject filter chips — union of subjects with at least one pending item
-  const subjChipsEl=el('hwSubjectChips');
-  if(subjChipsEl){
-    const classNotDone=classHw.filter(h=>!(h.doneBy&&h.doneBy[S.child]));
-    const allSubjs=[...new Set([...classNotDone,...allPending].map(h=>h.subject).filter(Boolean))];
-    if(allSubjs.length>=1){
-      if(_hwSubjectFilter&&!allSubjs.includes(_hwSubjectFilter))_hwSubjectFilter=null;
-      subjChipsEl.style.display='';
-      subjChipsEl.innerHTML=allSubjs.map(s=>
-        `<div class="hw-subj-chip${_hwSubjectFilter===s?' active':''}" style="${subjectBadgeStyle(s)}" onclick="switchHwSubject('${esc(s)}')">${esc(subjectLabel(s))}</div>`
-      ).join('');
-    } else {
-      subjChipsEl.style.display='none';
-      _hwSubjectFilter=null;
-    }
-  }
-
-  // Apply subject filter
-  if(_hwSubjectFilter) classHw=classHw.filter(h=>h.subject===_hwSubjectFilter);
-  const pending=_hwSubjectFilter ? allPending.filter(h=>h.subject===_hwSubjectFilter) : allPending;
-
-  // Class homework section
-  const classSec=el('hwClassSection');
-  const classListEl=el('hwClassList');
-  if(classSec&&classListEl){
-    if(!classHw.length){
-      classSec.style.display='none';
-    } else {
-      classSec.style.display='';
-      const child=S.child;
-      const allKids=getKids();
-      classListEl.innerHTML=classHw.map(h=>{
-        const myDone=!!(h.doneBy&&h.doneBy[child]);
-        const can=child&&(isParent()||child===S.user);
-        const doneCount=allKids.filter(k=>h.doneBy&&h.doneBy[k]).length;
-        return `<div class="hw-item hw-class-item ${myDone?'hw-class-done':''}" data-hw-id="${h.id}">
-          <div class="hw-head">
-            <div class="check-box ${myDone?'done':''} ${can&&!myDone?'':'readonly'}" ${can&&!myDone?`onclick="toggleHW(${h.id})"`:''}>
-            </div>
-            <div class="hw-desc-text ${myDone?'done':''}">${esc(h.desc)}</div>
-            ${doneCount>0?`<span class="hw-done-count">${doneCount}/${allKids.length}</span>`:''}
-            <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
-            ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}
-          </div>
-          ${h.due?`<div class="hw-due">${t('hwDueLabel',fmtDate(h.due))}</div>`:''}
-          <div class="hw-done-by">${allKids.map(k=>`<span class="hw-done-pip ${h.doneBy&&h.doneBy[k]?'hw-done-pip-done':''}" title="${esc(k)}">${esc(k.charAt(0))}</span>`).join('')}</div>
-        </div>`;
-      }).join('');
-    }
-  }
-
-  if(!S.child){
-    el('hwCardTitle').textContent=t('hwTitle','');
-    el('hwList').innerHTML=`<div class="empty">${t('noKids')}</div>`;
-    el('addHwForm').style.display='none';
-    el('hwHistoryWrap').innerHTML='';
+  if (!S.child) {
+    el('hwCardTitle').textContent = t('hwTitle','');
+    el('hwList').innerHTML = `<div class="empty">${t('noKids')}</div>`;
+    el('addHwForm').style.display = 'none';
+    el('hwHistoryWrap').innerHTML = '';
     return;
   }
-  el('hwCardTitle').textContent=t('hwTitle',S.child);
-  const canAdd=isParent()||S.child===S.user;
-  el('addHwForm').style.display=canAdd?'':'none';
+  el('hwCardTitle').textContent = t('hwTitle', S.child);
+  const canAdd = isParent()||S.child===S.user;
+  el('addHwForm').style.display = canAdd ? '' : 'none';
 
-  el('hwList').innerHTML=pending.length?pending.map(h=>{
+  // Active (not done) items only
+  const pending = S.homework.filter(h=>h.child===S.child && !h.done);
+  el('hwList').innerHTML = pending.length ? pending.map(h=>{
     const can=isParent()||h.child===S.user;
     return `<div class="hw-item" data-hw-id="${h.id}">
       <div class="hw-head">
         <div class="check-box ${can?'':'readonly'}" ${can?`onclick="toggleHW(${h.id})"`:''}>
         </div>
-        <div class="hw-desc-text">${esc(h.desc)}</div>
         <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
-        ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}</div>
+        <div class="hw-desc-text">${esc(h.desc)}</div>
+        ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">×</button>`:''}</div>
       ${h.due?`<div class="hw-due">${t('hwDueLabel',fmtDate(h.due))}</div>`:''}</div>`;
-  }).join(''):`<div class="empty">${t('noHw')}</div>`;
+  }).join('') : `<div class="empty">${t('noHw')}</div>`;
 
   renderHwHistory(S.child);
 }
@@ -6554,28 +4681,20 @@ function renderHomework(){
 function renderHwHistory(child) {
   const wrap = el('hwHistoryWrap');
   if (!wrap || !child) return;
-  const personalDone=S.homework
-    .filter(h=>(!h.scope||h.scope==='personal')&&h.child===child&&h.done)
-    .map(h=>({...h,_doneAt:h.doneAt,_isClass:false}));
-  const classDone=S.homework
-    .filter(h=>h.scope==='class'&&h.doneBy&&h.doneBy[child])
-    .map(h=>({...h,_doneAt:h.doneAtBy&&h.doneAtBy[child],_isClass:true}));
-  const allDone=[...personalDone,...classDone].sort((a,b)=>(b._doneAt||0)-(a._doneAt||0));
+  const allDone = S.homework.filter(h=>h.child===child && h.done)
+    .sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
   if (!allDone.length) { wrap.innerHTML = ''; return; }
 
   const q = _hwHistSearch.toLowerCase();
-  const filtered = allDone.filter(h=>{
-    if(_hwSubjectFilter&&h.subject!==_hwSubjectFilter)return false;
-    if(!q)return true;
-    return h.desc.toLowerCase().includes(q)||subjectLabel(h.subject).toLowerCase().includes(q);
-  });
-  const visibleCount = _hwSubjectFilter ? filtered.length : allDone.length;
+  const filtered = q ? allDone.filter(h=>
+    h.desc.toLowerCase().includes(q) || subjectLabel(h.subject).toLowerCase().includes(q)
+  ) : allDone;
 
   wrap.innerHTML = `<div class="card" style="margin-top:10px">
     <div class="hw-hist-hdr" onclick="toggleHwHistory()">
-      <span style="color:#a0aec0;font-size:12px;margin-inline-end:6px">${_hwHistOpen?'▲':'▼'}</span>
       <span class="hw-hist-title">${t('hwHistory')}</span>
-      <span class="hw-hist-count">${visibleCount}</span>
+      <span class="hw-hist-count">${allDone.length}</span>
+      <span style="color:#a0aec0;font-size:12px;margin-inline-start:4px">${_hwHistOpen?'▲':'▼'}</span>
     </div>
     ${_hwHistOpen ? `
       <input class="hw-hist-search" placeholder="${t('hwHistorySearch')}"
@@ -6588,32 +4707,23 @@ function renderHwHistory(child) {
 function hwHistListHTML(filtered) {
   return filtered.length ? filtered.map(h=>`
     <div class="hw-hist-item" data-hw-id="${h.id}">
-      ${h._isClass?`<span class="hw-class-badge">כיתה</span>`:''}
-      <div class="hw-hist-desc">${esc(h.desc)}</div>
       <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
-      <span class="hw-hist-ts">${fmtDoneAt(h._doneAt)}</span>
-      ${isParent()&&!h._isClass?`<button class="del-btn" title="בטל סימון" onclick="toggleHW(${h.id})">${_ico.undo}</button>`:''}
-      ${h._isClass?`<button class="del-btn" title="בטל סימון" onclick="toggleHW(${h.id})">${_ico.undo}</button>`:''}
-      ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}
+      <div class="hw-hist-desc">${esc(h.desc)}</div>
+      <span class="hw-hist-ts">${fmtDoneAt(h.doneAt)}</span>
+      ${isParent()?`<button class="del-btn" style="opacity:0.5;font-size:14px" title="בטל סימון" onclick="toggleHW(${h.id})">↩</button>`:''}
+      ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">×</button>`:''}
     </div>`).join('')
-  : `<div class="empty" style="padding:8px 0">${t('hwHistoryEmpty')}${_hwSubjectFilter ? ' ב' + esc(subjectLabel(_hwSubjectFilter)) : ''}</div>`;
+  : `<div class="empty" style="padding:8px 0">${t('hwHistoryEmpty')}</div>`;
 }
 function filterHwHistory(child) {
   const listEl = el('hwHistList');
   if (!listEl) return;
-  const personalDone=S.homework
-    .filter(h=>(!h.scope||h.scope==='personal')&&h.child===child&&h.done)
-    .map(h=>({...h,_doneAt:h.doneAt,_isClass:false}));
-  const classDone=S.homework
-    .filter(h=>h.scope==='class'&&h.doneBy&&h.doneBy[child])
-    .map(h=>({...h,_doneAt:h.doneAtBy&&h.doneAtBy[child],_isClass:true}));
-  const allDone=[...personalDone,...classDone].sort((a,b)=>(b._doneAt||0)-(a._doneAt||0));
+  const allDone = S.homework.filter(h=>h.child===child && h.done)
+    .sort((a,b)=>(b.doneAt||0)-(a.doneAt||0));
   const q = _hwHistSearch.toLowerCase();
-  const filtered = allDone.filter(h=>{
-    if(_hwSubjectFilter&&h.subject!==_hwSubjectFilter)return false;
-    if(!q)return true;
-    return h.desc.toLowerCase().includes(q)||subjectLabel(h.subject).toLowerCase().includes(q);
-  });
+  const filtered = q ? allDone.filter(h=>
+    h.desc.toLowerCase().includes(q) || subjectLabel(h.subject).toLowerCase().includes(q)
+  ) : allDone;
   listEl.innerHTML = hwHistListHTML(filtered);
 }
 function toggleHwHistory() {
@@ -6621,103 +4731,55 @@ function toggleHwHistory() {
   renderHwHistory(S.child);
 }
 
-function switchChild(c){if(!isParent()&&c!==S.user)return;S.child=c;_hwSubjectFilter=null;renderHomework();}
-function switchHwSubject(s){_hwSubjectFilter=(_hwSubjectFilter===s)?null:s;renderHomework();}
-function _hwScopePick(val) {
-  _hwScope = val;
-  document.querySelectorAll('#hwScopeSeg .hw-scope-btn').forEach(b =>
-    b.classList.toggle('active', b.dataset.val === val));
-  const childTabsEl = el('childTabsContainer');
-  if (childTabsEl) {
-    const kids = isParent() ? getKids() : getKids().filter(k => k === S.user);
-    childTabsEl.style.display = kids.length >= 2 ? '' : 'none';
-  }
-  const hwDescEl = el('hwDesc');
-  if (hwDescEl) hwDescEl.placeholder = val === 'class' ? 'שיעור בית לכל הכיתה...' : t('hwPlaceholder');
-}
+function switchChild(c){S.child=c;renderHomework();}
 
 function toggleHW(id){
   const h=S.homework.find(x=>x.id===id);
-  if(!h)return;
-  if(h.scope==='class'){
-    const child=S.child;
-    if(!child||(!isParent()&&child!==S.user))return;
-    const isDone=!!(h.doneBy&&h.doneBy[child]);
-    if(!isDone){
-      const row=document.querySelector(`.hw-item[data-hw-id="${id}"]`);
-      if(row){
-        row.classList.add('hw-fly-out');
-        setTimeout(()=>{
-          if(!h.doneBy)h.doneBy={};
-          if(!h.doneAtBy)h.doneAtBy={};
-          h.doneBy[child]=true;h.doneAtBy[child]=Date.now();
-          _hwHistOpen=true;save();renderHomework();renderHome();
-        },270);return;
-      }
-      if(!h.doneBy)h.doneBy={};if(!h.doneAtBy)h.doneAtBy={};
-      h.doneBy[child]=true;h.doneAtBy[child]=Date.now();_hwHistOpen=true;
-    } else {
-      const histRow=document.querySelector(`.hw-hist-item[data-hw-id="${id}"]`);
-      if(histRow){
-        histRow.classList.add('hw-fly-out-hist');
-        setTimeout(()=>{
-          delete h.doneBy[child];delete h.doneAtBy[child];
-          save();renderHomework();renderHome();
-        },270);return;
-      }
-      delete h.doneBy[child];delete h.doneAtBy[child];
-    }
-    save();renderHomework();renderHome();return;
-  }
-  // Personal item
-  if(!isParent()&&h.child!==S.user)return;
+  if(!h||(!isParent()&&h.child!==S.user))return;
   if(!h.done){
+    // Animate the item out, then mark done
     const row=document.querySelector(`.hw-item[data-hw-id="${id}"]`);
     if(row){
       row.classList.remove('hw-fly-in-active');
-      void row.offsetWidth;
+      void row.offsetWidth; // force reflow so animation restarts clean
       row.classList.add('hw-fly-out');
       setTimeout(()=>{
-        h.done=true;h.doneAt=Date.now();
-        _hwHistOpen=true;save();renderHomework();renderHome();
+        h.done=true; h.doneAt=Date.now();
+        _hwHistOpen=true;  // auto-open history so user sees where it went
+        save(); renderHomework(); renderHome();
         requestAnimationFrame(()=>{
           const hist=document.querySelector(`.hw-hist-item[data-hw-id="${id}"]`);
-          if(hist)hist.classList.add('hw-fly-in');
+          if(hist) hist.classList.add('hw-fly-in');
         });
-      },270);return;
+      },270);
+      return;
     }
-    h.done=true;h.doneAt=Date.now();_hwHistOpen=true;
+    h.done=true; h.doneAt=Date.now(); _hwHistOpen=true;
   } else {
+    // Animate history item out, then restore to active list
     const histRow=document.querySelector(`.hw-hist-item[data-hw-id="${id}"]`);
     if(histRow){
       histRow.classList.add('hw-fly-out-hist');
       setTimeout(()=>{
-        h.done=false;delete h.doneAt;
-        save();renderHomework();renderHome();
+        h.done=false; delete h.doneAt;
+        save(); renderHomework(); renderHome();
         requestAnimationFrame(()=>{
           const active=document.querySelector(`.hw-item[data-hw-id="${id}"]`);
-          if(active)active.classList.add('hw-fly-in-active');
+          if(active) active.classList.add('hw-fly-in-active');
         });
-      },270);return;
+      },270);
+      return;
     }
-    h.done=false;delete h.doneAt;
+    h.done=false; delete h.doneAt;
+    save(); renderHomework(); renderHome();
   }
-  save();renderHomework();renderHome();
 }
 
 function deleteHW(id){if(!isParent())return;S.homework=S.homework.filter(x=>x.id!==id);save();renderHomework();renderHome();}
 function addHomework(){
-  const descEl=el('hwDesc');
-  const desc=descEl.value.trim();
-  if(!desc){descEl.focus();descEl.classList.add('input-shake');setTimeout(()=>descEl.classList.remove('input-shake'),500);return;}
-  if(_hwScope==='class'){
-    if(!isParent())return;
-    S.homework.push({id:Date.now(),scope:'class',subject:el('hwSubject').value,desc,due:el('hwDue').value,doneBy:{},doneAtBy:{}});
-  } else {
-    if(!S.child)return;
-    if(!isParent()&&S.child!==S.user)return;
-    S.homework.push({id:Date.now(),scope:'personal',child:S.child,subject:el('hwSubject').value,desc,due:el('hwDue').value,done:false});
-  }
+  if(!S.child)return;
+  const desc=el('hwDesc').value.trim();if(!desc||(!isParent()&&S.child!==S.user))return;
+  S.homework.push({id:Date.now(),child:S.child,subject:el('hwSubject').value,desc,due:el('hwDue').value,done:false});
   el('hwDesc').value='';save();renderHomework();renderHome();
 }
 
@@ -6725,7 +4787,7 @@ function addHomework(){
 //  CALENDAR
 // ════════════════════════════════════════
 let _calClassEventsOn = {}; // { [kidName]: bool }
-let _calFilter = 'all'; // 'all' | 'class' | 'family'
+let _calClassOnly = false;  // true = show class events only
 let _syncedClassEvents = {}; // { [firestoreEventId]: gcalId }
 
 function loadSyncedClassEvents(){
@@ -6748,18 +4810,10 @@ async function unsyncClassEvent(evId){
   renderCalendar();
 }
 
-function _calEventVisibleToKid(ev, kidName) {
-  if (ev.gcal) return true;
-  const ps = eventPersons(ev);
-  return ps.includes('All') || ps.includes(kidName);
-}
-
 function allCalEvents(){
   const anyClassOn=Object.values(_calClassEventsOn).some(Boolean);
   const classEvs=[];
-  const _seenClassEvKeys=new Set();
   getKids().forEach(name=>{
-    if(!isParent() && name !== S.user) return; // kids only see their own class
     if(!_calClassEventsOn[name])return;
     const member=getMembers().find(m=>m.name===name);
     if(!member?.school)return;
@@ -6770,48 +4824,27 @@ function allCalEvents(){
     [...(cache.events||[]),...(cache.gradeEvents||[]),...(cache.schoolEvents||[])].forEach(ev=>{
       if(!ev.date)return;
       if(!matchesGenderFilter(ev,name))return;
-      const key=`${ev.id}_${name}`;
-      if(_seenClassEvKeys.has(key))return;
-      _seenClassEvKeys.add(key);
       classEvs.push({...ev,classEvent:true,classKid:name,_cid:cid});
     });
   });
-  if(anyClassOn&&_calFilter==='class') return classEvs;
+  if(anyClassOn&&_calClassOnly) return classEvs;
   const syncedIds=new Set(S.events.filter(e=>e.gcalId).map(e=>e.gcalId));
-  let personalEvs=[...S.events.filter(e=>!e.gcalId),...S.events.filter(e=>e.gcalId),...gcal.events.filter(e=>!syncedIds.has(e.gcalId))];
-  if(!isParent()) personalEvs=personalEvs.filter(e=>_calEventVisibleToKid(e,S.user));
-  if(_calFilter==='family') return personalEvs;
-  return [...personalEvs,...classEvs];
+  const base=[...S.events.filter(e=>!e.gcalId),...S.events.filter(e=>e.gcalId),...gcal.events.filter(e=>!syncedIds.has(e.gcalId))];
+  return [...base,...classEvs];
 }
 
 function renderCalClassToggles(){
   const wrap=el('calClassToggles');
   if(!wrap)return;
-  const isHe=getLang()==='he';
-
-  if(!isParent()){
-    // Kid view: just "All events" / "Class only" seg control
-    const member=getMembers().find(m=>m.name===S.user);
-    if(!member?.school?.city||!member?.school?.grade){wrap.innerHTML='';return;}
-    wrap.innerHTML=`<div class="cal-view-seg" style="margin-bottom:8px">
-      <div class="cal-view-seg-btn ${_calFilter==='all'?'active':''}"    onclick="kidCalViewAll()">${isHe?'הכל':'All'}</div>
-      <div class="cal-view-seg-btn ${_calFilter==='class'?'active':''}"  onclick="kidCalViewClass()">${isHe?'כיתה':'כיתה'}</div>
-      <div class="cal-view-seg-btn ${_calFilter==='family'?'active':''}" onclick="kidCalViewFamily()">${isHe?'משפחה':'Family'}</div>
-    </div>`;
-    // Auto-enable class events for this kid if not yet on
-    if(!_calClassEventsOn[S.user]) kidCalViewAll();
-    return;
-  }
-
   const kids=getKids()
     .map(name=>getMembers().find(m=>m.name===name))
     .filter(m=>m?.school?.city&&m?.school?.grade);
   if(!kids.length){wrap.innerHTML='';return;}
   const anyOn=Object.values(_calClassEventsOn).some(Boolean);
+  const isHe=getLang()==='he';
   const segControl=anyOn?`<div class="cal-view-seg">
-    <div class="cal-view-seg-btn ${_calFilter==='all'?'active':''}"    onclick="setCalFilter('all')">${isHe?'הכל':'All'}</div>
-    <div class="cal-view-seg-btn ${_calFilter==='class'?'active':''}"  onclick="setCalFilter('class')">${isHe?'כיתה':'Class'}</div>
-    <div class="cal-view-seg-btn ${_calFilter==='family'?'active':''}" onclick="setCalFilter('family')">${isHe?'משפחה':'Family'}</div>
+    <div class="cal-view-seg-btn ${!_calClassOnly?'active':''}" onclick="setCalClassOnly(false)">${isHe?'כל האירועים':'All events'}</div>
+    <div class="cal-view-seg-btn ${_calClassOnly?'active':''}" onclick="setCalClassOnly(true)">${isHe?'כיתה בלבד':'Class only'}</div>
   </div>`:'';
   wrap.innerHTML=`<div class="cal-class-toggles">${kids.map(m=>{
     const on=_calClassEventsOn[m.name];
@@ -6826,23 +4859,8 @@ function renderCalClassToggles(){
   }).join('')}</div>${segControl}`;
 }
 
-async function _ensureKidClassLoaded(){
-  if(!_calClassEventsOn[S.user]){
-    _calClassEventsOn[S.user]=true;
-    const member=getMembers().find(m=>m.name===S.user);
-    if(member?.school){
-      const cid=classIdFor(member.school);
-      if(cid&&(!_commCache[cid]||(Date.now()-(_commCache[cid].loadedAt||0))>120000))
-        await loadCommunityData([member]);
-    }
-  }
-}
-async function kidCalViewAll()   { await _ensureKidClassLoaded(); _calFilter='all';    renderCalendar(); }
-async function kidCalViewClass() { await _ensureKidClassLoaded(); _calFilter='class';  renderCalendar(); }
-async function kidCalViewFamily(){ _calFilter='family'; renderCalendar(); }
-
-function setCalFilter(val){
-  _calFilter=val;
+function setCalClassOnly(val){
+  _calClassOnly=val;
   renderCalendar();
 }
 
@@ -6892,7 +4910,7 @@ function selectDay(dateStr){S.calSelected=dateStr;const di=el('newEventDate');if
 function renderDayPanel(events){
   const evs=(events||allCalEvents()).filter(e=>e.date===S.calSelected).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
   const title=S.calSelected===today?t('todayLabel'):fmtDateLong(S.calSelected);
-  let html=`<div class="day-panel-title"><span style="display:inline-flex;vertical-align:middle;width:16px;height:16px;margin-inline-end:5px">${TAB_ICONS.calendar}</span>${title}</div>`;
+  let html=`<div class="day-panel-title">📆 ${title}</div>`;
   if(!evs.length){html+=`<div class="empty" style="padding:12px">${t('noEvents')}</div>`;}
   else html+=evs.map(e=>{
     if(e.classEvent){
@@ -6907,7 +4925,7 @@ function renderDayPanel(events){
       return `<div class="event-item" style="border-inline-start-color:${col};flex-wrap:wrap">
         <div class="event-body" style="width:100%">
           <div class="event-title">${eventTypeIcon(e.type)} ${esc(e.title)}</div>
-          <div class="event-meta">${e.time?_ico.clock+' '+e.time:t('allDay')}${e.location?' · '+_ico.pin+' '+esc(e.location):''}${e.note?` · ${esc(e.note)}`:''}</div>
+          <div class="event-meta">${e.time?'🕐 '+e.time:t('allDay')}${e.note?` · ${esc(e.note)}`:''}</div>
           ${payBtn}
         </div>
         <span class="event-person-chip" style="background:${col}22;color:${col}">🏫 ${esc(e.classKid)}</span>
@@ -6920,14 +4938,14 @@ function renderDayPanel(events){
     const personLabel=e.gcal?'':isAll
       ?`👨‍👩‍👧‍👧 ${t('everyone')}`
       :ps.map(n=>getEmoji(n)+' '+n).join(' · ');
-    const canDel=(isAll&&isParent()&&(!e.gcal||gcalConnected()))||(!isAll&&ps.includes(S.user));
+    const canDel=isParent()&&(!e.gcal||gcalConnected());
     return `<div class="event-item ${e.gcal?'gcal-event':''}" style="border-inline-start-color:${color}">
       <div class="event-body">
         <div class="event-title">${e.gcal?'<span class="g-badge">G</span>':''}${esc(e.title)}</div>
-        <div class="event-meta">${e.time?_ico.clock+' '+e.time:t('allDay')}${e.location?' · '+_ico.pin+' '+esc(e.location):''}${e.gcal?' '+t('gcalSource'):''}</div>
+        <div class="event-meta">${e.time?'🕐 '+e.time:t('allDay')}${e.gcal?' '+t('gcalSource'):''}</div>
       </div>
       ${personLabel?`<span class="event-person-chip" style="background:${color}22;color:${color}">${personLabel}</span>`:''}
-      ${canDel?`<button class="del-btn" onclick="deleteEvent(${e.id},'${e.gcalId||''}')">${_ico.x}</button>`:''}</div>`;
+      ${canDel?`<button class="del-btn" onclick="deleteEvent(${e.id},'${e.gcalId||''}')">×</button>`:''}</div>`;
   }).join('');
   el('dayPanel').innerHTML=html;
 }
@@ -6935,34 +4953,16 @@ function calShift(d){S.calMonth+=d;if(S.calMonth>11){S.calMonth=0;S.calYear++;}i
 async function addEvent(){
   const title=el('newEventTitle').value.trim(),date=el('newEventDate').value;
   if(!title||!date)return;
-  const person = _eventPersons.includes('All') ? 'All' : [...new Set([..._eventPersons, S.user])];
-  const location=el('newEventLocation')?.value.trim()||'';
-  const ev={id:Date.now(),title,date,time:el('newEventTime').value,person,...(location&&{location})};
+  const person = _eventPersons.length===1&&_eventPersons[0]==='All' ? 'All' : _eventPersons;
+  const ev={id:Date.now(),title,date,time:el('newEventTime').value,person};
   const syncGcal=gcalConnected()&&isParent()&&el('gcalSyncCheck').checked;
   if(syncGcal){const gcalId=await gcalCreateEvent(ev);if(gcalId)ev.gcalId=gcalId;}
-  S.events.push(ev);el('newEventTitle').value='';el('newEventTime').value='';if(el('newEventLocation'))el('newEventLocation').value='';
+  S.events.push(ev);el('newEventTitle').value='';el('newEventTime').value='';
   _eventPersons=['All']; renderEventPersonPicker();
   S.calSelected=date;const d2=new Date(date+'T00:00:00');S.calYear=d2.getFullYear();S.calMonth=d2.getMonth();
   save();if(syncGcal)await fetchGCalEvents();else renderCalendar();
 }
 async function deleteEvent(id,gcalId){
-  const ev=typeof id==='number'?S.events.find(x=>x.id===id):null;
-  if(ev){
-    const ps=eventPersons(ev);
-    if(!ps.includes('All')){
-      // personal event — remove self only
-      const remaining=ps.filter(n=>n!==S.user);
-      if(remaining.length===0){
-        if(gcalId&&gcalConnected())await gcalDeleteEvent(gcalId);
-        S.events=S.events.filter(x=>x.id!==id);
-      } else {
-        ev.person=remaining;
-      }
-      save();if(gcalConnected())await fetchGCalEvents();else renderCalendar();
-      return;
-    }
-  }
-  // 'All' event or legacy — full delete, parents only
   if(!isParent())return;
   if(gcalId&&gcalConnected())await gcalDeleteEvent(gcalId);
   if(typeof id==='number')S.events=S.events.filter(x=>x.id!==id);
@@ -6973,65 +4973,19 @@ async function deleteEvent(id,gcalId){
 //  TABS & FILTER
 // ════════════════════════════════════════
 const ALL_TABS = [
-  { id:'home',      icon:'🏡', adminOnly: false },
-  { id:'chores',    icon:'✅', adminOnly: false },
-  { id:'grocery',   icon:'🛒', adminOnly: false },
-  { id:'homework',  icon:'📚', adminOnly: false },
-  { id:'calendar',  icon:'📅', adminOnly: false },
-  { id:'community', icon:'🏫', adminOnly: false },
+  { id:'home',      icon:'🏡' },
+  { id:'chores',    icon:'✅' },
+  { id:'grocery',   icon:'🛒' },
+  { id:'homework',  icon:'📚' },
+  { id:'calendar',  icon:'📅' },
+  { id:'community', icon:'🏫' },
   { id:'analytics', icon:'📊', adminOnly: true },
 ];
-
-// SVG icon library (Phosphor-style, 2px stroke, rounded caps)
-const TAB_ICONS = {
-  home: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>`,
-  chores: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-4.5"/></svg>`,
-  grocery: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6L18 2z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>`,
-  homework: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>`,
-  calendar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
-  community: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>`,
-  analytics: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="3" y1="20" x2="21" y2="20"/></svg>`,
-  more: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>`,
-};
-
-// Filled icon variants for active state
-const TAB_ICONS_FILLED = {
-  home:      `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7A1 1 0 003 11h1v9a1 1 0 001 1h5v-5h4v5h5a1 1 0 001-1v-9h1a1 1 0 00.707-1.707l-7-7z"/></svg>`,
-  chores:    `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path fill-rule="evenodd" d="M12 2a10 10 0 100 20A10 10 0 0012 2zm4.707 8.293a1 1 0 00-1.414 0L10.5 15.086l-1.793-1.793a1 1 0 00-1.414 1.414l2.5 2.5a1 1 0 001.414 0l5.5-5.5a1 1 0 000-1.414z" clip-rule="evenodd"/></svg>`,
-  grocery:   `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M19 7H5L3.5 3H1v2h1.22L5.5 16.2A2 2 0 007.46 18h9.07a2 2 0 001.96-1.6L20.78 7H19zm-3 8a1 1 0 110 2 1 1 0 010-2zm-8 0a1 1 0 110 2 1 1 0 010-2z"/><rect x="8" y="10" width="8" height="2" rx="1"/></svg>`,
-  homework:  `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M18 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM9 4h2v5l-1-.75L9 9V4zm9 16H6V4h1v9l3-2.25L13 13V4h5v16z"/></svg>`,
-  calendar:  `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V8h16v13z"/></svg>`,
-  community: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>`,
-  analytics: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>`,
-};
-
-function tabIcon(id, active = false) {
-  if (active && TAB_ICONS_FILLED[id]) return TAB_ICONS_FILLED[id];
-  return TAB_ICONS[id] || '';
-}
-
-function scrollTabBar(dir) {
-  const sc = el('tabScroll');
-  if (!sc) return;
-  // dir: -1 = scroll left (more tabs in RTL), +1 = scroll right (back to start in RTL)
-  sc.scrollBy({ left: dir * -160, behavior: 'smooth' });
-}
-
-function updateTabArrows() {
-  const sc = el('tabScroll');
-  const prev = el('tabArrowPrev');
-  const next = el('tabArrowNext');
-  if (!sc || !prev || !next) return;
-  const sl = Math.abs(sc.scrollLeft); // RTL scrollLeft can be negative in Chrome
-  const max = sc.scrollWidth - sc.clientWidth;
-  prev.classList.toggle('tab-arrow-hidden', sl <= 4);
-  next.classList.toggle('tab-arrow-hidden', sl >= max - 4);
-}
 const TAB_IDX = { home:0, chores:1, grocery:2, homework:3, calendar:4, community:5, analytics:6 };
 function tabLabel(id) { return t('tabs')[TAB_IDX[id]] || id; }
 
 function getActiveTabs() {
-  const visible = ALL_TABS.filter(t => !t.adminOnly || (isAdmin() && !isKid()));
+  const visible = ALL_TABS.filter(t => !t.adminOnly || isAdmin());
   if (!S.uid || !S.user) return visible.map(t => t.id);
   // Prefer Firestore-synced prefs (available after familyData loads)
   const firestorePrefs = familyData?.tabPrefs?.[S.user];
@@ -7059,91 +5013,28 @@ function saveActiveTabs(ids) {
 
 function renderTabBar() {
   const active = getActiveTabs();
+  // If current tab was removed, fall back to first active
   if (!active.includes(S.tab)) {
     S.tab = active[0];
     document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
     el('tab-' + S.tab)?.classList.add('active');
   }
-
-  const tabsHtml = active.map(id => {
+  el('tabBar').innerHTML = active.map(id => {
     const tab = ALL_TABS.find(t => t.id === id);
     if (!tab) return '';
-    const isActive = S.tab === id;
-    const badge = (id === 'community' && _pendingCount > 0 && isCommittee() && !isKid())
-      ? `<span class="tab-comm-badge">${_pendingCount}</span>` : '';
-    return `<button class="tab${isActive ? ' active' : ''}" data-tab="${id}" onclick="switchTab('${id}')">
-      <span class="tab-icon">${tabIcon(id, isActive)}</span>
+    return `<div class="tab ${S.tab===id?'active':''}" data-tab="${id}" onclick="switchTab('${id}')">
+      <span class="tab-icon">${tab.icon}</span>
       <span class="tab-label">${tabLabel(id)}</span>
-      ${badge}
-    </button>`;
+    </div>`;
   }).join('');
-
-  el('tabBar').innerHTML = `
-    <button class="tab-arrow tab-arrow-hidden" id="tabArrowPrev" onclick="scrollTabBar(-1)" aria-label="הקודם">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
-    </button>
-    <div class="tab-scroll" id="tabScroll">${tabsHtml}</div>
-    <button class="tab-arrow tab-arrow-hidden" id="tabArrowNext" onclick="scrollTabBar(1)" aria-label="הבא">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-    </button>`;
-
-  const sc = el('tabScroll');
-  sc.addEventListener('scroll', updateTabArrows, { passive: true });
-  // Scroll active tab into view and update arrows after layout
-  requestAnimationFrame(() => {
-    sc.querySelector('.tab.active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
-    updateTabArrows();
-  });
-}
-
-function navToCalendarDate(dateStr, src, kid) {
-  const [yr, mo] = dateStr.split('-').map(Number);
-  S.calYear = yr;
-  S.calMonth = mo - 1;
-  S.calSelected = dateStr;
-  if (src === 'class' && kid) {
-    _calClassEventsOn[kid] = true;  // ensure kid's class events toggle is on
-  } else {
-    _calFilter = 'all';              // ensure personal events aren't hidden
-  }
-  switchTab('calendar');
-  renderCalendar();
 }
 
 function switchTab(tab) {
-  const active = getActiveTabs();
-  const oldIdx = active.indexOf(S.tab);
-  const newIdx = active.indexOf(tab);
-  const enterClass = newIdx >= oldIdx ? 'tab-enter-right' : 'tab-enter-left';
-
   S.tab = tab;
-  const _titleEl = el('headerTabTitle');
-  if (_titleEl) _titleEl.textContent = tabLabel(tab);
-  // Synchronous scroll reset — window.scrollTo is async on mobile Safari
-  document.documentElement.scrollTop = 0;
-  document.body.scrollTop = 0;
   el('tabBar').querySelectorAll('.tab').forEach(e =>
     e.classList.toggle('active', e.dataset.tab === tab));
-  document.querySelectorAll('.tab-content').forEach(e =>
-    e.classList.remove('active', 'tab-enter-right', 'tab-enter-left'));
-  const newContent = el('tab-' + tab);
-  if (newContent) {
-    // Keep new content invisible while display:block takes effect (prevents
-    // a one-frame flash at the final position before the animation's from-keyframe kicks in)
-    newContent.style.opacity = '0';
-    newContent.classList.add('active');
-    requestAnimationFrame(() => {
-      newContent.style.opacity = '';   // hand off to the animation's from { opacity:0 }
-      newContent.classList.add(enterClass);
-      setTimeout(() => newContent.classList.remove('tab-enter-right', 'tab-enter-left'), 220);
-    });
-  }
-  // Scroll active tab button into view
-  el('tabScroll')?.querySelector('.tab.active')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
-  updateTabArrows();
-  _updateScrollTopBtn();
-  if (tab !== 'chores') el('choreFabWrap')?.style.setProperty('display', 'none');
-  if (tab === 'chores') renderChores();
+  document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
+  el('tab-' + tab).classList.add('active');
   if (tab === 'community') renderCommunity();
   if (tab === 'analytics') renderAnalytics();
   if (tab === 'homework' && getKids().includes(S.filter)) S.child = S.filter;
@@ -7377,7 +5268,7 @@ function _renderPresenceGroups() {
         <span class="presence-group-chevron">${onlineExp ? '▾' : '◂'}</span>
         <span class="presence-group-label">מחוברים עכשיו</span>
         <span class="presence-group-count">
-          <span style="color:${_presenceOnline.length > 0 ? 'var(--primary-500)' : 'var(--gray-400)'};font-weight:800">${_presenceOnline.length}</span>
+          <span style="color:${_presenceOnline.length > 0 ? '#48bb78' : '#a0aec0'};font-weight:800">${_presenceOnline.length}</span>
         </span>
       </div>
       ${onlineBody}
@@ -7570,7 +5461,7 @@ function _renderAnalyticsUI(container, d) {
         <a href="https://console.firebase.google.com/project/familyhub-7fdd5/usage" target="_blank" rel="noopener noreferrer"
            style="font-size:11px;font-weight:800;color:#6a11cb;text-decoration:none;background:#f0e8ff;padding:3px 9px;border-radius:8px">📈 שימוש</a>
         <a href="https://console.firebase.google.com/project/familyhub-7fdd5/settings/billing" target="_blank" rel="noopener noreferrer"
-           style="font-size:11px;font-weight:800;color:var(--primary-600);text-decoration:none;background:var(--primary-50);padding:3px 9px;border-radius:8px">💳 חיוב</a>
+           style="font-size:11px;font-weight:800;color:#276749;text-decoration:none;background:#e6f4ea;padding:3px 9px;border-radius:8px">💳 חיוב</a>
         <button class="analytics-refresh-btn" onclick="renderAnalytics(true)" title="רענן">↻</button>
       </div>
     </div>
@@ -7951,7 +5842,6 @@ const HOME_SECTIONS = [
   { id:'stars',    icon:'⭐', labelKey:'starChart'   },
   { id:'homework', icon:'📚', labelKey:'hwDueSoon'   },
   { id:'upcoming', icon:'📅', labelHe:'אירועים קרובים', labelEn:'Upcoming events' },
-  { id:'shopping', icon:'🛒', labelHe:'קניות מהירות',  labelEn:'Quick shopping' },
 ];
 
 function _normaliseHomePrefs(p) {
@@ -8018,8 +5908,7 @@ function renderHomeEditor() {
   el('homeEditorActive').innerHTML = active.length ? active.map((id, i) => {
     const s = HOME_SECTIONS.find(x => x.id === id);
     const first = i === 0, last = i === active.length - 1;
-    return `<div class="tab-ed-row" data-drag-idx="${i}">
-      <span class="tab-ed-handle" onpointerdown="homeDragDown(event,${i})">⠿</span>
+    return `<div class="tab-ed-row">
       <span class="tab-ed-icon">${s.icon}</span>
       <span class="tab-ed-label">${_homeSectionLabel(s)}</span>
       <div class="tab-ed-btns">
@@ -8038,26 +5927,16 @@ function renderHomeEditor() {
 }
 
 function homeSectionMoveUp(id) {
-  const p = getHomePrefs();
-  const vis = HOME_SECTIONS.filter(s => s.id !== 'stars' || getKids().length > 0);
-  const activeIds = p.order.filter(i => !p.hidden.includes(i) && vis.find(s => s.id === i));
-  const idx = activeIds.indexOf(id);
-  if (idx <= 0) return;
-  [activeIds[idx-1], activeIds[idx]] = [activeIds[idx], activeIds[idx-1]];
-  let ai = 0;
-  p.order = p.order.map(i => (!p.hidden.includes(i) && vis.find(s => s.id === i)) ? activeIds[ai++] : i);
-  saveHomePrefs(p); renderHomeEditor(); renderHome();
+  const p = getHomePrefs(); const i = p.order.indexOf(id);
+  if (i <= 0) return;
+  [p.order[i-1], p.order[i]] = [p.order[i], p.order[i-1]];
+  saveHomePrefs(p); renderHomeEditor();
 }
 function homeSectionMoveDown(id) {
-  const p = getHomePrefs();
-  const vis = HOME_SECTIONS.filter(s => s.id !== 'stars' || getKids().length > 0);
-  const activeIds = p.order.filter(i => !p.hidden.includes(i) && vis.find(s => s.id === i));
-  const idx = activeIds.indexOf(id);
-  if (idx < 0 || idx >= activeIds.length - 1) return;
-  [activeIds[idx], activeIds[idx+1]] = [activeIds[idx+1], activeIds[idx]];
-  let ai = 0;
-  p.order = p.order.map(i => (!p.hidden.includes(i) && vis.find(s => s.id === i)) ? activeIds[ai++] : i);
-  saveHomePrefs(p); renderHomeEditor(); renderHome();
+  const p = getHomePrefs(); const i = p.order.indexOf(id);
+  if (i < 0 || i >= p.order.length - 1) return;
+  [p.order[i], p.order[i+1]] = [p.order[i+1], p.order[i]];
+  saveHomePrefs(p); renderHomeEditor();
 }
 function homeSectionHide(id) {
   const p = getHomePrefs();
@@ -8068,85 +5947,6 @@ function homeSectionShow(id) {
   const p = getHomePrefs();
   p.hidden = p.hidden.filter(x => x !== id);
   saveHomePrefs(p); renderHomeEditor();
-}
-
-// ────────────────────────────────────────
-//  Drag-and-drop reorder — home editor
-// ────────────────────────────────────────
-const _homeDrag = { on:false, timer:null, idx:-1, hoverIdx:-1, y0:0, rowH:48, handle:null };
-
-function homeDragDown(e, idx) {
-  if (e.pointerType === 'mouse' && e.button !== 0) return;
-  e.stopPropagation();
-  const handle = e.currentTarget;
-  handle.setPointerCapture(e.pointerId);
-  _homeDrag.handle = handle;
-  handle.addEventListener('pointermove',   homeDragMove);
-  handle.addEventListener('pointerup',     homeDragUp);
-  handle.addEventListener('pointercancel', homeDragUp);
-  _homeDrag.y0 = e.clientY;
-  _homeDrag.timer = setTimeout(() => {
-    _homeDrag.on = true;
-    _homeDrag.idx = idx;
-    _homeDrag.hoverIdx = idx;
-    const rows = [...el('homeEditorActive').querySelectorAll('.tab-ed-row')];
-    _homeDrag.rowH = rows[0]?.offsetHeight || 48;
-    rows[idx]?.classList.add('tab-ed-dragging');
-    if (navigator.vibrate) navigator.vibrate(40);
-  }, 350);
-}
-
-function homeDragMove(e) {
-  const y = e.clientY;
-  if (_homeDrag.timer && Math.abs(y - _homeDrag.y0) > 15) {
-    clearTimeout(_homeDrag.timer); _homeDrag.timer = null;
-  }
-  if (!_homeDrag.on) return;
-  e.preventDefault();
-  const dy = y - _homeDrag.y0;
-  const rows = [...el('homeEditorActive').querySelectorAll('.tab-ed-row')];
-  rows[_homeDrag.idx].style.transform = `translateY(${dy}px)`;
-  rows[_homeDrag.idx].style.zIndex    = '10';
-  const raw = _homeDrag.idx + dy / _homeDrag.rowH;
-  _homeDrag.hoverIdx = Math.max(0, Math.min(rows.length - 1, Math.round(raw)));
-  rows.forEach((r, i) => {
-    if (i === _homeDrag.idx) return;
-    let shift = 0;
-    if (_homeDrag.hoverIdx > _homeDrag.idx && i > _homeDrag.idx && i <= _homeDrag.hoverIdx) shift = -_homeDrag.rowH;
-    if (_homeDrag.hoverIdx < _homeDrag.idx && i >= _homeDrag.hoverIdx && i < _homeDrag.idx) shift = _homeDrag.rowH;
-    r.style.transform = shift ? `translateY(${shift}px)` : '';
-  });
-}
-
-function homeDragUp(e) {
-  if (_homeDrag.timer) { clearTimeout(_homeDrag.timer); _homeDrag.timer = null; }
-  if (_homeDrag.handle) {
-    _homeDrag.handle.removeEventListener('pointermove',   homeDragMove);
-    _homeDrag.handle.removeEventListener('pointerup',     homeDragUp);
-    _homeDrag.handle.removeEventListener('pointercancel', homeDragUp);
-    _homeDrag.handle = null;
-  }
-  if (!_homeDrag.on) { _homeDrag.on = false; return; }
-  _homeDrag.on = false;
-  el('homeEditorActive').querySelectorAll('.tab-ed-row').forEach(r => {
-    r.style.transform = r.style.zIndex = '';
-    r.classList.remove('tab-ed-dragging');
-  });
-  if (_homeDrag.hoverIdx >= 0 && _homeDrag.hoverIdx !== _homeDrag.idx) {
-    const p = getHomePrefs();
-    const vis = HOME_SECTIONS.filter(s => s.id !== 'stars' || getKids().length > 0);
-    const activeIds = p.order.filter(id => !p.hidden.includes(id) && vis.find(s => s.id === id));
-    const [moved] = activeIds.splice(_homeDrag.idx, 1);
-    activeIds.splice(_homeDrag.hoverIdx, 0, moved);
-    let ai = 0;
-    p.order = p.order.map(id =>
-      (!p.hidden.includes(id) && vis.find(s => s.id === id)) ? activeIds[ai++] : id
-    );
-    saveHomePrefs(p);
-    renderHome();
-  }
-  _homeDrag.idx = _homeDrag.hoverIdx = -1;
-  renderHomeEditor();
 }
 
 function setFilter(name){

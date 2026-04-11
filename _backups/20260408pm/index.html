@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260413fp') location.reload(true);
+        if (v !== '20260408pm') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -20,7 +20,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="FamilyHub">
-  <meta name="theme-color" content="#6C8CFF">
+  <meta name="theme-color" content="#6a11cb">
   <script>
     (function(){
       function makeIcon(size) {
@@ -38,14 +38,14 @@
       document.getElementById('appleTouchIcon').href=makeIcon(180);
     })();
   </script>
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
   <!-- Firebase SDKs — must load before main script -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260413fp">
+  <link rel="stylesheet" href="styles.css?v=20260408w">
 </head>
 <body>
 
@@ -67,8 +67,8 @@
 
     <!-- Sign In -->
     <div id="signinPanel">
-      <input class="auth-input" id="siEmail" type="email"    placeholder="אימייל" dir="ltr" autocomplete="email"            onkeydown="if(event.key==='Enter')doSignIn()">
-      <input class="auth-input" id="siPwd"   type="password" placeholder="סיסמה"  dir="ltr" autocomplete="current-password" onkeydown="if(event.key==='Enter')doSignIn()">
+      <input class="auth-input" id="siEmail" type="email"    placeholder="אימייל" dir="ltr" autocomplete="email">
+      <input class="auth-input" id="siPwd"   type="password" placeholder="סיסמה"  dir="ltr" autocomplete="current-password">
       <div id="siError" class="auth-error"></div>
       <button class="auth-btn-main" onclick="doSignIn()">כניסה</button>
       <button class="auth-link-btn" onclick="setAuthMode('signup')" style="direction:rtl">צור משפחה חדשה ←</button>
@@ -91,17 +91,15 @@
       <input class="auth-input" id="suPwd"    type="password" placeholder="סיסמה (לפחות 6 תווים)" dir="ltr" autocomplete="new-password">
       <div id="su1Error" class="auth-error"></div>
       <button class="auth-btn-main" onclick="signupNext()">הבא ←</button>
-      <button class="auth-link-btn" onclick="setAuthMode('signin')" style="margin-top:4px">‹ חזרה להתחברות</button>
     </div>
 
     <!-- Sign Up step 2: member builder -->
     <div id="signupPanel2" style="display:none">
-      <div class="auth-panel-label" id="su2Title">קודם כל, הפרטים שלך</div>
-      <div class="su2-subtitle" id="su2Subtitle">נדרש לפני הוספת בני משפחה נוספים</div>
+      <div class="auth-panel-label">מי בן/בת המשפחה?</div>
       <div class="emoji-row" id="emojiRow"></div>
       <div class="mb-add-row">
-        <input class="auth-input mb-name-input" id="mbName" type="text" placeholder="השם שלך" onkeydown="if(event.key==='Enter')addDraftMember()">
-        <div class="mb-role-toggle" id="su2RoleRow" style="display:none">
+        <input class="auth-input mb-name-input" id="mbName" type="text" placeholder="שם" onkeydown="if(event.key==='Enter')addDraftMember()">
+        <div class="mb-role-toggle">
           <button class="mb-role-btn active" id="mbRoleParent" onclick="setMbRole('parent')">הורה</button>
           <button class="mb-role-btn"        id="mbRoleKid"    onclick="setMbRole('kid')">ילד</button>
         </div>
@@ -113,15 +111,13 @@
         </div>
         <input class="auth-input" id="mbDob" type="date" placeholder="תאריך לידה" style="margin-bottom:0">
       </div>
-      <button class="auth-btn-main su2-self-btn" id="su2AddBtn" onclick="addDraftMember()">הוסף את עצמי ←</button>
+      <button class="auth-btn-add" onclick="addDraftMember()">+ הוסף</button>
       <div class="member-preview" id="memberPreview"></div>
-      <div class="su2-more-divider" id="su2MoreDivider" style="display:none"><span>הוסף בני משפחה נוספים <span class="su2-optional">(אופציונלי)</span></span></div>
       <div id="su2Error" class="auth-error"></div>
-      <div class="auth-btns-row" id="su2CreateRow" style="display:none">
+      <div class="auth-btns-row">
         <button class="auth-btn-back" onclick="signupBack()">‹ חזור</button>
         <button class="auth-btn-main auth-btn-create" onclick="doSignUp()">✓ צור חשבון</button>
       </div>
-      <button class="auth-link-btn" id="su2BackLink" onclick="signupBack()" style="margin-top:4px">‹ חזור</button>
     </div>
 
     <div id="authLoadingOverlay" style="display:none" class="auth-loading">⏳ טוען...</div>
@@ -233,16 +229,12 @@
       <div id="adminLogList"></div>
     </div>
     <div id="adminSettingsSection">
-      <div class="comm-section-label" style="margin-top:4px">🗂️ סוגי אירועים</div>
-      <div id="adminEventTypes"></div>
       <div class="comm-section-label" style="margin-top:4px">⚙️ הגדרות התראות</div>
       <div id="adminNotifSettings"></div>
       <div class="comm-section-label" style="margin-top:4px">📊 הגדרות לוח מובילים</div>
       <div id="adminLeaderboardSettings"></div>
       <div class="comm-section-label" style="margin-top:4px">🛒 היסטוריית קניות</div>
       <div id="adminShoppingHistorySettings"></div>
-      <div class="comm-section-label" style="margin-top:4px">💬 פניות משתמשים</div>
-      <div id="adminMessages"></div>
       <div class="comm-section-label" style="margin-top:4px">🔧 כלי תחזוקה</div>
       <div id="adminMaintenance"></div>
     </div>
@@ -250,60 +242,10 @@
 </div>
 
 <!-- MANAGEMENT SCREEN -->
-<div id="messageCenterPanel" class="hidden">
-  <div class="mgmt-header">
-    <button class="mgmt-back-btn" onclick="closeMessageCenter()">×</button>
-    <div class="mgmt-header-title">🔔 מרכז הודעות</div>
-    <div style="display:flex;gap:6px;align-items:center">
-      <span id="mcCount" style="font-size:12px;color:var(--gray-400);font-weight:700"></span>
-      <button id="mcDeleteAllBtn" onclick="deleteAllNotifs()" style="display:none;font-size:11px;padding:4px 10px;border:none;border-radius:var(--r-pill);background:var(--error-bg);color:var(--error);font-family:inherit;font-weight:700;cursor:pointer">מחק הכל</button>
-    </div>
-  </div>
-  <div style="padding:8px 12px;border-bottom:1px solid var(--gray-100);display:none" id="mcSelectAllRow">
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;cursor:pointer">
-      <input type="checkbox" id="mcSelectAll" onchange="mcToggleSelectAll(this)">
-      בחר הכל
-    </label>
-    <button id="mcDeleteSelectedBtn" onclick="deleteSelectedNotifs()" style="display:none;font-size:12px;padding:4px 12px;border:none;border-radius:var(--r-pill);background:var(--error-bg);color:var(--error);font-family:inherit;font-weight:700;cursor:pointer;margin-right:auto">מחק נבחרים</button>
-  </div>
-  <div id="messageCenterList" style="padding:8px 0"></div>
-</div>
-
-<div id="feedbackPanel" class="hidden">
-  <div class="mgmt-header">
-    <button class="mgmt-back-btn" onclick="closeFeedback()">×</button>
-    <div class="mgmt-header-title">💬 פנייה למנהל המערכת</div>
-  </div>
-  <div style="padding:16px;max-width:520px;margin:0 auto">
-    <div id="feedbackForm">
-      <div class="comm-section-label" style="margin-bottom:12px">יש לך משהו לומר? שלח/י לנו!</div>
-      <div style="margin-bottom:12px">
-        <label style="font-size:12px;font-weight:700;color:var(--gray-500);display:block;margin-bottom:6px">נושא</label>
-        <div id="ddFeedbackTopic"></div>
-        <select id="feedbackTopicSelect" style="display:none"></select>
-      </div>
-      <div style="margin-bottom:12px">
-        <label style="font-size:12px;font-weight:700;color:var(--gray-500);display:block;margin-bottom:6px">הודעה</label>
-        <textarea id="feedbackText" rows="5"
-          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--r-sm);font-family:inherit;font-size:14px;resize:vertical;background:var(--surface);color:var(--gray-900)"
-          placeholder="ספר/י לנו מה עלי דעתך, מה כדאי לשנות, מה לא עובד..."></textarea>
-      </div>
-      <button class="btn" onclick="sendFeedback()" style="width:100%;padding:12px;font-size:15px;font-weight:700">📨 שלח פנייה</button>
-      <div id="feedbackError" style="color:var(--error);font-size:13px;font-weight:700;margin-top:8px;text-align:center;display:none"></div>
-    </div>
-    <div id="feedbackSuccess" style="display:none;text-align:center;padding:32px 16px">
-      <div style="font-size:48px;margin-bottom:12px">✅</div>
-      <div style="font-size:18px;font-weight:900;color:var(--gray-900);margin-bottom:8px">הפנייה נשלחה!</div>
-      <div style="font-size:14px;color:var(--gray-500);margin-bottom:24px">תודה על הפנייה, נחזור אליך בהקדם.</div>
-      <button class="btn-ghost" onclick="closeFeedback()" style="padding:10px 24px;font-size:14px">סגור</button>
-    </div>
-  </div>
-</div>
-
 <div id="mgmtScreen" class="hidden">
   <div class="mgmt-header">
     <button class="mgmt-back-btn" onclick="closeMgmt()">×</button>
-    <div class="mgmt-header-title">⚙️ הגדרות</div>
+    <div class="mgmt-header-title">⚙️ ניהול</div>
   </div>
   <div class="mgmt-content">
 
@@ -390,6 +332,16 @@
 <!-- Custom autocomplete dropdown -->
 <div id="acDropdown"></div>
 
+<!-- PHOTO MANAGER MODAL -->
+<div id="photoModal" class="photo-modal-wrap" style="display:none">
+  <div style="background:white;border-radius:20px;padding:22px;width:100%;max-width:340px;max-height:80vh;overflow-y:auto">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div style="font-size:16px;font-weight:900;color:#1a202c">📷 תמונות משפחה</div>
+      <button onclick="closePhotoModal()" style="background:none;border:none;font-size:24px;cursor:pointer;color:#718096;line-height:1;padding:0 2px">×</button>
+    </div>
+    <div id="photoMemberList"></div>
+  </div>
+</div>
 <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoFile(event)">
 
 <!-- HAMBURGER MENU -->
@@ -399,10 +351,12 @@
 <!-- APP -->
 <div id="app">
   <div class="header" id="appHeader">
-    <div class="header-row">
-      <button class="menu-btn" onclick="toggleMenu(this)">☰</button>
-      <div class="header-tab-title" id="headerTabTitle"></div>
-      <div class="header-end">
+    <div class="header-top">
+      <div>
+        <div class="header-title">🏠 FamilyHub</div>
+        <div class="header-greeting" id="headerGreeting"></div>
+      </div>
+      <div class="header-btns">
         <button class="notif-bell-btn" id="pendingReqBtn" onclick="openPendingPanel()" title="בקשות ממתינות" style="display:none">
           📋
           <span class="notif-bell-badge hidden" id="pendingReqBadge"></span>
@@ -411,10 +365,15 @@
           🔔
           <span class="notif-bell-badge hidden" id="notifBellBadge"></span>
         </button>
-        <button class="header-avatar-btn" id="headerAvatarBtn" onclick="toggleMenu(this)"></button>
+        <button class="menu-btn" onclick="toggleMenu(this)">☰</button>
       </div>
     </div>
-    <div id="notifBanners"></div>
+    <div class="header-body" id="headerBody">
+      <div class="header-date" id="headerDate"></div>
+      <div id="notifBanners"></div>
+      <div class="avatar-row" id="avatarRow"></div>
+    </div>
+    <button class="header-collapse-btn" id="headerCollapseBtn" onclick="toggleHeaderCollapse()" aria-label="הסתר/הצג כותרת">▾</button>
   </div>
 
   <div class="tab-bar" id="tabBar"></div>
@@ -422,8 +381,8 @@
   <div class="content">
     <!-- HOME -->
     <div id="tab-home" class="tab-content active">
-      <div class="tab-chips-row" id="homeChips"></div>
       <div id="welcomeBanner"></div>
+      <div id="weatherWidget"></div>
       <div id="homeSection-chores">
         <div class="card"><div class="card-title" id="homeChoresTitle"></div><div id="homeTasks"></div></div>
       </div>
@@ -439,31 +398,20 @@
           <div id="homeUpcoming"></div>
         </div>
       </div>
-      <div id="homeSection-shopping"></div>
     </div>
 
     <!-- CHORES -->
     <div id="tab-chores" class="tab-content">
-      <div class="tab-chips-row" id="choresChips"></div>
-      <div class="chore-cat-chips-row" id="choreCatChips" style="display:none"></div>
       <div id="choresContent"></div>
-      <div class="card chore-quick-add" id="addChoreCard">
-        <div class="chore-qa-input-row">
-          <textarea class="chore-qa-input" id="newChoreText" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addChore()}" oninput="_choreInputGrow(this)"></textarea>
-          <button class="chore-qa-plus" id="addChoreBtn" onclick="addChore()">
-            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
-          </button>
-        </div>
-        <div class="chore-qa-controls-row">
-          <div id="choreAssigneeLabel" class="chore-qa-assignee-label" style="display:none"></div>
-          <select id="newChorePriority" style="display:none"></select>
-          <div class="pri-seg" id="priSegControl">
-            <button class="pri-seg-btn" data-val="high"   onclick="_priSegPick('high')">גבוהה</button>
-            <button class="pri-seg-btn active" data-val="medium" onclick="_priSegPick('medium')">בינונית</button>
-            <button class="pri-seg-btn" data-val="low"    onclick="_priSegPick('low')">נמוכה</button>
+      <div class="card" id="addChoreCard">
+        <div class="card-title" id="addChoreTitle"></div>
+        <div class="add-form">
+          <input class="add-input" id="newChoreText" type="text" onkeydown="if(event.key==='Enter')addChore()">
+          <div class="form-row">
+            <select id="newChoreAssignee" style="flex:1"></select>
+            <select id="newChorePriority" style="flex:1"></select>
+            <button class="btn-sm" id="addChoreBtn" onclick="addChore()"></button>
           </div>
-          <div class="chore-qa-sep"></div>
-          <input type="date" class="chore-qa-date" id="newChoreDate">
         </div>
       </div>
       <div id="choreHistoryWrap"></div>
@@ -484,16 +432,11 @@
           <div class="pool-search-wrap">
             <input class="pool-search" id="poolSearch" type="search" placeholder="🔍" oninput="onPoolSearch(this.value)">
           </div>
-          <div class="cat-chips-wrap" id="poolCatChips"></div>
-          <div class="pool-add-wrap" id="poolAddWrap">
-            <button class="pool-add-trigger" id="poolAddTrigger" onclick="togglePoolAddForm()">＋ הוסף פריט</button>
-            <div class="grocery-add pool-add-expand" id="poolAddForm" style="display:none">
-              <input class="g-input" id="poolItemInput" type="text" onkeydown="if(event.key==='Enter')addPoolItem()">
-              <select id="poolCatSelect" style="display:none"></select>
-              <div class="soft-dd" id="ddPoolCat"></div>
-              <button class="unit-toggle" id="poolUnitToggle" onclick="togglePoolNewQtyType()">יח'</button>
-              <button class="btn-sm" id="addPoolBtn" onclick="addPoolItem()"></button>
-            </div>
+          <div class="grocery-add" id="poolAddForm">
+            <input class="g-input" id="poolItemInput" type="text" onkeydown="if(event.key==='Enter')addPoolItem()">
+            <select class="g-cat" id="poolCatSelect"></select>
+            <button class="unit-toggle" id="poolUnitToggle" onclick="togglePoolNewQtyType()">יח'</button>
+            <button class="btn" onclick="addPoolItem()">＋</button>
           </div>
           <div id="poolList"></div>
         </div>
@@ -515,31 +458,21 @@
         <div class="card">
           <div class="card-title" id="shoppingListTitle"></div>
           <div id="shoppingListEl"></div>
+          <button class="btn" id="doneShoppingBtn" onclick="doneShopping()" style="margin-top:10px;background:linear-gradient(135deg,#38a169,#2f855a);display:none"></button>
         </div>
       </div>
-      <button class="done-shopping-sticky" id="doneShoppingBtn" onclick="doneShopping()" style="display:none"></button>
     </div>
 
     <!-- HOMEWORK -->
     <div id="tab-homework" class="tab-content">
-      <div class="tab-chips-row" id="childTabsContainer"></div>
-      <div class="tab-chips-row" id="hwSubjectChips" style="display:none;flex-wrap:wrap;gap:8px"></div>
-      <div class="card hw-class-card" id="hwClassSection" style="display:none">
-        <div class="hw-section-hdr">🏫 שיעורי בית של הכיתה</div>
-        <div id="hwClassList"></div>
-      </div>
+      <div class="child-tabs" id="childTabsContainer"></div>
       <div class="card">
         <div class="card-title" id="hwCardTitle"></div>
         <div id="hwList"></div>
         <div class="add-form" id="addHwForm">
-          <div class="hw-scope-seg" id="hwScopeSeg" style="display:none">
-            <button class="hw-scope-btn active" data-val="personal" onclick="_hwScopePick('personal')">אישי</button>
-            <button class="hw-scope-btn" data-val="class" onclick="_hwScopePick('class')">🏫 לכל הכיתה</button>
-          </div>
           <input class="add-input" id="hwDesc" type="text">
           <div class="form-row">
-            <div id="ddHwSubject" style="flex:1;min-width:0"></div>
-            <select id="hwSubject" style="display:none"></select>
+            <select id="hwSubject" style="flex:1"></select>
             <input type="date" id="hwDue" style="flex:1">
             <button class="btn-sm" id="addHwBtn" onclick="addHomework()"></button>
           </div>
@@ -550,7 +483,6 @@
 
     <!-- COMMUNITY -->
     <div id="tab-community" class="tab-content">
-      <div class="tab-chips-row" id="communityChips"></div>
       <div id="communityContent"></div>
     </div>
 
@@ -586,7 +518,6 @@
             <input type="date" id="newEventDate" style="flex:1">
             <input type="time" id="newEventTime" style="flex:0 0 100px">
           </div>
-          <input class="add-input" id="newEventLocation" type="text" placeholder="📍 מיקום (אופציונלי)">
           <div id="newEventPersonPicker" class="event-person-picker"></div>
           <label id="gcalSyncRow" style="display:none;align-items:center;gap:7px;font-size:13px;font-weight:700;color:#4a5568;cursor:pointer;margin-top:6px">
             <input type="checkbox" id="gcalSyncCheck" style="width:16px;height:16px;accent-color:#4285f4">
@@ -599,16 +530,7 @@
   </div>
 </div>
 
-<div class="chore-fab-wrap" id="choreFabWrap" style="display:none">
-  <div class="chore-fab-picker" id="choreFabPicker"></div>
-  <button class="chore-fab" id="choreFab" onclick="choreFabClick()" aria-label="הוסף משימה">
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
-  </button>
-</div>
-<button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
-</button>
-<script src="app.js?v=20260413fp"></script>
+<script src="app.js?v=20260408w"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
