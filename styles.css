@@ -1061,9 +1061,9 @@ mark { background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px; 
   width: 36px; height: 36px; padding: 0; border: none; border-radius: var(--r-pill);
   background: var(--primary-500); color: white;
   display: flex; align-items: center; justify-content: center;
-  display: inline-flex; align-items: center; justify-content: center;
   flex-shrink: 0; cursor: pointer; transition: background var(--t-normal);
 }
+.btn-sm svg { display: block; }
 .btn-sm:hover { background: var(--primary-600); }
 
 .btn-ghost {
@@ -1558,6 +1558,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 }
 .home-quick-add-btn svg { width: 18px; height: 18px; }
 .home-quick-add-btn:hover { background: var(--primary-600); }
+.home-quick-add-btn.quick-added-btn { background: var(--success,#38a169); transition: background 0.15s; }
 @keyframes quick-add-pop {
   0%  { background: var(--success-bg); }
   80% { background: var(--success-bg); }
