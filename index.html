@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260413fp') location.reload(true);
+        if (v !== '20260413fq') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260413fp">
+  <link rel="stylesheet" href="styles.css?v=20260413fq">
 </head>
 <body>
 
@@ -288,7 +288,7 @@
           style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--r-sm);font-family:inherit;font-size:14px;resize:vertical;background:var(--surface);color:var(--gray-900)"
           placeholder="ספר/י לנו מה עלי דעתך, מה כדאי לשנות, מה לא עובד..."></textarea>
       </div>
-      <button class="btn" onclick="sendFeedback()" style="width:100%;padding:12px;font-size:15px;font-weight:700">📨 שלח פנייה</button>
+      <button class="btn" onclick="sendFeedback()" style="width:100%;padding:12px;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:5px">📨 שלח פנייה</button>
       <div id="feedbackError" style="color:var(--error);font-size:13px;font-weight:700;margin-top:8px;text-align:center;display:none"></div>
     </div>
     <div id="feedbackSuccess" style="display:none;text-align:center;padding:32px 16px">
@@ -608,7 +608,7 @@
 <button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
 </button>
-<script src="app.js?v=20260413fp"></script>
+<script src="app.js?v=20260413fq"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
