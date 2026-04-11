@@ -991,9 +991,9 @@ function initNotifBanners() {
         (n.recipientUid === S.uid && n.requestedByUid !== S.uid)
       ) && (n.type !== 'shopping_done' || !isKid());
       renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
-      // Patch old school_pending notifications that are missing reqId
       if (isAdmin()) _patchMissingReqIds(_allNotifs);
       _updateBellBadge();
+      if (!el('messageCenterPanel')?.classList.contains('hidden')) renderMessageCenter();
       if (isCommittee()) _fetchPendingBadge();
       if (!el('messageCenterPanel')?.classList.contains('hidden')) renderMessageCenter();
     }, err => console.error('[notif] onSnapshot error:', err.code, err.message));
@@ -1345,6 +1345,14 @@ function _renderCommPendingBanner(el) {
   } else {
     el.innerHTML = `<div style="text-align:end;margin-bottom:4px"><button class="comm-history-link" onclick="openAdminPanel(true,true)">📋 היסטוריית בקשות</button></div>`;
   }
+}
+
+function openMessageCenter() {
+  el('messageCenterPanel').classList.remove('hidden');
+  renderMessageCenter();
+}
+function closeMessageCenter() {
+  el('messageCenterPanel').classList.add('hidden');
 }
 
 function renderMessageCenter() {

@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260413fh') location.reload(true);
+        if (v !== '20260413fi') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260413fh">
+  <link rel="stylesheet" href="styles.css?v=20260413fi">
 </head>
 <body>
 
@@ -250,6 +250,25 @@
 </div>
 
 <!-- MANAGEMENT SCREEN -->
+<div id="messageCenterPanel" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeMessageCenter()">×</button>
+    <div class="mgmt-header-title">🔔 מרכז הודעות</div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <span id="mcCount" style="font-size:12px;color:var(--gray-400);font-weight:700"></span>
+      <button id="mcDeleteAllBtn" onclick="deleteAllNotifs()" style="display:none;font-size:11px;padding:4px 10px;border:none;border-radius:var(--r-pill);background:var(--error-bg);color:var(--error);font-family:inherit;font-weight:700;cursor:pointer">מחק הכל</button>
+    </div>
+  </div>
+  <div style="padding:8px 12px;border-bottom:1px solid var(--gray-100);display:none" id="mcSelectAllRow">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;cursor:pointer">
+      <input type="checkbox" id="mcSelectAll" onchange="mcToggleSelectAll(this)">
+      בחר הכל
+    </label>
+    <button id="mcDeleteSelectedBtn" onclick="deleteSelectedNotifs()" style="display:none;font-size:12px;padding:4px 12px;border:none;border-radius:var(--r-pill);background:var(--error-bg);color:var(--error);font-family:inherit;font-weight:700;cursor:pointer;margin-right:auto">מחק נבחרים</button>
+  </div>
+  <div id="messageCenterList" style="padding:8px 0"></div>
+</div>
+
 <div id="feedbackPanel" class="hidden">
   <div class="mgmt-header">
     <button class="mgmt-back-btn" onclick="closeFeedback()">×</button>
@@ -589,7 +608,7 @@
 <button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
 </button>
-<script src="app.js?v=20260413fh"></script>
+<script src="app.js?v=20260413fi"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
