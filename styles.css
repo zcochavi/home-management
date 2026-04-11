@@ -1558,13 +1558,13 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 }
 .home-quick-add-btn svg { width: 18px; height: 18px; }
 .home-quick-add-btn:hover { background: var(--primary-600); }
-.home-quick-add-btn.quick-added-btn { background: var(--success,#38a169); transition: background 0.15s; }
+.home-quick-add-btn.quick-added-btn { background: var(--success,#38a169); transition: background 0.5s; }
 @keyframes quick-add-pop {
   0%  { background: var(--success-bg); }
-  80% { background: var(--success-bg); }
+  85% { background: var(--success-bg); }
   100%{ background: transparent; }
 }
-.home-quick-add-input.quick-added { animation: quick-add-pop 0.7s ease forwards; }
+.home-quick-add-input.quick-added { animation: quick-add-pop 2s ease forwards; }
 .home-quick-ac-outer { position: relative; }
 .home-quick-ac-drop {
   position: absolute; top: calc(100% + 5px); left: 0; right: 0;
