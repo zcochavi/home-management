@@ -54,7 +54,7 @@ const STRINGS = {
     wbStars: n => `יש לך ${n} ⭐ כוכבים השבוע`,
     addChoreTitle:'➕ הוסף משימה', chorePlaceholder:'מה צריך לעשות...',
     noChores:'זה זמן טוב להוסיף משהו קטן 🙂',
-    choreHistory:'✅ היסטוריה', choreHistoryEmpty:'אין משימות שהושלמו עדיין', choreHistorySearch:'חיפוש בהיסטוריה...',
+    choreHistory:'📋 היסטוריה', choreHistoryEmpty:'אין משימות שהושלמו עדיין', choreHistorySearch:'חיפוש בהיסטוריה...',
     high:'גבוהה', medium:'בינונית', low:'נמוכה',
     youLabel:'(את/ה)', add:'הוסף',
     superPoolTitle:'🏪 מאגר', superListTitle:'🛒 רשימת קניות', superCartTitle:'🧺 בעגלה',
@@ -126,6 +126,8 @@ const STRINGS = {
     commApplicationDeny:'✕ דחה',
     commMyApplication:'המועמדות שלך',
     commApplicationExpires: d => `פג תוקף: ${d}`,
+    commCancelApplication:'בטל מועמדות',
+    commLeaveCommittee:'עזוב ועד',
   },
   en: {
     dir:'ltr', locale:'en-US',
@@ -146,7 +148,7 @@ const STRINGS = {
     wbStars: n => `You have ${n} ⭐ star${n!==1?'s':''} this week`,
     addChoreTitle:'➕ Add Chore', chorePlaceholder:'What needs doing…',
     noChores:'A good time to add something small 🙂',
-    choreHistory:'✅ History', choreHistoryEmpty:'No completed chores yet', choreHistorySearch:'Search history…',
+    choreHistory:'📋 History', choreHistoryEmpty:'No completed chores yet', choreHistorySearch:'Search history…',
     high:'high', medium:'medium', low:'low',
     youLabel:'(you)', add:'Add',
     superPoolTitle:'🏪 Pool', superListTitle:'🛒 Shopping List', superCartTitle:'🧺 In Cart',
@@ -218,6 +220,8 @@ const STRINGS = {
     commApplicationDeny:'✕ Deny',
     commMyApplication:'Your Application',
     commApplicationExpires: d => `Expires: ${d}`,
+    commCancelApplication:'Cancel Application',
+    commLeaveCommittee:'Leave Committee',
   },
 };
 
@@ -421,6 +425,31 @@ function _choreWhen(id) {
   if (d === yesterday) return 'אתמול';
   return fmtDate(d);
 }
+function _choreDueLabel(due) {
+  if (!due) return null;
+  const isHe = getLang() === 'he';
+  if (due < today)      return isHe ? `עבר: ${fmtDate(due)}`  : `overdue: ${fmtDate(due)}`;
+  if (due === today)    return isHe ? 'היום'  : 'Today';
+  if (due === tomorrow) return isHe ? 'מחר'   : 'Tomorrow';
+  return fmtDate(due);
+}
+
+// Chore sort score: combines priority + due-date urgency.
+// Priority penalty (days): high=0, medium=5, low=12.
+// Due-date days: negative if overdue (urgent bonus), 0=today, N=N days out, no-due=30.
+// Lower score → appears first.
+const _CHORE_PRI_PENALTY = { high: 0, medium: 5, low: 12 };
+function _choreSortScore(c) {
+  const pri = _CHORE_PRI_PENALTY[c.priority] ?? 5;
+  let dueDays;
+  if (c.due) {
+    const msPerDay = 864e5;
+    dueDays = Math.round((new Date(c.due + 'T00:00:00') - new Date(today + 'T00:00:00')) / msPerDay);
+  } else {
+    dueDays = 30; // no due date: treated as ~a month out
+  }
+  return pri + dueDays;
+}
 
 // ════════════════════════════════════════
 //  STATE
@@ -532,11 +561,37 @@ let _joining = false;
 
 const EMOJI_OPTIONS = ['👩','👨','👧','👦','🧒','👶','🧑','👵','👴','🧔','🧑‍🍼','👱'];
 const GRADE_OPTIONS = ['','א','ב','ג','ד','ה','ו','ז','ח','ט','י','י"א','י"ב'];
-let _draftMembers = [];
+let _draftMembers   = [];
+let _draftSelfAdded = false;
 let _mbRole   = 'parent';
 let _mbEmoji  = EMOJI_OPTIONS[0];
 let _mbGender = null;
 let _mbDob    = '';
+
+function _enterSu2SelfMode() {
+  el('su2Title').textContent         = 'קודם כל, הפרטים שלך';
+  el('su2Subtitle').style.display    = '';
+  el('su2RoleRow').style.display     = 'none';
+  el('mbName').placeholder           = 'השם שלך';
+  el('su2AddBtn').className          = 'auth-btn-main su2-self-btn';
+  el('su2AddBtn').textContent        = 'הוסף את עצמי ←';
+  el('su2MoreDivider').style.display = 'none';
+  el('su2CreateRow').style.display   = 'none';
+  el('su2BackLink').style.display    = '';
+  if (el('mbKidExtras')) el('mbKidExtras').style.display = 'none';
+}
+
+function _enterSu2MoreMode() {
+  el('su2Title').textContent         = 'הוסף בני משפחה נוספים';
+  el('su2Subtitle').style.display    = 'none';
+  el('su2RoleRow').style.display     = '';
+  el('mbName').placeholder           = 'שם';
+  el('su2AddBtn').className          = 'auth-btn-add';
+  el('su2AddBtn').textContent        = '+ הוסף';
+  el('su2MoreDivider').style.display = '';
+  el('su2CreateRow').style.display   = '';
+  el('su2BackLink').style.display    = 'none';
+}
 
 function generateFamilyCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -589,8 +644,10 @@ function setMbGender(g) {
 function addDraftMember() {
   const name = el('mbName').value.trim();
   if (!name) { el('mbName').focus(); return; }
-  const entry = { name, emoji: _mbEmoji, role: _mbRole };
-  if (_mbRole === 'kid') {
+  // Phase 1 (self): always parent — role toggle is hidden
+  const role  = _draftSelfAdded ? _mbRole : 'parent';
+  const entry = { name, emoji: _mbEmoji, role };
+  if (role === 'kid') {
     if (_mbGender) entry.gender = _mbGender;
     const dob = el('mbDob')?.value;
     if (dob) entry.dob = dob;
@@ -599,9 +656,19 @@ function addDraftMember() {
   el('mbName').value = '';
   if (el('mbDob')) el('mbDob').value = '';
   _mbGender = null;
+  _mbRole = 'parent';
   el('mbGenderBoy') ?.classList.remove('active');
   el('mbGenderGirl')?.classList.remove('active');
+  el('mbRoleParent')?.classList.add('active');
+  el('mbRoleKid')   ?.classList.remove('active');
+  if (el('mbKidExtras')) el('mbKidExtras').style.display = 'none';
   renderMemberPreview();
+  if (!_draftSelfAdded) {
+    _draftSelfAdded = true;
+    _enterSu2MoreMode();
+    initEmojiRow();
+    setTimeout(() => el('mbName')?.focus(), 50);
+  }
 }
 function removeDraftMember(i) {
   _draftMembers.splice(i, 1);
@@ -611,11 +678,13 @@ function renderMemberPreview() {
   el('memberPreview').innerHTML = _draftMembers.map((m, i) => {
     const genderLabel = m.gender === 'boy' ? ' · 👦' : m.gender === 'girl' ? ' · 👧' : '';
     const dobLabel    = m.dob ? ' · ' + m.dob : '';
-    return `<div class="member-chip">
+    const isSelf      = i === 0 && _draftSelfAdded;
+    return `<div class="member-chip${isSelf ? ' member-chip-first' : ''}">
       <span class="member-chip-emoji">${m.emoji}</span>
       <span class="member-chip-name">${esc(m.name)}${genderLabel}${dobLabel}</span>
+      ${isSelf ? '<span class="member-chip-self">אני</span>' : ''}
       <span class="member-chip-role">${m.role==='parent'?'הורה':'ילד/ה'}</span>
-      <button class="member-chip-del" onclick="removeDraftMember(${i})">×</button>
+      ${isSelf ? '' : `<button class="member-chip-del" onclick="removeDraftMember(${i})">×</button>`}
     </div>`;
   }).join('');
 }
@@ -644,13 +713,20 @@ function signupNext() {
   if (pwd.length < 6) { el('su1Error').textContent = 'הסיסמה חייבת להיות לפחות 6 תווים'; return; }
   el('signupPanel1').style.display = 'none';
   el('signupPanel2').style.display = '';
-  _draftMembers = [];
+  _draftMembers   = [];
+  _draftSelfAdded = false;
+  _mbRole   = 'parent';
+  _mbGender = null;
   renderMemberPreview();
   initEmojiRow();
+  _enterSu2SelfMode();
+  setTimeout(() => el('mbName')?.focus(), 50);
 }
 function signupBack() {
   el('signupPanel2').style.display = 'none';
   el('signupPanel1').style.display = '';
+  _draftSelfAdded = false;
+  _draftMembers   = [];
 }
 
 async function doSignIn() {
@@ -665,6 +741,19 @@ async function doSignIn() {
   } catch(e) {
     setAuthLoading(false);
     el('siError').textContent = getAuthError(e.code);
+    const isPwdErr = e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential';
+    const isEmailErr = e.code === 'auth/user-not-found' || e.code === 'auth/invalid-email';
+    const pwdEl   = el('siPwd');
+    const emailEl = el('siEmail');
+    if (isPwdErr) {
+      pwdEl.classList.add('input-error');
+      pwdEl.select();
+      pwdEl.addEventListener('input', () => pwdEl.classList.remove('input-error'), { once: true });
+    } else if (isEmailErr) {
+      emailEl.classList.add('input-error');
+      emailEl.select();
+      emailEl.addEventListener('input', () => emailEl.classList.remove('input-error'), { once: true });
+    }
   }
 }
 
@@ -693,14 +782,10 @@ async function doSignUp() {
       await secondaryApp.delete();
     }
     // 3. Write family doc + join code lookup
-    const localRaw = localStorage.getItem('familyhub_v3');
-    let init = { chores:[], grocery:[], homework:[], events:[], stars:{} };
-    if (localRaw) { try { Object.assign(init, JSON.parse(localRaw)); } catch(e){} }
     await fbDb.collection('families').doc(ownerUid).set({
       familyName, email, members, familyCode: code,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      chores: init.chores||[], grocery: init.grocery||[],
-      homework: init.homework||[], events: init.events||[], stars: init.stars||{},
+      chores: [], grocery: [], homework: [], events: [], stars: {},
       groceryPool: [], shoppingList: [], inCart: [], shoppingHistory: [],
     });
     await fbDb.collection('joinCodes').doc(code).set({ ownerUid });
@@ -830,14 +915,14 @@ function setAuthLoading(on) {
 
 function getAuthError(code) {
   const m = {
-    'auth/user-not-found':         'לא נמצא חשבון עם אימייל זה',
-    'auth/wrong-password':         'סיסמה שגויה',
-    'auth/invalid-credential':     'אימייל או סיסמה שגויים',
-    'auth/email-already-in-use':   'כתובת האימייל כבר בשימוש',
+    'auth/user-not-found':         'לא נמצא חשבון עם כתובת אימייל זו — בדוק שהכתבת נכון',
+    'auth/wrong-password':         'סיסמה שגויה — בדוק אותיות גדולות/קטנות ונסה שוב',
+    'auth/invalid-credential':     'אימייל או סיסמה שגויים — בדוק ונסה שוב',
+    'auth/email-already-in-use':   'כתובת האימייל כבר רשומה במערכת',
     'auth/invalid-email':          'כתובת אימייל לא תקינה',
-    'auth/weak-password':          'הסיסמה חלשה מדי (6 תווים לפחות)',
-    'auth/network-request-failed': 'בעיית חיבור לרשת',
-    'auth/too-many-requests':      'יותר מדי ניסיונות, נסה שוב מאוחר יותר',
+    'auth/weak-password':          'הסיסמה קצרה מדי — נדרשים לפחות 6 תווים',
+    'auth/network-request-failed': 'בעיית חיבור לרשת — בדוק את האינטרנט ונסה שוב',
+    'auth/too-many-requests':      'יותר מדי ניסיונות כושלים — נסה שוב עוד כמה דקות',
     'permission-denied':           'אין הרשאה לכתוב למסד הנתונים — יש לעדכן את חוקי האבטחה ב-Firebase Console',
   };
   return m[code] || 'שגיאה: ' + code;
@@ -848,8 +933,7 @@ let _sessionStartMs  = null;
 
 function _applyAdminUI() {
   const btn = el('pendingReqBtn');
-  const showBell = isCommittee() && !isKid();
-  if (btn) btn.style.display = showBell ? '' : 'none';
+  if (btn) btn.style.display = 'none'; // moved to community tab badge + in-tab banner
   if (showBell) _fetchPendingBadge();
 }
 
@@ -875,7 +959,8 @@ function showToast(msg, type = 'info', duration = 4000) {
 }
 
 // ── Notification system (banners + message center) ───────────
-let _allNotifs = []; // cached for message center
+let _allNotifs    = []; // cached for message center
+let _pendingCount = 0; // pending requests count for committee tab badge
 
 function initNotifBanners() {
   if (_notifUnsubscribe) { _notifUnsubscribe(); _notifUnsubscribe = null; }
@@ -959,7 +1044,7 @@ function renderNotifBanners(undismissed) {
     const REQUEST_TYPES = ['school_pending','event_pending','application_pending'];
     const isRequest  = REQUEST_TYPES.includes(n.type);
     const isInfo     = n.type === 'shopping_done';
-    const isGood     = n.type?.includes('approved') || n.type === 'member_joined';
+    const isGood     = n.type?.includes('approved') || n.type === 'member_joined' || n.type === 'class_member_joined';
     const isDenied   = n.type?.includes('denied') || n.type?.includes('rejected');
     const bg     = isDenied ? '#fff5f5' : '#ebf8ff';
     const border = isDenied ? '#feb2b2' : '#90cdf4';
@@ -1213,9 +1298,39 @@ async function _fetchPendingBadge() {
       ? activeDocs.length
       : activeDocs.filter(d => isCommitteeFor(d.ref.parent.parent.id)).length;
     const total = evCount + (appsSnap?.size || 0) + (schoolsSnap?.size || 0);
+    _pendingCount = total;
     const badge = el('pendingReqBadge');
     if (badge) { badge.textContent = total || ''; badge.classList.toggle('hidden', !total); }
+    _updateCommTabBadge();
+    // Update community banner if tab is open
+    const banner = el('commPendingBanner');
+    if (banner) _renderCommPendingBanner(banner);
   } catch(e) {}
+}
+
+function _updateCommTabBadge() {
+  const btn = document.querySelector('.tab[data-tab="community"]');
+  if (!btn) return;
+  let dot = btn.querySelector('.tab-comm-badge');
+  if (_pendingCount > 0 && isCommittee() && !isKid()) {
+    if (!dot) { dot = document.createElement('span'); dot.className = 'tab-comm-badge'; btn.appendChild(dot); }
+    dot.textContent = _pendingCount;
+  } else if (dot) {
+    dot.remove();
+  }
+}
+
+function _renderCommPendingBanner(el) {
+  if (!isCommittee() || isKid()) { el.innerHTML = ''; return; }
+  if (_pendingCount > 0) {
+    el.innerHTML = `<div class="comm-pending-banner" onclick="openPendingPanel()">
+      <span class="comm-pending-icon">📋</span>
+      <span class="comm-pending-text">יש <strong>${_pendingCount}</strong> בקשות ממתינות לאישור</span>
+      <span class="comm-pending-arrow">←</span>
+    </div>`;
+  } else {
+    el.innerHTML = `<div style="text-align:end;margin-bottom:4px"><button class="comm-history-link" onclick="openAdminPanel(true,true)">📋 היסטוריית בקשות</button></div>`;
+  }
 }
 
 function renderMessageCenter() {
@@ -1528,6 +1643,7 @@ function showNotifToast(title, body) {
 }
 
 function subscribeToFamily(uid) {
+  if (!_evtCfgLoaded) { _evtCfgLoaded = true; loadEventTypesCfg(); }
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
   fbUnsubscribe = fbDb.collection('families').doc(uid).onSnapshot(snap => {
     if (!snap.exists) {
@@ -1757,6 +1873,7 @@ const _ico = {
   clock:`<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-bottom:1px"><circle cx="7" cy="7" r="5.5"/><polyline points="7,4 7,7 9,8.5"/></svg>`,
   pin:  `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-bottom:1px"><path d="M7 1a3.5 3.5 0 0 1 3.5 3.5C10.5 7.5 7 13 7 13S3.5 7.5 3.5 4.5A3.5 3.5 0 0 1 7 1z"/><circle cx="7" cy="4.5" r="1.2" fill="currentColor" stroke="none"/></svg>`,
   pencil:`<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;display:block"><path d="M9.5 2a1.5 1.5 0 0 1 2 2L4 11H2V9L9.5 2z"/></svg>`,
+  fam:   `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;display:inline-block;vertical-align:middle;color:#a0aec0"><circle cx="13" cy="7" r="2.5"/><path d="M18 17c0-2.8-2.7-5-6-5"/><circle cx="7" cy="7" r="2.5"/><path d="M1 17c0-2.8 2.7-5 6-5s6 2.2 6 5"/></svg>`,
 };
 
 // ════════════════════════════════════════
@@ -2543,7 +2660,7 @@ async function renderMgmtCommunity() {
       </div>
       ${classmates.length ? classmates.map(c=>`
         <div class="comm-mate">
-          <span style="font-size:18px">👨‍👩‍👧</span>
+          ${_ico.fam}
           <span class="comm-mate-family">${esc(c.familyName||'משפחה')}</span>
           <span class="comm-mate-kid">${esc(c.kidName)}</span>
         </div>`).join('')
@@ -2553,17 +2670,34 @@ async function renderMgmtCommunity() {
 }
 
 // ── Community Tab ─────────────────────────
-const EVENT_TYPES = [
-  { id:'birthday',     icon:'🎂' },
-  { id:'trip',         icon:'🚌' },
-  { id:'party',        icon:'🎉' },
-  { id:'announcement', icon:'📢' },
-  { id:'other',        icon:'📝' },
+const _DEFAULT_EVENT_TYPES = [
+  { id:'birthday',     icon:'🎂', labelHe:'יום הולדת', labelEn:'Birthday',    mDate:true,  mTime:true,  mLoc:true  },
+  { id:'trip',         icon:'🚌', labelHe:'טיול',       labelEn:'Trip',        mDate:true,  mTime:false, mLoc:false },
+  { id:'party',        icon:'🎉', labelHe:'מסיבה',      labelEn:'Party',       mDate:true,  mTime:true,  mLoc:true  },
+  { id:'announcement', icon:'📢', labelHe:'הודעה',      labelEn:'Announcement',mDate:false, mTime:false, mLoc:false },
+  { id:'other',        icon:'📝', labelHe:'אחר',         labelEn:'Other',       mDate:false, mTime:false, mLoc:false },
 ];
-function eventTypeIcon(type) { return EVENT_TYPES.find(e=>e.id===type)?.icon||'📝'; }
+let _eventTypesCfg = _DEFAULT_EVENT_TYPES.map(t => ({ ...t, enabled:true }));
+let _evtCfgLoaded  = false;
+
+async function loadEventTypesCfg() {
+  try {
+    const snap = await fbDb.collection('appConfig').doc('eventTypes').get();
+    if (snap.exists && Array.isArray(snap.data().types) && snap.data().types.length) {
+      _eventTypesCfg = snap.data().types;
+    }
+  } catch(e) { /* keep defaults */ }
+}
+async function _saveEventTypesCfg() {
+  await fbDb.collection('appConfig').doc('eventTypes').set({ types: _eventTypesCfg });
+}
+const getEventTypes = () => _eventTypesCfg.filter(t => t.enabled !== false);
+
+function eventTypeIcon(type) { return _eventTypesCfg.find(e=>e.id===type)?.icon || '📝'; }
 function eventTypeName(type) {
-  const keys = { birthday:'evBirthday', trip:'evTrip', party:'evParty', announcement:'evAnnouncement', other:'evOther' };
-  return t(keys[type]||'evOther');
+  const cfg = _eventTypesCfg.find(e => e.id === type);
+  if (cfg) return getLang() === 'he' ? (cfg.labelHe || cfg.id) : (cfg.labelEn || cfg.labelHe || cfg.id);
+  return type;
 }
 function classLabelFromId(classId) {
   if (!classId) return '';
@@ -2659,6 +2793,38 @@ function subscribeToCommClass(cid) {
         _commCache[cid].applications = snap.docs.map(d => ({id:d.id,...d.data()}));
         rerender();
       }, e => console.warn('[community] applications:', e.code))
+  );
+
+  // Live: class members — updates classmates list in real-time and notifies on new joins
+  let _membersInited = false;
+  _commListeners[cid].push(
+    fbDb.collection('schoolClasses').doc(cid).collection('members')
+      .onSnapshot(snap => {
+        if (!_commCache[cid]) return;
+        const all = snap.docs.map(d => d.data()).filter(m => m.familyUid !== S.uid);
+        if (!_membersInited) {
+          _membersInited = true;
+          _commCache[cid].classmates = all;
+        } else {
+          const prev = new Set(_commCache[cid].classmates.map(m => m.familyUid + '__' + (m.kidName||m.name)));
+          all.forEach(m => {
+            const key = m.familyUid + '__' + (m.kidName||m.name);
+            if (!prev.has(key)) {
+              const isHe = getLang() === 'he';
+              fbDb.collection('families').doc(S.uid).collection('notifications').add({
+                type: 'class_member_joined',
+                message: isHe
+                  ? `🎉 ${esc(m.kidName||m.name)} הצטרף/ה לכיתה!`
+                  : `🎉 ${esc(m.kidName||m.name)} joined the class!`,
+                dismissed: false,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+              }).catch(() => {});
+            }
+          });
+          _commCache[cid].classmates = all;
+        }
+        rerender();
+      }, e => console.warn('[community] members:', e.code))
   );
 }
 
@@ -2905,6 +3071,8 @@ function renderCommCard(kid) {
       <button onclick="refreshCommunity()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#c8d3e8;padding:4px;line-height:1" title="רענן">↻</button>
     </div>
 
+    ${isCommitteeFor(cid) && !isAdmin() ? `<div style="text-align:end;margin:-4px 0 8px"><button class="comm-leave-btn" onclick="leaveCommittee('${cid}')">${t('commLeaveCommittee')}</button></div>` : ''}
+
     ${upcoming.length
       ? `<div class="post-feed">${upcoming.map(ev=>renderPostCard(ev,cid)).join('')}</div>`
       : `<div class="post-feed-empty">${t('commNoEvents')}</div>`}
@@ -2951,6 +3119,7 @@ function renderCommCard(kid) {
         <div class="application-meta">${myApp.voteCount||0}/15 תמיכות${exp ? ' · ' + t('commApplicationExpires',exp) : ''}</div>
         <div class="application-progress"><div class="application-progress-fill" style="width:${pct}%"></div></div>
       </div>
+      <button class="comm-cancel-app-btn" onclick="cancelCommitteeApplication('${myApp.id}','${cid}')">${t('commCancelApplication')}</button>
     </div>`;
   }
   otherApps.forEach(app => {
@@ -2987,12 +3156,12 @@ function renderCommCard(kid) {
           <input type="date" class="auth-input" id="commEvDate_${cid}" style="margin-bottom:0;width:100%" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
           <div id="commEvDateHint_${cid}" style="display:none;font-size:11px;color:var(--gray-400);font-weight:600;margin-top:3px;padding-right:2px">תאריך אופציונלי לסוג זה</div>
         </div>
-        <input type="time" class="auth-input" id="commEvTime_${cid}" style="flex:0 0 110px;margin-bottom:0">
+        <input type="time" class="auth-input" id="commEvTime_${cid}" style="flex:0 0 110px;margin-bottom:0" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
       </div>
       <div style="margin-bottom:6px">
         <div id="commEvTypeDd_${cid}" style="width:100%"></div>
         <select id="commEvType_${cid}" style="display:none" onchange="onCommEvTypeChange('${cid}')">
-          ${EVENT_TYPES.map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
+          ${getEventTypes().map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
         </select>
       </div>
       <div id="commEvGenderWrap_${cid}" style="margin-bottom:6px">
@@ -3012,7 +3181,7 @@ function renderCommCard(kid) {
           <option value="school">🏛 ${t('commScopeSchool')}</option>
         </select>
       </div>` : `<input type="hidden" id="commEvScope_${cid}" value="class">`}
-      <input class="auth-input" id="commEvLocation_${cid}" placeholder="📍 מיקום (אופציונלי)" style="margin-bottom:6px">
+      <input class="auth-input" id="commEvLocation_${cid}" placeholder="📍 מיקום (אופציונלי)" style="margin-bottom:6px" oninput="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
       <input class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" style="margin-bottom:6px">
       <input class="auth-input" id="commEvPaybox_${cid}" placeholder="${t('commEventPaybox')}" style="margin-bottom:10px" type="url" dir="ltr">
       <div id="commEvError_${cid}" style="display:none;font-size:12px;color:var(--error);font-weight:700;margin-bottom:8px;padding:6px 10px;background:var(--error-bg);border-radius:8px"></div>
@@ -3038,7 +3207,7 @@ function renderCommCard(kid) {
             const anyComm = familyInfo.parents.some(p => p.isCommittee)
               || (familyInfo.legacyComm||[]).includes(cid);
             return `<div class="comm-mate" data-name="${esc((c.kidName+' '+(c.familyName||'')).toLowerCase())}">
-              <span style="font-size:18px">👨‍👩‍👧</span>
+              ${_ico.fam}
               <span class="comm-mate-name">${esc(c.kidName)} ${esc(c.familyName||'')}</span>
               ${anyComm ? `<span class="role-badge-committee">${t('roleCommittee')}</span>` : ''}
             </div>`;
@@ -3085,7 +3254,7 @@ async function renderCommunity() {
     .map(k => ({ name: k.name, cid: classIdFor(k.school) }))
     .filter(k => k.cid);
   const adminBtn = (isCommittee() && !isKid())
-    ? `<button class="admin-btn" onclick="openAdminPanel(true, true)">📋 היסטוריית בקשות</button>`
+    ? `<div id="commPendingBanner"></div>`
     : '';
   const fabHtml = isParent() ? `
     <div class="comm-fab-wrap" id="commFabWrap">
@@ -3097,20 +3266,21 @@ async function renderCommunity() {
       </button>
     </div>` : '';
   container.innerHTML = adminBtn + kidsWithSchool.map(kid => renderCommCard(kid)).join('') + fabHtml;
+  const bannerEl = el('commPendingBanner');
+  if (bannerEl) _renderCommPendingBanner(bannerEl);
   kidsWithSchool.forEach(kid => {
     const cid = classIdFor(kid.school);
     if (cid) _buildSoftDd('commEvTypeDd_' + cid, 'commEvType_' + cid);
   });
 }
 
-const _DATE_OPTIONAL_TYPES = new Set(['announcement', 'other']);
-
 function onCommEvTypeChange(cid) {
-  const type = el('commEvType_' + cid)?.value;
+  const type    = el('commEvType_' + cid)?.value;
+  const typeCfg = _eventTypesCfg.find(t => t.id === type) || {};
   const genderWrap = el('commEvGenderWrap_' + cid);
   if (genderWrap) genderWrap.style.display = type === 'birthday' ? '' : 'none';
   const dateHint = el('commEvDateHint_' + cid);
-  if (dateHint) dateHint.style.display = _DATE_OPTIONAL_TYPES.has(type) ? '' : 'none';
+  if (dateHint) dateHint.style.display = typeCfg.mDate ? 'none' : '';
 }
 
 function matchesGenderFilter(ev, kidName) {
@@ -3194,15 +3364,20 @@ async function submitClassEvent(cid) {
   const genderFilter = type === 'birthday'
     ? (document.querySelector(`input[name="commEvGender_${cid}"]:checked`)?.value || 'all')
     : 'all';
+  const typeCfg  = _eventTypesCfg.find(t => t.id === type) || {};
   const _errEl   = el('commEvError_'   + cid);
   const _titleEl = el('commEvTitle_'   + cid);
   const _dateEl  = el('commEvDate_'    + cid);
+  const _locEl   = el('commEvLocation_'+ cid);
+  const _timeEl  = el('commEvTime_'   + cid);
   const _showErr = (msg, fieldEl) => {
     if (_errEl) { _errEl.textContent = msg; _errEl.style.display = ''; }
     if (fieldEl) { fieldEl.classList.add('input-error'); fieldEl.focus(); }
   };
-  if (!title) { _showErr('יש להזין כותרת לאירוע', _titleEl); return; }
-  if (!date && !_DATE_OPTIONAL_TYPES.has(type)) { _showErr('יש לבחור תאריך לסוג אירוע זה', _dateEl); return; }
+  if (!title)              { _showErr('יש להזין כותרת לאירוע', _titleEl);             return; }
+  if (typeCfg.mDate && !date)     { _showErr('יש לבחור תאריך לסוג אירוע זה', _dateEl);  return; }
+  if (typeCfg.mTime && !time)     { _showErr('יש להזין שעה לסוג אירוע זה', _timeEl);    return; }
+  if (typeCfg.mLoc  && !location) { _showErr('יש להזין מיקום לסוג אירוע זה', _locEl);   return; }
   if (_errEl) _errEl.style.display = 'none';
   const docData = { title, date, type, note, scope,
     postedBy: { familyUid: S.uid, firstName: S.user, familyName: familyData?.familyName||'' },
@@ -3391,6 +3566,13 @@ function renderMaintenanceTools() {
       <div style="font-size:13px;color:#4a5568;margin-bottom:10px">המר משפחות עם <code>role:'committee'</code> ישן ל-<code>committeeClasses</code> לפי כיתות ילדיהן.</div>
       <button class="admin-btn" id="migrateCommitteeBtn" onclick="migrateCommitteeRoles()" style="width:100%;padding:9px;font-size:13px">נרמל תפקידי ועד ◀</button>
       <div id="migrateCommitteeResult" style="font-size:12px;margin-top:8px;color:#276749"></div>
+    </div>
+    <div class="card" style="margin-bottom:12px;padding:12px;border:1.5px solid var(--error-light,#fed7d7)">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px;color:var(--error)">🗑 איפוס נתוני משפחה</div>
+      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוחק את כל המשימות, הקניות, השיעורים, האירועים והכוכבים של משפחה — שומר חברי משפחה וקוד הצטרפות.</div>
+      <input class="auth-input" id="resetFamilyUidInput" placeholder="Family UID" style="margin-bottom:8px;font-family:monospace;font-size:13px">
+      <button class="admin-btn" id="resetFamilyBtn" onclick="adminResetFamilyData()" style="width:100%;padding:9px;font-size:13px;background:var(--error);color:#fff;border-color:var(--error)">איפוס נתונים ◀</button>
+      <div id="resetFamilyResult" style="font-size:12px;margin-top:8px"></div>
     </div>`;
 }
 
@@ -3408,6 +3590,35 @@ async function migrateKidCodes() {
   } catch(e) {
     res.textContent = 'שגיאה: ' + (e.message || String(e));
     console.error('migrateKidCodes:', e);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function adminResetFamilyData() {
+  const uid = el('resetFamilyUidInput').value.trim();
+  const res = el('resetFamilyResult');
+  const btn = el('resetFamilyBtn');
+  if (!uid) { res.style.color = 'var(--error)'; res.textContent = 'יש להזין Family UID'; return; }
+  if (!await _confirm(`למחוק את כל הנתונים של המשפחה ${uid}?\n\nפעולה זו בלתי הפיכה.`, { danger: true, okLabel: 'אפס נתונים' })) return;
+  btn.disabled = true;
+  res.style.color = '#718096';
+  res.textContent = 'מאפס...';
+  try {
+    const famDoc = await fbDb.collection('families').doc(uid).get();
+    if (!famDoc.exists) { res.style.color = 'var(--error)'; res.textContent = 'לא נמצאה משפחה עם UID זה'; return; }
+    const { members, familyCode, familyName, email, committeeClasses, createdAt } = famDoc.data();
+    await fbDb.collection('families').doc(uid).update({
+      chores: [], grocery: [], homework: [], events: [], stars: {},
+      groceryPool: [], shoppingList: [], inCart: [], shoppingHistory: [],
+    });
+    res.style.color = '#276749';
+    res.textContent = `✓ הנתונים של "${familyName || uid}" אופסו בהצלחה`;
+    el('resetFamilyUidInput').value = '';
+  } catch(e) {
+    res.style.color = 'var(--error)';
+    res.textContent = 'שגיאה: ' + (e.message || String(e));
+    console.error('adminResetFamilyData:', e);
   } finally {
     btn.disabled = false;
   }
@@ -3516,6 +3727,95 @@ function _applyAdminPanelCache(data, showLog) {
   _renderLeaderboardFromDays(data.lbDays);
   renderShoppingHistorySettings();
   renderMaintenanceTools();
+  renderAdminEventTypes();
+}
+
+function renderAdminEventTypes() {
+  const container = el('adminEventTypes');
+  if (!container) return;
+  const mFields = [['mDate','תאריך'],['mTime','שעה'],['mLoc','מיקום']];
+  container.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">
+      ${_eventTypesCfg.map((t, i) => `
+        <div class="card" style="padding:12px">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+            <input id="evtIcon_${i}" value="${esc(t.icon)}" maxlength="2"
+              style="width:38px;text-align:center;font-size:20px;border:1.5px solid var(--gray-200);border-radius:8px;padding:4px 2px;font-family:inherit;background:var(--surface)">
+            <input id="evtLabelHe_${i}" value="${esc(t.labelHe)}" placeholder="שם בעברית"
+              style="flex:1;padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;text-align:right;background:var(--surface)">
+            <input id="evtLabelEn_${i}" value="${esc(t.labelEn)}" placeholder="English" dir="ltr"
+              style="flex:1;padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;background:var(--surface)">
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap">
+            <span style="font-size:12px;font-weight:700;color:var(--gray-500)">שדות חובה:</span>
+            ${mFields.map(([key,lbl]) => `
+              <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer">
+                <input type="checkbox" id="evt_${key}_${i}" ${t[key] ? 'checked' : ''} style="width:16px;height:16px">
+                ${lbl}
+              </label>`).join('')}
+            <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer;margin-right:auto">
+              <input type="checkbox" id="evtEnabled_${i}" ${t.enabled !== false ? 'checked' : ''} style="width:16px;height:16px">
+              פעיל
+            </label>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="admin-btn" onclick="saveEventTypeRow(${i})" style="flex:1;padding:7px;font-size:12px">💾 שמור</button>
+            <button onclick="deleteEventType('${esc(t.id)}')" style="padding:7px 12px;background:var(--error-bg);color:var(--error);border:none;border-radius:var(--r-sm);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer">🗑</button>
+          </div>
+        </div>`).join('')}
+    </div>
+    <div class="card" style="padding:12px">
+      <div style="font-size:13px;font-weight:900;color:var(--gray-900);margin-bottom:10px">➕ הוסף סוג אירוע</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        <input id="newEvtIcon" maxlength="2" placeholder="📝"
+          style="width:44px;text-align:center;font-size:20px;border:1.5px solid var(--gray-200);border-radius:8px;padding:6px 2px;font-family:inherit;background:var(--surface)">
+        <input id="newEvtLabelHe" placeholder="שם בעברית"
+          style="flex:1;padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;text-align:right;background:var(--surface)">
+        <input id="newEvtLabelEn" placeholder="English" dir="ltr"
+          style="flex:1;padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;background:var(--surface)">
+      </div>
+      <button class="admin-btn" onclick="addEventType()" style="width:100%;padding:8px">+ הוסף</button>
+    </div>`;
+}
+
+async function saveEventTypeRow(i) {
+  const t = _eventTypesCfg[i];
+  if (!t) return;
+  t.icon    = el(`evtIcon_${i}`)?.value.trim()    || t.icon;
+  t.labelHe = el(`evtLabelHe_${i}`)?.value.trim() || t.labelHe;
+  t.labelEn = el(`evtLabelEn_${i}`)?.value.trim() || t.labelEn;
+  t.enabled = el(`evtEnabled_${i}`)?.checked ?? true;
+  t.mDate   = el(`evt_mDate_${i}`)?.checked ?? false;
+  t.mTime   = el(`evt_mTime_${i}`)?.checked ?? false;
+  t.mLoc    = el(`evt_mLoc_${i}`)?.checked  ?? false;
+  try {
+    await _saveEventTypesCfg();
+    showToast((getLang()==='he' ? 'נשמר ✓' : 'Saved ✓'), 'success');
+  } catch(e) { showToast('שגיאה בשמירה', 'error'); }
+}
+
+async function deleteEventType(id) {
+  const t = _eventTypesCfg.find(x => x.id === id);
+  const name = t ? (getLang()==='he' ? t.labelHe : t.labelEn) : id;
+  if (!await _confirm(`למחוק את סוג האירוע "${name}"?`, { okLabel: 'מחק' })) return;
+  _eventTypesCfg = _eventTypesCfg.filter(x => x.id !== id);
+  try {
+    await _saveEventTypesCfg();
+    renderAdminEventTypes();
+  } catch(e) { showToast('שגיאה בשמירה', 'error'); }
+}
+
+async function addEventType() {
+  const icon    = el('newEvtIcon')?.value.trim()    || '📝';
+  const labelHe = el('newEvtLabelHe')?.value.trim() || '';
+  const labelEn = el('newEvtLabelEn')?.value.trim() || '';
+  if (!labelHe) { el('newEvtLabelHe')?.classList.add('input-error'); el('newEvtLabelHe')?.focus(); return; }
+  const id = 'custom_' + Date.now();
+  _eventTypesCfg.push({ id, icon, labelHe, labelEn: labelEn || labelHe, mDate:false, mTime:false, mLoc:false, enabled:true });
+  try {
+    await _saveEventTypesCfg();
+    renderAdminEventTypes();
+  } catch(e) { showToast('שגיאה בשמירה', 'error'); }
 }
 
 async function renderAdminPanel(showLog = true) {
@@ -3603,6 +3903,22 @@ async function applyForCommittee(cid) {
     });
     // onSnapshot handles re-render
   } catch(e) { console.error('applyForCommittee:', e); }
+}
+
+async function cancelCommitteeApplication(appId, cid) {
+  if (!await _confirm('לבטל את המועמדות לוועד?', { danger: true, okLabel: 'בטל מועמדות' })) return;
+  try {
+    await fbDb.collection('committeeApplications').doc(appId).delete();
+    // onSnapshot handles re-render
+  } catch(e) { console.error('cancelCommitteeApplication:', e); }
+}
+
+async function leaveCommittee(cid) {
+  if (!await _confirm('לעזוב את ועד ההורים של כיתה זו?', { danger: true, okLabel: 'עזוב ועד' })) return;
+  try {
+    await setCommitteeRole(S.uid, S.user, false, cid);
+    // setCommitteeRole handles re-render
+  } catch(e) { console.error('leaveCommittee:', e); }
 }
 
 async function voteForApplication(appId, cid) {
@@ -4134,10 +4450,10 @@ function applyRoleUI() {
 //  HEADER
 // ════════════════════════════════════════
 function renderHeader() {
-  const h = new Date().getHours();
-  const g = h<12?t('greetMorning'):h<17?t('greetAfternoon'):t('greetEvening');
-  el('headerGreeting').innerHTML = `${esc(g)}, <strong>${esc(S.user)}</strong>! <span style="display:inline-flex;vertical-align:middle;margin:0 2px;">${getAvatar(S.user, 22)}</span>&nbsp;<span class="header-role-badge">${currentUserRoleBadge()}</span>`;
-  el('headerDate').textContent = new Date().toLocaleDateString(t('locale'),{weekday:'long',month:'long',day:'numeric'});
+  const avatarBtn = el('headerAvatarBtn');
+  if (avatarBtn) avatarBtn.innerHTML = getAvatar(S.user, 28) || `<span style="font-size:18px">${getEmoji(S.user)||'👤'}</span>`;
+  const titleEl = el('headerTabTitle');
+  if (titleEl) titleEl.textContent = tabLabel(S.tab);
 }
 
 // ── Tab chip helpers ──────────────────────────
@@ -4477,7 +4793,15 @@ function renderHome() {
       <div class="wb-emoji">${getAvatar(S.user, 48)}</div>
       <div class="wb-name">${t('wbHi',S.user)}</div>
       <div class="wb-sub">${t('wbStars',n)}</div></div>`;
-  } else { bannerEl.innerHTML = ''; }
+  } else {
+    const h = new Date().getHours();
+    const g = h<12?t('greetMorning'):h<17?t('greetAfternoon'):t('greetEvening');
+    const dateStr = new Date().toLocaleDateString(t('locale'),{weekday:'long',month:'long',day:'numeric'});
+    bannerEl.innerHTML = `<div class="home-greeting-card">
+      <div class="hgc-line1">${esc(g)}, <strong>${esc(S.user)}</strong>! <span style="display:inline-flex;vertical-align:middle;margin:0 2px">${getAvatar(S.user, 20)}</span>&nbsp;<span class="header-role-badge">${currentUserRoleBadge()}</span></div>
+      <div class="hgc-line2"><span>${dateStr}</span><span class="header-date-sep" id="headerWeatherSep" style="display:none">·</span><span id="headerWeather"></span></div>
+    </div>`;
+  }
 
   renderWeatherWidget();
 
@@ -4569,14 +4893,15 @@ function renderChores() {
   if (S.filter !== 'All') { _choreFabAssignee = null; }
   _updateChoreFormAssignee();
   let items = S.filter==='All' ? S.chores : S.chores.filter(c=>c.assignee===S.filter);
-  const active = items.filter(c=>!c.done);
+  const active = items.filter(c=>!c.done).sort((a,b) => _choreSortScore(a) - _choreSortScore(b));
   if (fabWrap) fabWrap.style.display = (S.tab === 'chores' && isParent() && (S.filter === 'All' || active.length > 0)) ? '' : 'none';
   const showAssignee = S.filter==='All';
   const inner = active.length ? active.map(c=>{
     const can = isParent()||c.assignee===S.user;
     const priDotCls = c.priority==='high' ? 'chore-dot-high' : c.priority==='medium' ? 'chore-dot-med' : 'chore-dot-low';
     const priLabel = t(c.priority);
-    const metaParts = [showAssignee ? esc(c.assignee) : ''].filter(Boolean).join(' • ');
+    const whenMeta  = _choreDueLabel(c.due) || _choreWhen(c.id);
+    const dueClass  = c.due && c.due < today ? ' chore-meta-overdue' : '';
     const threeDotSVG = `<svg viewBox="0 0 16 16" fill="currentColor" style="width:14px;height:14px;display:block"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>`;
     return `<div class="chore-card" data-chore-id="${c.id}">
       ${isParent()?`<div class="chore-reveal-zone">
@@ -4591,9 +4916,10 @@ function renderChores() {
         <div class="chore-body" id="choreBody_${c.id}">
           <div class="chore-text" onclick="this.classList.toggle('expanded');event.stopPropagation()">${esc(c.text)}</div>
           <div class="chore-meta-row">
-            ${metaParts ? `<span class="chore-meta">${metaParts}</span><span class="chore-meta-sep">•</span>` : ''}<span class="chore-meta">${_choreWhen(c.id)}</span><span class="chore-meta-sep">•</span><span class="chore-dot ${priDotCls}"></span><span class="chore-pri-label">${priLabel}</span>
+            <span class="chore-meta${dueClass}">${whenMeta}</span><span class="chore-meta-sep">•</span><span class="chore-dot ${priDotCls}"></span><span class="chore-pri-label">${priLabel}</span>
           </div>
         </div>
+        ${showAssignee && c.assignee ? `<div class="chore-assignee-av" title="${esc(c.assignee)}">${getAvatar(c.assignee, 30)}</div>` : ''}
         ${isParent()?`<div class="chore-3dot" id="chore3dot_${c.id}">
           <button class="chore-3dot-btn" onclick="_chore3dotToggle(${c.id});event.stopPropagation()">${threeDotSVG}</button>
         </div>`:''}
@@ -4944,7 +5270,7 @@ function startEditChore(id) {
   const chore = S.chores.find(x => x.id === id);
   if (!chore) return;
   card.classList.add('editing');
-  body.innerHTML = `<input class="chore-edit-input" id="choreEditInput_${id}" value="${esc(chore.text)}" onkeydown="if(event.key==='Enter')saveEditChore(${id});if(event.key==='Escape')cancelEditChore(${id})"><div class="chore-edit-actions"><button class="chore-edit-save" onclick="saveEditChore(${id});event.stopPropagation()">שמור</button><button class="chore-edit-cancel" onclick="cancelEditChore(${id});event.stopPropagation()">ביטול</button></div>`;
+  body.innerHTML = `<input class="chore-edit-input" id="choreEditInput_${id}" value="${esc(chore.text)}" onkeydown="if(event.key==='Enter')saveEditChore(${id});if(event.key==='Escape')cancelEditChore(${id})"><div class="chore-edit-date-row"><label class="chore-edit-date-label">📅 תאריך יעד:</label><input type="date" class="chore-qa-date chore-edit-date" id="choreEditDate_${id}" value="${chore.due||''}"><button class="chore-edit-date-clear" onclick="el('choreEditDate_${id}').value=''" title="נקה תאריך">✕</button></div><div class="chore-edit-actions"><button class="chore-edit-save" onclick="saveEditChore(${id});event.stopPropagation()">שמור</button><button class="chore-edit-cancel" onclick="cancelEditChore(${id});event.stopPropagation()">ביטול</button></div>`;
   const inp = el('choreEditInput_' + id);
   if (inp) { inp.focus(); inp.select(); }
 }
@@ -4953,8 +5279,12 @@ function saveEditChore(id) {
   if (!inp) return;
   const text = inp.value.trim();
   if (!text) return;
+  const dateInp = el('choreEditDate_' + id);
   const chore = S.chores.find(x => x.id === id);
-  if (chore) chore.text = text;
+  if (chore) {
+    chore.text = text;
+    chore.due = dateInp ? (dateInp.value || null) : chore.due;
+  }
   save(); renderChores(); renderHome();
 }
 function cancelEditChore(id) { renderChores(); }
@@ -5051,14 +5381,31 @@ function _choreOpenForm() {
   setTimeout(() => el('newChoreText')?.focus(), 300);
 }
 
+function _choreInputGrow(ta) {
+  ta.style.height = 'auto';
+  const lineH = parseFloat(getComputedStyle(ta).lineHeight) || 21;
+  const padV  = parseFloat(getComputedStyle(ta).paddingTop) + parseFloat(getComputedStyle(ta).paddingBottom);
+  const maxH  = lineH * 2 + padV;
+  ta.style.overflowY = ta.scrollHeight > maxH ? 'auto' : 'hidden';
+  ta.style.height = Math.min(ta.scrollHeight, maxH) + 'px';
+}
+
 function addChore(){
   const text = el('newChoreText').value.trim();
   if (!text) return;
   const assignee = isParent()
     ? (S.filter !== 'All' ? S.filter : (_choreFabAssignee || getAllMemberNames()[0]))
     : S.user;
-  S.chores.push({id:Date.now(),text,assignee,priority:el('newChorePriority').value,done:false});
-  el('newChoreText').value='';
+  const due = el('newChoreDate')?.value || '';
+  const chore = {id:Date.now(),text,assignee,priority:el('newChorePriority').value,done:false};
+  if (due) chore.due = due;
+  S.chores.push(chore);
+  const ta = el('newChoreText');
+  ta.value='';
+  ta.style.height='';
+  ta.style.overflowY='hidden';
+  const dateEl = el('newChoreDate');
+  if (dateEl) dateEl.value='';
   _priSegPick('medium');
   _choreFabAssignee = null;
   _updateChoreFormAssignee();
@@ -6428,9 +6775,12 @@ function renderTabBar() {
     const tab = ALL_TABS.find(t => t.id === id);
     if (!tab) return '';
     const isActive = S.tab === id;
+    const badge = (id === 'community' && _pendingCount > 0 && isCommittee() && !isKid())
+      ? `<span class="tab-comm-badge">${_pendingCount}</span>` : '';
     return `<button class="tab${isActive ? ' active' : ''}" data-tab="${id}" onclick="switchTab('${id}')">
       <span class="tab-icon">${tabIcon(id, isActive)}</span>
       <span class="tab-label">${tabLabel(id)}</span>
+      ${badge}
     </button>`;
   }).join('');
 
@@ -6473,6 +6823,8 @@ function switchTab(tab) {
   const enterClass = newIdx >= oldIdx ? 'tab-enter-right' : 'tab-enter-left';
 
   S.tab = tab;
+  const _titleEl = el('headerTabTitle');
+  if (_titleEl) _titleEl.textContent = tabLabel(tab);
   // Synchronous scroll reset — window.scrollTo is async on mobile Safari
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;

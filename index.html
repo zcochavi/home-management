@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260413dl') location.reload(true);
+        if (v !== '20260413ee') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260413dl">
+  <link rel="stylesheet" href="styles.css?v=20260413ee">
 </head>
 <body>
 
@@ -91,15 +91,17 @@
       <input class="auth-input" id="suPwd"    type="password" placeholder="סיסמה (לפחות 6 תווים)" dir="ltr" autocomplete="new-password">
       <div id="su1Error" class="auth-error"></div>
       <button class="auth-btn-main" onclick="signupNext()">הבא ←</button>
+      <button class="auth-link-btn" onclick="setAuthMode('signin')" style="margin-top:4px">‹ חזרה להתחברות</button>
     </div>
 
     <!-- Sign Up step 2: member builder -->
     <div id="signupPanel2" style="display:none">
-      <div class="auth-panel-label">מי בן/בת המשפחה?</div>
+      <div class="auth-panel-label" id="su2Title">קודם כל, הפרטים שלך</div>
+      <div class="su2-subtitle" id="su2Subtitle">נדרש לפני הוספת בני משפחה נוספים</div>
       <div class="emoji-row" id="emojiRow"></div>
       <div class="mb-add-row">
-        <input class="auth-input mb-name-input" id="mbName" type="text" placeholder="שם" onkeydown="if(event.key==='Enter')addDraftMember()">
-        <div class="mb-role-toggle">
+        <input class="auth-input mb-name-input" id="mbName" type="text" placeholder="השם שלך" onkeydown="if(event.key==='Enter')addDraftMember()">
+        <div class="mb-role-toggle" id="su2RoleRow" style="display:none">
           <button class="mb-role-btn active" id="mbRoleParent" onclick="setMbRole('parent')">הורה</button>
           <button class="mb-role-btn"        id="mbRoleKid"    onclick="setMbRole('kid')">ילד</button>
         </div>
@@ -111,13 +113,15 @@
         </div>
         <input class="auth-input" id="mbDob" type="date" placeholder="תאריך לידה" style="margin-bottom:0">
       </div>
-      <button class="auth-btn-add" onclick="addDraftMember()">+ הוסף</button>
+      <button class="auth-btn-main su2-self-btn" id="su2AddBtn" onclick="addDraftMember()">הוסף את עצמי ←</button>
       <div class="member-preview" id="memberPreview"></div>
+      <div class="su2-more-divider" id="su2MoreDivider" style="display:none">הוסף בני משפחה נוספים <span class="su2-optional">(אופציונלי)</span></div>
       <div id="su2Error" class="auth-error"></div>
-      <div class="auth-btns-row">
+      <div class="auth-btns-row" id="su2CreateRow" style="display:none">
         <button class="auth-btn-back" onclick="signupBack()">‹ חזור</button>
         <button class="auth-btn-main auth-btn-create" onclick="doSignUp()">✓ צור חשבון</button>
       </div>
+      <button class="auth-link-btn" id="su2BackLink" onclick="signupBack()" style="margin-top:4px">‹ חזור</button>
     </div>
 
     <div id="authLoadingOverlay" style="display:none" class="auth-loading">⏳ טוען...</div>
@@ -229,6 +233,8 @@
       <div id="adminLogList"></div>
     </div>
     <div id="adminSettingsSection">
+      <div class="comm-section-label" style="margin-top:4px">🗂️ סוגי אירועים</div>
+      <div id="adminEventTypes"></div>
       <div class="comm-section-label" style="margin-top:4px">⚙️ הגדרות התראות</div>
       <div id="adminNotifSettings"></div>
       <div class="comm-section-label" style="margin-top:4px">📊 הגדרות לוח מובילים</div>
@@ -341,12 +347,10 @@
 <!-- APP -->
 <div id="app">
   <div class="header" id="appHeader">
-    <div class="header-top">
-      <div>
-        <div class="header-title">🏠 FamilyHub</div>
-        <div class="header-greeting" id="headerGreeting"></div>
-      </div>
-      <div class="header-btns">
+    <div class="header-row">
+      <button class="menu-btn" onclick="toggleMenu(this)">☰</button>
+      <div class="header-tab-title" id="headerTabTitle"></div>
+      <div class="header-end">
         <button class="notif-bell-btn" id="pendingReqBtn" onclick="openPendingPanel()" title="בקשות ממתינות" style="display:none">
           📋
           <span class="notif-bell-badge hidden" id="pendingReqBadge"></span>
@@ -355,18 +359,10 @@
           🔔
           <span class="notif-bell-badge hidden" id="notifBellBadge"></span>
         </button>
-        <button class="menu-btn" onclick="toggleMenu(this)">☰</button>
+        <button class="header-avatar-btn" id="headerAvatarBtn" onclick="toggleMenu(this)"></button>
       </div>
     </div>
-    <div class="header-body" id="headerBody">
-      <div class="header-date-row">
-        <span id="headerDate"></span>
-        <span class="header-date-sep" id="headerWeatherSep" style="display:none">·</span>
-        <span id="headerWeather"></span>
-      </div>
-      <div id="notifBanners"></div>
-    </div>
-    <button class="header-collapse-btn" id="headerCollapseBtn" onclick="toggleHeaderCollapse()" aria-label="הסתר/הצג כותרת">▾</button>
+    <div id="notifBanners"></div>
   </div>
 
   <div class="tab-bar" id="tabBar"></div>
@@ -397,10 +393,11 @@
     <!-- CHORES -->
     <div id="tab-chores" class="tab-content">
       <div class="tab-chips-row" id="choresChips"></div>
+      <div class="chore-cat-chips-row" id="choreCatChips" style="display:none"></div>
       <div id="choresContent"></div>
       <div class="card chore-quick-add" id="addChoreCard">
         <div class="chore-qa-input-row">
-          <input class="chore-qa-input" id="newChoreText" type="text" onkeydown="if(event.key==='Enter')addChore()">
+          <textarea class="chore-qa-input" id="newChoreText" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addChore()}" oninput="_choreInputGrow(this)"></textarea>
           <button class="chore-qa-plus" id="addChoreBtn" onclick="addChore()">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
           </button>
@@ -413,6 +410,8 @@
             <button class="pri-seg-btn active" data-val="medium" onclick="_priSegPick('medium')">בינונית</button>
             <button class="pri-seg-btn" data-val="low"    onclick="_priSegPick('low')">נמוכה</button>
           </div>
+          <div class="chore-qa-sep"></div>
+          <input type="date" class="chore-qa-date" id="newChoreDate">
         </div>
       </div>
       <div id="choreHistoryWrap"></div>
@@ -557,7 +556,7 @@
 <button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
 </button>
-<script src="app.js?v=20260413dl"></script>
+<script src="app.js?v=20260413ee"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
