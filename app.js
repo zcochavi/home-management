@@ -3692,7 +3692,7 @@ async function renderAdminMessages() {
             ${unread ? `<span class="adminmsg-dot" style="width:8px;height:8px;border-radius:50%;background:var(--primary-500);flex-shrink:0;display:inline-block"></span>` : ''}
             <span style="font-size:13px;font-weight:900;color:var(--gray-900);flex:1">${esc(m.topicLabel || m.topic || '—')}</span>
             <span style="font-size:11px;color:var(--gray-400)">${dateStr}</span>
-            ${unread ? `<button onclick="markAdminMsgRead('${m.id}')" style="font-size:11px;border:none;background:none;color:var(--primary-500);cursor:pointer;font-family:inherit;font-weight:700;padding:0">סמן כנקרא</button>` : ''}
+            ${unread ? `<button onclick="markAdminMsgRead('${m.id}',this)" style="font-size:11px;border:none;background:none;color:var(--primary-500);cursor:pointer;font-family:inherit;font-weight:700;padding:0;min-width:70px;text-align:end">סמן כנקרא</button>` : ''}
           </div>
           <div style="font-size:12px;color:var(--gray-500);margin-bottom:4px">${esc(m.senderName || '')}${m.familyName ? ' · ' + esc(m.familyName) : ''}</div>
           <div style="font-size:13px;color:var(--gray-700);white-space:pre-wrap">${esc(m.text || '')}</div>
@@ -3703,7 +3703,8 @@ async function renderAdminMessages() {
   }
 }
 
-async function markAdminMsgRead(id) {
+async function markAdminMsgRead(id, btn) {
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner" style="width:11px;height:11px;border-width:2px;vertical-align:middle"></span>'; }
   try {
     await fbFunctions.httpsCallable('markAdminMessageRead')({ msgId: id });
     const row = el('adminMsg_' + id);
@@ -3712,7 +3713,10 @@ async function markAdminMsgRead(id) {
       row.querySelector('.adminmsg-dot')?.remove();
       row.querySelector('button[onclick*="markAdminMsgRead"]')?.remove();
     }
-  } catch(e) { console.error('markAdminMsgRead:', e); }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'סמן כנקרא'; }
+    console.error('markAdminMsgRead:', e);
+  }
 }
 
 function renderMaintenanceTools() {
