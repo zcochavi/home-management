@@ -4455,7 +4455,8 @@ function renderStatic() {
   el('poolItemInput').placeholder = t('poolAddPlaceholder');
   el('hwDesc').placeholder        = t('hwPlaceholder');
   el('newEventTitle').placeholder = t('eventPlaceholder');
-  el('addHwBtn').innerHTML = _ico.plus;
+  el('addHwBtn').innerHTML   = _ico.plus;
+  el('addPoolBtn').innerHTML = _ico.plus;
   el('addEventBtn').textContent  = t('add');
   el('doneShoppingBtn').textContent   = t('doneShopping');
   el('historyTitle').textContent      = t('shoppingHistoryTitle');
@@ -4620,8 +4621,8 @@ function renderHomeShopping() {
           onblur="setTimeout(()=>{const d=el('homeQuickAcDrop');if(d)d.style.display='none'},160)"
           onkeydown="homeQuickAcKey(event)">
         ${Date.now() - _quickAddConfirm < 1500
-          ? `<button class="home-quick-add-btn" style="background:#38a169" onclick="homeQuickAddShop()"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></button>`
-          : `<button class="home-quick-add-btn" onclick="homeQuickAddShop()"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>`
+          ? `<button class="home-quick-add-btn" style="background:#38a169" onclick="homeQuickAddShop()"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:block"><polyline points="20 6 9 17 4 12"/></svg></button>`
+          : `<button class="home-quick-add-btn" onclick="homeQuickAddShop()"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="width:13px;height:13px;display:block"><line x1="7" y1="1" x2="7" y2="13"/><line x1="1" y1="7" x2="13" y2="7"/></svg></button>`
         }
       </div>
       <div class="home-quick-ac-drop" id="homeQuickAcDrop" style="display:none"></div>
