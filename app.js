@@ -3547,7 +3547,8 @@ async function sendFeedback() {
     return;
   }
   const btn = el('feedbackPanel').querySelector('button.btn');
-  if (btn) btn.disabled = true;
+  const btnLabel = btn?.textContent || '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span>'; }
   try {
     await fbFunctions.httpsCallable('submitFeedback')({
       topic:      _feedbackTopicVal,
@@ -3562,7 +3563,7 @@ async function sendFeedback() {
     errEl.textContent = 'שגיאה בשליחה: ' + (e.message || String(e));
     errEl.style.display = '';
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
   }
 }
 

@@ -1047,6 +1047,15 @@ mark { background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px; 
 /* ═══════════════════════════════════════════
    BUTTONS
 ═══════════════════════════════════════════ */
+@keyframes spin { to { transform: rotate(360deg); } }
+.btn-spinner {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2.5px solid rgba(255,255,255,0.35);
+  border-top-color: #fff;
+  animation: spin 0.7s linear infinite;
+  display: inline-block; vertical-align: middle;
+}
+
 .btn {
   padding: 10px 18px; border: none; border-radius: var(--r-pill);
   background: var(--primary-500); color: white;
