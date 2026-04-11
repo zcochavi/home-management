@@ -946,7 +946,7 @@ function showToast(msg, type = 'info', duration = 4000) {
   if (!wrap) {
     wrap = document.createElement('div');
     wrap.id = 'toastWrap';
-    wrap.style.cssText = 'position:fixed;bottom:24px;right:50%;transform:translateX(50%);z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;width:90%;max-width:360px';
+    wrap.style.cssText = 'position:fixed;bottom:calc(var(--tab-bar-h,68px) + env(safe-area-inset-bottom,0px) + 12px);right:50%;transform:translateX(50%);z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;width:90%;max-width:360px';
     document.body.appendChild(wrap);
   }
   const t = document.createElement('div');
