@@ -3720,6 +3720,27 @@ function renderMaintenanceTools() {
       <div id="migrateCommitteeResult" style="font-size:12px;margin-top:8px;color:#276749"></div>
     </div>
     <div class="card" style="margin-bottom:12px;padding:12px;border:1.5px solid var(--error-light,#fed7d7)">
+      <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:var(--error)">🏫 מחיקת עיר / בית ספר</div>
+      <div style="font-size:12px;color:#718096;margin-bottom:10px">מוחק כיתות ורישומי ילדים — לא מוחק את הילדים עצמם.</div>
+
+      <div style="border-bottom:1px solid var(--error-light,#fed7d7);padding-bottom:12px;margin-bottom:12px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">מחיקת עיר</div>
+        <div style="font-size:12px;color:#718096;margin-bottom:8px">מוחק את כל בתי הספר, הכיתות ורישומי הילדים של העיר מהמערכת.</div>
+        <input class="auth-input" id="deleteCityInput" placeholder="שם העיר" style="margin-bottom:8px;text-align:right">
+        <button class="admin-btn" id="deleteCityBtn" onclick="adminDeleteCity()" style="width:100%;padding:8px;font-size:13px;background:var(--error);color:#fff;border-color:var(--error)">מחק עיר ◀</button>
+        <div id="deleteCityResult" style="font-size:12px;margin-top:6px"></div>
+      </div>
+
+      <div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">מחיקת בית ספר</div>
+        <div style="font-size:12px;color:#718096;margin-bottom:8px">מוחק את כל הכיתות ורישומי הילדים של בית הספר.</div>
+        <input class="auth-input" id="deleteSchoolCityInput" placeholder="שם העיר" style="margin-bottom:6px;text-align:right">
+        <input class="auth-input" id="deleteSchoolNameInput" placeholder="שם בית הספר" style="margin-bottom:8px;text-align:right">
+        <button class="admin-btn" id="deleteSchoolBtn" onclick="adminDeleteSchool()" style="width:100%;padding:8px;font-size:13px;background:var(--error);color:#fff;border-color:var(--error)">מחק בית ספר ◀</button>
+        <div id="deleteSchoolResult" style="font-size:12px;margin-top:6px"></div>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:12px;padding:12px;border:1.5px solid var(--error-light,#fed7d7)">
       <div style="font-weight:700;font-size:14px;margin-bottom:4px;color:var(--error)">🗑 פעולות מחיקה</div>
       <div style="font-size:11px;color:#718096;margin-bottom:10px">ה-UID שלך: <code style="user-select:all;background:#f7fafc;padding:1px 4px;border-radius:4px">${S.uid}</code> <button onclick="el('resetFamilyUidInput').value='${S.uid}';el('deleteFamilyUidInput').value='${S.uid}'" style="border:none;background:none;font-size:11px;color:var(--primary-500);cursor:pointer;padding:0;font-family:inherit;font-weight:700">← הכנס</button></div>
 
@@ -3782,6 +3803,43 @@ async function adminResetFamilyData() {
   } finally {
     btn.disabled = false;
   }
+}
+
+async function adminDeleteCity() {
+  const city = el('deleteCityInput').value.trim();
+  const res  = el('deleteCityResult');
+  const btn  = el('deleteCityBtn');
+  if (!city) { res.style.color = 'var(--error)'; res.textContent = 'יש להזין שם עיר'; return; }
+  if (!await _confirm(`למחוק את העיר "${city}" ואת כל בתי הספר והכיתות שלה?\n\nרישומי הילדים יוסרו, אך הילדים עצמם לא יימחקו.`, { danger: true, okLabel: 'מחק עיר' })) return;
+  btn.disabled = true; res.style.color = '#718096'; res.textContent = 'מוחק...';
+  try {
+    const r = await fbFunctions.httpsCallable('adminDeleteCity')({ city });
+    res.style.color = '#276749';
+    res.textContent = `✓ העיר "${city}" נמחקה — ${r.data.classesDeleted} כיתות, ${r.data.kidsUnlinked} ילדים שוחררו`;
+    el('deleteCityInput').value = '';
+  } catch(e) {
+    res.style.color = 'var(--error)';
+    res.textContent = 'שגיאה: ' + (e?.details?.message || e?.message || String(e));
+  } finally { btn.disabled = false; }
+}
+
+async function adminDeleteSchool() {
+  const city       = el('deleteSchoolCityInput').value.trim();
+  const schoolName = el('deleteSchoolNameInput').value.trim();
+  const res = el('deleteSchoolResult');
+  const btn = el('deleteSchoolBtn');
+  if (!city || !schoolName) { res.style.color = 'var(--error)'; res.textContent = 'יש להזין עיר ושם בית ספר'; return; }
+  if (!await _confirm(`למחוק את "${schoolName}" (${city}) ואת כל הכיתות שלו?\n\nרישומי הילדים יוסרו, אך הילדים עצמם לא יימחקו.`, { danger: true, okLabel: 'מחק בית ספר' })) return;
+  btn.disabled = true; res.style.color = '#718096'; res.textContent = 'מוחק...';
+  try {
+    const r = await fbFunctions.httpsCallable('adminDeleteSchool')({ city, schoolName });
+    res.style.color = '#276749';
+    res.textContent = `✓ "${schoolName}" נמחק — ${r.data.classesDeleted} כיתות, ${r.data.kidsUnlinked} ילדים שוחררו`;
+    el('deleteSchoolCityInput').value = ''; el('deleteSchoolNameInput').value = '';
+  } catch(e) {
+    res.style.color = 'var(--error)';
+    res.textContent = 'שגיאה: ' + (e?.details?.message || e?.message || String(e));
+  } finally { btn.disabled = false; }
 }
 
 async function adminDeleteFamily() {

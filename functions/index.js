@@ -1198,6 +1198,140 @@ exports.getClassParents = functions.https.onCall(async (data, context) => {
   return result;
 });
 
+// ── Shared helpers for city/school deletion ───────────────
+function normCityId(city) {
+  return (city||'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^\w\u0590-\u05FF]/g,'');
+}
+
+// Delete all schoolClasses whose IDs start with `prefix~~`,
+// unlink kids in affected families, remove committeeClasses entries.
+// Does NOT delete families or kids.
+async function deleteClassesWithPrefix(prefix) {
+  const classesSnap = await db.collection('schoolClasses').get();
+  const affected = classesSnap.docs.filter(d => d.id.startsWith(prefix + '~~'));
+  const affectedIds = new Set(affected.map(d => d.id));
+  let classesDeleted = 0, kidsUnlinked = 0;
+
+  for (const classDoc of affected) {
+    const cid = classDoc.id;
+
+    // Delete subcollections: members, events, pendingEvents
+    for (const sub of ['members', 'events', 'pendingEvents']) {
+      const subSnap = await classDoc.ref.collection(sub).get();
+      await Promise.all(subSnap.docs.map(d => d.ref.delete()));
+    }
+    await classDoc.ref.delete();
+    classesDeleted++;
+  }
+
+  // Unlink kids in all families that had school in an affected class
+  const familiesSnap = await db.collection('families').get();
+  for (const famDoc of familiesSnap.docs) {
+    const fam = famDoc.data();
+    const members = fam.members || [];
+    let changed = false;
+
+    const updatedMembers = members.map(m => {
+      if (m.role !== 'kid') return m;
+      const cid = classIdFor(m.school);
+      if (!cid || !affectedIds.has(cid)) return m;
+      const u = { ...m };
+      delete u.school;
+      delete u.schoolPending;
+      changed = true;
+      kidsUnlinked++;
+      return u;
+    });
+
+    // Also strip affected classIds from committeeClasses (family-level and per-member)
+    const famComm = (fam.committeeClasses || []).filter(c => !affectedIds.has(c));
+    const updatedMembersComm = updatedMembers.map(m => {
+      if (!m.committeeClasses) return m;
+      const filtered = m.committeeClasses.filter(c => !affectedIds.has(c));
+      return filtered.length !== m.committeeClasses.length ? { ...m, committeeClasses: filtered } : m;
+    });
+    const commChanged = famComm.length !== (fam.committeeClasses||[]).length ||
+      updatedMembersComm.some((m,i) => m !== updatedMembers[i]);
+
+    if (changed || commChanged) {
+      const update = { members: updatedMembersComm };
+      if (commChanged) update.committeeClasses = famComm;
+      await famDoc.ref.update(update).catch(e => console.error('unlinkKids:', famDoc.id, e));
+    }
+  }
+
+  // Delete committeeApplications for affected classes
+  for (const cid of affectedIds) {
+    const appsSnap = await db.collection('committeeApplications')
+      .where('classId', '==', cid).get();
+    await Promise.all(appsSnap.docs.map(d => d.ref.delete()));
+  }
+
+  return { classesDeleted, kidsUnlinked };
+}
+
+exports.adminDeleteCity = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const { city } = data;
+  if (!city?.trim()) throw new functions.https.HttpsError('invalid-argument', 'Missing city');
+
+  const n = s => (s||'').trim().replace(/\s+/g,' ').replace(/\//g,'-').replace(/~/g,'');
+  const cityNorm = n(city);
+
+  const result = await deleteClassesWithPrefix(cityNorm);
+
+  // Remove from school index
+  await db.collection('schoolIndex').doc('cities_list')
+    .update({ cities: admin.firestore.FieldValue.arrayRemove(city) }).catch(() => {});
+  await db.collection('schoolIndex').doc('schools__' + normCityId(city)).delete().catch(() => {});
+
+  // Delete grade-level and school-level event collections for this city
+  const gradePrefix = cityNorm + '~~';
+  const gradesSnap = await db.collection('schoolGrades').get();
+  for (const doc of gradesSnap.docs.filter(d => d.id.startsWith(gradePrefix))) {
+    const subSnap = await doc.ref.collection('events').get();
+    await Promise.all(subSnap.docs.map(d => d.ref.delete()));
+    await doc.ref.delete();
+  }
+  const schoolsSnap = await db.collection('schools').get();
+  for (const doc of schoolsSnap.docs.filter(d => d.id.startsWith(gradePrefix))) {
+    const subSnap = await doc.ref.collection('events').get();
+    await Promise.all(subSnap.docs.map(d => d.ref.delete()));
+    await doc.ref.delete();
+  }
+
+  console.log(`adminDeleteCity: deleted city "${city}": ${JSON.stringify(result)}`);
+  return { ok: true, ...result };
+});
+
+exports.adminDeleteSchool = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const { city, schoolName } = data;
+  if (!city?.trim() || !schoolName?.trim())
+    throw new functions.https.HttpsError('invalid-argument', 'Missing city or schoolName');
+
+  const n = s => (s||'').trim().replace(/\s+/g,' ').replace(/\//g,'-').replace(/~/g,'');
+  const prefix = n(city) + '~~' + n(schoolName);
+
+  const result = await deleteClassesWithPrefix(prefix);
+
+  // Remove school from index
+  await db.collection('schoolIndex').doc('schools__' + normCityId(city))
+    .update({ schools: admin.firestore.FieldValue.arrayRemove(schoolName) }).catch(() => {});
+
+  // Delete school-level event collection
+  const schoolDocId = n(city) + '~~' + n(schoolName);
+  const schoolDoc = db.collection('schools').doc(schoolDocId);
+  const evSnap = await schoolDoc.collection('events').get();
+  await Promise.all(evSnap.docs.map(d => d.ref.delete()));
+  await schoolDoc.delete().catch(() => {});
+
+  console.log(`adminDeleteSchool: deleted school "${schoolName}" in "${city}": ${JSON.stringify(result)}`);
+  return { ok: true, ...result };
+});
+
 exports.getAdminMessages = functions.https.onCall(async (data, context) => {
   if (context.auth?.uid !== ADMIN_UID)
     throw new functions.https.HttpsError('permission-denied', 'Admins only');
