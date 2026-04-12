@@ -746,7 +746,7 @@ async function doSignIn() {
   } catch(e) {
     setAuthLoading(false);
     el('siError').textContent = getAuthError(e.code);
-    const isPwdErr = e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential';
+    const isPwdErr = e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential' || e.code === 'auth/invalid-login-credentials';
     const isEmailErr = e.code === 'auth/user-not-found' || e.code === 'auth/invalid-email';
     const pwdEl   = el('siPwd');
     const emailEl = el('siEmail');
@@ -929,9 +929,10 @@ function setAuthLoading(on) {
 
 function getAuthError(code) {
   const m = {
-    'auth/user-not-found':         'לא נמצא חשבון עם כתובת אימייל זו — בדוק שהכתבת נכון',
-    'auth/wrong-password':         'סיסמה שגויה — בדוק אותיות גדולות/קטנות ונסה שוב',
-    'auth/invalid-credential':     'אימייל או סיסמה שגויים — בדוק ונסה שוב',
+    'auth/user-not-found':             'לא נמצא חשבון עם כתובת אימייל זו — בדוק שהכתבת נכון',
+    'auth/wrong-password':             'סיסמה שגויה — בדוק אותיות גדולות/קטנות ונסה שוב',
+    'auth/invalid-credential':         'אימייל או סיסמה שגויים — בדוק ונסה שוב',
+    'auth/invalid-login-credentials':  'אימייל או סיסמה שגויים — בדוק ונסה שוב',
     'auth/email-already-in-use':   'כתובת האימייל כבר רשומה במערכת',
     'auth/invalid-email':          'כתובת אימייל לא תקינה',
     'auth/weak-password':          'הסיסמה קצרה מדי — נדרשים לפחות 6 תווים',
