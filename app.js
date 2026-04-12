@@ -7635,7 +7635,13 @@ function renderFamilyDetails(data, familyUid, clickedMemberName) {
         </div>` : ''}
     </div>` : `<div style="font-size:13px;color:#a0aec0;padding:24px;text-align:center">אין נתונים למשפחה זו</div>`;
 
-  el('familyDetailsBody').innerHTML = treeSection;
+  el('familyDetailsBody').innerHTML =
+    `<div style="font-size:11px;color:var(--gray-400);font-weight:600;margin-bottom:14px;display:flex;align-items:center;gap:6px">
+       <span>UID:</span>
+       <span style="font-family:monospace;letter-spacing:0.02em">${esc(familyUid)}</span>
+       <button onclick="navigator.clipboard.writeText('${familyUid}').then(()=>showToast('UID הועתק','success'))"
+         style="border:none;background:var(--gray-100);color:var(--gray-500);border-radius:6px;padding:2px 7px;font-size:10px;cursor:pointer;font-family:inherit;font-weight:700">העתק</button>
+     </div>` + treeSection;
 }
 
 async function toggleCommitteeFromPanel(familyUid, memberName, grant, cid, btn) {
