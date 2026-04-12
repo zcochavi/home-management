@@ -637,7 +637,8 @@ body {
 .message-center-panel.mc-closing { animation: mc-slide-down .28s ease forwards; }
 @keyframes mc-slide-up   { from { transform: translateY(100%) } to { transform: translateY(0) } }
 @keyframes mc-slide-down { from { transform: translateY(0) } to { transform: translateY(100%) } }
-.mc-tab-bar { display: flex; border-bottom: 2px solid var(--gray-100); padding: 0 16px; position: sticky; top: 65px; z-index: 9; background: var(--surface); }
+#messageCenterList, #mcFeedbackList { flex: 1; overflow-y: auto; }
+.mc-tab-bar { display: flex; border-bottom: 2px solid var(--gray-100); padding: 0 16px; background: var(--surface); }
 .mc-tab { flex: 1; padding: 10px 0; border: none; background: none; font-family: inherit; font-size: 14px; font-weight: 700; color: var(--gray-400); cursor: pointer; position: relative; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color var(--t-fast); }
 .mc-tab.mc-tab-active { color: var(--primary-600); border-bottom-color: var(--primary-500); }
 .mc-tab-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--primary-500); margin-right: 5px; vertical-align: middle; margin-bottom: 2px; }
@@ -1369,10 +1370,10 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 /* ═══════════════════════════════════════════
    MANAGEMENT SCREENS
 ═══════════════════════════════════════════ */
-#mgmtScreen, #tabEditorScreen, #adminPanel, #homeEditorScreen, #feedbackPanel, #messageCenterPanel {
+#mgmtScreen, #tabEditorScreen, #adminPanel, #homeEditorScreen, #feedbackPanel {
   position: fixed; inset: 0; background: var(--bg-primary); z-index: 900; overflow-y: auto;
 }
-#mgmtScreen.hidden, #tabEditorScreen.hidden, #adminPanel.hidden, #homeEditorScreen.hidden, #feedbackPanel.hidden, #messageCenterPanel.hidden { display: none; }
+#mgmtScreen.hidden, #tabEditorScreen.hidden, #adminPanel.hidden, #homeEditorScreen.hidden, #feedbackPanel.hidden { display: none; }
 #tab-home.active { display: flex; flex-direction: column; }
 
 .mgmt-header {
@@ -1444,8 +1445,9 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
   position: fixed; inset: 0; z-index: 900; background: var(--surface); display: flex; flex-direction: column;
   transform: translateY(100%);
 }
-#familyDetailsPanel.mc-open, #pendingPanel.mc-open { animation: mc-slide-up .28s cubic-bezier(.34,1.2,.64,1) forwards; }
-#familyDetailsPanel.mc-closing, #pendingPanel.mc-closing { animation: mc-slide-down .28s ease forwards; }
+#messageCenterPanel.hidden { display: none; }
+#familyDetailsPanel.mc-open, #pendingPanel.mc-open, #messageCenterPanel.mc-open { animation: mc-slide-up .28s cubic-bezier(.34,1.2,.64,1) forwards; }
+#familyDetailsPanel.mc-closing, #pendingPanel.mc-closing, #messageCenterPanel.mc-closing { animation: mc-slide-down .28s ease forwards; }
 
 /* Tab editor */
 .tab-ed-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); touch-action: none; transition: transform 0.12s ease; }
