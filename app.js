@@ -2647,6 +2647,25 @@ function acPick(i) {
   }
   hideAc();
 }
+async function onDeleteCityAc(inp) {
+  if (!_cachedCities) await loadCities();
+  showAc(inp, _cachedCities || []);
+}
+async function onDeleteSchoolCityAc(inp) {
+  if (!_cachedCities) await loadCities();
+  showAc(inp, _cachedCities || []);
+  const schoolInp = el('deleteSchoolNameInput');
+  if (schoolInp) {
+    schoolInp.disabled = !inp.value.trim();
+    if (!inp.value.trim()) schoolInp.value = '';
+  }
+  if (inp.value.trim()) loadSchoolsFor(inp.value);
+}
+async function onDeleteSchoolNameAc(inp) {
+  const city = el('deleteSchoolCityInput')?.value.trim();
+  if (city) await loadSchoolsFor(city);
+  showAc(inp, city ? (_cachedSchools[normCityId(city)] || []) : []);
+}
 async function onCityAc(inp, idx) {
   if (!_cachedCities) await loadCities();
   showAc(inp, _cachedCities || []);
@@ -3866,7 +3885,7 @@ function renderMaintenanceTools() {
       <div style="border-bottom:1px solid var(--error-light,#fed7d7);padding-bottom:12px;margin-bottom:12px">
         <div style="font-size:13px;font-weight:700;margin-bottom:4px">מחיקת עיר</div>
         <div style="font-size:12px;color:#718096;margin-bottom:8px">מוחק את כל בתי הספר, הכיתות ורישומי הילדים של העיר מהמערכת.</div>
-        <input class="auth-input" id="deleteCityInput" placeholder="שם העיר" style="margin-bottom:8px;text-align:right">
+        <input class="auth-input" id="deleteCityInput" placeholder="שם העיר" style="margin-bottom:8px;text-align:right" oninput="onDeleteCityAc(this)" onfocus="onDeleteCityAc(this)" onblur="scheduleHideAc()">
         <button class="admin-btn" id="deleteCityBtn" onclick="adminDeleteCity()" style="width:100%;padding:8px;font-size:13px;background:var(--error);color:#fff;border-color:var(--error)">מחק עיר ◀</button>
         <div id="deleteCityResult" style="font-size:12px;margin-top:6px"></div>
       </div>
@@ -3874,8 +3893,8 @@ function renderMaintenanceTools() {
       <div>
         <div style="font-size:13px;font-weight:700;margin-bottom:4px">מחיקת בית ספר</div>
         <div style="font-size:12px;color:#718096;margin-bottom:8px">מוחק את כל הכיתות ורישומי הילדים של בית הספר.</div>
-        <input class="auth-input" id="deleteSchoolCityInput" placeholder="שם העיר" style="margin-bottom:6px;text-align:right">
-        <input class="auth-input" id="deleteSchoolNameInput" placeholder="שם בית הספר" style="margin-bottom:8px;text-align:right">
+        <input class="auth-input" id="deleteSchoolCityInput" placeholder="שם העיר" style="margin-bottom:6px;text-align:right" oninput="onDeleteSchoolCityAc(this)" onfocus="onDeleteSchoolCityAc(this)" onblur="scheduleHideAc()">
+        <input class="auth-input" id="deleteSchoolNameInput" placeholder="שם בית הספר" style="margin-bottom:8px;text-align:right" oninput="onDeleteSchoolNameAc(this)" onfocus="onDeleteSchoolNameAc(this)" onblur="scheduleHideAc()" disabled>
         <button class="admin-btn" id="deleteSchoolBtn" onclick="adminDeleteSchool()" style="width:100%;padding:8px;font-size:13px;background:var(--error);color:#fff;border-color:var(--error)">מחק בית ספר ◀</button>
         <div id="deleteSchoolResult" style="font-size:12px;margin-top:6px"></div>
       </div>
