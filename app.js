@@ -3622,11 +3622,16 @@ function openFeedback() {
 async function loadFeedbackHistory() {
   const wrap = el('feedbackHistory');
   if (!wrap) return;
+  wrap.innerHTML = `<div style="margin-top:16px;border-top:1px solid var(--gray-100);padding-top:16px;display:flex;align-items:center;gap:10px;color:var(--gray-400)">
+    <div class="fh-spinner" style="zoom:0.5;flex-shrink:0"></div>
+    <span style="font-size:13px;font-weight:700">טוען פניות קודמות...</span>
+  </div>`;
   try {
     const { data } = await fbFunctions.httpsCallable('getUserFeedbacks')();
     renderFeedbackHistory(data.msgs || []);
   } catch(e) {
     console.warn('loadFeedbackHistory:', e);
+    wrap.innerHTML = '';
   }
 }
 
