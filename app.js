@@ -3614,6 +3614,48 @@ function openFeedback() {
   el('feedbackText').value = '';
   _feedbackTopicVal = FEEDBACK_TOPICS[0].id;
   _renderFeedbackTopicDD();
+  loadFeedbackHistory();
+}
+
+async function loadFeedbackHistory() {
+  const wrap = el('feedbackHistory');
+  if (!wrap) return;
+  try {
+    const { data } = await fbFunctions.httpsCallable('getUserFeedbacks')();
+    renderFeedbackHistory(data.msgs || []);
+  } catch(e) {
+    console.warn('loadFeedbackHistory:', e);
+  }
+}
+
+function renderFeedbackHistory(msgs) {
+  const wrap = el('feedbackHistory');
+  if (!wrap) return;
+  if (!msgs.length) { wrap.innerHTML = ''; return; }
+  const fmtDate = ms => ms ? new Date(ms).toLocaleDateString('he-IL', { day:'numeric', month:'short', year:'numeric' }) : '';
+  wrap.innerHTML = `
+    <div style="border-top:1px solid var(--gray-100);margin-top:16px;padding-top:16px">
+      <div style="font-size:12px;font-weight:800;color:var(--gray-400);margin-bottom:10px;letter-spacing:0.04em">הפניות שלי</div>
+      ${msgs.map(m => `
+        <div style="margin-bottom:12px;border:1px solid var(--gray-100);border-radius:var(--r-sm);overflow:hidden">
+          <div style="padding:10px 12px;background:var(--gray-50)">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <span style="font-size:12px;font-weight:800;color:var(--gray-700)">${esc(m.topicLabel || m.topic)}</span>
+              <span style="font-size:11px;color:var(--gray-400)">${fmtDate(m.createdAt)}</span>
+            </div>
+            <div style="font-size:13px;color:var(--gray-700);white-space:pre-wrap;line-height:1.5">${esc(m.text)}</div>
+          </div>
+          ${m.replied
+            ? `<div style="padding:10px 12px;background:#f0fff4;border-top:1px solid #9ae6b4">
+                 <div style="font-size:11px;font-weight:800;color:#276749;margin-bottom:4px">↩ תגובה מהמנהל · ${fmtDate(m.repliedAt)}</div>
+                 <div style="font-size:13px;color:#276749;white-space:pre-wrap;line-height:1.5">${esc(m.replyText)}</div>
+               </div>`
+            : `<div style="padding:8px 12px;background:var(--surface);border-top:1px solid var(--gray-100)">
+                 <span style="font-size:11px;color:var(--gray-400);font-weight:700">⏳ ממתינה לתגובה</span>
+               </div>`
+          }
+        </div>`).join('')}
+    </div>`;
 }
 
 function closeFeedback() { el('feedbackPanel').classList.add('hidden'); }
@@ -3667,6 +3709,7 @@ async function sendFeedback() {
     });
     el('feedbackForm').style.display = 'none';
     el('feedbackSuccess').style.display = '';
+    loadFeedbackHistory();
   } catch(e) {
     errEl.textContent = 'שגיאה בשליחה: ' + (e.message || String(e));
     errEl.style.display = '';
