@@ -1415,7 +1415,8 @@ function renderMessageCenter() {
   }
   list.innerHTML = notifs.map(n => {
     const isGood = n.type?.includes('approved') || n.type === 'member_joined';
-    const icon   = n.type === 'shopping_done' ? '🛒' : n.type === 'member_joined' ? '👋' : isGood ? '✅' : '❌';
+    const isDenied = n.type?.includes('denied') || n.type?.includes('rejected');
+    const icon   = n.type === 'shopping_done' ? '🛒' : n.type === 'member_joined' ? '👋' : n.type === 'admin_reply' ? '↩️' : isGood ? '✅' : isDenied ? '❌' : '🔔';
     const dt     = n.createdAt?.toDate ? n.createdAt.toDate().toLocaleString('he-IL', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
     const dimmed = n.dismissed ? 'opacity:0.55;' : '';
     return `<div class="mc-item" id="mcItem_${n.id}" style="${dimmed}">
