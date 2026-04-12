@@ -1121,8 +1121,21 @@ async function quickApproveReq(notifId, type, reqId, btn) {
   try {
     if (type === 'school_pending') {
       const docSnap = await fbDb.collection('pendingSchools').doc(reqId).get();
-      if (docSnap.exists) await updateSchoolIndex(docSnap.data().city, docSnap.data().schoolName);
-      await fbFunctions.httpsCallable('approveSchoolRequest')({ id: reqId, adminName: myFullName() });
+      if (!docSnap.exists) return;
+      const req = docSnap.data();
+      if (req.type === 'city') {
+        const cityStatus = req.cityStatus || 'pending';
+        if (cityStatus === 'pending') {
+          btn.closest('.notif-banner-actions').querySelectorAll('button').forEach(b => b.disabled = false);
+          showToast('יש לאשר את העיר תחילה — פתח את לוח הבקשות', 'error');
+          return;
+        }
+        // City already approved — approve the school part
+        await fbFunctions.httpsCallable('resolveSchoolPart')({ id: reqId, part: 'school', action: 'approved', adminName: myFullName() });
+      } else {
+        await updateSchoolIndex(req.city, req.schoolName);
+        await fbFunctions.httpsCallable('approveSchoolRequest')({ id: reqId, adminName: myFullName() });
+      }
     } else if (type === 'event_pending') {
       const parts = reqId.split('|');
       await fbFunctions.httpsCallable('approveEvent')({ cid: parts[0], pendingId: parts[1] });
