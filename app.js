@@ -1157,21 +1157,43 @@ async function quickDenyReq(notifId, type, reqId, btn) {
 }
 
 function _openAdminMsgFromNotif(id, btn) {
-  openAdminPanel(false);
   dismissNotifBanner(id, btn?.closest('.notif-banner'));
+  openMessageCenter('feedback');
 }
 
 // ── Message center ────────────────────────────────────────────
-function openMessageCenter() {
+let _mcTab = 'notifs';
+
+function openMessageCenter(tab) {
   const panel = el('messageCenterPanel');
   panel.classList.remove('hidden');
   panel.classList.add('mc-open');
-  renderMessageCenter();
+  // Show tab bar only for admin
+  const tabBar = el('mcTabBar');
+  if (tabBar) tabBar.style.display = isAdmin() ? '' : 'none';
+  // Dot on פניות tab if there are unread admin_message notifications
+  const dot = el('mcFeedbackUnreadDot');
+  if (dot) dot.style.display = isAdmin() && _allNotifs.some(n => n.type === 'admin_message' && !n.dismissed) ? '' : 'none';
+  switchMcTab(tab || _mcTab);
 }
 function closeMessageCenter() {
   const panel = el('messageCenterPanel');
   panel.classList.add('mc-closing');
   setTimeout(() => { panel.classList.add('hidden'); panel.classList.remove('mc-open','mc-closing'); }, 280);
+}
+function switchMcTab(tab) {
+  _mcTab = tab;
+  el('mcTabNotifs')  ?.classList.toggle('mc-tab-active', tab === 'notifs');
+  el('mcTabFeedback')?.classList.toggle('mc-tab-active', tab === 'feedback');
+  const isNotifs = tab === 'notifs';
+  el('messageCenterList').style.display = isNotifs ? '' : 'none';
+  el('mcFeedbackList').style.display    = isNotifs ? 'none' : '';
+  el('mcSelectAllRow').style.display    = isNotifs ? '' : 'none';
+  // Header controls: count + delete-all only shown for notifs tab
+  el('mcDeleteAllBtn').style.display    = 'none';
+  el('mcCount').textContent             = '';
+  if (isNotifs) renderMessageCenter();
+  else          renderMcFeedbacks();
 }
 
 // ── Pending Requests Panel (admin only) ──────────────────────
@@ -1386,6 +1408,55 @@ function renderMessageCenter() {
       </div>
     </div>`;
   }).join('');
+}
+
+async function renderMcFeedbacks() {
+  const wrap = el('mcFeedbackList');
+  if (!wrap) return;
+  wrap.innerHTML = '<div style="text-align:center;padding:32px 0"><div class="fh-spinner" style="margin:0 auto"></div></div>';
+  try {
+    const result = await fbFunctions.httpsCallable('getAdminMessages')();
+    const msgs = result.data || [];
+    // Update unread dot
+    const unreadCount = msgs.filter(m => m.read === false).length;
+    const dot = el('mcFeedbackUnreadDot');
+    if (dot) dot.style.display = unreadCount ? '' : 'none';
+    if (!msgs.length) {
+      wrap.innerHTML = '<div style="text-align:center;color:var(--gray-400);font-size:13px;font-weight:700;padding:40px 0">אין פניות עדיין</div>';
+      return;
+    }
+    wrap.innerHTML = msgs.map((m, i) => {
+      const ts = m.createdAt ? new Date(m.createdAt) : null;
+      const dateStr = ts ? ts.toLocaleDateString('he-IL') + ' ' + ts.toLocaleTimeString('he-IL', { hour:'2-digit', minute:'2-digit' }) : '';
+      const unread = m.read === false;
+      return `<div id="adminMsg_${m.id}" style="padding:14px 0${i < msgs.length-1 ? ';border-bottom:1px solid var(--gray-100)' : ''}${unread ? ';background:var(--primary-50,#eff6ff);margin:0 -16px;padding-inline:16px' : ''}">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          ${unread ? `<span class="adminmsg-dot" style="width:8px;height:8px;border-radius:50%;background:var(--primary-500);flex-shrink:0;display:inline-block"></span>` : ''}
+          <span style="font-size:13px;font-weight:900;color:var(--gray-900);flex:1">${esc(m.topicLabel || m.topic || '—')}</span>
+          <span style="font-size:11px;color:var(--gray-400)">${dateStr}</span>
+          ${unread ? `<button onclick="markAdminMsgRead('${m.id}',this)" style="font-size:11px;border:none;background:none;color:var(--primary-500);cursor:pointer;font-family:inherit;font-weight:700;padding:0;min-width:70px;text-align:end">סמן כנקרא</button>` : ''}
+        </div>
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:4px">${esc(m.senderName || '')}${m.familyName ? ' · ' + esc(m.familyName) : ''}</div>
+        <div style="font-size:13px;color:var(--gray-700);white-space:pre-wrap;margin-bottom:8px">${esc(m.text || '')}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <button onclick="createChoreFromFeedback(${JSON.stringify(m.text||'').replace(/"/g,'&quot;')})" style="font-size:11px;border:none;background:var(--gray-100);color:var(--gray-600);cursor:pointer;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:var(--r-pill)">🧹 צור משימה</button>
+          ${m.replied
+            ? `<span style="font-size:11px;color:#276749;font-weight:700">✅ נענה · ${esc(m.replyText||'')}</span>`
+            : `<button id="adminReplyBtn_${m.id}" onclick="openReplyToFeedback('${m.id}')" style="font-size:11px;border:none;background:var(--primary-50,#eff6ff);color:var(--primary-600);cursor:pointer;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:var(--r-pill)">💬 השב</button>`
+          }
+        </div>
+        <div id="adminReplyForm_${m.id}" style="display:none;margin-top:8px">
+          <textarea id="adminReplyText_${m.id}" rows="2" placeholder="כתוב תגובה לפונה..." style="width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;border:1px solid var(--gray-200);border-radius:8px;padding:8px;resize:vertical"></textarea>
+          <div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-top:4px">
+            <div id="adminReplyErr_${m.id}" style="display:none;font-size:12px;color:var(--error);flex:1"></div>
+            <button onclick="sendReplyToFeedback('${m.id}',this)" style="font-size:12px;border:none;background:var(--primary-500);color:white;cursor:pointer;font-family:inherit;font-weight:700;padding:5px 14px;border-radius:var(--r-pill)">שלח</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    wrap.innerHTML = `<div style="font-size:12px;color:var(--error);padding:8px 0">שגיאה: ${esc(e.message)}</div>`;
+  }
 }
 
 function mcOnCheck() {
@@ -4040,7 +4111,6 @@ function _applyAdminPanelCache(data, showLog) {
   renderShoppingHistorySettings();
   renderMaintenanceTools();
   renderAdminEventTypes();
-  renderAdminMessages();
 }
 
 function renderAdminEventTypes() {

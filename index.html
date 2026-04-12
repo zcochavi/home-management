@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260413ft') location.reload(true);
+        if (v !== '20260413fu') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260413ft">
+  <link rel="stylesheet" href="styles.css?v=20260413fu">
 </head>
 <body>
 
@@ -203,24 +203,6 @@
   </div>
 </div>
 
-<!-- MESSAGE CENTER -->
-<div id="messageCenterPanel" class="message-center-panel hidden">
-  <div class="mgmt-header">
-    <button class="mgmt-back-btn" onclick="closeMessageCenter()">×</button>
-    <div class="mgmt-header-title">🔔 מרכז הודעות</div>
-    <div style="display:flex;gap:8px;align-items:center">
-      <button class="admin-btn" id="mcDeleteSelectedBtn" onclick="deleteSelectedNotifs()" style="font-size:12px;padding:5px 10px;margin-bottom:0;display:none">🗑 מחק נבחרים</button>
-      <button class="admin-btn" id="mcDeleteAllBtn" onclick="deleteAllNotifs()" style="font-size:12px;padding:5px 10px;margin-bottom:0;background:#fff5f5;color:#c53030;border-color:#feb2b2;display:none">מחק הכל</button>
-    </div>
-  </div>
-  <div id="mcSelectAllRow" style="padding:4px 16px 6px;display:none;align-items:center;gap:8px;border-bottom:1px solid #f0f4ff">
-    <input type="checkbox" id="mcSelectAll" onchange="mcToggleSelectAll(this)" style="width:16px;height:16px;cursor:pointer">
-    <label for="mcSelectAll" style="font-size:12px;font-weight:700;color:#718096;cursor:pointer">בחר הכל</label>
-    <span id="mcCount" style="font-size:11px;color:#a0aec0;font-weight:700;margin-right:auto"></span>
-  </div>
-  <div id="messageCenterList" style="overflow-y:auto;flex:1;padding:8px 16px"></div>
-</div>
-
 <!-- ADMIN PANEL -->
 <div id="adminPanel" class="hidden">
   <div class="mgmt-header">
@@ -241,23 +223,25 @@
       <div id="adminLeaderboardSettings"></div>
       <div class="comm-section-label" style="margin-top:4px">🛒 היסטוריית קניות</div>
       <div id="adminShoppingHistorySettings"></div>
-      <div class="comm-section-label" style="margin-top:4px">💬 פניות משתמשים</div>
-      <div id="adminMessages"></div>
       <div class="comm-section-label" style="margin-top:4px">🔧 כלי תחזוקה</div>
       <div id="adminMaintenance"></div>
     </div>
   </div>
 </div>
 
-<!-- MANAGEMENT SCREEN -->
+<!-- MESSAGE CENTER -->
 <div id="messageCenterPanel" class="hidden">
   <div class="mgmt-header">
     <button class="mgmt-back-btn" onclick="closeMessageCenter()">×</button>
-    <div class="mgmt-header-title">🔔 מרכז הודעות</div>
+    <div class="mgmt-header-title">📬 מרכז הודעות</div>
     <div style="display:flex;gap:6px;align-items:center">
       <span id="mcCount" style="font-size:12px;color:var(--gray-400);font-weight:700"></span>
       <button id="mcDeleteAllBtn" onclick="deleteAllNotifs()" style="display:none;font-size:11px;padding:4px 10px;border:none;border-radius:var(--r-pill);background:var(--error-bg);color:var(--error);font-family:inherit;font-weight:700;cursor:pointer">מחק הכל</button>
     </div>
+  </div>
+  <div id="mcTabBar" class="mc-tab-bar" style="display:none">
+    <button id="mcTabNotifs"   class="mc-tab mc-tab-active" onclick="switchMcTab('notifs')">🔔 התראות</button>
+    <button id="mcTabFeedback" class="mc-tab"               onclick="switchMcTab('feedback')">💬 פניות<span id="mcFeedbackUnreadDot" class="mc-tab-dot" style="display:none"></span></button>
   </div>
   <div style="padding:8px 12px;border-bottom:1px solid var(--gray-100);display:none" id="mcSelectAllRow">
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;cursor:pointer">
@@ -267,6 +251,7 @@
     <button id="mcDeleteSelectedBtn" onclick="deleteSelectedNotifs()" style="display:none;font-size:12px;padding:4px 12px;border:none;border-radius:var(--r-pill);background:var(--error-bg);color:var(--error);font-family:inherit;font-weight:700;cursor:pointer;margin-right:auto">מחק נבחרים</button>
   </div>
   <div id="messageCenterList" style="padding:8px 0"></div>
+  <div id="mcFeedbackList" style="padding:8px 16px;display:none"></div>
 </div>
 
 <div id="feedbackPanel" class="hidden">
@@ -608,7 +593,7 @@
 <button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
 </button>
-<script src="app.js?v=20260413ft"></script>
+<script src="app.js?v=20260413fu"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
