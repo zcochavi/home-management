@@ -1057,14 +1057,15 @@ function renderNotifBanners(undismissed) {
     if (existing.has('notifBanner_' + n.id)) return;
     const REQUEST_TYPES = ['school_pending','event_pending','application_pending'];
     const isRequest  = REQUEST_TYPES.includes(n.type);
-    const isAdminMsg = n.type === 'admin_message';
+    const isAdminMsg   = n.type === 'admin_message';
+    const isAdminReply = n.type === 'admin_reply';
     const isInfo     = n.type === 'shopping_done';
     const isGood     = n.type?.includes('approved') || n.type === 'member_joined' || n.type === 'class_member_joined';
     const isDenied   = n.type?.includes('denied') || n.type?.includes('rejected');
-    const bg     = isDenied ? '#fff5f5' : isAdminMsg ? '#faf5ff' : '#ebf8ff';
-    const border = isDenied ? '#feb2b2' : isAdminMsg ? '#d6bcfa' : '#90cdf4';
-    const color  = isDenied ? '#c53030' : isAdminMsg ? '#6b21a8' : '#2b6cb0';
-    const icon   = isInfo ? '🛒' : isGood ? '✅' : isDenied ? '❌' : isRequest ? '📋' : isAdminMsg ? '💬' : '🔔';
+    const bg     = isDenied ? '#fff5f5' : isAdminMsg ? '#faf5ff' : isAdminReply ? '#f0fff4' : '#ebf8ff';
+    const border = isDenied ? '#feb2b2' : isAdminMsg ? '#d6bcfa' : isAdminReply ? '#9ae6b4' : '#90cdf4';
+    const color  = isDenied ? '#c53030' : isAdminMsg ? '#6b21a8' : isAdminReply ? '#276749' : '#2b6cb0';
+    const icon   = isInfo ? '🛒' : isGood ? '✅' : isDenied ? '❌' : isRequest ? '📋' : (isAdminMsg || isAdminReply) ? '💬' : '🔔';
     const div = document.createElement('div');
     div.className = 'notif-banner notif-banner-in';
     div.id = 'notifBanner_' + n.id;
@@ -3696,8 +3697,19 @@ async function renderAdminMessages() {
           </div>
           <div style="font-size:12px;color:var(--gray-500);margin-bottom:4px">${esc(m.senderName || '')}${m.familyName ? ' · ' + esc(m.familyName) : ''}</div>
           <div style="font-size:13px;color:var(--gray-700);white-space:pre-wrap;margin-bottom:8px">${esc(m.text || '')}</div>
-          <div style="text-align:start">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
             <button onclick="createChoreFromFeedback(${JSON.stringify(m.text||'').replace(/"/g,'&quot;')})" style="font-size:11px;border:none;background:var(--gray-100);color:var(--gray-600);cursor:pointer;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:var(--r-pill)">🧹 צור משימה</button>
+            ${m.replied
+              ? `<span style="font-size:11px;color:#276749;font-weight:700">✅ נענה · ${esc(m.replyText||'')}</span>`
+              : `<button id="adminReplyBtn_${m.id}" onclick="openReplyToFeedback('${m.id}')" style="font-size:11px;border:none;background:var(--primary-50,#eff6ff);color:var(--primary-600);cursor:pointer;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:var(--r-pill)">💬 השב</button>`
+            }
+          </div>
+          <div id="adminReplyForm_${m.id}" style="display:none;margin-top:8px">
+            <textarea id="adminReplyText_${m.id}" rows="2" placeholder="כתוב תגובה לפונה..." style="width:100%;box-sizing:border-box;font-family:inherit;font-size:13px;border:1px solid var(--gray-200);border-radius:8px;padding:8px;resize:vertical"></textarea>
+            <div style="display:flex;justify-content:flex-end;align-items:center;gap:6px;margin-top:4px">
+              <div id="adminReplyErr_${m.id}" style="display:none;font-size:12px;color:var(--error);flex:1"></div>
+              <button onclick="sendReplyToFeedback('${m.id}',this)" style="font-size:12px;border:none;background:var(--primary-500);color:white;cursor:pointer;font-family:inherit;font-weight:700;padding:5px 14px;border-radius:var(--r-pill)">שלח</button>
+            </div>
           </div>
         </div>`;
       }).join('') + `</div>`;
@@ -3719,6 +3731,33 @@ async function markAdminMsgRead(id, btn) {
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = 'סמן כנקרא'; }
     console.error('markAdminMsgRead:', e);
+  }
+}
+
+function openReplyToFeedback(id) {
+  const form = el('adminReplyForm_' + id);
+  if (!form) return;
+  const isHidden = form.style.display === 'none';
+  form.style.display = isHidden ? '' : 'none';
+  if (isHidden) form.querySelector('textarea')?.focus();
+}
+
+async function sendReplyToFeedback(id, btn) {
+  const textarea = el('adminReplyText_' + id);
+  const text = textarea?.value?.trim();
+  if (!text) { textarea?.focus(); return; }
+  const errEl = el('adminReplyErr_' + id);
+  if (errEl) errEl.style.display = 'none';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="fh-spinner" style="transform:scale(0.45);display:inline-block;vertical-align:middle;margin:-9px -9px -9px 0"><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span></div>'; }
+  try {
+    await fbFunctions.httpsCallable('adminReplyToFeedback')({ msgId: id, replyText: text });
+    const form = el('adminReplyForm_' + id);
+    if (form) form.innerHTML = '<div style="font-size:12px;color:#276749;padding:4px 0;font-weight:700">✅ תגובה נשלחה</div>';
+    const replyBtn = el('adminReplyBtn_' + id);
+    if (replyBtn) { replyBtn.textContent = '✅ נענה'; replyBtn.disabled = true; replyBtn.style.opacity = '0.5'; }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'שלח'; }
+    if (errEl) { errEl.textContent = 'שגיאה: ' + (e.message || String(e)); errEl.style.display = ''; }
   }
 }
 
