@@ -1183,12 +1183,13 @@ function openMessageCenter(tab) {
   const panel = el('messageCenterPanel');
   panel.classList.remove('hidden');
   panel.classList.add('mc-open');
-  // Show tab bar only for admin
+  // Show tab bar only for admin (not kids in admin family)
+  const isRealAdmin = isAdmin() && !isKid();
   const tabBar = el('mcTabBar');
-  if (tabBar) tabBar.style.display = isAdmin() ? '' : 'none';
+  if (tabBar) tabBar.style.display = isRealAdmin ? '' : 'none';
   // Dot on פניות tab if there are unread admin_message notifications
   const dot = el('mcFeedbackUnreadDot');
-  if (dot) dot.style.display = isAdmin() && _allNotifs.some(n => n.type === 'admin_message' && !n.dismissed) ? '' : 'none';
+  if (dot) dot.style.display = isRealAdmin && _allNotifs.some(n => n.type === 'admin_message' && !n.dismissed) ? '' : 'none';
   switchMcTab(tab || _mcTab);
 }
 function closeMessageCenter() {
