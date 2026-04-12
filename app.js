@@ -1400,9 +1400,8 @@ function renderMessageCenter() {
   const list = el('messageCenterList');
   if (!list) return;
   const notifs = _allNotifs.filter(n =>
-    !['school_pending','event_pending','application_pending'].includes(n.type) &&
+    !['school_pending','event_pending','application_pending','admin_message'].includes(n.type) &&
     (n.type !== 'shopping_done' || !isKid()) &&
-    (n.type !== 'admin_message' || isAdmin()) &&
     (n.type !== 'admin_reply'   || n.recipientUid === S.uid)
   );
   el('mcCount').textContent = notifs.length ? `${notifs.length} הודעות` : '';
