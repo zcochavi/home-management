@@ -891,6 +891,9 @@ exports.approveSchoolRequest = functions.https.onCall(async (data, context) => {
   if (!docSnap.exists) throw new functions.https.HttpsError('not-found', 'Request not found');
   const req = docSnap.data();
 
+  if (req.type === 'city' && (req.cityStatus || 'pending') === 'pending')
+    throw new functions.https.HttpsError('failed-precondition', 'City must be approved before the school');
+
   // Register each waiting family's kid in class & clear pending flag
   for (const pf of (req.pendingFamilies || [])) {
     try {
@@ -1351,6 +1354,62 @@ exports.markAdminMessageRead = functions.https.onCall(async (data, context) => {
   if (!msgId) throw new functions.https.HttpsError('invalid-argument', 'Missing msgId');
   await db.collection('adminMessages').doc(msgId).update({ read: true });
   return { ok: true };
+});
+
+exports.adminReplyToFeedback = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const { msgId, replyText } = data;
+  if (!msgId)          throw new functions.https.HttpsError('invalid-argument', 'Missing msgId');
+  if (!replyText?.trim()) throw new functions.https.HttpsError('invalid-argument', 'Missing reply text');
+
+  const msgDoc = await db.collection('adminMessages').doc(msgId).get();
+  if (!msgDoc.exists) throw new functions.https.HttpsError('not-found', 'Message not found');
+  const msg = msgDoc.data();
+
+  const recipientUid = msg.familyUid;
+  if (!recipientUid) throw new functions.https.HttpsError('failed-precondition', 'No sender UID in message');
+
+  const trimmed    = replyText.trim();
+  const topicLabel = msg.topicLabel || msg.topic || 'פנייה';
+  const notifText  = `💬 תגובה על "${topicLabel}": ${trimmed}`;
+
+  await writeNotif(recipientUid, 'admin_reply', notifText, { recipientUid, msgId, replyText: trimmed, topicLabel });
+
+  const tokens = await getTokens(recipientUid, true);
+  if (tokens.length) {
+    await sendToTokens(tokens, `💬 תגובה על "${topicLabel}"`, trimmed, {});
+  }
+
+  await db.collection('adminMessages').doc(msgId).update({
+    replied: true,
+    replyText: trimmed,
+    repliedAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  return { ok: true };
+});
+
+exports.getUserFeedbacks = functions.https.onCall(async (data, context) => {
+  if (!context.auth?.uid) throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  const snap = await db.collection('adminMessages')
+    .where('familyUid', '==', context.auth.uid)
+    .limit(20)
+    .get();
+  const msgs = snap.docs.map(d => {
+    const m = d.data();
+    return {
+      id:         d.id,
+      topic:      m.topic      || '',
+      topicLabel: m.topicLabel || '',
+      text:       m.text       || '',
+      createdAt:  m.createdAt?.toMillis?.() || null,
+      replied:    m.replied    || false,
+      replyText:  m.replyText  || '',
+      repliedAt:  m.repliedAt?.toMillis?.() || null,
+    };
+  }).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  return { msgs };
 });
 
 exports.submitFeedback = functions.https.onCall(async (data, context) => {
