@@ -353,7 +353,7 @@ body {
 .hw-subj-chip.active { opacity: 1; border-color: currentColor; box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
 .avatar-chip { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex-shrink: 0; transition: transform var(--t-normal), opacity var(--t-normal); opacity: 0.45; }
 .avatar-chip:active { transform: scale(0.9); }
-.avatar-chip.active { transform: scale(1.05); opacity: 1; }
+.avatar-chip.active { transform: scale(1.12); opacity: 1; }
 .avatar-bubble {
   width: 44px; height: 44px; background: var(--gray-100); border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
