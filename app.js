@@ -4203,30 +4203,32 @@ function renderAdminEventTypes() {
   const container = el('adminEventTypes');
   if (!container) return;
   const mFields = [['mDate','תאריך'],['mTime','שעה'],['mLoc','מיקום']];
-  const chkStyle = 'display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap';
+  const chkStyle = 'display:flex;align-items:center;gap:5px;font-size:12px;font-weight:700;cursor:pointer';
+  const inp = 'width:100%;box-sizing:border-box;padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;background:var(--surface)';
   container.innerHTML = `
     <div class="card" style="padding:0;margin-bottom:8px;overflow:hidden">
       ${_eventTypesCfg.map((t, i) => `
         <div style="padding:12px${i < _eventTypesCfg.length - 1 ? ';border-bottom:1px solid var(--gray-100)' : ''}">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
             <input id="evtIcon_${i}" value="${esc(t.icon)}" maxlength="2"
-              style="width:38px;text-align:center;font-size:20px;border:1.5px solid var(--gray-200);border-radius:8px;padding:4px 2px;font-family:inherit;background:var(--surface)">
+              style="width:42px;flex-shrink:0;text-align:center;font-size:20px;border:1.5px solid var(--gray-200);border-radius:8px;padding:5px 2px;font-family:inherit;background:var(--surface)">
             <input id="evtLabelHe_${i}" value="${esc(t.labelHe)}" placeholder="שם בעברית"
-              style="flex:1;padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;text-align:right;background:var(--surface)">
-            <input id="evtLabelEn_${i}" value="${esc(t.labelEn)}" placeholder="English" dir="ltr"
-              style="flex:1;padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;background:var(--surface)">
+              style="${inp};text-align:right">
           </div>
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
-            <span style="font-size:11px;font-weight:700;color:var(--gray-400)">שדות חובה:</span>
+          <div style="margin-bottom:8px">
+            <input id="evtLabelEn_${i}" value="${esc(t.labelEn)}" placeholder="English name" dir="ltr"
+              style="${inp}">
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap;background:var(--gray-50);border-radius:8px;padding:8px 10px">
+            <span style="font-size:11px;font-weight:800;color:var(--gray-400);width:100%;margin-bottom:2px">שדות חובה</span>
             ${mFields.map(([key,lbl]) => `
               <label style="${chkStyle}">
                 <input type="checkbox" id="evt_${key}_${i}" ${t[key] ? 'checked' : ''} style="width:15px;height:15px">
                 ${lbl}
               </label>`).join('')}
-            <span style="font-size:11px;font-weight:700;color:var(--gray-400);margin-right:4px">פילטר:</span>
             <label style="${chkStyle}">
               <input type="checkbox" id="evtGender_${i}" ${t.hasGenderFilter ? 'checked' : ''} style="width:15px;height:15px">
-              בנים/בנות
+              פילטר בנים/בנות
             </label>
             <label style="${chkStyle};margin-right:auto">
               <input type="checkbox" id="evtEnabled_${i}" ${t.enabled !== false ? 'checked' : ''} style="width:15px;height:15px">
@@ -4241,13 +4243,14 @@ function renderAdminEventTypes() {
     </div>
     <div class="card" style="padding:12px">
       <div style="font-size:13px;font-weight:900;color:var(--gray-900);margin-bottom:10px">➕ הוסף סוג אירוע</div>
-      <div style="display:flex;gap:8px;margin-bottom:8px">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
         <input id="newEvtIcon" maxlength="2" placeholder="📝"
-          style="width:44px;text-align:center;font-size:20px;border:1.5px solid var(--gray-200);border-radius:8px;padding:6px 2px;font-family:inherit;background:var(--surface)">
+          style="width:42px;flex-shrink:0;text-align:center;font-size:20px;border:1.5px solid var(--gray-200);border-radius:8px;padding:5px 2px;font-family:inherit;background:var(--surface)">
         <input id="newEvtLabelHe" placeholder="שם בעברית"
-          style="flex:1;padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;text-align:right;background:var(--surface)">
-        <input id="newEvtLabelEn" placeholder="English" dir="ltr"
-          style="flex:1;padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-family:inherit;font-size:13px;font-weight:700;background:var(--surface)">
+          style="${inp};text-align:right">
+      </div>
+      <div style="margin-bottom:10px">
+        <input id="newEvtLabelEn" placeholder="English name" dir="ltr" style="${inp}">
       </div>
       <button class="admin-btn" onclick="addEventType()" style="width:100%;padding:8px">+ הוסף</button>
     </div>`;
