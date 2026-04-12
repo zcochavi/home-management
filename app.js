@@ -3719,7 +3719,7 @@ async function renderAdminMessages() {
 }
 
 async function markAdminMsgRead(id, btn) {
-  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="fh-spinner" style="transform:scale(0.45);display:inline-block;vertical-align:middle;margin:-9px -9px -9px 0"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="fh-spinner" style="zoom:0.45;display:inline-block;vertical-align:middle"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>'; }
   try {
     await fbFunctions.httpsCallable('markAdminMessageRead')({ msgId: id });
     const row = el('adminMsg_' + id);
@@ -3748,7 +3748,7 @@ async function sendReplyToFeedback(id, btn) {
   if (!text) { textarea?.focus(); return; }
   const errEl = el('adminReplyErr_' + id);
   if (errEl) errEl.style.display = 'none';
-  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="fh-spinner" style="transform:scale(0.45);display:inline-block;vertical-align:middle;margin:-9px -9px -9px 0"><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span></div>'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="fh-spinner" style="zoom:0.45;display:inline-block;vertical-align:middle"><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span><span style="background:white"></span></div>'; }
   try {
     await fbFunctions.httpsCallable('adminReplyToFeedback')({ msgId: id, replyText: text });
     const form = el('adminReplyForm_' + id);
