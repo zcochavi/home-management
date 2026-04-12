@@ -4027,7 +4027,7 @@ async function adminDeleteFamily() {
 }
 
 function createChoreFromFeedback(text) {
-  closeAdminPanel();
+  closeMessageCenter();
   switchTab('chores');
   setTimeout(() => {
     const inp = el('newChoreText');
