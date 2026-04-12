@@ -2209,7 +2209,7 @@ function renderMgmtMembers() {
           <select class="auth-input" id="mgmtEditGrade_${i}" style="flex:1" ${!m.school?.name ? 'disabled' : ''}>
             ${GRADE_OPTIONS.map(g=>`<option value="${g}" ${(m.school?.grade||'')==g?'selected':''}>${g?'כיתה '+g:'כיתה...'}</option>`).join('')}
           </select>
-          <input class="auth-input" id="mgmtEditClassNum_${i}" placeholder="מספר כיתה" value="${esc(m.school?.classNum||'')}" style="flex:1" maxlength="3" ${!m.school?.name ? 'disabled' : ''}>
+          <input class="auth-input" id="mgmtEditClassNum_${i}" placeholder="כיתה (מספר/שם)" value="${esc(m.school?.classNum||'')}" style="flex:1" maxlength="20" ${!m.school?.name ? 'disabled' : ''}>
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
