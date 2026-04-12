@@ -986,10 +986,12 @@ function initNotifBanners() {
     .onSnapshot(snap => {
       _allNotifs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       // Request-type notifs only show if explicitly addressed to this user (recipientUid match)
-      const _visibleNotif = n => !n.dismissed && (
-        !['school_pending','event_pending','application_pending'].includes(n.type) ||
-        (n.recipientUid === S.uid && n.requestedByUid !== S.uid)
-      ) && (n.type !== 'shopping_done' || !isKid());
+      const _visibleNotif = n => !n.dismissed
+        && (n.type !== 'admin_message' || isAdmin())
+        && (n.type !== 'admin_reply'   || n.recipientUid === S.uid)
+        && (!['school_pending','event_pending','application_pending'].includes(n.type) ||
+            (n.recipientUid === S.uid && n.requestedByUid !== S.uid))
+        && (n.type !== 'shopping_done' || !isKid());
       renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
       if (isAdmin()) _patchMissingReqIds(_allNotifs);
       _updateBellBadge();
@@ -1397,7 +1399,9 @@ function renderMessageCenter() {
   if (!list) return;
   const notifs = _allNotifs.filter(n =>
     !['school_pending','event_pending','application_pending'].includes(n.type) &&
-    (n.type !== 'shopping_done' || !isKid())
+    (n.type !== 'shopping_done' || !isKid()) &&
+    (n.type !== 'admin_message' || isAdmin()) &&
+    (n.type !== 'admin_reply'   || n.recipientUid === S.uid)
   );
   el('mcCount').textContent = notifs.length ? `${notifs.length} הודעות` : '';
   el('mcDeleteAllBtn').style.display = notifs.length ? '' : 'none';
