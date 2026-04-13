@@ -6061,7 +6061,7 @@ function _updateScrollTopBtn() {
 window.addEventListener('scroll', _updateScrollTopBtn, { passive: true });
 document.addEventListener('scroll', _updateScrollTopBtn, { passive: true });
 window.addEventListener('resize', () => {
-  ['homeChips','choresChips','communityChips'].forEach(_applyChipsSpread);
+  ['homeChips','choresChips','communityChips','childTabsContainer'].forEach(_applyChipsSpread);
 }, { passive: true });
 
 function switchGrocerySection(sec) {
@@ -6674,7 +6674,7 @@ function renderHomework(){
   const childTabsEl=el('childTabsContainer');
   const showKidChips = kids.length >= 2;
   childTabsEl.style.display = showKidChips ? '' : 'none';
-  if (showKidChips) childTabsEl.innerHTML = _hwKidChipsHtml(kids);
+  if (showKidChips) { childTabsEl.innerHTML = _hwKidChipsHtml(kids); _applyChipsSpread('childTabsContainer'); }
 
   // Scope toggle: parents only
   const scopeEl=el('hwScopeSeg');
