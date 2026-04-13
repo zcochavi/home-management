@@ -3370,7 +3370,7 @@ async function renderCommunity() {
   const container = el('communityContent');
   if (!container) return;
   const commChipsEl = el('communityChips');
-  if (commChipsEl) commChipsEl.innerHTML = _kidChipsHtml();
+  if (commChipsEl) { commChipsEl.innerHTML = _kidChipsHtml(); _applyChipsSpread('communityChips'); }
 
   const filteredKids = (S.filter !== 'All' && getKids().includes(S.filter))
     ? [S.filter] : getKids();
@@ -4718,6 +4718,7 @@ const DRAWER_ICONS = {
   admin:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
   gcal:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
   signout:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
+  tour:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
   feedback: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>`,
 };
 
@@ -4752,6 +4753,9 @@ function openMenu() {
     !S.lockedMember ? _drawerItem('switch', isHe ? 'החלף משתמש' : 'Switch member', `closeMenu();switchUser()`) : '',
     _drawerItem('install',  isHe ? 'הוסף לדף הבית' : 'Add to home screen', `closeMenu();installApp()`),
     _drawerItem('feedback', isHe ? 'פנייה למנהל המערכת' : 'Contact admin', `closeMenu();openFeedback()`),
+    ...(!isParent() ? [] : Object.keys(_tutDefs()).map(tab =>
+      _drawerItem('tour', isHe ? `סיור ב${tabLabel(tab)}` : `${tabLabel(tab)} tour`, `closeMenu();replayTutorial('${tab}')`)
+    )),
     isAdmin() ? _drawerItem('admin', isHe ? 'הגדרות מערכת' : 'System settings', `closeMenu();openAdminPanel(false)`, { adminKey: true }) : '',
   ].filter(Boolean).join('');
 
@@ -4949,6 +4953,13 @@ function _allGroupAvatar() {
   </svg>`;
   return `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;color:#a0aec0"><span style="width:72%;height:72%;display:flex">${svg}</span></span>`;
 }
+function _applyChipsSpread(rowId) {
+  const row = el(rowId);
+  if (!row) return;
+  const count = row.querySelectorAll('.avatar-chip').length;
+  row.classList.toggle('chips-spread', window.innerWidth >= 680 && count > 0 && count <= 6);
+}
+
 function _allMemberChipsHtml() {
   if (!isParent()) return '';
   const allNames = getAllMemberNames();
@@ -5276,7 +5287,7 @@ function renderWeatherWidget() {
 
 function renderHome() {
   const homeChipsEl = el('homeChips');
-  if (homeChipsEl) homeChipsEl.innerHTML = _allMemberChipsHtml();
+  if (homeChipsEl) { homeChipsEl.innerHTML = _allMemberChipsHtml(); _applyChipsSpread('homeChips'); }
   const bannerEl = el('welcomeBanner');
   if (isKid()) {
     const col = getKidGradient(S.user);
@@ -5379,7 +5390,7 @@ let _chore3dotActiveId = null;
 
 function renderChores() {
   const choresChipsEl = el('choresChips');
-  if (choresChipsEl) choresChipsEl.innerHTML = _allMemberChipsHtml();
+  if (choresChipsEl) { choresChipsEl.innerHTML = _allMemberChipsHtml(); _applyChipsSpread('choresChips'); }
   const fabWrap = el('choreFabWrap');
   // Reset assignee state when filter changes
   if (S.filter !== 'All') { _choreFabAssignee = null; }
@@ -6049,6 +6060,9 @@ function _updateScrollTopBtn() {
 }
 window.addEventListener('scroll', _updateScrollTopBtn, { passive: true });
 document.addEventListener('scroll', _updateScrollTopBtn, { passive: true });
+window.addEventListener('resize', () => {
+  ['homeChips','choresChips','communityChips'].forEach(_applyChipsSpread);
+}, { passive: true });
 
 function switchGrocerySection(sec) {
   if (!isParent() && sec !== 'shopping') sec = 'shopping';
@@ -7345,6 +7359,7 @@ function switchTab(tab) {
   if (tab === 'community') renderCommunity();
   if (tab === 'analytics') renderAnalytics();
   if (tab === 'homework' && getKids().includes(S.filter)) S.child = S.filter;
+  if (_tutDefs()[tab]) setTimeout(() => _tutMaybeTrigger(tab), 700);
   // Stop presence auto-refresh when leaving analytics
   if (tab !== 'analytics' && _presenceRefreshTimer) {
     clearInterval(_presenceRefreshTimer);
@@ -8390,4 +8405,164 @@ if (!FB_CONFIGURED) {
       }
     }
   });
+}
+
+// ════════════════════════════════════════
+//  TUTORIAL
+// ════════════════════════════════════════
+let _tutSteps  = [];
+let _tutIdx    = 0;
+let _tutTabKey = null;
+
+function _tutIsMobile() { return window.innerWidth < 680; }
+
+function _tutDefs() {
+  const mob = _tutIsMobile();
+  return {
+    grocery: {
+      steps: [
+        {
+          sel: '.grocery-subtabs',
+          title: '3 לשוניות',
+          text: '🏪 מאגר — רשימת המוצרים הקבועים שלכם.\n🛒 קניות — הרשימה שלוקחים לסופר.\n📋 היסטוריה — סיכומי קניות קודמות.',
+        },
+        {
+          sel: '#poolAddWrap',
+          title: 'הוספת מוצר למאגר',
+          text: 'לחצו ➕ הוסף פריט להוספת מוצר חדש.\nניתן לבחור קטגוריה וסוג יחידה — יחידות (×) או משקל (ק"ג).',
+        },
+        {
+          sel: '#grocerySec-pool .card',
+          title: 'שליחה לרשימת הקניות',
+          text: 'לחיצה על מוצר מוסיפה אותו לרשימה הפעילה — לחיצה חוזרת מסירה אותו.\nשינוי הכמות כאן מעדכן אוטומטית את הכמות המבוקשת ברשימה.',
+        },
+        {
+          sel: '#grocerySec-pool .card',
+          title: 'עריכה ומחיקה',
+          text: mob
+            ? 'החליקו מוצר שמאלה לחשיפת כפתורי עריכה ומחיקה.'
+            : 'לחצו ⋮ ליד מוצר לתפריט עריכה ומחיקה.\nניתן גם להחליק שמאלה.',
+        },
+        {
+          sel: '#grocerySec-shopping .card',
+          title: 'בזמן הקניה',
+          text: 'ליד שם כל מוצר מוצגת הכמות המבוקשת.\nניתן לשנות את הכמות שהבאתם בפועל — אם פחות מהמבוקש, הצבע ישתנה לכתום.\nבסיום לחצו ✓ סיימתי לקנות: הקניה תישמר בהיסטוריה וההורים האחרים יקבלו התראה על פריטים שלא הובאו.',
+          before: () => switchGrocerySection('shopping'),
+        },
+      ],
+      onEnd: () => switchGrocerySection('pool'),
+    },
+  };
+}
+
+function _tutDoneKey()  { return 'fh_tut_' + (S.uid || '_'); }
+function _tutIsDone(tab) {
+  try { return JSON.parse(localStorage.getItem(_tutDoneKey()) || '[]').includes(tab); } catch { return false; }
+}
+function _tutMarkDone(tab) {
+  try {
+    const k = _tutDoneKey();
+    const d = JSON.parse(localStorage.getItem(k) || '[]');
+    if (!d.includes(tab)) { d.push(tab); localStorage.setItem(k, JSON.stringify(d)); }
+  } catch {}
+}
+
+function _tutMaybeTrigger(tab) {
+  if (!isParent() || _tutIsDone(tab)) return;
+  startTutorial(tab);
+}
+
+function replayTutorial(tab) {
+  // Clear done flag so tutorial can re-run
+  try {
+    const k = _tutDoneKey();
+    const d = JSON.parse(localStorage.getItem(k) || '[]').filter(t => t !== tab);
+    localStorage.setItem(k, JSON.stringify(d));
+  } catch {}
+  // Navigate to the right tab, then start
+  if (S.tab !== tab) {
+    switchTab(tab);
+    setTimeout(() => startTutorial(tab), 750);
+  } else {
+    startTutorial(tab);
+  }
+}
+
+function startTutorial(tab) {
+  const def = _tutDefs()[tab];
+  if (!def?.steps?.length) return;
+  _tutTabKey = tab;
+  _tutSteps  = def.steps;
+  _tutIdx    = 0;
+  _tutShowStep(0);
+}
+
+function _tutShowStep(idx) {
+  const step = _tutSteps[idx];
+  if (!step) { _tutEnd(); return; }
+  const expectedTab = _tutTabKey; // capture before any async gap
+  if (step.before) step.before();
+  setTimeout(() => {
+    // Abort if tutorial ended, or user navigated away
+    if (!_tutSteps.length || S.tab !== expectedTab) { if (_tutSteps.length) _tutEnd(); return; }
+
+    const target = document.querySelector(step.sel);
+    if (!target) { _tutIdx++; _tutShowStep(_tutIdx); return; }
+
+    const rect = target.getBoundingClientRect();
+    // If element is hidden (inside display:none parent), dimensions are zero — skip step
+    if (rect.width === 0 && rect.height === 0) { _tutIdx++; _tutShowStep(_tutIdx); return; }
+
+    const overlay = el('tutOverlay');
+    if (!overlay) return;
+    overlay.style.display = '';
+
+    const pad  = 8;
+    const spot = el('tutSpot');
+    if (spot) {
+      spot.style.top    = (rect.top    - pad) + 'px';
+      spot.style.left   = (rect.left   - pad) + 'px';
+      spot.style.width  = (rect.width  + pad * 2) + 'px';
+      spot.style.height = (rect.height + pad * 2) + 'px';
+    }
+
+    const titleEl = el('tutTitle'); if (titleEl) titleEl.textContent = step.title;
+    const textEl  = el('tutText');  if (textEl)  textEl.textContent  = step.text;
+    const nextBtn = el('tutNextBtn'); if (nextBtn) nextBtn.textContent = idx === _tutSteps.length - 1 ? 'סיום ✓' : 'הבא ›';
+    const dotsEl  = el('tutDots');
+    if (dotsEl) dotsEl.innerHTML = _tutSteps.map((_, i) =>
+      `<div class="tut-dot${i === idx ? ' active' : ''}"></div>`
+    ).join('');
+
+    const card  = el('tutCard');
+    if (!card) return;
+    const cardW = Math.min(300, window.innerWidth - 32);
+    card.style.width     = cardW + 'px';
+    card.style.transform = 'none'; // clear the default center transform
+    const cardH = card.offsetHeight || 170;
+    const vp    = window.innerHeight;
+    let top  = rect.bottom + pad + 12;
+    if (top + cardH > vp - 8) top = rect.top - pad - cardH - 12;
+    top  = Math.max(8, Math.min(top, vp - cardH - 8));
+    let left = rect.left + rect.width / 2 - cardW / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - cardW - 8));
+    card.style.top  = top  + 'px';
+    card.style.left = left + 'px';
+  }, 80);
+}
+
+function tutNext() {
+  _tutIdx++;
+  if (_tutIdx >= _tutSteps.length) _tutEnd();
+  else _tutShowStep(_tutIdx);
+}
+
+function tutSkip() { _tutEnd(); }
+
+function _tutEnd() {
+  const _ov = el('tutOverlay'); if (_ov) _ov.style.display = 'none';
+  _tutMarkDone(_tutTabKey);
+  const def = _tutDefs()[_tutTabKey];
+  if (def?.onEnd) def.onEnd();
+  _tutSteps = []; _tutIdx = 0; _tutTabKey = null;
 }

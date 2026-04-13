@@ -341,8 +341,13 @@ body {
 .avatar-row::-webkit-scrollbar { display: none; }
 
 /* Tab-internal chip row (home, chores, community) */
-.tab-chips-row { display: flex; gap: 10px; margin-bottom: 14px; padding-bottom: 2px; }
-.tab-chips-row .avatar-chip { flex: 1; }
+.tab-chips-row { display: flex; gap: 10px; margin-bottom: 8px; padding: 6px 4px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+.tab-chips-row::-webkit-scrollbar { display: none; }
+.tab-chips-row .avatar-chip { flex: 0 0 auto; }
+@media (min-width: 680px) {
+  .tab-chips-row.chips-spread { overflow-x: hidden; gap: 0; justify-content: space-evenly; }
+  .tab-chips-row.chips-spread .avatar-chip { flex: 1 1 0; max-width: 100px; }
+}
 
 /* Homework kid chips — evenly spread full width */
 .hw-kid-chips { display: flex; gap: 8px; margin-bottom: 14px; }
@@ -802,6 +807,33 @@ body {
   padding: 4px 6px; outline: none; cursor: pointer; flex-shrink: 0;
 }
 .chore-qa-date::-webkit-calendar-picker-indicator { opacity: 0.4; cursor: pointer; width: 12px; height: 12px; }
+
+/* ── Tutorial spotlight ─────────────────── */
+#tutOverlay { position: fixed; inset: 0; z-index: 9990; cursor: default; }
+#tutSpot {
+  position: fixed; border-radius: 14px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(0,0,0,0.58);
+  transition: top 0.28s ease, left 0.28s ease, width 0.28s ease, height 0.28s ease;
+}
+#tutCard {
+  position: fixed; z-index: 9992; direction: rtl;
+  top: 50%; left: 50%; transform: translate(-50%,-50%);
+  background: #fff; border-radius: 18px;
+  padding: 18px 20px 14px;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.2), 0 2px 8px rgba(0,0,0,0.08);
+  width: min(300px, calc(100vw - 32px));
+  transition: top 0.28s ease, left 0.28s ease;
+}
+.tut-title { font-family: 'Amatic SC', sans-serif; font-size: 22px; font-weight: 700; color: var(--gray-900); margin-bottom: 8px; }
+.tut-body  { font-size: 13px; font-weight: 500; color: var(--gray-600); line-height: 1.75; white-space: pre-line; }
+.tut-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; gap: 8px; }
+.tut-skip-btn { border: none; background: none; font-family: inherit; font-size: 12px; color: var(--gray-400); cursor: pointer; padding: 4px 0; }
+.tut-skip-btn:hover { color: var(--gray-600); }
+.tut-next-btn { border: none; background: var(--primary-500); color: #fff; font-family: inherit; font-size: 13px; font-weight: 700; padding: 8px 18px; border-radius: 20px; cursor: pointer; transition: background var(--t-fast); white-space: nowrap; }
+.tut-next-btn:hover { background: var(--primary-600); }
+#tutDots { display: flex; gap: 5px; align-items: center; }
+.tut-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gray-200); transition: all 0.2s ease; }
+.tut-dot.active { width: 18px; border-radius: 3px; background: var(--primary-500); }
 
 /* ── Soft Card Dropdown ─────────────────── */
 .soft-dd { position: relative; flex-shrink: 0; }
