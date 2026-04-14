@@ -344,10 +344,8 @@ body {
 .tab-chips-row { display: flex; gap: 10px; margin-bottom: 8px; padding: 6px 4px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
 .tab-chips-row::-webkit-scrollbar { display: none; }
 .tab-chips-row .avatar-chip { flex: 0 0 auto; }
-@media (min-width: 680px) {
-  .tab-chips-row.chips-spread { overflow-x: hidden; gap: 0; justify-content: space-evenly; }
-  .tab-chips-row.chips-spread .avatar-chip { flex: 1 1 0; max-width: 100px; }
-}
+.tab-chips-row.chips-spread { overflow-x: hidden; gap: 0; justify-content: space-evenly; }
+.tab-chips-row.chips-spread .avatar-chip { flex: 1 1 0; max-width: 100px; }
 
 /* Homework kid chips — evenly spread full width */
 .hw-kid-chips { display: flex; gap: 8px; margin-bottom: 14px; }

@@ -4957,7 +4957,7 @@ function _applyChipsSpread(rowId) {
   const row = el(rowId);
   if (!row) return;
   const count = row.querySelectorAll('.avatar-chip').length;
-  row.classList.toggle('chips-spread', window.innerWidth >= 680 && count > 0 && count <= 6);
+  row.classList.toggle('chips-spread', count > 0 && count <= 6);
 }
 
 function _allMemberChipsHtml() {
