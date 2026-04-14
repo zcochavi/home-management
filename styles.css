@@ -792,19 +792,21 @@ body {
 .chore-qa-input-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px 4px 4px; }
 .chore-qa-input { flex: 1; min-width: 0; border: none; outline: none; font-family: inherit; font-size: 15px; font-weight: 500; color: var(--gray-800); background: none; padding: 14px 10px; caret-color: var(--primary-500); resize: none; overflow-y: hidden; line-height: 1.4; display: block; }
 .chore-qa-input::placeholder { color: var(--gray-400); font-weight: 400; }
-.chore-qa-plus { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: none; background: var(--primary-500); color: #fff; cursor: pointer; padding: 0; border-radius: 10px; transition: background var(--t-fast), transform var(--t-fast); }
+.chore-qa-plus { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: none; background: var(--primary-500); color: #fff; cursor: pointer; padding: 0; border-radius: var(--r-pill); transition: background var(--t-fast), transform var(--t-fast); }
 .chore-qa-plus:active { background: var(--primary-600); transform: scale(0.93); }
 .chore-qa-plus svg { width: 14px; height: 14px; }
 /* Row 2: secondary controls */
 .chore-qa-controls-row { display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: var(--gray-50); border-top: 1px solid var(--gray-100); flex-wrap: wrap; }
 .chore-qa-sep { width: 1px; height: 16px; background: var(--gray-200); flex-shrink: 0; }
 .chore-qa-date {
-  border: 1px solid var(--gray-200); border-radius: 8px;
-  background: var(--surface); color: var(--gray-500);
-  font-family: inherit; font-size: 11px; font-weight: 600;
-  padding: 4px 6px; outline: none; cursor: pointer; flex: 1 1 auto; min-width: 100px;
+  flex: 1 1 auto; min-width: 100px;
+  padding: 7px 10px; border: 1.5px solid var(--gray-200); border-radius: var(--r-input);
+  background: var(--surface); color: var(--gray-600);
+  font-family: inherit; font-size: 13px; font-weight: 600; outline: none; cursor: pointer;
+  transition: border-color var(--t-fast);
 }
-.chore-qa-date::-webkit-calendar-picker-indicator { opacity: 0.4; cursor: pointer; width: 12px; height: 12px; }
+.chore-qa-date:focus { border-color: var(--primary-500); }
+.chore-qa-date::-webkit-calendar-picker-indicator { opacity: 0.45; cursor: pointer; }
 
 /* ── Tutorial spotlight ─────────────────── */
 #tutOverlay { position: fixed; inset: 0; z-index: 9990; cursor: default; }
