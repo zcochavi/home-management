@@ -796,13 +796,13 @@ body {
 .chore-qa-plus:active { background: var(--primary-600); transform: scale(0.93); }
 .chore-qa-plus svg { width: 14px; height: 14px; }
 /* Row 2: secondary controls */
-.chore-qa-controls-row { display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: var(--gray-50); border-top: 1px solid var(--gray-100); }
+.chore-qa-controls-row { display: flex; align-items: center; gap: 6px; padding: 8px 10px; background: var(--gray-50); border-top: 1px solid var(--gray-100); flex-wrap: wrap; }
 .chore-qa-sep { width: 1px; height: 16px; background: var(--gray-200); flex-shrink: 0; }
 .chore-qa-date {
   border: 1px solid var(--gray-200); border-radius: 8px;
   background: var(--surface); color: var(--gray-500);
   font-family: inherit; font-size: 11px; font-weight: 600;
-  padding: 4px 6px; outline: none; cursor: pointer; flex-shrink: 0;
+  padding: 4px 6px; outline: none; cursor: pointer; flex: 1 1 auto; min-width: 100px;
 }
 .chore-qa-date::-webkit-calendar-picker-indicator { opacity: 0.4; cursor: pointer; width: 12px; height: 12px; }
 
