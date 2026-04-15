@@ -1600,6 +1600,7 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
 
   const { webtopSession, syncParams, familyId } = req.body || {};
   const token = webtopSession?.token;
+  const fullCookie = webtopSession?.fullCookie || null;
   if (!token || !syncParams || !familyId) {
     return res.status(400).json({ error: 'missing fields' });
   }
@@ -1609,32 +1610,45 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
   if (!familyDoc.exists) return res.status(404).json({ error: 'family not found' });
 
   try {
-    // Fetch current week's homework for this student
-    const homework = await _fetchWebtopHomework(token, syncParams);
-
-    // Key by classCode — one entry per class, not per student
     const classCode = String(syncParams.classCode || syncParams.studentID || '');
     const safeKey = classCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const existingStudents = familyDoc.data()?.webtopStudents || {};
+    const isFirstSync = !existingStudents[safeKey]?.initialSyncDone;
 
-    // Merge: keep other classes' homework, replace this class's
+    // First sync: pull 4 weeks back (~1 month). Delta syncs: current week only.
+    const weekOffsets = isFirstSync ? [0, -1, -2, -3] : [0];
+    let newHomework = [];
+    try {
+      for (const offset of weekOffsets) {
+        const hw = await _fetchWebtopHomework(token, syncParams, fullCookie, offset);
+        newHomework = newHomework.concat(hw);
+      }
+    } catch (fetchErr) {
+      console.error('webtopSetup _fetchWebtopHomework failed:', fetchErr.message);
+      return res.status(500).json({ error: fetchErr.message });
+    }
+    console.log(`webtopSetup: ${isFirstSync ? 'initial' : 'delta'} sync, ${newHomework.length} items fetched`);
+
+    // Merge: deduplicate by classCode|date|subject — preserves history, updates edits
     const existing = familyDoc.data()?.webtopHomework || [];
-    const merged = [
-      ...existing.filter(h => h.classCode !== classCode),
-      ...homework,
-    ];
+    const hwKey = h => `${h.classCode}|${h.date}|${h.subject}`;
+    const mergedMap = new Map(existing.map(h => [hwKey(h), h]));
+    for (const h of newHomework) mergedMap.set(hwKey(h), h);
+    const merged = [...mergedMap.values()];
 
     const updatePayload = {
       webtopHomework: merged,
       webtopUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       [`webtopStudents.${safeKey}`]: {
         token,
+        fullCookie: fullCookie || null,
         syncParams,
         classCode,
         studentName: syncParams.studentName || '',
+        initialSyncDone: true,
       },
     };
-    // Delete any stale entries that have the same studentID but a different key
-    const existingStudents = familyDoc.data()?.webtopStudents || {};
+    // Delete stale entries with same studentID but different key
     for (const [key, entry] of Object.entries(existingStudents)) {
       if (key !== safeKey && entry.syncParams?.studentID === syncParams.studentID) {
         updatePayload[`webtopStudents.${key}`] = admin.firestore.FieldValue.delete();
@@ -1642,7 +1656,7 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
     }
     await db.collection('families').doc(familyId).update(updatePayload);
 
-    return res.json({ ok: true, homeworkCount: homework.length });
+    return res.json({ ok: true, homeworkCount: newHomework.length, total: merged.length, isFirstSync });
   } catch (err) {
     console.error('webtopSetup error', err);
     return res.status(500).json({ error: 'server error' });
@@ -1666,14 +1680,23 @@ exports.webtopSync = functions.pubsub.schedule('every 1 hours').onRun(async () =
     const lastSync = webtopUpdatedAt?.toMillis?.() || 0;
     if (now - lastSync < intervalMs) return;
     try {
-      let allHomework = [];
-      for (const [, { token, syncParams }] of entries) {
+      const existingHomework = doc.data().webtopHomework || [];
+      const hwKey = h => `${h.classCode}|${h.date}|${h.subject}`;
+      const mergedMap = new Map(existingHomework.map(h => [hwKey(h), h]));
+
+      for (const [safeKey, { token, syncParams, fullCookie, initialSyncDone }] of entries) {
         if (!token || !syncParams) continue;
-        const hw = await _fetchWebtopHomework(token, syncParams);
-        allHomework = allHomework.concat(hw);
+        const weekOffsets = initialSyncDone ? [0] : [0, -1, -2, -3];
+        for (const offset of weekOffsets) {
+          const hw = await _fetchWebtopHomework(token, syncParams, fullCookie || null, offset);
+          for (const h of hw) mergedMap.set(hwKey(h), h);
+        }
+        if (!initialSyncDone) {
+          await doc.ref.update({ [`webtopStudents.${safeKey}.initialSyncDone`]: true });
+        }
       }
       await doc.ref.update({
-        webtopHomework: allHomework,
+        webtopHomework: [...mergedMap.values()],
         webtopUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
       synced++;
@@ -1687,20 +1710,47 @@ exports.webtopSync = functions.pubsub.schedule('every 1 hours').onRun(async () =
 });
 
 // ─── Helper: fetch and flatten homework from Webtop API ──────────────────────
-async function _fetchWebtopHomework(token, syncParams) {
-  const res = await fetch(WEBTOP_API, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Cookie': `webToken=${decodeURIComponent(token)}`,
-      'Origin': 'https://webtop.smartschool.co.il',
-      'Referer': 'https://webtop.smartschool.co.il/',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    },
-    body: JSON.stringify({ ...syncParams, weekIndex: 0 }),
-  });
+async function _fetchWebtopHomework(token, syncParams, fullCookie, weekOffset = 0) {
+  let cookieStr;
+  if (fullCookie) {
+    // Use exact Cookie header captured from the browser — most reliable
+    cookieStr = fullCookie;
+    console.log('Using fullCookie, keys:', fullCookie.split(';').map(p=>p.trim().split('=')[0]).join(', '));
+  } else {
+    let decodedToken;
+    try { decodedToken = decodeURIComponent(token); } catch { decodedToken = token; }
+    cookieStr = `webToken=${decodedToken}`;
+    console.log('Using single webToken (no fullCookie)');
+  }
 
-  if (!res.ok) throw new Error(`Webtop API returned ${res.status}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000);
+
+  let res;
+  try {
+    res = await fetch(WEBTOP_API, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': cookieStr,
+        'Origin': 'https://webtop.smartschool.co.il',
+        'Referer': 'https://webtop.smartschool.co.il/',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify({ ...syncParams, weekIndex: weekOffset }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  if (!res.ok) {
+    if (res.status === 403 || res.status === 401) {
+      throw new Error(`session_expired`);
+    }
+    const errBody = await res.text().catch(() => '');
+    throw new Error(`Webtop API ${res.status}: ${errBody.slice(0, 200)}`);
+  }
   const json = await res.json();
 
   // Flatten: collect all non-null homeWork strings across days and hours

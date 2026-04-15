@@ -872,6 +872,10 @@ body {
 .hw-hist-hdr { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 6px 0; user-select: none; direction: rtl; }
 .hw-hist-title { font-size: 14px; font-weight: 700; color: var(--gray-600); flex: 1; }
 .hw-hist-count { background: var(--gray-100); color: var(--gray-500); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: var(--r-pill); }
+.hw-search-bar { padding: 4px 0 8px; }
+.hw-search-input { width: 100%; padding: 9px 14px 9px 36px; border: 1.5px solid var(--gray-200); border-radius: var(--r-input); font-family: inherit; font-size: 14px; outline: none; box-sizing: border-box; background: var(--gray-50) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%239ca3af' stroke-width='2' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") no-repeat 12px center; background-size: 16px; direction: rtl; }
+.hw-search-input:focus { border-color: var(--primary-500); background-color: #fff; }
+.hw-search-input::-webkit-search-cancel-button { cursor: pointer; }
 .hw-hist-search { width: 100%; padding: 8px 12px; border: 1.5px solid var(--gray-200); border-radius: var(--r-input); font-family: inherit; font-size: 13px; font-weight: 600; outline: none; box-sizing: border-box; margin: 6px 0 10px; display: block; }
 .hw-hist-search:focus { border-color: var(--primary-500); }
 .hw-hist-item { display: flex; align-items: center; gap: 7px; padding: 9px 0; border-bottom: 1px solid var(--gray-100); }
@@ -1751,8 +1755,13 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 /* ── Shared Homework ────────────────────── */
 .hw-class-card { margin-bottom: 10px; }
 .hw-section-hdr { font-size: 13px; font-weight: 700; color: var(--gray-500); padding-bottom: 8px; border-bottom: 1px solid var(--gray-100); margin-bottom: 4px; }
+#hwWebtopList { max-height: 340px; overflow-y: auto; overscroll-behavior: contain; }
+#hwWebtopList::-webkit-scrollbar { width: 4px; }
+#hwWebtopList::-webkit-scrollbar-thumb { background: var(--gray-200); border-radius: 4px; }
 .hw-class-item.hw-class-done .hw-desc-text { opacity: 0.45; }
 .hw-webtop-item { border-right: 3px solid #6c8cff; }
+.hw-webtop-item.hw-webtop-done { border-right-color: #d1d5db; opacity: 0.55; }
+.hw-webtop-item.hw-webtop-done .hw-desc-text { text-decoration: line-through; }
 .hw-webtop-icon { font-size: 14px; flex-shrink: 0; }
 .hw-webtop-context { font-size: 11px; color: var(--gray-400); margin: 3px 0 0 31px; line-height: 1.4; }
 .hw-done-by { display: flex; gap: 5px; margin-top: 6px; margin-inline-start: 31px; flex-wrap: wrap; }

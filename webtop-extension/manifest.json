@@ -6,7 +6,8 @@
   "permissions": ["storage", "cookies", "tabs", "webRequest"],
   "host_permissions": [
     "https://webtop.smartschool.co.il/*",
-    "https://webtopserver.smartschool.co.il/*"
+    "https://webtopserver.smartschool.co.il/*",
+    "https://us-central1-familyhub-7fdd5.cloudfunctions.net/*"
   ],
   "action": {
     "default_popup": "popup.html",

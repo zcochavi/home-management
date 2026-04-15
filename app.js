@@ -74,7 +74,7 @@ const STRINGS = {
     shoppingList:'🛒 רשימת קניות', addItemPlaceholder:'הוסף פריט...',
     clearChecked:'🗑 נקה מסומנים', groceryEmpty:'🛒 הרשימה ריקה!',
     cats:{ 'Fruit & Veg':'פירות וירקות','Dairy & Eggs':'חלב וביצים','Pantry':'מזווה','Meat & Fish':'בשר ודגים','פירות וירקות':'פירות וירקות','חלב וביצים':'חלב וביצים','מזווה':'מזווה','בשר ודגים':'בשר ודגים','כללי':'כללי' },
-    hwTitle: n => `📖 שיעורים של ${n}`,
+    hwTitle: n => n ? `📖 שיעורים אישיים של ${n}` : '📖 שיעורים אישיים',
     hwPlaceholder:'תיאור המשימה...', noHw:'🎉 אין שיעורים!',
     hwDueLabel: d => `📅 להגשה: ${d}`,
     subjects:{ Maths:'מתמטיקה', English:'אנגלית', Science:'מדעים', History:'היסטוריה', Art:'אמנות' },
@@ -168,7 +168,7 @@ const STRINGS = {
     shoppingList:'🛒 Shopping List', addItemPlaceholder:'Add item…',
     clearChecked:'🗑 Clear checked', groceryEmpty:'🛒 List is empty!',
     cats:{ 'Fruit & Veg':'Fruit & Veg','Dairy & Eggs':'Dairy & Eggs','Pantry':'Pantry','Meat & Fish':'Meat & Fish' },
-    hwTitle: n => `📖 ${n}'s Homework`,
+    hwTitle: n => n ? `📖 ${n}'s Personal Homework` : '📖 Personal Homework',
     hwPlaceholder:'Assignment description…', noHw:'🎉 No homework!',
     hwDueLabel: d => `📅 Due: ${d}`,
     subjects:{ Maths:'Maths', English:'English', Science:'Science', History:'History', Art:'Art' },
@@ -1801,6 +1801,7 @@ function subscribeToFamily(uid) {
     S.shoppingHistory  = d.shoppingHistory  || [];
     pruneShoppingHistory();
     migrateGroceryIfNeeded();
+    _applyWebtopAutoMatch();
     afterLoad();
   }, err => {
     console.error('Firestore error:', err);
@@ -1816,6 +1817,32 @@ function _gradeToNum(g) {
   if (map[s] !== undefined) return map[s];
   const n = parseInt(s, 10);
   return isNaN(n) ? null : n;
+}
+
+// Apply grade→classCode auto-match in memory without side effects.
+// Called on every Firestore snapshot so webtopClassCode is always set before the first render.
+// The async setWebtopKidClass call persists the mapping to Firestore (fire-and-forget).
+function _applyWebtopAutoMatch() {
+  const webtopStudents = familyData?.webtopStudents;
+  if (!webtopStudents) return;
+  const kids = getKids();
+  const members = getMembers();
+  Object.values(webtopStudents).forEach(({ classCode, studentName }) => {
+    if (!classCode) return;
+    const alreadyMapped = kids.some(k => members.find(m => m.name === k)?.webtopClassCode === classCode);
+    if (alreadyMapped) return;
+    let matches = kids.filter(k => _gradeToNum(members.find(m => m.name === k)?.school?.grade) === Number(classCode));
+    if (matches.length > 1 && studentName) {
+      const sn = studentName.toLowerCase();
+      const named = matches.filter(k => sn.includes(k.toLowerCase()));
+      if (named.length === 1) matches = named;
+    }
+    if (matches.length === 1) {
+      const m = members.find(m => m.name === matches[0]);
+      if (m) m.webtopClassCode = classCode; // in-memory so renderHomework sees it immediately
+      setTimeout(() => setWebtopKidClass(classCode, matches[0]), 0); // persist async after render
+    }
+  });
 }
 
 function renderMgmtWebtop() {
@@ -1846,12 +1873,17 @@ function renderMgmtWebtop() {
       return _gradeToNum(m?.school?.grade) === Number(cc);
     });
     if (matches.length > 1 && studentName) {
-      // Tiebreak: keep kids whose FamilyHub name appears in the Webtop student name
       const sn = studentName.toLowerCase();
       const named = matches.filter(k => sn.includes(k.toLowerCase()));
       if (named.length === 1) matches = named;
     }
-    if (matches.length === 1) setWebtopKidClass(cc, matches[0]);
+    if (matches.length === 1) {
+      const kid = matches[0];
+      // Optimistic local update so the render below sees the mapping immediately
+      const m = members.find(m => m.name === kid);
+      if (m) m.webtopClassCode = cc;
+      setWebtopKidClass(cc, kid);
+    }
   });
 
   const mappingEl = el('mgmtWebtopMapping');
@@ -6790,8 +6822,7 @@ function renderShoppingHistory() {
 //  HOMEWORK
 // ════════════════════════════════════════
 let _hwHistOpen = false;
-let _hwHistSearch = '';
-let _hwScope      = 'personal';
+let _hwSearch = '';
 let _hwSubjectFilter = null;
 
 function fmtDoneAt(ts) {
@@ -6802,6 +6833,8 @@ function fmtDoneAt(ts) {
   return d.toLocaleDateString(t('locale'), {month:'short', day:'numeric'});
 }
 
+function setHwSearch(val) { _hwSearch = val; renderHomework(); }
+
 function renderHomework(){
   if (!isParent() && S.child !== S.user) { S.child = S.user; }
   const kids=isParent()?getKids():getKids().filter(k=>k===S.user);
@@ -6810,9 +6843,15 @@ function renderHomework(){
   childTabsEl.style.display = showKidChips ? '' : 'none';
   if (showKidChips) { childTabsEl.innerHTML = _hwKidChipsHtml(kids); _applyChipsSpread('childTabsContainer'); }
 
-  // Scope toggle: parents only
-  const scopeEl=el('hwScopeSeg');
-  if(scopeEl)scopeEl.style.display=isParent()?'':'none';
+
+  // Search bar
+  const searchBar = el('hwSearchBar');
+  const searchInput = el('hwSearchInput');
+  if (searchBar) {
+    searchBar.style.display = '';
+    if (searchInput && searchInput !== document.activeElement) searchInput.value = _hwSearch;
+  }
+  const sq = _hwSearch.toLowerCase();
 
   // Build full (unfiltered) lists first for subject chip computation
   let classHw=S.homework.filter(h=>h.scope==='class');
@@ -6820,16 +6859,25 @@ function renderHomework(){
     ? S.homework.filter(h=>(!h.scope||h.scope==='personal')&&h.child===S.child&&!h.done)
     : [];
 
-  // Subject filter chips — union of subjects with at least one pending item
+  // Base webtop list filtered by child/classCode only (no subject/search yet)
+  const childMember = S.child ? getMembers().find(m=>m.name===S.child) : null;
+  const childClassCode = childMember?.webtopClassCode || null;
+  const allWtHw = !S.child
+    ? _webtopHomework
+    : childClassCode
+      ? _webtopHomework.filter(h => h.classCode === childClassCode)
+      : [];
+
+  // Subject filter chips — union of subjects across all three sections
   const subjChipsEl=el('hwSubjectChips');
   if(subjChipsEl){
     const classNotDone=classHw.filter(h=>!(h.doneBy&&h.doneBy[S.child]));
-    const allSubjs=[...new Set([...classNotDone,...allPending].map(h=>h.subject).filter(Boolean))];
+    const allSubjs=[...new Set([...classNotDone,...allPending,...allWtHw].map(h=>h.subject).filter(Boolean))];
     if(allSubjs.length>=1){
       if(_hwSubjectFilter&&!allSubjs.includes(_hwSubjectFilter))_hwSubjectFilter=null;
       subjChipsEl.style.display='';
       subjChipsEl.innerHTML=allSubjs.map(s=>
-        `<div class="hw-subj-chip${_hwSubjectFilter===s?' active':''}" style="${subjectBadgeStyle(s)}" onclick="switchHwSubject('${esc(s)}')">${esc(subjectLabel(s))}</div>`
+        `<div class="hw-subj-chip${_hwSubjectFilter===s?' active':''}" style="${webtopSubjectStyle(s)}" onclick="switchHwSubject('${esc(s)}')">${esc(subjectLabel(s))}</div>`
       ).join('');
     } else {
       subjChipsEl.style.display='none';
@@ -6837,21 +6885,31 @@ function renderHomework(){
     }
   }
 
-  // Apply subject filter
+  // Apply subject filter + text search to all three sections
   if(_hwSubjectFilter) classHw=classHw.filter(h=>h.subject===_hwSubjectFilter);
-  const pending=_hwSubjectFilter ? allPending.filter(h=>h.subject===_hwSubjectFilter) : allPending;
+  let pending=_hwSubjectFilter ? allPending.filter(h=>h.subject===_hwSubjectFilter) : allPending;
+  let wtHw=_hwSubjectFilter ? allWtHw.filter(h=>h.subject===_hwSubjectFilter) : allWtHw;
+
+  if (sq) {
+    classHw = classHw.filter(h =>
+      (h.desc||'').toLowerCase().includes(sq) ||
+      subjectLabel(h.subject).toLowerCase().includes(sq)
+    );
+    pending = pending.filter(h =>
+      (h.desc||'').toLowerCase().includes(sq) ||
+      subjectLabel(h.subject).toLowerCase().includes(sq)
+    );
+    wtHw = wtHw.filter(h =>
+      (h.text||'').toLowerCase().includes(sq) ||
+      (h.subject||'').toLowerCase().includes(sq) ||
+      (h.context||'').toLowerCase().includes(sq)
+    );
+  }
 
   // Webtop homework section
   const webtopSec=el('hwWebtopSection');
   const webtopListEl=el('hwWebtopList');
   if(webtopSec&&webtopListEl){
-    const childMember = S.child ? getMembers().find(m=>m.name===S.child) : null;
-    const childClassCode = childMember?.webtopClassCode || null;
-    const wtHw = !S.child
-      ? _webtopHomework
-      : childClassCode
-        ? _webtopHomework.filter(h => h.classCode === childClassCode)
-        : [];
     const syncTimeEl=el('hwWebtopSyncTime');
     if(syncTimeEl&&_webtopUpdatedAt){
       syncTimeEl.textContent=_webtopUpdatedAt.toLocaleString(t('locale'),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
@@ -6860,16 +6918,24 @@ function renderHomework(){
       webtopSec.style.display='none';
     } else {
       webtopSec.style.display='';
-      webtopListEl.innerHTML=wtHw.map(h=>`
-        <div class="hw-item hw-webtop-item">
+      const doneMap = familyData?.webtopHomeworkDone || {};
+      webtopListEl.innerHTML=wtHw.map(h=>{
+        const doneKey = `${h.classCode}|${h.date}|${h.subject}`;
+        const isDone = !!doneMap[doneKey];
+        const canToggle = isParent() ||
+          (isKid() && getMembers().find(m=>m.name===S.user)?.webtopClassCode === h.classCode);
+        return `<div class="hw-item hw-webtop-item${isDone?' hw-webtop-done':''}">
           <div class="hw-head">
-            <span class="hw-webtop-icon">📡</span>
-            <div class="hw-desc-text">${esc(h.text)}</div>
+            ${canToggle
+              ? `<div class="check-box${isDone?' done':''}" onclick="toggleWebtopDone('${esc(doneKey)}')"></div>`
+              : `<span class="hw-webtop-icon">📡</span>`}
+            <div class="hw-desc-text${isDone?' done':''}">${esc(h.text)}</div>
             ${h.subject?`<span class="badge" style="${webtopSubjectStyle(h.subject)}">${esc(h.subject)}</span>`:''}
           </div>
           ${h.context?`<div class="hw-webtop-context">${esc(h.context)}</div>`:''}
           ${h.date?`<div class="hw-due">${fmtDate(h.date.slice(0,10))}</div>`:''}
-        </div>`).join('');
+        </div>`;
+      }).join('');
     }
   }
 
@@ -6941,13 +7007,13 @@ function renderHwHistory(child) {
   const allDone=[...personalDone,...classDone].sort((a,b)=>(b._doneAt||0)-(a._doneAt||0));
   if (!allDone.length) { wrap.innerHTML = ''; return; }
 
-  const q = _hwHistSearch.toLowerCase();
+  const q = _hwSearch.toLowerCase();
   const filtered = allDone.filter(h=>{
     if(_hwSubjectFilter&&h.subject!==_hwSubjectFilter)return false;
     if(!q)return true;
-    return h.desc.toLowerCase().includes(q)||subjectLabel(h.subject).toLowerCase().includes(q);
+    return (h.desc||'').toLowerCase().includes(q)||subjectLabel(h.subject).toLowerCase().includes(q);
   });
-  const visibleCount = _hwSubjectFilter ? filtered.length : allDone.length;
+  const visibleCount = filtered.length;
 
   wrap.innerHTML = `<div class="card" style="margin-top:10px">
     <div class="hw-hist-hdr" onclick="toggleHwHistory()">
@@ -6955,11 +7021,7 @@ function renderHwHistory(child) {
       <span class="hw-hist-title">${t('hwHistory')}</span>
       <span class="hw-hist-count">${visibleCount}</span>
     </div>
-    ${_hwHistOpen ? `
-      <input class="hw-hist-search" placeholder="${t('hwHistorySearch')}"
-        value="${esc(_hwHistSearch)}"
-        oninput="_hwHistSearch=this.value;filterHwHistory('${esc(child)}')">
-      <div id="hwHistList">${hwHistListHTML(filtered)}</div>` : ''}
+    ${_hwHistOpen ? `<div id="hwHistList">${hwHistListHTML(filtered)}</div>` : ''}
   </div>`;
 }
 
@@ -6986,11 +7048,11 @@ function filterHwHistory(child) {
     .filter(h=>h.scope==='class'&&h.doneBy&&h.doneBy[child])
     .map(h=>({...h,_doneAt:h.doneAtBy&&h.doneAtBy[child],_isClass:true}));
   const allDone=[...personalDone,...classDone].sort((a,b)=>(b._doneAt||0)-(a._doneAt||0));
-  const q = _hwHistSearch.toLowerCase();
+  const q = _hwSearch.toLowerCase();
   const filtered = allDone.filter(h=>{
     if(_hwSubjectFilter&&h.subject!==_hwSubjectFilter)return false;
     if(!q)return true;
-    return h.desc.toLowerCase().includes(q)||subjectLabel(h.subject).toLowerCase().includes(q);
+    return (h.desc||'').toLowerCase().includes(q)||subjectLabel(h.subject).toLowerCase().includes(q);
   });
   listEl.innerHTML = hwHistListHTML(filtered);
 }
@@ -6999,10 +7061,9 @@ function toggleHwHistory() {
   renderHwHistory(S.child);
 }
 
-function switchChild(c){if(!isParent()&&c!==S.user)return;S.child=c;_hwSubjectFilter=null;renderHomework();}
+function switchChild(c){if(!isParent()&&c!==S.user)return;S.child=c;_hwSubjectFilter=null;_hwSearch='';renderHomework();}
 function switchHwSubject(s){_hwSubjectFilter=(_hwSubjectFilter===s)?null:s;renderHomework();}
 function _hwScopePick(val) {
-  _hwScope = val;
   document.querySelectorAll('#hwScopeSeg .hw-scope-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.val === val));
   const childTabsEl = el('childTabsContainer');
@@ -7012,6 +7073,24 @@ function _hwScopePick(val) {
   }
   const hwDescEl = el('hwDesc');
   if (hwDescEl) hwDescEl.placeholder = val === 'class' ? 'שיעור בית לכל הכיתה...' : t('hwPlaceholder');
+}
+
+async function toggleWebtopDone(doneKey) {
+  if (!fbDb || !S.uid) return;
+  const isDone = !!(familyData?.webtopHomeworkDone?.[doneKey]);
+  const update = {};
+  if (isDone) {
+    update[`webtopHomeworkDone.${doneKey}`] = firebase.firestore.FieldValue.delete();
+  } else {
+    if (!familyData.webtopHomeworkDone) familyData.webtopHomeworkDone = {};
+    familyData.webtopHomeworkDone[doneKey] = true;
+    update[`webtopHomeworkDone.${doneKey}`] = true;
+  }
+  if (isDone && familyData?.webtopHomeworkDone) {
+    delete familyData.webtopHomeworkDone[doneKey];
+  }
+  renderHomework();
+  await fbDb.collection('families').doc(S.uid).update(update);
 }
 
 function toggleHW(id){
@@ -7088,14 +7167,9 @@ function addHomework(){
   const descEl=el('hwDesc');
   const desc=descEl.value.trim();
   if(!desc){descEl.focus();descEl.classList.add('input-shake');setTimeout(()=>descEl.classList.remove('input-shake'),500);return;}
-  if(_hwScope==='class'){
-    if(!isParent())return;
-    S.homework.push({id:Date.now(),scope:'class',subject:el('hwSubject').value,desc,due:el('hwDue').value,doneBy:{},doneAtBy:{}});
-  } else {
-    if(!S.child)return;
-    if(!isParent()&&S.child!==S.user)return;
-    S.homework.push({id:Date.now(),scope:'personal',child:S.child,subject:el('hwSubject').value,desc,due:el('hwDue').value,done:false});
-  }
+  if(!S.child)return;
+  if(!isParent()&&S.child!==S.user)return;
+  S.homework.push({id:Date.now(),scope:'personal',child:S.child,subject:el('hwSubject').value,desc,due:el('hwDue').value,done:false});
   el('hwDesc').value='';save();renderHomework();renderHome();
 }
 

@@ -17,7 +17,7 @@ function loadStatus() {
     if (data?.familyId) {
       showLinked(data.familyName || data.familyId, data.lastSync);
       dbgToken.textContent  = data.webtopToken  ? `טוקן: ✅ ${data.webtopToken.slice(0,12)}…` : 'טוקן: ❌ חסר — פתח Webtop';
-      dbgParams.textContent = data.syncParams   ? `פרמטרים: ✅ studentID ${data.syncParams.studentID}` : 'פרמטרים: ❌ חסר — פתח שיעורי בית ב-Webtop';
+      dbgParams.textContent = data.syncParams   ? `פרמטרים: ✅ כיתה ${data.syncParams.classCode ?? '?'}` : 'פרמטרים: ❌ חסר — פתח שיעורי בית ב-Webtop';
     } else {
       showUnlinked();
     }
@@ -60,7 +60,10 @@ syncBtn.addEventListener('click', () => {
     syncBtn.disabled = false;
     syncBtn.textContent = 'סנכרן עכשיו';
     if (res?.ok) {
-      syncResult.textContent = `✅ ${res.homeworkCount} שיעורים סונכרנו`;
+      const label = res.isFirstSync
+        ? `✅ סנכרון ראשוני: ${res.homeworkCount} שיעורים נטענו (${res.total} בסך הכל)`
+        : `✅ ${res.homeworkCount} שיעורים עודכנו (${res.total} בסך הכל)`;
+      syncResult.textContent = label;
       loadStatus();
     } else {
       syncResult.style.color = '#ef4444';

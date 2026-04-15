@@ -92,12 +92,19 @@ input:focus { border-color: #6c8cff; }
 }
 .info-row {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 8px;
   font-size: 12px;
   font-weight: 600;
   color: #4a5568;
   line-height: 1.4;
+  overflow: hidden;
+}
+.info-row span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .btn-ghost {

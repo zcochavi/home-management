@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260415wn') location.reload(true);
+        if (v !== '20260415wn9') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -526,6 +526,9 @@
     <div id="tab-homework" class="tab-content">
       <div class="tab-chips-row" id="childTabsContainer"></div>
       <div class="tab-chips-row" id="hwSubjectChips" style="display:none;flex-wrap:wrap;gap:8px"></div>
+      <div class="hw-search-bar" id="hwSearchBar" style="display:none">
+        <input type="search" id="hwSearchInput" class="hw-search-input" placeholder="חיפוש בשיעורי בית..." oninput="setHwSearch(this.value)" autocomplete="off">
+      </div>
       <div class="card hw-class-card" id="hwWebtopSection" style="display:none">
         <div class="hw-section-hdr" id="hwWebtopHdr" style="display:flex;justify-content:space-between;align-items:center"><span>📡 Webtop — שיעורי בית מסונכרנים</span><span id="hwWebtopSyncTime" style="font-size:0.75em;color:#9ca3af;font-weight:400"></span></div>
         <div id="hwWebtopList"></div>
@@ -538,10 +541,6 @@
         <div class="card-title" id="hwCardTitle"></div>
         <div id="hwList"></div>
         <div class="add-form" id="addHwForm">
-          <div class="hw-scope-seg" id="hwScopeSeg" style="display:none">
-            <button class="hw-scope-btn active" data-val="personal" onclick="_hwScopePick('personal')">אישי</button>
-            <button class="hw-scope-btn" data-val="class" onclick="_hwScopePick('class')">🏫 לכל הכיתה</button>
-          </div>
           <input class="add-input" id="hwDesc" type="text">
           <div class="form-row">
             <div id="ddHwSubject" style="flex:1;min-width:0"></div>

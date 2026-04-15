@@ -2,10 +2,37 @@ const WEBTOP_SETUP_URL = 'https://us-central1-familyhub-7fdd5.cloudfunctions.net
 const WEBTOP_LINK_URL  = 'https://us-central1-familyhub-7fdd5.cloudfunctions.net/webtopLink';
 const WEBTOP_ORIGIN    = 'https://webtop.smartschool.co.il';
 
-// ─── Intercept any Webtop API call that carries student identity fields ───────
-// We watch ALL calls to the API server. Any POST that includes studentID +
-// classCode + periodID is good enough to build syncParams with weekIndex=0.
-// This fires on the initial page load (not just the homework tab).
+// ─── Capture webToken + trigger sync (fires AFTER onBeforeRequest for same req)
+// onBeforeSendHeaders fires after onBeforeRequest, so by the time we run here
+// the syncParams are already being written. We wait 200ms to let that settle.
+chrome.webRequest.onBeforeSendHeaders.addListener(
+  (details) => {
+    const cookieHeader = details.requestHeaders?.find(h => h.name.toLowerCase() === 'cookie');
+    console.warn('[FH] onBeforeSendHeaders:', details.url.split('/').pop(),
+      '| Cookie header:', cookieHeader ? 'found' : 'NOT FOUND');
+    if (!cookieHeader?.value) return;
+    const match = cookieHeader.value.match(/(?:^|;\s*)webToken=([^;]+)/);
+    if (!match?.[1]) {
+      console.warn('[FH] no webToken in Cookie header. Keys:', cookieHeader.value.split(';').map(p=>p.trim().split('=')[0]).join(', '));
+      return;
+    }
+    const token = match[1].trim();
+    const fullCookie = cookieHeader.value; // full Cookie header, e.g. "webToken=X; other=Y"
+    chrome.storage.local.get(['webtopToken']).then(stored => {
+      const isNew = stored.webtopToken !== token;
+      console.warn('[FH] webToken', isNew ? 'NEW' : 'same', 'len:', token.length,
+        '| full cookie keys:', fullCookie.split(';').map(p=>p.trim().split('=')[0]).join(', '));
+      chrome.storage.local.set({ webtopToken: token, webtopFullCookie: fullCookie }).then(() => {
+        setTimeout(() => trySendToFamilyHub(), 200);
+      });
+    });
+  },
+  { urls: ['https://webtopserver.smartschool.co.il/*'] },
+  ['requestHeaders', 'extraHeaders']
+);
+
+// ─── Capture syncParams from request body (fires BEFORE onBeforeSendHeaders) ──
+// Only stores syncParams — sync is triggered by onBeforeSendHeaders above.
 chrome.webRequest.onBeforeRequest.addListener(
   (details) => {
     if (!details.requestBody?.raw?.length) return;
@@ -14,21 +41,17 @@ chrome.webRequest.onBeforeRequest.addListener(
       const body   = new TextDecoder().decode(bytes);
       const params = JSON.parse(body);
       const endpoint = details.url.split('/').pop();
-      console.log('[FH] Webtop API:', endpoint, '| studentID:', params.studentID, '| classCode:', params.classCode);
+      console.log('[FH] onBeforeRequest:', endpoint, '| studentID:', params.studentID, '| classCode:', params.classCode);
 
-      // Need at least studentID + classCode to be useful
       if (!params.studentID || !params.classCode) return;
 
-      // Build syncParams (force weekIndex 0 = current week)
       const syncParams = { ...params, weekIndex: 0 };
-
       chrome.storage.local.get(['syncParams']).then(stored => {
-        // Always update if we got the actual homework endpoint;
-        // only store for the first time for other endpoints
         const isHomework = endpoint.includes('GetPupilLessonsAndHomework');
         if (isHomework || !stored.syncParams) {
           console.log('[FH] storing syncParams from:', endpoint);
-          chrome.storage.local.set({ syncParams }).then(() => trySendToFamilyHub());
+          chrome.storage.local.set({ syncParams });
+          // sync is triggered by onBeforeSendHeaders, not here
         }
       });
     } catch (_) {}
@@ -37,15 +60,16 @@ chrome.webRequest.onBeforeRequest.addListener(
   ['requestBody']
 );
 
-// ─── Read webToken cookie when user is on Webtop ──────────────────────────────
+// ─── Fallback: also read cookie when Webtop tab finishes loading ──────────────
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete') return;
   if (!tab.url?.startsWith(WEBTOP_ORIGIN)) return;
-  readWebtopCookie();
+  // Just store the token if we can find it — no sync trigger here
+  // (onBeforeRequest handles sync when API requests fire)
+  _readTokenFromCookies();
 });
 
-async function readWebtopCookie() {
-  // Try both the frontend and API domains — the cookie may be set on either
+async function _readTokenFromCookies() {
   const searchUrls = [
     'https://webtop.smartschool.co.il',
     'https://webtopserver.smartschool.co.il',
@@ -58,20 +82,25 @@ async function readWebtopCookie() {
       if (found?.value) {
         console.log('[FH] token cookie found:', found.name, 'len:', found.value.length);
         await chrome.storage.local.set({ webtopToken: found.value });
-        await trySendToFamilyHub();
-        return;
+        return true;
       }
     } catch (err) {
       console.error('[FH] cookie error for', url, err);
     }
   }
   console.log('[FH] no token cookie found on any domain');
+  return false;
+}
+
+// Called from popup REFRESH_COOKIE — only updates stored token, no sync
+async function refreshCookieOnly() {
+  await _readTokenFromCookies();
 }
 
 // ─── Send to FamilyHub Cloud Function ────────────────────────────────────────
 async function trySendToFamilyHub() {
-  const stored = await chrome.storage.local.get(['webtopToken', 'syncParams', 'familyId']);
-  const { webtopToken, syncParams, familyId } = stored;
+  const stored = await chrome.storage.local.get(['webtopToken', 'webtopFullCookie', 'syncParams', 'familyId']);
+  const { webtopToken, webtopFullCookie, syncParams, familyId } = stored;
 
   if (!familyId)    { console.log('[FH] not linked'); return; }
   if (!webtopToken) { console.log('[FH] no token — visit Webtop while logged in'); return; }
@@ -79,11 +108,11 @@ async function trySendToFamilyHub() {
 
   console.log('[FH] sending to FamilyHub…');
   try {
-    const res = await fetch(WEBTOP_SETUP_URL, {
+    const res = await fetchWithRetry(WEBTOP_SETUP_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        webtopSession: { token: webtopToken },
+        webtopSession: { token: webtopToken, fullCookie: webtopFullCookie || null },
         syncParams,
         familyId,
       }),
@@ -102,6 +131,22 @@ async function trySendToFamilyHub() {
     console.error('[FH] network error:', err);
     setBadge('!', '#ef4444', 6000);
   }
+}
+
+async function fetchWithRetry(url, options, maxRetries = 2) {
+  let lastErr;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetch(url, options);
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxRetries) {
+        console.log(`[FH] fetch attempt ${attempt + 1} failed, retrying…`);
+        await new Promise(r => setTimeout(r, 1500));
+      }
+    }
+  }
+  throw lastErr;
 }
 
 // ─── Badge ────────────────────────────────────────────────────────────────────
@@ -126,11 +171,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     return true;
   }
   if (msg.type === 'MANUAL_SYNC') {
-    readWebtopCookie().then(() => manualSync()).then(reply).catch(err => reply({ ok: false, error: err.message }));
+    manualSync().then(reply).catch(err => reply({ ok: false, error: err.message }));
     return true;
   }
   if (msg.type === 'REFRESH_COOKIE') {
-    readWebtopCookie().then(() => reply({ ok: true })).catch(() => reply({ ok: false }));
+    refreshCookieOnly().then(() => reply({ ok: true })).catch(() => reply({ ok: false }));
     return true;
   }
 });
@@ -142,21 +187,27 @@ async function manualSync() {
   if (!webtopToken) return { ok: false, error: 'טוקן חסר — פתח Webtop בדפדפן' };
   if (!syncParams)  return { ok: false, error: 'פרמטרים חסרים — פתח שיעורי בית ב-Webtop' };
 
-  const res = await fetch(WEBTOP_SETUP_URL, {
+  const res = await fetchWithRetry(WEBTOP_SETUP_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ webtopSession: { token: webtopToken }, syncParams, familyId }),
   });
-  if (!res.ok) return { ok: false, error: `שרת: ${res.status}` };
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = body.error === 'session_expired'
+      ? 'הסשן פג — פתח Webtop ורענן'
+      : body.error || `שרת: ${res.status}`;
+    return { ok: false, error: err };
+  }
   const json = await res.json();
   await chrome.storage.local.set({ lastSync: Date.now() });
   setBadge('✓', '#22c55e', 4000);
-  return { ok: true, homeworkCount: json.homeworkCount };
+  return { ok: true, homeworkCount: json.homeworkCount, total: json.total, isFirstSync: json.isFirstSync };
 }
 
 async function linkFamily(familyId) {
   try {
-    const res = await fetch(WEBTOP_LINK_URL, {
+    const res = await fetchWithRetry(WEBTOP_LINK_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ familyId }),
@@ -164,8 +215,7 @@ async function linkFamily(familyId) {
     if (!res.ok) return { ok: false, error: 'קוד לא תקין' };
     const { familyName } = await res.json();
     await chrome.storage.local.set({ familyId, familyName });
-    // Try reading cookie immediately after linking
-    await readWebtopCookie();
+    await _readTokenFromCookies();
     return { ok: true, familyName };
   } catch (_) {
     return { ok: false, error: 'שגיאת רשת' };
