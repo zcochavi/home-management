@@ -487,6 +487,7 @@ let fbUnsubscribe       = null;
 let _presenceInterval   = null;
 let _notifUnsubscribe   = null;
 let _webtopHomework     = []; // [{subject, text, date, studentId, studentName}]
+let _webtopUpdatedAt    = null;
 
 const isParent    = () => getParents().includes(S.user);
 const isKid       = () => getKids().includes(S.user);
@@ -1586,7 +1587,7 @@ async function authSignOut() {
   await stopPresence();
   unsubscribeAllComm(); _commCache = {};
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
-  _webtopHomework = [];
+  _webtopHomework = []; _webtopUpdatedAt = null;
   const firebaseUid = fbAuth?.currentUser?.uid;
   if (firebaseUid) localStorage.removeItem('familyhub_family_uid_' + firebaseUid);
   if (firebaseUid) localStorage.removeItem('familyhub_locked_member_' + firebaseUid);
@@ -1792,6 +1793,7 @@ function subscribeToFamily(uid) {
     S.homework     = d.homework     || [];
     S.events       = d.events       || [];
     _webtopHomework = d.webtopHomework || [];
+    _webtopUpdatedAt = d.webtopUpdatedAt?.toDate?.() || null;
     S.stars        = d.stars        || {};
     S.groceryPool      = d.groceryPool      || [];
     S.shoppingList     = d.shoppingList     || [];
@@ -1812,7 +1814,11 @@ function renderMgmtWebtop() {
   if (!el2) return;
   const students = [...new Set(_webtopHomework.map(h => h.studentName).filter(Boolean))];
   if (students.length > 0) {
-    el2.textContent = `✅ מחובר — ${students.join(', ')}, ${_webtopHomework.length} שיעורי בית סונכרנו`;
+    const syncTime = _webtopUpdatedAt
+      ? _webtopUpdatedAt.toLocaleString(t('locale'), {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})
+      : '';
+    el2.innerHTML = `✅ מחובר — ${students.join(', ')}, ${_webtopHomework.length} שיעורי בית`
+      + (syncTime ? `<br><span style="font-size:0.8em;color:#6b7280">סונכרן לאחרונה: ${syncTime}</span>` : '');
     el2.style.color = '#16a34a';
   } else {
     el2.textContent = 'לא מחובר עדיין';
