@@ -413,6 +413,22 @@ function subjectBadgeStyle(name) {
   if (s) return `background:${s.bg};color:${s.color}`;
   return 'background:#f3f4f6;color:#6b7280';
 }
+function webtopSubjectStyle(name) {
+  if (!name) return 'background:#f3f4f6;color:#6b7280';
+  const s = getSubjects().find(s => s.name === name || s.nameHe === name);
+  if (s) return `background:${s.bg};color:${s.color}`;
+  const palette = [
+    {bg:'#dbeafe',color:'#1e40af'},{bg:'#dcfce7',color:'#166534'},
+    {bg:'#fce7f3',color:'#9d174d'},{bg:'#ede9fe',color:'#5b21b6'},
+    {bg:'#ffedd5',color:'#9a3412'},{bg:'#cffafe',color:'#155e75'},
+    {bg:'#fef9c3',color:'#854d0e'},{bg:'#f0fdf4',color:'#14532d'},
+    {bg:'#fdf4ff',color:'#6b21a8'},{bg:'#fff7ed',color:'#7c2d12'},
+  ];
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) & 0xffff;
+  const {bg, color} = palette[h % palette.length];
+  return `background:${bg};color:${color}`;
+}
 function subjectLabel(name) {
   const s = getSubjects().find(s => s.name === name);
   if (getLang() === 'he') return s?.nameHe || s?.name || name;
@@ -470,7 +486,7 @@ let gcal = { gapiReady:false, gisReady:false, tokenClient:null, accessToken:null
 let fbUnsubscribe       = null;
 let _presenceInterval   = null;
 let _notifUnsubscribe   = null;
-let _webtopHomework     = []; // [{subject, text, day, date}]
+let _webtopHomework     = []; // [{subject, text, date, studentId, studentName}]
 
 const isParent    = () => getParents().includes(S.user);
 const isKid       = () => getKids().includes(S.user);
@@ -6760,7 +6776,7 @@ function renderHomework(){
           <div class="hw-head">
             <span class="hw-webtop-icon">📡</span>
             <div class="hw-desc-text">${esc(h.text)}</div>
-            <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject)||h.subject)}</span>
+            ${h.subject?`<span class="badge" style="${webtopSubjectStyle(h.subject)}">${esc(h.subject)}</span>`:''}
           </div>
           ${h.date?`<div class="hw-due">${fmtDate(h.date.slice(0,10))}</div>`:''}
         </div>`).join('');
