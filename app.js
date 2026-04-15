@@ -6839,12 +6839,13 @@ function renderHomework(){
   const webtopSec=el('hwWebtopSection');
   const webtopListEl=el('hwWebtopList');
   if(webtopSec&&webtopListEl){
-    const childClassCode = S.child
-      ? getMembers().find(m=>m.name===S.child)?.webtopClassCode
-      : null;
-    const wtHw = childClassCode
-      ? _webtopHomework.filter(h => h.classCode === childClassCode)
-      : _webtopHomework;
+    const childMember = S.child ? getMembers().find(m=>m.name===S.child) : null;
+    const childClassCode = childMember?.webtopClassCode || null;
+    const wtHw = !S.child
+      ? _webtopHomework
+      : childClassCode
+        ? _webtopHomework.filter(h => h.classCode === childClassCode)
+        : [];
     const syncTimeEl=el('hwWebtopSyncTime');
     if(syncTimeEl&&_webtopUpdatedAt){
       syncTimeEl.textContent=_webtopUpdatedAt.toLocaleString(t('locale'),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});

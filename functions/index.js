@@ -1633,6 +1633,13 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
         studentName: syncParams.studentName || '',
       },
     };
+    // Delete any stale entries that have the same studentID but a different key
+    const existingStudents = familyDoc.data()?.webtopStudents || {};
+    for (const [key, entry] of Object.entries(existingStudents)) {
+      if (key !== safeKey && entry.syncParams?.studentID === syncParams.studentID) {
+        updatePayload[`webtopStudents.${key}`] = admin.firestore.FieldValue.delete();
+      }
+    }
     await db.collection('families').doc(familyId).update(updatePayload);
 
     return res.json({ ok: true, homeworkCount: homework.length });
