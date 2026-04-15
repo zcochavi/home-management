@@ -1835,16 +1835,22 @@ function renderMgmtWebtop() {
   const kids = getKids();
   const members = getMembers();
 
-  // Auto-match: for any unmapped class, find a kid whose grade number matches classCode
-  classEntries.forEach(([, {classCode}]) => {
+  // Auto-match: grade number match, with studentName as tiebreaker for siblings in same grade
+  classEntries.forEach(([, {classCode, studentName}]) => {
     const cc = classCode;
     if (!cc) return;
     const alreadyMapped = kids.some(k => members.find(m=>m.name===k)?.webtopClassCode === cc);
     if (alreadyMapped) return;
-    const matches = kids.filter(k => {
+    let matches = kids.filter(k => {
       const m = members.find(m=>m.name===k);
       return _gradeToNum(m?.school?.grade) === Number(cc);
     });
+    if (matches.length > 1 && studentName) {
+      // Tiebreak: keep kids whose FamilyHub name appears in the Webtop student name
+      const sn = studentName.toLowerCase();
+      const named = matches.filter(k => sn.includes(k.toLowerCase()));
+      if (named.length === 1) matches = named;
+    }
     if (matches.length === 1) setWebtopKidClass(cc, matches[0]);
   });
 
