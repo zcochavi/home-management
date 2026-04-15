@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260414gf') location.reload(true);
+        if (v !== '20260414wt') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -45,7 +45,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
-  <link rel="stylesheet" href="styles.css?v=20260414gf">
+  <link rel="stylesheet" href="styles.css?v=20260414wt">
 </head>
 <body>
 
@@ -369,6 +369,17 @@
       <div id="mgmtCommunityList"></div>
     </div>
 
+    <!-- ── Webtop Integration ── -->
+    <div class="card" id="mgmtWebtopCard">
+      <div class="card-title">📡 חיבור Webtop</div>
+      <div class="mgmt-section-hint">התקן את תוסף FamilyHub ב-Chrome והזן את קוד המשפחה כדי לסנכרן שיעורי בית אוטומטית.</div>
+      <div style="margin:10px 0 6px;font-size:12px;font-weight:700;color:#4a5568">קוד המשפחה שלך</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div id="mgmtWebtopCode" style="flex:1;font-family:monospace;font-size:13px;background:#f1f5f9;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;color:#1a1a2e;word-break:break-all;direction:ltr"></div>
+        <button class="mgmt-add-btn" onclick="copyWebtopCode()" title="העתק">⎘</button>
+      </div>
+      <div id="mgmtWebtopStatus" style="margin-top:8px;font-size:12px;font-weight:600">לא מחובר עדיין</div>
+    </div>
 
   </div>
 </div>
@@ -510,6 +521,10 @@
     <div id="tab-homework" class="tab-content">
       <div class="tab-chips-row" id="childTabsContainer"></div>
       <div class="tab-chips-row" id="hwSubjectChips" style="display:none;flex-wrap:wrap;gap:8px"></div>
+      <div class="card hw-class-card" id="hwWebtopSection" style="display:none">
+        <div class="hw-section-hdr">📡 Webtop — שיעורי בית מסונכרנים</div>
+        <div id="hwWebtopList"></div>
+      </div>
       <div class="card hw-class-card" id="hwClassSection" style="display:none">
         <div class="hw-section-hdr">🏫 שיעורי בית של הכיתה</div>
         <div id="hwClassList"></div>
@@ -607,7 +622,7 @@
     </div>
   </div>
 </div>
-<script src="app.js?v=20260414gf"></script>
+<script src="app.js?v=20260414wt"></script>
 
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>

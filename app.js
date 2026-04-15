@@ -470,6 +470,8 @@ let gcal = { gapiReady:false, gisReady:false, tokenClient:null, accessToken:null
 let fbUnsubscribe       = null;
 let _presenceInterval   = null;
 let _notifUnsubscribe   = null;
+let _webtopUnsub        = null;
+let _webtopHomework     = []; // [{subject, text, day, date, classKey}]
 
 const isParent    = () => getParents().includes(S.user);
 const isKid       = () => getKids().includes(S.user);
@@ -1569,6 +1571,8 @@ async function authSignOut() {
   await stopPresence();
   unsubscribeAllComm(); _commCache = {};
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
+  if (_webtopUnsub) { _webtopUnsub(); _webtopUnsub = null; }
+  _webtopHomework = [];
   const firebaseUid = fbAuth?.currentUser?.uid;
   if (firebaseUid) localStorage.removeItem('familyhub_family_uid_' + firebaseUid);
   if (firebaseUid) localStorage.removeItem('familyhub_locked_member_' + firebaseUid);
@@ -1759,6 +1763,7 @@ function showNotifToast(title, body) {
 function subscribeToFamily(uid) {
   if (!_evtCfgLoaded) { _evtCfgLoaded = true; loadEventTypesCfg(); }
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
+  _subscribeWebtop(uid);
   fbUnsubscribe = fbDb.collection('families').doc(uid).onSnapshot(snap => {
     if (!snap.exists) {
       // Family doc missing — mapping is stale, sign out and return to auth
@@ -1786,6 +1791,34 @@ function subscribeToFamily(uid) {
     el('loadingScreen').classList.add('hidden');
     el('authScreen').classList.remove('hidden');
   });
+}
+
+function _subscribeWebtop(familyId) {
+  if (_webtopUnsub) { _webtopUnsub(); _webtopUnsub = null; }
+  _webtopUnsub = fbDb.collection('webtopClasses')
+    .where('familyIds', 'array-contains', familyId)
+    .onSnapshot(snap => {
+      _webtopHomework = [];
+      snap.forEach(doc => {
+        const hw = doc.data().homework || [];
+        hw.forEach(item => _webtopHomework.push({ ...item, classKey: doc.id }));
+      });
+      if (S.tab === 'homework') renderHomework();
+      renderMgmtWebtop();
+    }, () => {});
+}
+
+function renderMgmtWebtop() {
+  const el2 = el('mgmtWebtopStatus');
+  if (!el2) return;
+  const keys = [...new Set(_webtopHomework.map(h => h.classKey))];
+  if (keys.length > 0) {
+    el2.textContent = `✅ מחובר — ${keys.length} כיתה${keys.length > 1 ? 'ות' : ''}, ${_webtopHomework.length} שיעורי בית סונכרנו`;
+    el2.style.color = '#16a34a';
+  } else {
+    el2.textContent = 'לא מחובר עדיין';
+    el2.style.color = '#9ca3af';
+  }
 }
 
 let _firstJoinNotified = false;
@@ -2158,6 +2191,22 @@ function renderMgmt() {
   renderMgmtCats();
   renderMgmtSubjects();
   renderMgmtCommunity();
+  // Webtop card — parents only
+  const webtopCard = el('mgmtWebtopCard');
+  if (webtopCard) {
+    webtopCard.style.display = isParent() ? '' : 'none';
+    const codeEl = el('mgmtWebtopCode');
+    if (codeEl) codeEl.textContent = S.uid || '';
+    renderMgmtWebtop();
+  }
+}
+
+function copyWebtopCode() {
+  const code = S.uid || '';
+  navigator.clipboard.writeText(code).then(() => {
+    const btn = document.querySelector('#mgmtWebtopCard .mgmt-add-btn');
+    if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = '⎘'; }, 1500); }
+  }).catch(() => {});
 }
 
 // ── Members ──────────────────────────────
@@ -6706,6 +6755,27 @@ function renderHomework(){
   // Apply subject filter
   if(_hwSubjectFilter) classHw=classHw.filter(h=>h.subject===_hwSubjectFilter);
   const pending=_hwSubjectFilter ? allPending.filter(h=>h.subject===_hwSubjectFilter) : allPending;
+
+  // Webtop homework section
+  const webtopSec=el('hwWebtopSection');
+  const webtopListEl=el('hwWebtopList');
+  if(webtopSec&&webtopListEl){
+    const wtHw=_webtopHomework;
+    if(!wtHw.length){
+      webtopSec.style.display='none';
+    } else {
+      webtopSec.style.display='';
+      webtopListEl.innerHTML=wtHw.map(h=>`
+        <div class="hw-item hw-webtop-item">
+          <div class="hw-head">
+            <span class="hw-webtop-icon">📡</span>
+            <div class="hw-desc-text">${esc(h.text)}</div>
+            <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject)||h.subject)}</span>
+          </div>
+          ${h.date?`<div class="hw-due">${h.day||''} ${fmtDate(h.date)}</div>`:''}
+        </div>`).join('');
+    }
+  }
 
   // Class homework section
   const classSec=el('hwClassSection');
