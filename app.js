@@ -470,8 +470,7 @@ let gcal = { gapiReady:false, gisReady:false, tokenClient:null, accessToken:null
 let fbUnsubscribe       = null;
 let _presenceInterval   = null;
 let _notifUnsubscribe   = null;
-let _webtopUnsub        = null;
-let _webtopHomework     = []; // [{subject, text, day, date, classKey}]
+let _webtopHomework     = []; // [{subject, text, day, date}]
 
 const isParent    = () => getParents().includes(S.user);
 const isKid       = () => getKids().includes(S.user);
@@ -1571,7 +1570,6 @@ async function authSignOut() {
   await stopPresence();
   unsubscribeAllComm(); _commCache = {};
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
-  if (_webtopUnsub) { _webtopUnsub(); _webtopUnsub = null; }
   _webtopHomework = [];
   const firebaseUid = fbAuth?.currentUser?.uid;
   if (firebaseUid) localStorage.removeItem('familyhub_family_uid_' + firebaseUid);
@@ -1763,7 +1761,6 @@ function showNotifToast(title, body) {
 function subscribeToFamily(uid) {
   if (!_evtCfgLoaded) { _evtCfgLoaded = true; loadEventTypesCfg(); }
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
-  _subscribeWebtop(uid);
   fbUnsubscribe = fbDb.collection('families').doc(uid).onSnapshot(snap => {
     if (!snap.exists) {
       // Family doc missing — mapping is stale, sign out and return to auth
@@ -1778,6 +1775,7 @@ function subscribeToFamily(uid) {
     S.grocery      = d.grocery      || [];
     S.homework     = d.homework     || [];
     S.events       = d.events       || [];
+    _webtopHomework = d.webtopHomework || [];
     S.stars        = d.stars        || {};
     S.groceryPool      = d.groceryPool      || [];
     S.shoppingList     = d.shoppingList     || [];
@@ -1791,32 +1789,6 @@ function subscribeToFamily(uid) {
     el('loadingScreen').classList.add('hidden');
     el('authScreen').classList.remove('hidden');
   });
-}
-
-function _subscribeWebtop(familyId) {
-  if (_webtopUnsub) { _webtopUnsub(); _webtopUnsub = null; }
-  console.log('[webtop] subscribing, familyId:', familyId);
-  // Debug: try a raw unfiltered read first to see if collection is readable
-  fbDb.collection('webtopClasses').limit(5).get()
-    .then(s => console.log('[webtop] raw read OK, docs:', s.size, s.docs.map(d => d.id)))
-    .catch(e => console.error('[webtop] raw read FAILED:', e.code, e.message));
-  _webtopUnsub = fbDb.collection('webtopClasses')
-    .where('familyIds', 'array-contains', familyId)
-    .onSnapshot(snap => {
-      console.log('[webtop] snapshot docs:', snap.size, 'familyId:', familyId);
-      _webtopHomework = [];
-      snap.forEach(doc => {
-        const hw = doc.data().homework || [];
-        console.log('[webtop] doc', doc.id, 'homework items:', hw.length);
-        hw.forEach(item => _webtopHomework.push({ ...item, classKey: doc.id }));
-      });
-      if (S.tab === 'homework') renderHomework();
-      renderMgmtWebtop();
-    }, err => {
-      console.error('[webtop] Firestore listener error:', err.code, err.message);
-      const el2 = el('mgmtWebtopStatus');
-      if (el2) { el2.textContent = `שגיאה: ${err.code}`; el2.style.color = '#ef4444'; }
-    });
 }
 
 function renderMgmtWebtop() {

@@ -1608,47 +1608,45 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
   const familyDoc = await db.collection('families').doc(familyId).get();
   if (!familyDoc.exists) return res.status(404).json({ error: 'family not found' });
 
-  // Build a stable class key — prefer full session info, fall back to studentID
-  const classKey = (webtopSession.institutionCode && webtopSession.classCode && webtopSession.classNumber)
-    ? `${webtopSession.institutionCode}_${webtopSession.classCode}_${webtopSession.classNumber}`
-    : `student_${syncParams.studentID || syncParams.classCode || 'unknown'}`;
-
   try {
     // Fetch current week's homework
     const homework = await _fetchWebtopHomework(token, syncParams);
 
-    // Store class record in Firestore
-    await db.collection('webtopClasses').doc(classKey).set({
-      token,
-      syncParams,
-      session: webtopSession,
-      familyIds: admin.firestore.FieldValue.arrayUnion(familyId),
-      homework,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
+    // Store directly on the family document — the app already listens to this in real-time
+    await db.collection('families').doc(familyId).update({
+      webtopHomework: homework,
+      webtopToken: token,
+      webtopSyncParams: syncParams,
+      webtopUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
 
-    return res.json({ ok: true, classKey, homeworkCount: homework.length });
+    return res.json({ ok: true, homeworkCount: homework.length });
   } catch (err) {
     console.error('webtopSetup error', err);
     return res.status(500).json({ error: 'server error' });
   }
 });
 
-// ─── webtopSync — scheduled every 6 hours, refresh homework for all classes ──
+// ─── webtopSync — scheduled every 6 hours, refresh homework for all families ─
 exports.webtopSync = functions.pubsub.schedule('every 6 hours').onRun(async () => {
-  const snapshot = await db.collection('webtopClasses').get();
+  const snapshot = await db.collection('families')
+    .where('webtopToken', '>', '')
+    .get();
   const promises = snapshot.docs.map(async doc => {
-    const { token, syncParams } = doc.data();
-    if (!token || !syncParams) return;
+    const { webtopToken, webtopSyncParams } = doc.data();
+    if (!webtopToken || !webtopSyncParams) return;
     try {
-      const homework = await _fetchWebtopHomework(token, syncParams);
-      await doc.ref.update({ homework, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+      const homework = await _fetchWebtopHomework(webtopToken, webtopSyncParams);
+      await doc.ref.update({
+        webtopHomework: homework,
+        webtopUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
     } catch (err) {
-      console.error(`webtopSync failed for ${doc.id}`, err);
+      console.error(`webtopSync failed for family ${doc.id}`, err);
     }
   });
   await Promise.all(promises);
-  console.log(`webtopSync: refreshed ${snapshot.docs.length} classes`);
+  console.log(`webtopSync: refreshed ${snapshot.docs.length} families`);
   return null;
 });
 
