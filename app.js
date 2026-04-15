@@ -6801,6 +6801,7 @@ function renderHomework(){
             <div class="hw-desc-text">${esc(h.text)}</div>
             ${h.subject?`<span class="badge" style="${webtopSubjectStyle(h.subject)}">${esc(h.subject)}</span>`:''}
           </div>
+          ${h.context?`<div class="hw-webtop-context">${esc(h.context)}</div>`:''}
           ${h.date?`<div class="hw-due">${fmtDate(h.date.slice(0,10))}</div>`:''}
         </div>`).join('');
     }
