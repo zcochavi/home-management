@@ -1814,11 +1814,7 @@ function renderMgmtWebtop() {
   if (!el2) return;
   const students = [...new Set(_webtopHomework.map(h => h.studentName).filter(Boolean))];
   if (students.length > 0) {
-    const syncTime = _webtopUpdatedAt
-      ? _webtopUpdatedAt.toLocaleString(t('locale'), {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})
-      : '';
-    el2.innerHTML = `✅ מחובר — ${students.join(', ')}, ${_webtopHomework.length} שיעורי בית`
-      + (syncTime ? `<br><span style="font-size:0.8em;color:#6b7280">סונכרן לאחרונה: ${syncTime}</span>` : '');
+    el2.textContent = `✅ מחובר — ${students.join(', ')}, ${_webtopHomework.length} שיעורי בית`;
     el2.style.color = '#16a34a';
   } else {
     el2.textContent = 'לא מחובר עדיין';
@@ -6773,6 +6769,10 @@ function renderHomework(){
           return sn.includes(ch)||ch.includes(sn.split(' ')[0]);
         })
       : _webtopHomework;
+    const syncTimeEl=el('hwWebtopSyncTime');
+    if(syncTimeEl&&_webtopUpdatedAt){
+      syncTimeEl.textContent=_webtopUpdatedAt.toLocaleString(t('locale'),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+    }
     if(!wtHw.length){
       webtopSec.style.display='none';
     } else {

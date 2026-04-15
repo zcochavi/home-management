@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260415wg') location.reload(true);
+        if (v !== '20260415wh') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -522,7 +522,7 @@
       <div class="tab-chips-row" id="childTabsContainer"></div>
       <div class="tab-chips-row" id="hwSubjectChips" style="display:none;flex-wrap:wrap;gap:8px"></div>
       <div class="card hw-class-card" id="hwWebtopSection" style="display:none">
-        <div class="hw-section-hdr">📡 Webtop — שיעורי בית מסונכרנים</div>
+        <div class="hw-section-hdr" id="hwWebtopHdr" style="display:flex;justify-content:space-between;align-items:center"><span>📡 Webtop — שיעורי בית מסונכרנים</span><span id="hwWebtopSyncTime" style="font-size:0.75em;color:#9ca3af;font-weight:400"></span></div>
         <div id="hwWebtopList"></div>
       </div>
       <div class="card hw-class-card" id="hwClassSection" style="display:none">
