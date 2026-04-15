@@ -1798,14 +1798,20 @@ function _subscribeWebtop(familyId) {
   _webtopUnsub = fbDb.collection('webtopClasses')
     .where('familyIds', 'array-contains', familyId)
     .onSnapshot(snap => {
+      console.log('[webtop] snapshot docs:', snap.size, 'familyId:', familyId);
       _webtopHomework = [];
       snap.forEach(doc => {
         const hw = doc.data().homework || [];
+        console.log('[webtop] doc', doc.id, 'homework items:', hw.length);
         hw.forEach(item => _webtopHomework.push({ ...item, classKey: doc.id }));
       });
       if (S.tab === 'homework') renderHomework();
       renderMgmtWebtop();
-    }, () => {});
+    }, err => {
+      console.error('[webtop] Firestore listener error:', err.code, err.message);
+      const el2 = el('mgmtWebtopStatus');
+      if (el2) { el2.textContent = `שגיאה: ${err.code}`; el2.style.color = '#ef4444'; }
+    });
 }
 
 function renderMgmtWebtop() {

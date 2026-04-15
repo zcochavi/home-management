@@ -1564,3 +1564,133 @@ exports.getFamilyDetails = functions.https.onCall(async (data, context) => {
 
   return { familyName: fd.familyName || '', members };
 });
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// WEBTOP INTEGRATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const fetch = require('node-fetch');
+const WEBTOP_API = 'https://webtopserver.smartschool.co.il/server/api/PupilCard/GetPupilLessonsAndHomework';
+
+// ─── webtopLink — validate a FamilyHub family UID and return its name ─────────
+exports.webtopLink = functions.https.onRequest(async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') { res.set('Access-Control-Allow-Headers', 'Content-Type'); return res.status(204).send(''); }
+  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+  const { familyId } = req.body || {};
+  if (!familyId || typeof familyId !== 'string') return res.status(400).json({ error: 'missing familyId' });
+
+  try {
+    const doc = await db.collection('families').doc(familyId).get();
+    if (!doc.exists) return res.status(404).json({ error: 'family not found' });
+    const familyName = doc.data()?.familyName || '';
+    return res.json({ ok: true, familyName });
+  } catch (err) {
+    console.error('webtopLink error', err);
+    return res.status(500).json({ error: 'server error' });
+  }
+});
+
+// ─── webtopSetup — store token + params, immediately fetch homework ───────────
+exports.webtopSetup = functions.https.onRequest(async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') { res.set('Access-Control-Allow-Headers', 'Content-Type'); return res.status(204).send(''); }
+  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+  const { webtopSession, syncParams, familyId } = req.body || {};
+  const token = webtopSession?.token;
+  if (!token || !syncParams || !familyId) {
+    return res.status(400).json({ error: 'missing fields' });
+  }
+
+  // Verify the family exists
+  const familyDoc = await db.collection('families').doc(familyId).get();
+  if (!familyDoc.exists) return res.status(404).json({ error: 'family not found' });
+
+  // Build a stable class key — prefer full session info, fall back to studentID
+  const classKey = (webtopSession.institutionCode && webtopSession.classCode && webtopSession.classNumber)
+    ? `${webtopSession.institutionCode}_${webtopSession.classCode}_${webtopSession.classNumber}`
+    : `student_${syncParams.studentID || syncParams.classCode || 'unknown'}`;
+
+  try {
+    // Fetch current week's homework
+    const homework = await _fetchWebtopHomework(token, syncParams);
+
+    // Store class record in Firestore
+    await db.collection('webtopClasses').doc(classKey).set({
+      token,
+      syncParams,
+      session: webtopSession,
+      familyIds: admin.firestore.FieldValue.arrayUnion(familyId),
+      homework,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+
+    return res.json({ ok: true, classKey, homeworkCount: homework.length });
+  } catch (err) {
+    console.error('webtopSetup error', err);
+    return res.status(500).json({ error: 'server error' });
+  }
+});
+
+// ─── webtopSync — scheduled every 6 hours, refresh homework for all classes ──
+exports.webtopSync = functions.pubsub.schedule('every 6 hours').onRun(async () => {
+  const snapshot = await db.collection('webtopClasses').get();
+  const promises = snapshot.docs.map(async doc => {
+    const { token, syncParams } = doc.data();
+    if (!token || !syncParams) return;
+    try {
+      const homework = await _fetchWebtopHomework(token, syncParams);
+      await doc.ref.update({ homework, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    } catch (err) {
+      console.error(`webtopSync failed for ${doc.id}`, err);
+    }
+  });
+  await Promise.all(promises);
+  console.log(`webtopSync: refreshed ${snapshot.docs.length} classes`);
+  return null;
+});
+
+// ─── Helper: fetch and flatten homework from Webtop API ──────────────────────
+async function _fetchWebtopHomework(token, syncParams) {
+  const res = await fetch(WEBTOP_API, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cookie': `webToken=${token}`,
+      'Origin': 'https://webtop.smartschool.co.il',
+      'Referer': 'https://webtop.smartschool.co.il/',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    },
+    body: JSON.stringify({ ...syncParams, weekIndex: 0 }),
+  });
+
+  if (!res.ok) throw new Error(`Webtop API returned ${res.status}`);
+  const json = await res.json();
+
+  // Flatten: collect all non-null homeWork strings across days and hours
+  const homework = [];
+  const dayData = json?.data;
+  if (!dayData) return homework;
+
+  for (const day of Object.values(dayData)) {
+    const hours = day?.hoursData;
+    if (!hours) continue;
+    for (const hour of Object.values(hours)) {
+      const schedules = hour?.scheduale;
+      if (!Array.isArray(schedules)) continue;
+      for (const s of schedules) {
+        if (s?.homeWork) {
+          homework.push({
+            subject: s.subjectName || '',
+            text: s.homeWork,
+            day: day.dayName || '',
+            date: day.date || '',
+          });
+        }
+      }
+    }
+  }
+  return homework;
+}

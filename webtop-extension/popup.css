@@ -1,0 +1,116 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Heebo', sans-serif;
+  width: 280px;
+  padding: 16px;
+  background: #f8f9ff;
+  color: #1a1a2e;
+  font-size: 14px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1.5px solid #e8eaf6;
+}
+.logo { font-size: 28px; line-height: 1; }
+.title { font-size: 16px; font-weight: 800; color: #1a1a2e; }
+.subtitle { font-size: 11px; font-weight: 600; color: #6c8cff; }
+
+.hint {
+  font-size: 13px;
+  color: #555;
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 10px;
+  font-family: 'Heebo', sans-serif;
+  font-size: 13px;
+  outline: none;
+  background: #fff;
+  transition: border-color 0.15s;
+  margin-bottom: 6px;
+  text-align: left;
+}
+input:focus { border-color: #6c8cff; }
+
+.error {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ef4444;
+  min-height: 16px;
+  margin-bottom: 8px;
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 10px;
+  background: #6c8cff;
+  color: #fff;
+  font-family: 'Heebo', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-primary:hover { background: #5a78f0; }
+.btn-primary:disabled { background: #a5b4fc; cursor: default; }
+
+.family-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  border: 1.5px solid #e8eaf6;
+  margin-bottom: 12px;
+}
+.family-icon { font-size: 24px; }
+.family-name { font-size: 15px; font-weight: 800; color: #1a1a2e; }
+.sync-status { font-size: 11px; font-weight: 600; color: #9ca3af; margin-top: 2px; }
+
+.info-box {
+  background: #eef2ff;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a5568;
+  line-height: 1.4;
+}
+
+.btn-ghost {
+  width: 100%;
+  padding: 8px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  background: none;
+  font-family: 'Heebo', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #9ca3af;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-ghost:hover { border-color: #ef4444; color: #ef4444; }

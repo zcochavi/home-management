@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🏠</div>
+    <div class="header-text">
+      <div class="title">FamilyHub</div>
+      <div class="subtitle">Webtop Connector</div>
+    </div>
+  </div>
+
+  <!-- Not linked state -->
+  <div id="stateUnlinked">
+    <p class="hint">הזן את קוד המשפחה שלך מהגדרות FamilyHub כדי לחבר את שיעורי הבית.</p>
+    <input id="familyIdInput" type="text" placeholder="קוד משפחה" maxlength="28" dir="ltr" autocomplete="off">
+    <div id="linkError" class="error"></div>
+    <button id="linkBtn" class="btn-primary">חבר ←</button>
+  </div>
+
+  <!-- Linked state -->
+  <div id="stateLinked" style="display:none">
+    <div class="family-card">
+      <div class="family-icon">👨‍👩‍👧</div>
+      <div>
+        <div class="family-name" id="familyNameEl"></div>
+        <div class="sync-status" id="syncStatusEl"></div>
+      </div>
+    </div>
+
+    <!-- Debug status -->
+    <div class="info-box" id="debugBox">
+      <div class="info-row"><span>🔑</span><span id="dbgToken">טוקן: בודק...</span></div>
+      <div class="info-row"><span>📋</span><span id="dbgParams">פרמטרים: בודק...</span></div>
+    </div>
+
+    <button id="syncBtn" class="btn-primary" style="margin-bottom:8px">סנכרן עכשיו</button>
+    <div id="syncResult" class="error" style="color:#16a34a"></div>
+    <button id="unlinkBtn" class="btn-ghost">נתק משפחה</button>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
