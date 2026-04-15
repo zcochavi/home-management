@@ -1609,16 +1609,31 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
   if (!familyDoc.exists) return res.status(404).json({ error: 'family not found' });
 
   try {
-    // Fetch current week's homework
+    // Fetch current week's homework for this student
     const homework = await _fetchWebtopHomework(token, syncParams);
 
-    // Store directly on the family document — the app already listens to this in real-time
-    await db.collection('families').doc(familyId).update({
-      webtopHomework: homework,
-      webtopToken: token,
-      webtopSyncParams: syncParams,
+    // Key by classCode — one entry per class, not per student
+    const classCode = String(syncParams.classCode || syncParams.studentID || '');
+    const safeKey = classCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    // Merge: keep other classes' homework, replace this class's
+    const existing = familyDoc.data()?.webtopHomework || [];
+    const merged = [
+      ...existing.filter(h => h.classCode !== classCode),
+      ...homework,
+    ];
+
+    const updatePayload = {
+      webtopHomework: merged,
       webtopUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+      [`webtopStudents.${safeKey}`]: {
+        token,
+        syncParams,
+        classCode,
+        studentName: syncParams.studentName || '',
+      },
+    };
+    await db.collection('families').doc(familyId).update(updatePayload);
 
     return res.json({ ok: true, homeworkCount: homework.length });
   } catch (err) {
@@ -1627,26 +1642,40 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
   }
 });
 
-// ─── webtopSync — scheduled every 6 hours, refresh homework for all families ─
-exports.webtopSync = functions.pubsub.schedule('every 6 hours').onRun(async () => {
+// ─── webtopSync — runs hourly, respects per-family webtopSyncIntervalHours ────
+exports.webtopSync = functions.pubsub.schedule('every 1 hours').onRun(async () => {
   const snapshot = await db.collection('families')
-    .where('webtopToken', '>', '')
+    .where('webtopStudents', '!=', null)
     .get();
+  const now = Date.now();
+  let synced = 0;
   const promises = snapshot.docs.map(async doc => {
-    const { webtopToken, webtopSyncParams } = doc.data();
-    if (!webtopToken || !webtopSyncParams) return;
+    const { webtopStudents, webtopUpdatedAt, webtopSyncIntervalHours } = doc.data();
+    if (!webtopStudents || typeof webtopStudents !== 'object') return;
+    const entries = Object.entries(webtopStudents);
+    if (!entries.length) return;
+    // Check if enough time has passed since last sync
+    const intervalMs = (webtopSyncIntervalHours || 6) * 3600 * 1000;
+    const lastSync = webtopUpdatedAt?.toMillis?.() || 0;
+    if (now - lastSync < intervalMs) return;
     try {
-      const homework = await _fetchWebtopHomework(webtopToken, webtopSyncParams);
+      let allHomework = [];
+      for (const [, { token, syncParams }] of entries) {
+        if (!token || !syncParams) continue;
+        const hw = await _fetchWebtopHomework(token, syncParams);
+        allHomework = allHomework.concat(hw);
+      }
       await doc.ref.update({
-        webtopHomework: homework,
+        webtopHomework: allHomework,
         webtopUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
+      synced++;
     } catch (err) {
       console.error(`webtopSync failed for family ${doc.id}`, err);
     }
   });
   await Promise.all(promises);
-  console.log(`webtopSync: refreshed ${snapshot.docs.length} families`);
+  console.log(`webtopSync: synced ${synced}/${snapshot.docs.length} families`);
   return null;
 });
 
@@ -1656,7 +1685,7 @@ async function _fetchWebtopHomework(token, syncParams) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Cookie': `webToken=${token}`,
+      'Cookie': `webToken=${decodeURIComponent(token)}`,
       'Origin': 'https://webtop.smartschool.co.il',
       'Referer': 'https://webtop.smartschool.co.il/',
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -1681,10 +1710,11 @@ async function _fetchWebtopHomework(token, syncParams) {
       for (const s of schedules) {
         if (s?.homeWork) {
           homework.push({
-            subject: s.subjectName || '',
+            subject: s.subject_name || '',
             text: s.homeWork,
-            day: day.dayName || '',
-            date: day.date || '',
+            context: s.descClass || '',
+            date: (day.date || '').slice(0, 10),
+            classCode: String(syncParams.classCode || syncParams.studentID || ''),
           });
         }
       }

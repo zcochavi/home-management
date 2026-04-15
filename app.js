@@ -1809,6 +1809,15 @@ function subscribeToFamily(uid) {
   });
 }
 
+function _gradeToNum(g) {
+  if (!g) return null;
+  const map = {א:1,ב:2,ג:3,ד:4,ה:5,ו:6,ז:7,ח:8,ט:9,י:10,יא:11,יב:12};
+  const s = String(g).trim().replace(/['\u05f3]/g,'');
+  if (map[s] !== undefined) return map[s];
+  const n = parseInt(s, 10);
+  return isNaN(n) ? null : n;
+}
+
 function renderMgmtWebtop() {
   const el2 = el('mgmtWebtopStatus');
   if (!el2) return;
@@ -1823,17 +1832,33 @@ function renderMgmtWebtop() {
   // Class → kid mapping
   const webtopStudents = familyData?.webtopStudents || {};
   const classEntries = Object.entries(webtopStudents);
+  const kids = getKids();
+  const members = getMembers();
+
+  // Auto-match: for any unmapped class, find a kid whose grade number matches classCode
+  classEntries.forEach(([, {classCode}]) => {
+    const cc = classCode;
+    if (!cc) return;
+    const alreadyMapped = kids.some(k => members.find(m=>m.name===k)?.webtopClassCode === cc);
+    if (alreadyMapped) return;
+    const matches = kids.filter(k => {
+      const m = members.find(m=>m.name===k);
+      return _gradeToNum(m?.school?.grade) === Number(cc);
+    });
+    if (matches.length === 1) setWebtopKidClass(cc, matches[0]);
+  });
+
   const mappingEl = el('mgmtWebtopMapping');
   if (mappingEl) {
     if (!classEntries.length) { mappingEl.style.display='none'; }
     else {
       mappingEl.style.display='';
-      const kids = getKids();
       mappingEl.innerHTML = classEntries.map(([safeKey, {studentName, classCode}]) => {
         const cc = classCode || safeKey;
-        const assignedKid = kids.find(k => getMembers().find(m=>m.name===k)?.webtopClassCode === cc) || '';
+        const assignedKid = kids.find(k => members.find(m=>m.name===k)?.webtopClassCode === cc) || '';
+        const autoTag = assignedKid ? '' : '<span style="font-size:10px;color:#9ca3af"> (לא זוהה)</span>';
         return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="font-size:12px;color:#4a5568;flex:1">${esc(studentName||cc)}</span>
+          <span style="font-size:12px;color:#4a5568;flex:1">${esc(studentName||cc)}${autoTag}</span>
           <select onchange="setWebtopKidClass('${esc(cc)}',this.value)" style="font-size:12px;border:1.5px solid #e2e8f0;border-radius:8px;padding:3px 6px;background:#fff">
             <option value="">— לא משויך —</option>
             ${kids.map(k=>`<option value="${esc(k)}" ${assignedKid===k?'selected':''}>${esc(k)}</option>`).join('')}
