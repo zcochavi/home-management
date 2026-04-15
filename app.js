@@ -1820,10 +1820,34 @@ function renderMgmtWebtop() {
     el2.textContent = 'לא מחובר עדיין';
     el2.style.color = '#9ca3af';
   }
+  // Class → kid mapping
+  const webtopStudents = familyData?.webtopStudents || {};
+  const classEntries = Object.entries(webtopStudents);
+  const mappingEl = el('mgmtWebtopMapping');
+  if (mappingEl) {
+    if (!classEntries.length) { mappingEl.style.display='none'; }
+    else {
+      mappingEl.style.display='';
+      const kids = getKids();
+      mappingEl.innerHTML = classEntries.map(([safeKey, {studentName, classCode}]) => {
+        const cc = classCode || safeKey;
+        const assignedKid = kids.find(k => getMembers().find(m=>m.name===k)?.webtopClassCode === cc) || '';
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:12px;color:#4a5568;flex:1">${esc(studentName||cc)}</span>
+          <select onchange="setWebtopKidClass('${esc(cc)}',this.value)" style="font-size:12px;border:1.5px solid #e2e8f0;border-radius:8px;padding:3px 6px;background:#fff">
+            <option value="">— לא משויך —</option>
+            ${kids.map(k=>`<option value="${esc(k)}" ${assignedKid===k?'selected':''}>${esc(k)}</option>`).join('')}
+          </select>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // Sync interval buttons
   const intervalRow = el('mgmtWebtopIntervalRow');
   const intervalBtns = el('mgmtWebtopIntervalBtns');
   if (intervalRow && intervalBtns) {
-    intervalRow.style.display = students.length > 0 ? 'flex' : 'none';
+    intervalRow.style.display = classEntries.length > 0 ? 'flex' : 'none';
     const current = familyData?.webtopSyncIntervalHours || 6;
     const options = [{h:1,label:'כל שעה'},{h:3,label:'כל 3 שעות'},{h:6,label:'כל 6 שעות'},{h:12,label:'כל 12 שעות'},{h:24,label:'פעם ביום'}];
     intervalBtns.innerHTML = options.map(o => `
@@ -2210,6 +2234,18 @@ function renderMgmt() {
     if (codeEl) codeEl.textContent = S.uid || '';
     renderMgmtWebtop();
   }
+}
+
+async function setWebtopKidClass(classCode, kidName) {
+  if (!fbDb || !S.uid) return;
+  const members = getMembers().map(m => ({
+    ...m,
+    webtopClassCode: m.name === kidName ? classCode : (m.webtopClassCode === classCode ? '' : m.webtopClassCode),
+  }));
+  if (familyData) familyData.members = members;
+  await fbDb.collection('families').doc(S.uid).update({ members });
+  renderMgmtWebtop();
+  renderHomework();
 }
 
 async function setWebtopSyncInterval(hours) {
@@ -6778,13 +6814,11 @@ function renderHomework(){
   const webtopSec=el('hwWebtopSection');
   const webtopListEl=el('hwWebtopList');
   if(webtopSec&&webtopListEl){
-    const wtHw=S.child
-      ? _webtopHomework.filter(h=>{
-          if(!h.studentName) return true;
-          const sn=(h.studentName||'').toLowerCase();
-          const ch=(S.child||'').toLowerCase();
-          return sn.includes(ch)||ch.includes(sn.split(' ')[0]);
-        })
+    const childClassCode = S.child
+      ? getMembers().find(m=>m.name===S.child)?.webtopClassCode
+      : null;
+    const wtHw = childClassCode
+      ? _webtopHomework.filter(h => h.classCode === childClassCode)
       : _webtopHomework;
     const syncTimeEl=el('hwWebtopSyncTime');
     if(syncTimeEl&&_webtopUpdatedAt){
