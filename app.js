@@ -6762,7 +6762,7 @@ function renderHomework(){
             <div class="hw-desc-text">${esc(h.text)}</div>
             <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject)||h.subject)}</span>
           </div>
-          ${h.date?`<div class="hw-due">${h.day||''} ${fmtDate(h.date)}</div>`:''}
+          ${h.date?`<div class="hw-due">${fmtDate(h.date.slice(0,10))}</div>`:''}
         </div>`).join('');
     }
   }
