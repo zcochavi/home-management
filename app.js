@@ -1795,6 +1795,11 @@ function subscribeToFamily(uid) {
 
 function _subscribeWebtop(familyId) {
   if (_webtopUnsub) { _webtopUnsub(); _webtopUnsub = null; }
+  console.log('[webtop] subscribing, familyId:', familyId);
+  // Debug: try a raw unfiltered read first to see if collection is readable
+  fbDb.collection('webtopClasses').limit(5).get()
+    .then(s => console.log('[webtop] raw read OK, docs:', s.size, s.docs.map(d => d.id)))
+    .catch(e => console.error('[webtop] raw read FAILED:', e.code, e.message));
   _webtopUnsub = fbDb.collection('webtopClasses')
     .where('familyIds', 'array-contains', familyId)
     .onSnapshot(snap => {
