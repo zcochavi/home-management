@@ -1794,9 +1794,9 @@ function subscribeToFamily(uid) {
 function renderMgmtWebtop() {
   const el2 = el('mgmtWebtopStatus');
   if (!el2) return;
-  const keys = [...new Set(_webtopHomework.map(h => h.classKey))];
-  if (keys.length > 0) {
-    el2.textContent = `✅ מחובר — ${keys.length} כיתה${keys.length > 1 ? 'ות' : ''}, ${_webtopHomework.length} שיעורי בית סונכרנו`;
+  const students = [...new Set(_webtopHomework.map(h => h.studentName).filter(Boolean))];
+  if (students.length > 0) {
+    el2.textContent = `✅ מחובר — ${students.join(', ')}, ${_webtopHomework.length} שיעורי בית סונכרנו`;
     el2.style.color = '#16a34a';
   } else {
     el2.textContent = 'לא מחובר עדיין';
@@ -6743,7 +6743,14 @@ function renderHomework(){
   const webtopSec=el('hwWebtopSection');
   const webtopListEl=el('hwWebtopList');
   if(webtopSec&&webtopListEl){
-    const wtHw=_webtopHomework;
+    const wtHw=S.child
+      ? _webtopHomework.filter(h=>{
+          if(!h.studentName) return true;
+          const sn=(h.studentName||'').toLowerCase();
+          const ch=(S.child||'').toLowerCase();
+          return sn.includes(ch)||ch.includes(sn.split(' ')[0]);
+        })
+      : _webtopHomework;
     if(!wtHw.length){
       webtopSec.style.display='none';
     } else {
