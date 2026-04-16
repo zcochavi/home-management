@@ -1639,6 +1639,8 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
     const updatePayload = {
       webtopHomework: merged,
       webtopUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      webtopSyncError: admin.firestore.FieldValue.delete(),
+      webtopSyncErrorAt: admin.firestore.FieldValue.delete(),
       [`webtopStudents.${safeKey}`]: {
         token,
         fullCookie: fullCookie || null,
@@ -1698,10 +1700,17 @@ exports.webtopSync = functions.pubsub.schedule('every 1 hours').onRun(async () =
       await doc.ref.update({
         webtopHomework: [...mergedMap.values()],
         webtopUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        webtopSyncError: admin.firestore.FieldValue.delete(),
+        webtopSyncErrorAt: admin.firestore.FieldValue.delete(),
       });
       synced++;
     } catch (err) {
       console.error(`webtopSync failed for family ${doc.id}`, err);
+      const isExpired = err.message === 'session_expired';
+      doc.ref.update({
+        webtopSyncError: isExpired ? 'session_expired' : 'sync_failed',
+        webtopSyncErrorAt: admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => {});
     }
   });
   await Promise.all(promises);

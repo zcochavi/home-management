@@ -1849,7 +1849,16 @@ function renderMgmtWebtop() {
   const el2 = el('mgmtWebtopStatus');
   if (!el2) return;
   const students = [...new Set(_webtopHomework.map(h => h.studentName).filter(Boolean))];
-  if (students.length > 0) {
+  const syncErr = familyData?.webtopSyncError;
+  const syncErrAt = familyData?.webtopSyncErrorAt?.toDate?.();
+  const errTime = syncErrAt ? syncErrAt.toLocaleString(t('locale'), {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) : '';
+  if (syncErr) {
+    const msg = syncErr === 'session_expired'
+      ? `⚠️ הסשן פג (${errTime}) — פתח Webtop לחידוש`
+      : `⚠️ שגיאת סנכרון (${errTime}) — בדוק חיבור`;
+    el2.innerHTML = `${msg}${_webtopHomework.length ? `<br><span style="color:#16a34a;font-size:12px">📦 ${_webtopHomework.length} שיעורים שמורים ומוצגים</span>` : ''}`;
+    el2.style.color = '#d97706';
+  } else if (students.length > 0) {
     el2.textContent = `✅ מחובר — ${students.join(', ')}, ${_webtopHomework.length} שיעורי בית`;
     el2.style.color = '#16a34a';
   } else {
@@ -6862,11 +6871,10 @@ function renderHomework(){
   // Base webtop list filtered by child/classCode only (no subject/search yet)
   const childMember = S.child ? getMembers().find(m=>m.name===S.child) : null;
   const childClassCode = childMember?.webtopClassCode || null;
-  const allWtHw = !S.child
+  // If no classCode mapping yet, show all stored homework rather than hiding it
+  const allWtHw = (!S.child || !childClassCode)
     ? _webtopHomework
-    : childClassCode
-      ? _webtopHomework.filter(h => h.classCode === childClassCode)
-      : [];
+    : _webtopHomework.filter(h => h.classCode === childClassCode);
 
   // Subject filter chips — union of subjects across all three sections
   const subjChipsEl=el('hwSubjectChips');
