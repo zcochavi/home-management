@@ -6871,15 +6871,18 @@ function renderHomework(){
   // Base webtop list filtered by child/classCode only (no subject/search yet)
   const childMember = S.child ? getMembers().find(m=>m.name===S.child) : null;
   const childClassCode = childMember?.webtopClassCode || null;
-  // Filter by child's classCode when mapped; fall back to all only when no
-  // specific child is selected (parent overview) or nobody in the family has
-  // a classCode yet (first-time setup before any mapping exists).
-  const anyMapped = getMembers().some(m => m.webtopClassCode);
+  // anyMapped: at least one KID in the family has a classCode assigned
+  const anyMapped = getKids().some(k => getMembers().find(m => m.name === k)?.webtopClassCode);
+  // filtered: homework for this child's classCode — fall back to ALL if code
+  // doesn't match anything (e.g. stale safeKey mismatch from older syncs)
+  const filtered = childClassCode
+    ? _webtopHomework.filter(h => h.classCode === childClassCode)
+    : [];
   const allWtHw = !S.child
-    ? _webtopHomework
+    ? _webtopHomework                                      // parent all-kids view
     : childClassCode
-      ? _webtopHomework.filter(h => h.classCode === childClassCode)
-      : (!anyMapped ? _webtopHomework : []);
+      ? (filtered.length ? filtered : _webtopHomework)    // mapped: filtered, fallback to all if empty
+      : (!anyMapped ? _webtopHomework : []);               // unmapped kid: all only if nobody is mapped yet
 
   // Subject filter chips — union of subjects across all three sections
   const subjChipsEl=el('hwSubjectChips');
@@ -6923,19 +6926,23 @@ function renderHomework(){
   const webtopSec=el('hwWebtopSection');
   const webtopListEl=el('hwWebtopList');
   if(webtopSec&&webtopListEl){
-    const syncTimeEl=el('hwWebtopSyncTime');
-    if(syncTimeEl&&_webtopUpdatedAt){
-      syncTimeEl.textContent=_webtopUpdatedAt.toLocaleString(t('locale'),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
-    }
     // Show a hint when homework exists but this child has no classCode mapping
     const noMapping = S.child && !childClassCode && anyMapped && _webtopHomework.length > 0;
     if(!wtHw.length && !noMapping){
       webtopSec.style.display='none';
+      const syncTimeEl=el('hwWebtopSyncTime');
+      if(syncTimeEl) syncTimeEl.textContent='';
     } else if (noMapping) {
       webtopSec.style.display='';
+      const syncTimeEl=el('hwWebtopSyncTime');
+      if(syncTimeEl) syncTimeEl.textContent='';
       webtopListEl.innerHTML = `<div class="empty" style="font-size:13px;padding:8px 0">לא משויך לכיתה — הגדר בהגדרות</div>`;
     } else {
       webtopSec.style.display='';
+      const syncTimeEl=el('hwWebtopSyncTime');
+      if(syncTimeEl&&_webtopUpdatedAt){
+        syncTimeEl.textContent=_webtopUpdatedAt.toLocaleString(t('locale'),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+      }
       const doneMap = familyData?.webtopHomeworkDone || {};
       webtopListEl.innerHTML=wtHw.map(h=>{
         const doneKey = `${h.classCode}|${h.date}|${h.subject}`;
