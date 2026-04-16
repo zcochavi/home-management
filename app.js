@@ -5509,22 +5509,60 @@ function renderHome() {
   let hw = S.homework.filter(h=>!h.done);
   if (isKid()) hw = hw.filter(h=>h.child===S.user);
   else if (S.filter!=='All'&&getKids().includes(S.filter)) hw = hw.filter(h=>h.child===S.filter);
-  // Sort by nearest due date first; items with no due date go last
-  hw.sort((a,b)=>{
-    if (!a.due && !b.due) return 0;
-    if (!a.due) return 1;
-    if (!b.due) return -1;
-    return a.due.localeCompare(b.due);
+
+  // Add Webtop homework (undone items for the relevant child/class)
+  const _wtDoneMap = familyData?.webtopHomeworkDone || {};
+  let wtHomeHw = _webtopHomework.filter(h => {
+    const key = `${h.classCode}|${h.date}|${h.subject}`;
+    return !_wtDoneMap[key];
   });
-  el('hwSummary').innerHTML = hw.length
-    ? hw.map(h => `<div class="task-row home-task-row">
-        <div class="check-box readonly"></div>
-        <div class="task-body">
-          <div class="task-text">${esc(h.desc)}</div>
-          <div class="task-sub">${(()=>{const parts=[];if(isParent())parts.push(esc(h.child));if(h.subject)parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);if(h.due)parts.push(fmtDate(h.due));return parts.join(' · ');})()}</div>
-        </div>
-        <div class="home-type-icon home-type-hw">📚</div>
-      </div>`).join('')
+  if (isKid()) {
+    const myCode = getMembers().find(m => m.name === S.user)?.webtopClassCode;
+    if (myCode) wtHomeHw = wtHomeHw.filter(h => h.classCode === myCode);
+  } else if (S.filter !== 'All' && getKids().includes(S.filter)) {
+    const kidCode = getMembers().find(m => m.name === S.filter)?.webtopClassCode;
+    if (kidCode) wtHomeHw = wtHomeHw.filter(h => h.classCode === kidCode);
+  }
+
+  // Merge: tag each item with its type for rendering, then sort by due date
+  const combined = [
+    ...hw.map(h => ({ _type:'hw', _due: h.due||'', ...h })),
+    ...wtHomeHw.map(h => ({ _type:'wt', _due: h.date||'', ...h })),
+  ].sort((a,b) => {
+    if (!a._due && !b._due) return 0;
+    if (!a._due) return 1;
+    if (!b._due) return -1;
+    return a._due.localeCompare(b._due);
+  });
+
+  el('hwSummary').innerHTML = combined.length
+    ? combined.map(h => {
+        if (h._type === 'wt') {
+          const parts = [];
+          if (isParent() && S.filter === 'All') {
+            const kid = getKids().find(k => getMembers().find(m=>m.name===k)?.webtopClassCode === h.classCode);
+            if (kid) parts.push(esc(kid));
+          }
+          if (h.subject) parts.push(`<span style="${webtopSubjectStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(h.subject)}</span>`);
+          if (h.date) parts.push(fmtDate(h.date.slice(0,10)));
+          return `<div class="task-row home-task-row">
+            <div class="check-box readonly"></div>
+            <div class="task-body">
+              <div class="task-text">${esc(h.text)}</div>
+              ${parts.length ? `<div class="task-sub">${parts.join(' · ')}</div>` : ''}
+            </div>
+            <div class="home-type-icon">📡</div>
+          </div>`;
+        }
+        return `<div class="task-row home-task-row">
+          <div class="check-box readonly"></div>
+          <div class="task-body">
+            <div class="task-text">${esc(h.desc)}</div>
+            <div class="task-sub">${(()=>{const parts=[];if(isParent())parts.push(esc(h.child));if(h.subject)parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);if(h.due)parts.push(fmtDate(h.due));return parts.join(' · ');})()}</div>
+          </div>
+          <div class="home-type-icon home-type-hw">📚</div>
+        </div>`;
+      }).join('')
     : t('noPendingHw');
 
   renderHomeUpcoming();
