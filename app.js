@@ -5535,12 +5535,30 @@ function renderHome() {
     return a._due.localeCompare(b._due);
   });
 
+  // Build a reliable classCode→kid map for the "All" parent view.
+  // Primary: kid.webtopClassCode === h.classCode (exact match).
+  // Fallback: if only one unique classCode exists in stored homework and only
+  // one kid is mapped in webtop, all items belong to that kid.
+  const _wtCodeToKid = {};
+  if (isParent() && S.filter === 'All') {
+    getKids().forEach(k => {
+      const cc = getMembers().find(m => m.name === k)?.webtopClassCode;
+      if (cc) _wtCodeToKid[cc] = k;
+    });
+    // Fallback: single student scenario where code might not match
+    const uniqueCodes = [...new Set(_webtopHomework.map(h => h.classCode).filter(Boolean))];
+    const mappedKids = getKids().filter(k => getMembers().find(m => m.name === k)?.webtopClassCode);
+    if (uniqueCodes.length === 1 && mappedKids.length === 1 && !_wtCodeToKid[uniqueCodes[0]]) {
+      _wtCodeToKid[uniqueCodes[0]] = mappedKids[0];
+    }
+  }
+
   el('hwSummary').innerHTML = combined.length
     ? combined.map(h => {
         if (h._type === 'wt') {
           const parts = [];
           if (isParent() && S.filter === 'All') {
-            const kid = getKids().find(k => getMembers().find(m=>m.name===k)?.webtopClassCode === h.classCode);
+            const kid = _wtCodeToKid[h.classCode];
             if (kid) parts.push(esc(kid));
           }
           if (h.subject) parts.push(`<span style="${webtopSubjectStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(h.subject)}</span>`);
