@@ -1666,7 +1666,7 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
 });
 
 // ─── webtopSync — runs hourly, respects per-family webtopSyncIntervalHours ────
-exports.webtopSync = functions.pubsub.schedule('every 30 minutes').onRun(async () => {
+exports.webtopSync = functions.pubsub.schedule('every 20 minutes').onRun(async () => {
   const snapshot = await db.collection('families')
     .where('webtopStudents', '!=', null)
     .get();
