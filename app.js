@@ -1921,7 +1921,7 @@ function renderMgmtWebtop() {
   if (intervalRow && intervalBtns) {
     intervalRow.style.display = classEntries.length > 0 ? 'flex' : 'none';
     const current = familyData?.webtopSyncIntervalHours || 6;
-    const options = [{h:1,label:'כל שעה'},{h:3,label:'כל 3 שעות'},{h:6,label:'כל 6 שעות'},{h:12,label:'כל 12 שעות'},{h:24,label:'פעם ביום'}];
+    const options = [{h:0.5,label:'כל 30 דקות'},{h:1,label:'כל שעה'},{h:3,label:'כל 3 שעות'},{h:6,label:'כל 6 שעות'},{h:12,label:'כל 12 שעות'},{h:24,label:'פעם ביום'}];
     intervalBtns.innerHTML = options.map(o => `
       <button onclick="setWebtopSyncInterval(${o.h})" style="font-size:11px;padding:4px 10px;border-radius:20px;border:1.5px solid ${o.h===current?'#6366f1':'#e2e8f0'};background:${o.h===current?'#6366f1':'#fff'};color:${o.h===current?'#fff':'#4a5568'};cursor:pointer;font-weight:${o.h===current?'700':'400'}">${o.label}</button>
     `).join('');

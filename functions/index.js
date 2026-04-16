@@ -1666,7 +1666,7 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
 });
 
 // ─── webtopSync — runs hourly, respects per-family webtopSyncIntervalHours ────
-exports.webtopSync = functions.pubsub.schedule('every 1 hours').onRun(async () => {
+exports.webtopSync = functions.pubsub.schedule('every 30 minutes').onRun(async () => {
   const snapshot = await db.collection('families')
     .where('webtopStudents', '!=', null)
     .get();
@@ -1678,7 +1678,7 @@ exports.webtopSync = functions.pubsub.schedule('every 1 hours').onRun(async () =
     const entries = Object.entries(webtopStudents);
     if (!entries.length) return;
     // Check if enough time has passed since last sync
-    const intervalMs = (webtopSyncIntervalHours || 6) * 3600 * 1000;
+    const intervalMs = (webtopSyncIntervalHours || 1) * 3600 * 1000;
     const lastSync = webtopUpdatedAt?.toMillis?.() || 0;
     if (now - lastSync < intervalMs) return;
     try {
