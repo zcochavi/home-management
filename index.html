@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260421ls40') location.reload(true);
+        if (v !== '20260421ls55') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -433,7 +433,7 @@
     <button class="mgmt-back-btn" onclick="listDetailBack()">‹</button>
     <div class="mgmt-header-title" id="listDetailTitle"></div>
     <div style="display:flex;gap:2px;margin-inline-start:auto">
-      <button class="mgmt-back-btn" id="listEditBtn" style="font-size:16px;padding:4px 8px;display:none" onclick="listToggleEditMode()" title="ערוך שם">✏️</button>
+      <button class="mgmt-back-btn" id="listEditBtn" style="font-size:16px;padding:4px 8px;display:none" onclick="listToggleEditMode()" title="ערוך רשימה">✏️</button>
       <button class="mgmt-back-btn" id="listCloneBtn" style="font-size:16px;padding:4px 8px;display:none" onclick="listOpenClone(_listDetailId)" title="שכפל רשימה">⧉</button>
       <button class="mgmt-back-btn" id="listDeleteBtn" style="font-size:18px;padding:4px 8px;display:none" onclick="listDelete(_listDetailId)" title="מחק רשימה">🗑</button>
     </div>
@@ -537,9 +537,12 @@
       <!-- POOL -->
       <div id="grocerySec-pool">
         <div class="card">
-          <div class="card-title" id="poolTitle"></div>
-          <div class="pool-search-wrap">
-            <input class="pool-search" id="poolSearch" type="search" placeholder="🔍" oninput="onPoolSearch(this.value)">
+          <div class="pool-title-row">
+            <div class="card-title" id="poolTitle"></div>
+            <button class="pool-search-toggle" id="poolSearchToggle" onclick="togglePoolSearch()">🔍</button>
+          </div>
+          <div class="pool-search-wrap" id="poolSearchWrap" style="display:none">
+            <input class="pool-search" id="poolSearch" type="search" placeholder="חיפוש..." oninput="onPoolSearch(this.value)">
           </div>
           <div class="cat-chips-wrap" id="poolCatChips"></div>
           <div class="pool-add-wrap" id="poolAddWrap">
@@ -559,9 +562,12 @@
       <!-- HISTORY -->
       <div id="grocerySec-history" style="display:none">
         <div class="card">
-          <div class="card-title" id="historyTitle"></div>
-          <div class="pool-search-wrap">
-            <input class="pool-search" id="historySearch" type="search" placeholder="🔍" oninput="onHistorySearch(this.value)">
+          <div class="pool-title-row">
+            <div class="card-title" id="historyTitle"></div>
+            <button class="pool-search-toggle" id="historySearchToggle" onclick="toggleHistorySearch()">🔍</button>
+          </div>
+          <div class="pool-search-wrap" id="historySearchWrap" style="display:none">
+            <input class="pool-search" id="historySearch" type="search" placeholder="חיפוש..." oninput="onHistorySearch(this.value)">
           </div>
           <div id="historyList"></div>
         </div>
@@ -616,6 +622,17 @@
 
     <!-- LISTS -->
     <div id="tab-lists" class="tab-content">
+      <div class="lists-topbar" id="listsTopbar">
+        <button class="pool-search-toggle" id="listsSearchToggle" onclick="toggleListsSearch()">🔍</button>
+      </div>
+      <div class="lists-search-bar" id="listsSearchInline">
+        <input class="lists-search-input" id="listsSearchInput" type="text" placeholder="חיפוש ברשימות..."
+          autocomplete="off" autocorrect="off" autocapitalize="off"
+          oninput="_listsQuery=this.value;renderLists()"
+          onblur="setTimeout(_closeListsSearchOnBlur,150)">
+        <button class="lists-search-clear" id="listsSearchClearBtn"
+          onmousedown="event.preventDefault()" onclick="_listsQuery='';renderLists();document.getElementById('listsSearchInput').focus()">×</button>
+      </div>
       <div id="listsContent"></div>
     </div>
 

@@ -6368,6 +6368,30 @@ function onPoolSearch(val) {
   renderPool();
 }
 
+function togglePoolSearch() {
+  const wrap = el('poolSearchWrap');
+  const btn = el('poolSearchToggle');
+  const input = el('poolSearch');
+  const open = !wrap.classList.contains('open');
+  wrap.style.display = open ? 'block' : 'none';
+  wrap.classList.toggle('open', open);
+  btn.classList.toggle('active', open);
+  if (open) { setTimeout(() => input.focus(), 50); }
+  else { input.value = ''; onPoolSearch(''); }
+}
+
+function toggleHistorySearch() {
+  const wrap = el('historySearchWrap');
+  const btn = el('historySearchToggle');
+  const input = el('historySearch');
+  const open = !wrap.classList.contains('open');
+  wrap.style.display = open ? 'block' : 'none';
+  wrap.classList.toggle('open', open);
+  btn.classList.toggle('active', open);
+  if (open) { setTimeout(() => input.focus(), 50); }
+  else { input.value = ''; onHistorySearch(''); }
+}
+
 function pickPoolCat(name) {
   if (!name) { _poolCatFilter.clear(); }
   else if (_poolCatFilter.has(name)) { _poolCatFilter.delete(name); }
@@ -8972,7 +8996,8 @@ function listOpenShareMenu(listId) {
       ${list.type !== 'recipe' ? `
       <label class="share-mode-opt"><input type="radio" name="shareMode" value="self">
         <div><div class="share-mode-title">✅ סימון אישי</div><div class="share-mode-desc">כל אחד מסמן לעצמו — הסימונים לא משותפים</div></div>
-      </label>
+      </label>` : ''}
+      ${list.type !== 'recipe' && !list.archived ? `
       <label class="share-mode-opt"><input type="radio" name="shareMode" value="edit">
         <div><div class="share-mode-title">🤝 סימון משותף</div><div class="share-mode-desc">הסימונים גלויים לכל מי שיש לו את הקישור</div></div>
       </label>` : ''}
@@ -9498,6 +9523,35 @@ function _autoArchiveCheck(uid, lists) {
 
 // ── Render ─────────────────────────────
 let _listsQuery = '';
+let _listsSearchOpen = false;
+
+function toggleListsSearch() {
+  _listsSearchOpen = !_listsSearchOpen;
+  const bar = el('listsSearchInline');
+  const toggle = el('listsSearchToggle');
+  if (_listsSearchOpen) {
+    if (bar) bar.classList.add('open');
+    if (toggle) toggle.style.display = 'none';
+    setTimeout(() => el('listsSearchInput')?.focus(), 50);
+  } else {
+    _listsQuery = '';
+    if (bar) bar.classList.remove('open');
+    if (toggle) toggle.style.display = '';
+    renderLists();
+  }
+}
+
+function _closeListsSearchOnBlur() {
+  if (!_listsSearchOpen) return;
+  const bar = el('listsSearchInline');
+  const toggle = el('listsSearchToggle');
+  if (bar?.contains(document.activeElement)) return;
+  _listsSearchOpen = false;
+  _listsQuery = '';
+  if (bar) bar.classList.remove('open');
+  if (toggle) toggle.style.display = '';
+  renderLists();
+}
 
 function renderLists() {
   const cont = el('listsContent');
@@ -9517,11 +9571,12 @@ function renderLists() {
   }
 
   const q = _listsQuery.trim().toLowerCase();
-  const searchBar = `<div class="lists-search-wrap">
-    <input class="lists-search-input" id="listsSearch" type="text" placeholder="🔍 חיפוש ברשימות..." value="${esc(_listsQuery)}"
-      oninput="_listsQuery=this.value;renderLists()" autocomplete="off" autocorrect="off" autocapitalize="off">
-    ${q ? `<button class="lists-search-clear" onclick="_listsQuery='';renderLists()">×</button>` : ''}
-  </div>`;
+
+  // Sync topbar search input value and clear button visibility
+  const sinp = el('listsSearchInput');
+  if (sinp && sinp !== document.activeElement) sinp.value = _listsQuery;
+  const clrBtn = el('listsSearchClearBtn');
+  if (clrBtn) clrBtn.classList.toggle('visible', q.length > 0);
 
   const visible = lists.filter(_listVisible);
   const active   = visible.filter(l => !l.archived);
@@ -9529,18 +9584,18 @@ function renderLists() {
   let html = '';
 
   if (q) {
-    const pool = visible; // search across all incl. archived
+    const pool = visible;
     const results = pool
       .map(l => ({ l, m: _listsSearchMatch(l, q) }))
       .filter(({ m }) => m !== null);
     if (!results.length) {
-      html = searchBar + `<div class="lists-empty" style="padding-top:32px">
+      html = `<div class="lists-empty" style="padding-top:32px">
         <div class="lists-empty-icon">🔍</div>
         <div class="lists-empty-title">לא נמצאו תוצאות</div>
         <div class="lists-empty-sub">נסה מילת חיפוש אחרת</div>
       </div>`;
     } else {
-      html = searchBar + `<div class="lists-grid">${results.map(({ l, m }) => _renderListTile(l, m)).join('')}</div>`;
+      html = `<div class="lists-grid">${results.map(({ l, m }) => _renderListTile(l, m)).join('')}</div>`;
     }
   } else {
     const TYPE_META = [
@@ -9568,16 +9623,9 @@ function renderLists() {
         </div>
       </div>`;
     }
-    html = searchBar + html;
   }
 
-  const wasFocused = document.activeElement?.id === 'listsSearch';
-  const cursor = wasFocused ? document.activeElement.selectionStart : -1;
   cont.innerHTML = html;
-  if (wasFocused || q) {
-    const sinp = el('listsSearch');
-    if (sinp) { sinp.focus(); if (cursor >= 0) sinp.setSelectionRange(cursor, cursor); }
-  }
 }
 
 function _listsSearchMatch(list, q) {
@@ -9706,6 +9754,7 @@ function _renderListTile(l, matchInfo = null) {
   const dateStr = l.meta?.tripDate || l.meta?.eventDate || '';
   const matchHint = matchInfo && !matchInfo.byName && matchInfo.firstInside
     ? `<div class="list-tile-match">🔍 ${esc(matchInfo.firstInside)}</div>` : '';
+  const hasJoint = (l.publicShares || []).some(s => s.mode === 'edit');
   return `<div class="list-tile${l.archived ? ' list-tile-archived' : ''}" onclick="openListDetail('${l.id}')">
     ${dateStr ? `<div class="list-tile-date">${fmtDate(dateStr)}</div>` : ''}
     <button class="list-tile-menu-btn" onclick="event.stopPropagation();_listTileMenu('${l.id}',this)" title="אפשרויות">⋮</button>
@@ -9714,6 +9763,7 @@ function _renderListTile(l, matchInfo = null) {
     ${matchHint}
     ${left > 0 ? `<div class="list-tile-badge">${left}</div>` : (total > 0 ? `<div class="list-tile-done-badge">✓</div>` : '')}
     ${done > 0 ? `<div class="list-tile-progress"><div class="list-tile-bar" style="width:${pct}%"></div></div>` : ''}
+    ${hasJoint ? `<div class="list-tile-joint">🤝</div>` : ''}
   </div>`;
 }
 
@@ -9968,10 +10018,10 @@ function _renderPackingDetail(cont, list, canEdit) {
   let h = '';
   if (list.meta?.destination) h += `<div class="list-meta-chip">✈️ ${esc(list.meta.destination)}</div>`;
   if (list.meta?.tripDate)    h += `<div class="list-meta-chip">📅 ${fmtDate(list.meta.tripDate)}</div>`;
+  if (canEdit) h += _addItemFormHtml(list.id, 'packing', '+ הוסף פריט...');
   if (undone.length) {
     h += `<div class="card list-items-card">${undone.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showQty:true})).join('')}</div>`;
   }
-  if (canEdit) h += _addItemFormHtml(list.id, 'packing', '+ הוסף פריט...');
   if (done.length) h += _doneSectionHtml(list.id, done, canEdit, 'פריטים שסומנו');
   cont.innerHTML = h;
 }
@@ -10127,6 +10177,7 @@ async function listSaveItemEdit(listId, itemId, arrayKey = 'items') {
   _renderListDetail();
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ [arrayKey]: arr, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  _syncAllItemsToShares(list);
 }
 
 // Recipe detail
@@ -10141,23 +10192,21 @@ function _renderRecipeDetail(cont, list, canEdit) {
     ? `<div class="recipe-cook-badge" title="הכנות קודמות">👨‍🍳 ×${cookLog.length}  <span class="recipe-cook-last">אחרון: ${fmtDate(cookLog[cookLog.length-1].date)}</span></div>`
     : '';
   h += cookBadge;
-  h += `<button class="btn${_listCookMode ? '' : ' btn-outline'} recipe-cook-btn" onclick="_toggleCookMode('${list.id}')">
+  if (!canEdit && (items.length || steps.length)) h += `<button class="btn${_listCookMode ? '' : ' btn-outline'} recipe-cook-btn" onclick="_toggleCookMode('${list.id}')">
     ${_listCookMode ? '🍳 מצב בישול פעיל — לחץ לסיום' : '🍳 התחל בישול'}
   </button>`;
 
   // Ingredients
   h += `<div class="card list-items-card">
     <div class="list-section-hdr">🧂 מצרכים</div>
-    ${items.length ? items.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showAmount:true, checkable: _listCookMode})).join('') : `<div class="list-empty-hint">הוסף מצרכים...</div>`}
-  </div>`;
-  if (canEdit) h += `<div class="card list-add-card">
-    <div class="mgmt-add-form">
+    ${canEdit ? `<div class="mgmt-add-form">
       <input class="mgmt-input" id="listNewItem" type="text" placeholder="מצרך"
         onkeydown="if(event.key==='Enter')listAddItem('${list.id}','ingredient')">
       <input class="mgmt-input" id="listNewItemQty" type="text" placeholder="כמות" style="flex:0 0 64px"
         onkeydown="if(event.key==='Enter')listAddItem('${list.id}','ingredient')">
       <button class="mgmt-add-btn" onclick="listAddItem('${list.id}','ingredient')">+</button>
-    </div>
+    </div>` : ''}
+    ${items.length ? items.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showAmount:true, checkable: _listCookMode})).join('') : `<div class="list-empty-hint">הוסף מצרכים...</div>`}
   </div>`;
 
   // Steps
@@ -10170,6 +10219,11 @@ function _renderRecipeDetail(cont, list, canEdit) {
     <div class="list-section-hdr" style="display:flex;align-items:center;justify-content:space-between">
       <span>📝 שלבי הכנה</span>${stepProgress}
     </div>
+    ${canEdit ? `<div class="mgmt-add-form">
+      <input class="mgmt-input" id="listNewStep" type="text" placeholder="תיאור השלב" style="flex:1"
+        onkeydown="if(event.key==='Enter')listAddStep('${list.id}')">
+      <button class="mgmt-add-btn" onclick="listAddStep('${list.id}')">+</button>
+    </div>` : ''}
     ${steps.length ? steps.map((st, idx) => {
       const isCurrent = _listCookMode && idx === currentIdx;
       const isDone = st.done && _listCookMode;
@@ -10183,13 +10237,6 @@ function _renderRecipeDetail(cont, list, canEdit) {
         ${canEdit ? `<button class="list-item-del" onclick="listDeleteStep('${list.id}',${idx})">×</button>` : ''}
       </div>`;
     }).join('') : `<div class="list-empty-hint">הוסף שלבי הכנה...</div>`}
-  </div>`;
-  if (canEdit) h += `<div class="card list-add-card">
-    <div class="mgmt-add-form">
-      <input class="mgmt-input" id="listNewStep" type="text" placeholder="תיאור השלב" style="flex:1"
-        onkeydown="if(event.key==='Enter')listAddStep('${list.id}')">
-      <button class="mgmt-add-btn" onclick="listAddStep('${list.id}')">+</button>
-    </div>
   </div>`;
 
   cont.innerHTML = h;
@@ -10239,11 +10286,11 @@ function _renderEventDetail(cont, list, canEdit) {
     </div>`;
   }
 
+  if (canEdit) h += _addItemFormHtml(list.id, 'event', '+ הוסף משימה...');
+
   if (undone.length) {
     h += `<div class="card list-items-card">${undone.map(it => _listSwipeItemHtml(list.id, it, canEdit)).join('')}</div>`;
   }
-
-  if (canEdit) h += _addItemFormHtml(list.id, 'event', '+ הוסף משימה...');
 
   if (done.length) h += _doneSectionHtml(list.id, done, canEdit, 'משימות שהושלמו');
 
@@ -10264,6 +10311,36 @@ async function listToggleItem(listId, itemId, arrayKey = 'items') {
     .update({ [arrayKey]: arr, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   // Push change to active joint share docs so guests see it in real time
   _syncToggleToShares(list, itemId, item.done, item.checkedBy);
+}
+
+function _syncAllItemsToShares(list) {
+  const editShares = (list.publicShares || []).filter(s => s.mode === 'edit');
+  for (const share of editShares) {
+    const docRef = fbDb.collection('publicShares').doc(share.token);
+    docRef.get().then(snap => {
+      if (!snap.exists) return;
+      const shareItems = snap.data().items || [];
+      const merged = (list.items || []).map(i => {
+        const existing = shareItems.find(s => String(s.id) === String(i.id));
+        return existing ? { ...i, done: existing.done, checkedBy: existing.checkedBy || null } : { ...i };
+      });
+      docRef.update({ items: merged, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    }).catch(e => console.warn('[share-sync] full sync failed:', e));
+  }
+}
+
+function _syncItemEditToShares(list, itemId, fields) {
+  const editShares = (list.publicShares || []).filter(s => s.mode === 'edit');
+  for (const share of editShares) {
+    const docRef = fbDb.collection('publicShares').doc(share.token);
+    docRef.get().then(snap => {
+      if (!snap.exists) return;
+      const items = (snap.data().items || []).map(i =>
+        String(i.id) === String(itemId) ? { ...i, ...fields } : i
+      );
+      docRef.update({ items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    }).catch(e => console.warn('[share-sync] item edit push failed:', e));
+  }
 }
 
 function _syncToggleToShares(list, itemId, done, checkedBy) {
@@ -10287,6 +10364,7 @@ async function listDeleteItem(listId, itemId, arrayKey = 'items') {
   if (_listDetailId === listId) _renderListDetail();
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ [arrayKey]: list[arrayKey], updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  if (arrayKey === 'items') _syncAllItemsToShares(list);
 }
 
 async function listAddItem(listId, type) {
@@ -10309,6 +10387,7 @@ async function listAddItem(listId, type) {
   nameEl?.focus();
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ items: list.items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  _syncAllItemsToShares(list);
 }
 
 async function listAddStep(listId) {

@@ -947,7 +947,14 @@ body {
 .cat-chevron { font-size: 9px; display: inline-block; }
 .cat-count { color: var(--gray-400); font-weight: 700; }
 
-.pool-search-wrap { margin-bottom: 8px; }
+.pool-title-row { display: flex; align-items: center; margin-bottom: 14px; }
+.pool-title-row .card-title { margin-bottom: 0; flex: 1; }
+.pool-search-toggle { background: none; border: none; font-size: 17px; cursor: pointer; padding: 4px 7px; color: var(--gray-400); border-radius: 8px; line-height: 1; transition: background var(--t-fast), color var(--t-fast); }
+.pool-search-toggle:hover { background: var(--gray-100); color: var(--gray-700); }
+.pool-search-toggle.active { color: var(--primary-500); }
+.pool-search-wrap { display: none; margin-bottom: 0; }
+.pool-search-wrap.open { display: block; margin-bottom: 8px; animation: searchSlideDown 0.2s ease; }
+@keyframes searchSlideDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 .cat-chips-wrap { margin-bottom: 8px; }
 .cat-chips-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .cat-chips-toggle {
@@ -1433,28 +1440,31 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
   z-index: 90;
 }
 
-.lists-search-wrap {
-  position: relative; padding: 10px 12px 4px;
+.lists-topbar { height: 0; overflow: visible; position: relative; z-index: 5; }
+.lists-topbar .pool-search-toggle { position: absolute; top: 6px; inset-inline-end: 0; }
+.lists-search-bar {
+  display: none; padding: 8px 12px; position: relative;
+}
+.lists-search-bar.open {
+  display: flex; align-items: center;
+  animation: searchSlideDown 0.2s ease;
 }
 .lists-search-input {
-  width: 100%; box-sizing: border-box;
-  background: var(--surface); border: 1.5px solid var(--gray-200);
-  border-radius: var(--r-pill); padding: 10px 40px 10px 16px;
+  flex: 1; box-sizing: border-box;
+  background: var(--surface); border: 1.5px solid var(--primary-400);
+  border-radius: var(--r-pill); padding: 8px 36px 8px 14px;
   font-family: inherit; font-size: 14px; font-weight: 600;
-  outline: none; color: var(--gray-900); transition: border-color var(--t-fast);
-  direction: rtl;
+  outline: none; color: var(--gray-900);
+  direction: rtl; width: 100%;
 }
-.lists-search-input:focus { border-color: var(--primary-500); }
 .lists-search-input::placeholder { color: var(--gray-400); font-weight: 500; }
-.lists-search-icon {
-  position: absolute; top: 50%; transform: translateY(-50%);
-  inset-inline-start: 24px; color: var(--gray-400); font-size: 15px; pointer-events: none;
-}
 .lists-search-clear {
   position: absolute; top: 50%; transform: translateY(-50%);
-  inset-inline-end: 24px; background: none; border: none; cursor: pointer;
+  inset-inline-end: 10px; background: none; border: none; cursor: pointer;
   color: var(--gray-400); font-size: 18px; padding: 4px; line-height: 1;
+  display: none;
 }
+.lists-search-clear.visible { display: block; }
 .lists-search-clear:hover { color: var(--gray-700); }
 .list-tile-match {
   font-size: 10px; color: var(--primary-500); font-weight: 700;
@@ -1501,6 +1511,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 }
 .list-tile-menu-btn:hover, .list-tile:hover .list-tile-menu-btn { color: var(--gray-500); background: var(--gray-100); }
 .list-tile-archived { opacity: 0.6; }
+.list-tile-joint { position: absolute; bottom: 6px; inset-inline-start: 7px; font-size: 13px; line-height: 1; }
 .list-tile-popup {
   position: fixed; z-index: 9998;
   background: var(--surface); border-radius: 12px;
@@ -1579,6 +1590,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .list-items-card { padding: 0 !important; overflow: hidden; }
 .list-items-card .list-item:not(:last-child),
 .list-items-card .list-item-row:not(:last-child) { border-bottom: 1px solid var(--gray-100); }
+.list-items-card .mgmt-add-form { padding: 10px 12px; margin-top: 0; margin-bottom: 0; border-bottom: 1px solid var(--gray-100); }
 
 /* Swipe-reveal row */
 .list-item-row { position: relative; overflow: hidden; }
