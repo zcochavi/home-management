@@ -5114,7 +5114,7 @@ function applyRoleUI() {
 function renderHeader() {
   const avatarBtn = el('headerAvatarBtn');
   if (avatarBtn) avatarBtn.innerHTML = getAvatar(S.user, 28) || `<span style="font-size:18px">${getEmoji(S.user)||'👤'}</span>`;
-  const titleEl = el('headerTabTitle');
+  const titleEl = el('headerTabTitleText');
   if (titleEl) titleEl.textContent = tabLabel(S.tab);
   _updateTabCog();
 }
@@ -7675,7 +7675,7 @@ function switchTab(tab) {
   const enterClass = newIdx >= oldIdx ? 'tab-enter-right' : 'tab-enter-left';
 
   S.tab = tab;
-  const _titleEl = el('headerTabTitle');
+  const _titleEl = el('headerTabTitleText');
   if (_titleEl) _titleEl.textContent = tabLabel(tab);
   _updateTabCog();
   // Synchronous scroll reset — window.scrollTo is async on mobile Safari

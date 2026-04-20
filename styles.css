@@ -277,11 +277,13 @@ body {
 }
 .header-tab-title {
   position: absolute; inset-inline-start: 0; inset-inline-end: 0;
-  text-align: center; pointer-events: none;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  pointer-events: none;
   font-size: 16px; font-weight: 800; color: var(--gray-900);
-  letter-spacing: -0.2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  padding: 0 80px; /* keep text from overlapping buttons at extremes */
+  padding: 0 80px;
 }
+.header-tab-title span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tab-settings-btn { pointer-events: auto; }
 .header-end { display: flex; align-items: center; gap: 4px; flex-shrink: 0; margin-inline-start: auto; position: relative; z-index: 1; }
 .menu-btn { position: relative; z-index: 1; }
 .header-avatar-btn {
