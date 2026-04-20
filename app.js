@@ -5116,6 +5116,31 @@ function renderHeader() {
   if (avatarBtn) avatarBtn.innerHTML = getAvatar(S.user, 28) || `<span style="font-size:18px">${getEmoji(S.user)||'👤'}</span>`;
   const titleEl = el('headerTabTitle');
   if (titleEl) titleEl.textContent = tabLabel(S.tab);
+  _updateTabCog();
+}
+
+const _TAB_SETTINGS = {
+  home:     () => openHomeEditor(),
+  grocery:  () => openMgmtSection('mgmtCatList'),
+  homework: () => openMgmtSection('mgmtSubjectList'),
+};
+
+function openTabSettings() {
+  const fn = _TAB_SETTINGS[S.tab];
+  if (fn) fn();
+}
+
+function openMgmtSection(targetId) {
+  openMgmt();
+  setTimeout(() => {
+    const target = el(targetId);
+    target?.closest('.card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 120);
+}
+
+function _updateTabCog() {
+  const btn = el('tabSettingsBtn');
+  if (btn) btn.style.display = _TAB_SETTINGS[S.tab] ? '' : 'none';
 }
 
 // ── Tab chip helpers ──────────────────────────
@@ -7652,6 +7677,7 @@ function switchTab(tab) {
   S.tab = tab;
   const _titleEl = el('headerTabTitle');
   if (_titleEl) _titleEl.textContent = tabLabel(tab);
+  _updateTabCog();
   // Synchronous scroll reset — window.scrollTo is async on mobile Safari
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;

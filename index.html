@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260416wn7') location.reload(true);
+        if (v !== '20260420wn1') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -405,6 +405,7 @@
       <button class="menu-btn" onclick="toggleMenu(this)">☰</button>
       <div class="header-tab-title" id="headerTabTitle"></div>
       <div class="header-end">
+        <button class="notif-bell-btn" id="tabSettingsBtn" onclick="openTabSettings()" title="הגדרות לשונית" style="display:none">⚙️</button>
         <button class="notif-bell-btn" id="pendingReqBtn" onclick="openPendingPanel()" title="בקשות ממתינות" style="display:none">
           📋
           <span class="notif-bell-badge hidden" id="pendingReqBadge"></span>
