@@ -4800,6 +4800,155 @@ async function mgmtRemoveSubject(name) {
 }
 
 // ════════════════════════════════════════
+//  TAB SETTINGS PANELS
+// ════════════════════════════════════════
+
+// ── Grocery Settings ─────────────────────
+function openGrocerySettings()  { renderGroceryCats(); el('grocerySettingsPanel').classList.remove('hidden'); }
+function closeGrocerySettings() { el('grocerySettingsPanel').classList.add('hidden'); }
+
+function renderGroceryCats() {
+  const cats = getGroceryCats();
+  el('gsCatList').innerHTML = cats.length ? cats.map((c, i) => `
+    <div>
+      <div class="mgmt-item-row">
+        <span style="font-size:22px;width:28px;text-align:center;flex-shrink:0">${esc(c.emoji||'🛒')}</span>
+        <div class="mgmt-item-label">${esc(c.name)}</div>
+        <button class="mgmt-icon-btn purple" onclick="gsToggleCatEdit(${i})" title="ערוך">✏️</button>
+        <button class="mgmt-icon-btn red" onclick="gsRemoveCat('${esc(c.name)}')">🗑</button>
+      </div>
+      <div class="mgmt-edit-panel" id="gsCatPanel_${i}">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <input class="mgmt-input mgmt-emoji-input" id="gsCatEmoji_${i}" value="${esc(c.emoji||'🛒')}" maxlength="4"
+            oninput="this.dataset.manual='1'" title="אימוג'י">
+          <input class="mgmt-input" id="gsCatName_${i}" value="${esc(c.name)}"
+            oninput="autoSuggestCatEmoji(this.value,'gsCatEmoji_${i}')"
+            onkeydown="if(event.key==='Enter')gsSaveCatEdit(${i},'${esc(c.name)}')">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="auth-btn-main" style="padding:8px 16px;width:auto" onclick="gsSaveCatEdit(${i},'${esc(c.name)}')">✓ שמור</button>
+          <button class="auth-btn-back" onclick="gsToggleCatEdit(${i})">ביטול</button>
+        </div>
+      </div>
+    </div>`).join('') : '<div class="empty" style="padding:8px 0">אין קטגוריות</div>';
+}
+
+function gsToggleCatEdit(i) {
+  const panel = el(`gsCatPanel_${i}`);
+  const opening = !panel.classList.contains('open');
+  getGroceryCats().forEach((_, j) => { if (j !== i) el(`gsCatPanel_${j}`)?.classList.remove('open'); });
+  panel.classList.toggle('open', opening);
+  if (opening) el(`gsCatName_${i}`)?.focus();
+}
+
+async function gsSaveCatEdit(i, originalName) {
+  const newName  = el(`gsCatName_${i}`).value.trim();
+  const newEmoji = el(`gsCatEmoji_${i}`).value.trim() || suggestCatEmoji(newName) || '🛒';
+  if (!newName) return;
+  const cats = getGroceryCats().map((c, ci) => ci === i ? { name: newName, emoji: newEmoji } : c);
+  if (familyData) familyData.groceryCategories = cats;
+  if (newName !== originalName) {
+    S.grocery      = S.grocery.map(g      => g.category === originalName ? { ...g,  category: newName } : g);
+    S.groceryPool  = S.groceryPool.map(p  => p.category === originalName ? { ...p,  category: newName } : p);
+    S.shoppingList = S.shoppingList.map(x => x.category === originalName ? { ...x,  category: newName } : x);
+    S.inCart       = S.inCart.map(x       => x.category === originalName ? { ...x,  category: newName } : x);
+    await fbDb.collection('families').doc(S.uid).update({
+      groceryCategories: cats, grocery: S.grocery,
+      groceryPool: S.groceryPool, shoppingList: S.shoppingList, inCart: S.inCart,
+    });
+  } else {
+    await fbDb.collection('families').doc(S.uid).update({ groceryCategories: cats });
+  }
+  el(`gsCatPanel_${i}`).classList.remove('open');
+  renderGroceryCats(); renderMgmtCats(); renderStatic(); renderSupermarket();
+}
+
+async function gsAddCat() {
+  const name    = el('gsNewCatName').value.trim();
+  const emojiEl = el('gsNewCatEmoji');
+  const emoji   = emojiEl.value.trim() || suggestCatEmoji(name) || '🛒';
+  if (!name) { el('gsNewCatName').focus(); return; }
+  const cats = [...getGroceryCats(), { name, emoji }];
+  if (familyData) familyData.groceryCategories = cats;
+  await fbDb.collection('families').doc(S.uid).update({ groceryCategories: cats });
+  el('gsNewCatName').value = '';
+  emojiEl.value = ''; emojiEl.placeholder = '🛒'; delete emojiEl.dataset.manual;
+  renderGroceryCats(); renderMgmtCats(); renderStatic();
+}
+
+async function gsRemoveCat(name) {
+  const cats = getGroceryCats().filter(c => c.name !== name);
+  if (familyData) familyData.groceryCategories = cats;
+  await fbDb.collection('families').doc(S.uid).update({ groceryCategories: cats });
+  renderGroceryCats(); renderMgmtCats(); renderStatic(); renderSupermarket();
+}
+
+// ── Homework Settings ─────────────────────
+function openHomeworkSettings()  { renderHomeworkSettingsSubs(); el('homeworkSettingsPanel').classList.remove('hidden'); }
+function closeHomeworkSettings() { el('homeworkSettingsPanel').classList.add('hidden'); }
+
+function renderHomeworkSettingsSubs() {
+  const subs = getSubjects();
+  el('hsSubjectList').innerHTML = subs.length ? subs.map((s, i) => `
+    <div>
+      <div class="mgmt-item-row">
+        <span class="badge" style="${subjectBadgeStyle(s.name)};flex-shrink:0">${esc(s.nameHe || s.name)}</span>
+        <div class="mgmt-item-label"></div>
+        <button class="mgmt-icon-btn purple" onclick="hsToggleSubjectEdit(${i})" title="ערוך">✏️</button>
+        <button class="mgmt-icon-btn red" onclick="hsRemoveSubject('${esc(s.name)}')">🗑</button>
+      </div>
+      <div class="mgmt-edit-panel" id="hsSubjectPanel_${i}">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <input class="mgmt-input" id="hsSubjectNameHe_${i}" value="${esc(s.nameHe || s.name)}" placeholder="שם הנושא"
+            onkeydown="if(event.key==='Enter')hsSaveSubjectEdit(${i},'${esc(s.name)}')">
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="auth-btn-main" style="padding:8px 16px;width:auto" onclick="hsSaveSubjectEdit(${i},'${esc(s.name)}')">✓ שמור</button>
+          <button class="auth-btn-back" onclick="hsToggleSubjectEdit(${i})">ביטול</button>
+        </div>
+      </div>
+    </div>`).join('') : '<div class="empty" style="padding:8px 0">אין נושאים</div>';
+}
+
+function hsToggleSubjectEdit(i) {
+  const panel = el(`hsSubjectPanel_${i}`);
+  const opening = !panel.classList.contains('open');
+  getSubjects().forEach((_, j) => { if (j !== i) el(`hsSubjectPanel_${j}`)?.classList.remove('open'); });
+  panel.classList.toggle('open', opening);
+  if (opening) el(`hsSubjectNameHe_${i}`)?.focus();
+}
+
+async function hsSaveSubjectEdit(i, originalName) {
+  const newNameHe = el(`hsSubjectNameHe_${i}`).value.trim();
+  if (!newNameHe) return;
+  const subs = getSubjects().map((s, si) => si === i ? { ...s, nameHe: newNameHe } : s);
+  if (familyData) familyData.subjects = subs;
+  await fbDb.collection('families').doc(S.uid).update({ subjects: subs });
+  el(`hsSubjectPanel_${i}`).classList.remove('open');
+  renderHomeworkSettingsSubs(); renderMgmtSubjects(); renderStatic(); renderHomework();
+}
+
+async function hsAddSubject() {
+  const nameHe = el('hsNewSubjectNameHe').value.trim();
+  if (!nameHe) { el('hsNewSubjectNameHe').focus(); return; }
+  const subs = getSubjects();
+  const { bg, color } = SUBJECT_COLOR_POOL[subs.length % SUBJECT_COLOR_POOL.length];
+  const entry = { name: nameHe, nameHe, bg, color };
+  const updated = [...subs, entry];
+  if (familyData) familyData.subjects = updated;
+  await fbDb.collection('families').doc(S.uid).update({ subjects: updated });
+  el('hsNewSubjectNameHe').value = '';
+  renderHomeworkSettingsSubs(); renderMgmtSubjects(); renderStatic();
+}
+
+async function hsRemoveSubject(name) {
+  const updated = getSubjects().filter(s => s.name !== name);
+  if (familyData) familyData.subjects = updated;
+  await fbDb.collection('families').doc(S.uid).update({ subjects: updated });
+  renderHomeworkSettingsSubs(); renderMgmtSubjects(); renderStatic(); renderHomework();
+}
+
+// ════════════════════════════════════════
 //  PHOTO MANAGEMENT
 // ════════════════════════════════════════
 let _photoTarget = null;
@@ -5121,21 +5270,13 @@ function renderHeader() {
 
 const _TAB_SETTINGS = {
   home:     () => openHomeEditor(),
-  grocery:  () => openMgmtSection('mgmtCatList'),
-  homework: () => openMgmtSection('mgmtSubjectList'),
+  grocery:  () => openGrocerySettings(),
+  homework: () => openHomeworkSettings(),
 };
 
 function openTabSettings() {
   const fn = _TAB_SETTINGS[S.tab];
   if (fn) fn();
-}
-
-function openMgmtSection(targetId) {
-  openMgmt();
-  setTimeout(() => {
-    const target = el(targetId);
-    target?.closest('.card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 120);
 }
 
 function _updateTabCog() {
