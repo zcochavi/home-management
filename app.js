@@ -41,7 +41,7 @@ const STRINGS = {
     parentRole:'הורה', kidRole:'ילד/ה', roleAdmin:'🔑 מנהל', roleParent:'הורה', roleKid:'ילד/ה',
     greetMorning:'בוקר טוב', greetAfternoon:'צהריים טובים', greetEvening:'ערב טוב',
     switchUser:'החלף משתמש', langToggle:'EN',
-    tabs:['בית','משימות','סופרמרקט','שיעורים','לוח שנה','קהילה','דשבורד'],
+    tabs:['בית','משימות','סופרמרקט','שיעורים','לוח שנה','קהילה','רשימות','דשבורד'],
     all:'כולם',
     todayChores:'⚡ משימות היום',
     personChores: n => `⚡ משימות של ${n}`,
@@ -477,7 +477,7 @@ function _choreSortScore(c) {
 // ════════════════════════════════════════
 let S = {
   user:null, uid:null, tab:'home', filter:'All', child:null,
-  chores:[], grocery:[], homework:[], stars:{}, events:[],
+  chores:[], grocery:[], homework:[], stars:{}, events:[], lists:[],
   groceryPool:[], shoppingList:[], inCart:[], shoppingHistory:[],
   calYear:_now.getFullYear(), calMonth:_now.getMonth(), calSelected:today,
   lockedMember: null,
@@ -1586,6 +1586,7 @@ async function authSignOut() {
   stopNotifBanners();
   await stopPresence();
   unsubscribeAllComm(); _commCache = {};
+  unsubscribeLists();
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
   _webtopHomework = []; _webtopUpdatedAt = null;
   const firebaseUid = fbAuth?.currentUser?.uid;
@@ -1778,6 +1779,7 @@ function showNotifToast(title, body) {
 function subscribeToFamily(uid) {
   if (!_evtCfgLoaded) { _evtCfgLoaded = true; loadEventTypesCfg(); }
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
+  subscribeLists(uid);
   fbUnsubscribe = fbDb.collection('families').doc(uid).onSnapshot(snap => {
     if (!snap.exists) {
       // Family doc missing — mapping is stale, sign out and return to auth
@@ -2276,7 +2278,7 @@ function renderAll() {
   const sy = window.scrollY;
   renderTabBar(); renderStatic(); renderHeader(); renderHome();
   renderChores(); renderSupermarket(); renderHomework();
-  renderCalendar(); renderGCalBar(); applyRoleUI();
+  renderCalendar(); renderGCalBar(); renderLists(); applyRoleUI();
   if (S.tab === 'community') renderCommunity();
   // Restore scroll position — Firestore onSnapshot re-renders reset it on mobile
   if (sy > 0) window.scrollTo(0, sy);
@@ -5998,6 +6000,24 @@ function _alert(msg, opts = {}) {
   return new Promise(res => { _cmodalResolve = res; });
 }
 
+function _promptText(label, defaultValue = '') {
+  const ov = _cmodalEl();
+  ov.innerHTML = `<div class="cmodal-box" onclick="event.stopPropagation()">
+    <div class="cmodal-msg">${esc(label)}</div>
+    <input id="_cmodalInput" class="add-input" type="text" value="${esc(defaultValue)}" style="margin:8px 0 4px;font-size:15px;width:100%;box-sizing:border-box"
+      onkeydown="if(event.key==='Enter'){const v=this.value.trim();if(v)_cmodalClose(v);}if(event.key==='Escape')_cmodalClose(null)">
+    <div class="cmodal-btns">
+      <button class="cmodal-btn cmodal-ok" onclick="const v=document.getElementById('_cmodalInput').value.trim();if(v)_cmodalClose(v)">שמור</button>
+      <button class="cmodal-btn cmodal-cancel" onclick="_cmodalClose(null)">ביטול</button>
+    </div>
+  </div>`;
+  requestAnimationFrame(() => {
+    ov.classList.add('cmodal-visible');
+    setTimeout(() => { const inp = document.getElementById('_cmodalInput'); if (inp) { inp.focus(); inp.select(); } }, 80);
+  });
+  return new Promise(res => { _cmodalResolve = res; });
+}
+
 function _showSnackbar(msg, undoFn) {
   let snack = el('appSnackbar');
   if (!snack) {
@@ -7680,6 +7700,7 @@ const ALL_TABS = [
   { id:'homework',  icon:'📚', adminOnly: false },
   { id:'calendar',  icon:'📅', adminOnly: false },
   { id:'community', icon:'🏫', adminOnly: false },
+  { id:'lists',     icon:'📋', adminOnly: false },
   { id:'analytics', icon:'📊', adminOnly: true },
 ];
 
@@ -7692,6 +7713,7 @@ const TAB_ICONS = {
   calendar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
   community: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>`,
   analytics: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="3" y1="20" x2="21" y2="20"/></svg>`,
+  lists: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>`,
   more: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>`,
 };
 
@@ -7704,6 +7726,7 @@ const TAB_ICONS_FILLED = {
   calendar:  `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V8h16v13z"/></svg>`,
   community: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>`,
   analytics: `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z"/></svg>`,
+  lists:     `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M5 3a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H5zm2 5h10a1 1 0 010 2H7a1 1 0 010-2zm0 4h10a1 1 0 010 2H7a1 1 0 010-2zm0 4h6a1 1 0 010 2H7a1 1 0 010-2z"/></svg>`,
 };
 
 function tabIcon(id, active = false) {
@@ -7728,7 +7751,7 @@ function updateTabArrows() {
   prev.classList.toggle('tab-arrow-hidden', sl <= 4);
   next.classList.toggle('tab-arrow-hidden', sl >= max - 4);
 }
-const TAB_IDX = { home:0, chores:1, grocery:2, homework:3, calendar:4, community:5, analytics:6 };
+const TAB_IDX = { home:0, chores:1, grocery:2, homework:3, calendar:4, community:5, lists:6, analytics:7 };
 function tabLabel(id) { return t('tabs')[TAB_IDX[id]] || id; }
 
 function getActiveTabs() {
@@ -7848,6 +7871,8 @@ function switchTab(tab) {
   if (tab === 'chores') renderChores();
   if (tab === 'community') renderCommunity();
   if (tab === 'analytics') renderAnalytics();
+  if (tab === 'lists') renderLists();
+  const _lf = el('listsFab'); if (_lf) _lf.style.display = tab === 'lists' ? '' : 'none';
   if (tab === 'homework' && getKids().includes(S.filter)) S.child = S.filter;
   if (_tutDefs()[tab]) setTimeout(() => _tutMaybeTrigger(tab), 700);
   // Stop presence auto-refresh when leaving analytics
@@ -8867,6 +8892,322 @@ function setFilter(name){
 }
 
 // ════════════════════════════════════════
+//  EXTERNAL SHARING
+// ════════════════════════════════════════
+// IMPORTANT — add these Firestore security rules in Firebase console:
+// match /publicShares/{token} {
+//   allow read: if true;
+//   allow create: if request.auth != null;
+//   allow update: if resource.data.mode == 'edit'; // guests toggle done state only
+//   allow delete: if request.auth != null && request.auth.uid == resource.data.familyUid;
+// }
+
+function _copyShareLink(inputId) {
+  const inp = document.getElementById(inputId);
+  if (!inp) return;
+  inp.select();
+  inp.setSelectionRange(0, 9999);
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(inp.value)
+      .then(() => _showSnackbar('הקישור הועתק 📋'))
+      .catch(() => _showSnackbar('סמן את הטקסט והעתק ידנית'));
+  } else {
+    try { document.execCommand('copy'); _showSnackbar('הקישור הועתק 📋'); }
+    catch(_) { _showSnackbar('סמן את הטקסט והעתק ידנית'); }
+  }
+}
+
+function _nameHue(name) {
+  let h = 0;
+  for (let i = 0; i < (name || '').length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
+  return h % 360;
+}
+function _checkerBadge(name) {
+  if (!name) return '';
+  const hue = _nameHue(name);
+  return `<span class="list-item-checker" style="background:hsl(${hue},60%,88%);color:hsl(${hue},50%,28%)">${esc(name)}</span>`;
+}
+
+function _genShareToken() {
+  try { return crypto.randomUUID().replace(/-/g, ''); } catch(_) {}
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2,'0')).join('');
+}
+
+function listOpenShareMenu(listId) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  const shares = list.publicShares || [];
+  const baseUrl = location.origin + location.pathname;
+
+  let activeHtml = '';
+  if (shares.length) {
+    activeHtml = `<div class="share-active-section">
+      <div class="share-section-label">קישורים פעילים</div>
+      ${shares.map((s, i) => {
+        const url = `${baseUrl}?share=${s.token}`;
+        const modeLabel = s.mode === 'edit' ? '🤝 משותף' : s.mode === 'self' ? '✅ אישי' : '👁 צפייה';
+        return `<div style="margin-bottom:10px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <span class="share-link-badge">${modeLabel}</span>
+            <button class="share-link-copy-btn" onclick="_copyShareLink('share-url-${i}')">📋 העתק</button>
+            <button class="share-link-revoke-btn" onclick="listRevokeShare('${listId}','${s.token}')">בטל</button>
+          </div>
+          <input id="share-url-${i}" class="share-url-input" type="text" value="${url}" readonly
+            onclick="this.select()" dir="ltr">
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  const ov = _cmodalEl();
+  ov.innerHTML = `<div class="cmodal-box share-modal" onclick="event.stopPropagation()">
+    <div class="share-modal-title">🔗 שתף רשימה</div>
+    <div class="share-modal-listname">${esc(list.name)}</div>
+    ${activeHtml}
+    <div class="share-section-label">צור קישור חדש</div>
+    <div class="share-mode-col">
+      <label class="share-mode-opt"><input type="radio" name="shareMode" value="readonly" checked>
+        <div><div class="share-mode-title">👁 צפייה בלבד</div><div class="share-mode-desc">קריאה בלבד, ללא אפשרות סימון</div></div>
+      </label>
+      ${list.type !== 'recipe' ? `
+      <label class="share-mode-opt"><input type="radio" name="shareMode" value="self">
+        <div><div class="share-mode-title">✅ סימון אישי</div><div class="share-mode-desc">כל אחד מסמן לעצמו — הסימונים לא משותפים</div></div>
+      </label>
+      <label class="share-mode-opt"><input type="radio" name="shareMode" value="edit">
+        <div><div class="share-mode-title">🤝 סימון משותף</div><div class="share-mode-desc">הסימונים גלויים לכל מי שיש לו את הקישור</div></div>
+      </label>` : ''}
+    </div>
+    <div class="cmodal-btns">
+      <button class="cmodal-btn cmodal-ok" onclick="listCreateShare('${listId}')">צור קישור</button>
+      <button class="cmodal-btn cmodal-cancel" onclick="_cmodalClose(false)">סגור</button>
+    </div>
+  </div>`;
+  requestAnimationFrame(() => ov.classList.add('cmodal-visible'));
+  return new Promise(res => { _cmodalResolve = res; });
+}
+
+async function listCreateShare(listId) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list || !S.uid) return;
+  const mode = document.querySelector('input[name="shareMode"]:checked')?.value || 'readonly';
+  const token = _genShareToken();
+  const rawItems = JSON.parse(JSON.stringify(list.items || []));
+  const shareItems = mode === 'readonly'
+    ? rawItems.map(({ done, checkedBy, ...rest }) => rest)
+    : rawItems;
+  const shareDoc = {
+    familyUid: S.uid, listId, mode,
+    type: list.type, name: list.name,
+    items: shareItems,
+    meta:  JSON.parse(JSON.stringify(list.meta  || {})),
+    ...(list.type === 'recipe' && list.steps ? { steps: JSON.parse(JSON.stringify(list.steps)) } : {}),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  try {
+    await fbDb.collection('publicShares').doc(token).set(shareDoc);
+    const publicShares = [...(list.publicShares || []), { token, mode }];
+    await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+      .update({ publicShares, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    _cmodalClose(false);
+    setTimeout(() => listOpenShareMenu(listId), 100);
+  } catch(e) {
+    console.error('[share] create failed:', e);
+    _showSnackbar('שגיאה ביצירת הקישור');
+  }
+}
+
+async function listRevokeShare(listId, token) {
+  _cmodalClose(false);
+  const ok = await _confirm('לבטל את הקישור?\nהגישה תחסם מיד.', { danger: true, okLabel: 'בטל קישור' });
+  if (!ok) return;
+  try {
+    await fbDb.collection('publicShares').doc(token).delete();
+    const list = (S.lists || []).find(l => l.id === listId);
+    if (list) {
+      const publicShares = (list.publicShares || []).filter(s => s.token !== token);
+      await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+        .update({ publicShares, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    }
+    _showSnackbar('הקישור בוטל');
+  } catch(e) {
+    console.error('[share] revoke failed:', e);
+    _showSnackbar('שגיאה בביטול הקישור');
+  }
+}
+
+// ── Guest View ──────────────────────────
+let _guestShare = null; // live snapshot of the current guest share doc
+
+function _guestSelfKey(token)  { return `familyhub_self_${token}`; }
+function _guestNameKey(token)  { return `familyhub_guest_name_${token}`; }
+function _guestGetName(token)  { return localStorage.getItem(_guestNameKey(token)) || ''; }
+
+function _guestSelfChecks(token) {
+  try { return JSON.parse(localStorage.getItem(_guestSelfKey(token)) || '{}'); } catch(_) { return {}; }
+}
+function _guestSelfToggle(token, itemId) {
+  const checks = _guestSelfChecks(token);
+  checks[String(itemId)] = !checks[String(itemId)];
+  localStorage.setItem(_guestSelfKey(token), JSON.stringify(checks));
+}
+
+function _guestSubmitName(token) {
+  const inp = el('guestNameInput');
+  const name = inp?.value.trim();
+  if (!name) { inp?.focus(); inp?.classList.add('input-shake'); setTimeout(() => inp?.classList.remove('input-shake'), 500); return; }
+  localStorage.setItem(_guestNameKey(token), name);
+  if (_guestShare) _renderGuestShare(token, _guestShare);
+}
+
+function _showGuestPanel(token) {
+  const panel = el('guestPanel');
+  if (panel) panel.classList.remove('hidden');
+  const cont = el('guestContent');
+  if (cont) cont.innerHTML = `<div style="text-align:center;padding:40px;color:var(--gray-400)">⏳ טוען...</div>`;
+  fbDb.collection('publicShares').doc(token).onSnapshot(snap => {
+    if (!snap.exists) {
+      const nameEl = el('guestListName'); if (nameEl) nameEl.textContent = '';
+      if (cont) cont.innerHTML = `<div class="guest-error">
+        <div style="font-size:48px;margin-bottom:12px">🔗</div>
+        <div style="font-size:18px;font-weight:800;color:var(--gray-800);margin-bottom:8px">קישור לא תקין</div>
+        <div style="font-size:14px;color:var(--gray-400)">הקישור הוסר על ידי הבעלים</div>
+      </div>`;
+      return;
+    }
+    _guestShare = { id: snap.id, ...snap.data() };
+    _renderGuestShare(token, _guestShare);
+  }, err => {
+    console.error('[guest]', err);
+    if (cont) cont.innerHTML = `<div class="guest-error"><div style="font-size:48px">⚠️</div><div style="font-size:18px;font-weight:800;margin-top:12px">שגיאת טעינה</div></div>`;
+  });
+}
+
+function _renderGuestShare(token, share) {
+  const nameEl = el('guestListName');
+  const modeEl = el('guestModeBadge');
+  const typeEmoji = { packing:'🎒', recipe:'👨‍🍳', event:'🎉' }[share.type] || '📋';
+  if (nameEl) nameEl.innerHTML = `${typeEmoji} ${esc(share.name)}`;
+  if (modeEl) {
+    const modeInfo = { edit:'🤝 משותף', self:'✅ סימון אישי', readonly:'👁 צפייה בלבד' };
+    modeEl.textContent = modeInfo[share.mode] || modeInfo.readonly;
+    modeEl.className = `guest-mode-badge${share.mode === 'edit' ? ' guest-mode-edit' : share.mode === 'self' ? ' guest-mode-self' : ''}`;
+  }
+  const cont = el('guestContent');
+  if (!cont) return;
+
+  const isSelf = share.mode === 'self';
+  const isEdit = share.mode === 'edit';
+  const canCheck = isSelf || isEdit;
+
+  // Joint mode: require a name before allowing any interaction
+  if (isEdit && !_guestGetName(token)) {
+    cont.innerHTML = `<div class="guest-name-gate">
+      <div class="guest-name-gate-icon">🤝</div>
+      <div class="guest-name-gate-title">רשימה משותפת</div>
+      <div class="guest-name-gate-sub">הזן את שמך — הוא יופיע ליד הפריטים שתסמן</div>
+      <input class="guest-name-input" id="guestNameInput" type="text" placeholder="השם שלך..." maxlength="30" dir="rtl"
+        onkeydown="if(event.key==='Enter')_guestSubmitName('${token}')">
+      <button class="guest-name-btn" onclick="_guestSubmitName('${token}')">המשך ›</button>
+    </div>`;
+    setTimeout(() => el('guestNameInput')?.focus(), 80);
+    return;
+  }
+
+  const guestName = isEdit ? _guestGetName(token) : '';
+  const userNameEl = el('guestUserName');
+  if (userNameEl) {
+    if (guestName) {
+      const hue = _nameHue(guestName);
+      userNameEl.textContent = guestName;
+      userNameEl.style.cssText = `background:hsl(${hue},60%,88%);color:hsl(${hue},50%,28%)`;
+      userNameEl.style.display = '';
+    } else {
+      userNameEl.style.display = 'none';
+    }
+  }
+  const selfChecks = isSelf ? _guestSelfChecks(token) : {};
+  const chkSvg = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="2.5 8 6 11.5 13.5 4.5"/></svg>`;
+
+  function itemDone(it) {
+    if (isSelf) return !!selfChecks[String(it.id)];
+    return !!it.done;
+  }
+  function checkerName(it) {
+    return (isEdit && it.done && it.checkedBy) ? it.checkedBy : null;
+  }
+
+  let h = '';
+  if (share.meta?.destination) h += `<div class="list-meta-chip">✈️ ${esc(share.meta.destination)}</div>`;
+  if (share.meta?.tripDate)    h += `<div class="list-meta-chip">📅 ${fmtDate(share.meta.tripDate)}</div>`;
+  if (share.meta?.eventDate)   h += `<div class="list-meta-chip">📅 ${fmtDate(share.meta.eventDate)}</div>`;
+  if (share.meta?.location)    h += `<div class="list-meta-chip">📍 ${esc(share.meta.location)}</div>`;
+  if (share.meta?.servings)    h += `<div class="list-meta-chip">👥 ${share.meta.servings} מנות</div>`;
+
+  if (share.type === 'recipe') {
+    const items = share.items || [], steps = share.steps || [];
+    h += `<div class="card list-items-card"><div class="list-section-hdr">🧂 מצרכים</div>
+      ${items.length ? items.map(it => `<div class="list-item">
+        <div style="width:28px;flex-shrink:0"></div>
+        <span class="list-item-name">${esc(it.name)}</span>
+        ${it.amount ? `<span class="list-item-qty">${esc(it.amount)}${it.unit?' '+esc(it.unit):''}</span>` : ''}
+      </div>`).join('') : `<div class="list-empty-hint">אין מצרכים</div>`}
+    </div>`;
+    if (steps.length) h += `<div class="card list-items-card"><div class="list-section-hdr">📝 שלבי הכנה</div>
+      ${steps.map((st, i) => `<div class="list-step">
+        <div class="list-step-num">${i+1}</div>
+        <span class="list-step-text">${esc(st.text)}</span>
+      </div>`).join('')}
+    </div>`;
+  } else {
+    const items = share.items || [];
+    const undone = items.filter(it => !itemDone(it));
+    const done   = items.filter(it =>  itemDone(it));
+    const checkBtn = (it, isDone) => canCheck
+      ? `<button class="list-check-btn${isDone?' checked':''}" onclick="guestToggleItem('${token}','${it.id}')">${isDone?chkSvg:''}</button>`
+      : `<div style="width:28px;flex-shrink:0"></div>`;
+    h += `<div class="card list-items-card">
+      ${undone.length ? undone.map(it => `<div class="list-item">
+        ${checkBtn(it, false)}
+        <span class="list-item-name">${esc(it.name)}</span>
+        ${it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
+      </div>`).join('') : `<div class="list-empty-hint">הרשימה ריקה</div>`}
+    </div>`;
+    if (done.length) h += `<div class="card list-items-card" style="margin-top:8px">
+      <div class="list-section-hdr">✓ ${done.length} הושלם</div>
+      ${done.map(it => `<div class="list-item list-item-done">
+        ${checkBtn(it, true)}
+        <span class="list-item-name">${esc(it.name)}</span>
+        ${it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
+        ${_checkerBadge(checkerName(it))}
+      </div>`).join('')}
+    </div>`;
+  }
+  cont.innerHTML = h;
+}
+
+async function guestToggleItem(token, itemId) {
+  if (!_guestShare) return;
+  if (_guestShare.mode === 'self') {
+    _guestSelfToggle(token, itemId);
+    _renderGuestShare(token, _guestShare);
+    return;
+  }
+  if (_guestShare.mode !== 'edit') return;
+  const guestName = _guestGetName(token);
+  const docRef = fbDb.collection('publicShares').doc(token);
+  try {
+    const items = (_guestShare.items || []).map(i => {
+      if (String(i.id) !== String(itemId)) return i;
+      const nowDone = !i.done;
+      return { ...i, done: nowDone, checkedBy: nowDone ? guestName : null };
+    });
+    await docRef.update({ items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  } catch(e) { console.error('[guest] toggle failed:', e); }
+}
+
+
+// ════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════
 if (!FB_CONFIGURED) {
@@ -8874,27 +9215,34 @@ if (!FB_CONFIGURED) {
   el('loadingScreen').querySelector('.loading-txt').textContent = '⚠ Firebase לא מוגדר';
   el('loadingScreen').querySelector('.loading-emoji').textContent = '⚙️';
 } else {
-  fbAuth.onAuthStateChanged(user => {
-    if (_registering || _joining) return;
-    if (user) {
-      const familyUid = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
-      S.uid = familyUid;
-      S.lockedMember = localStorage.getItem('familyhub_locked_member_' + user.uid) || null;
-      el('authScreen').classList.add('hidden');
-      subscribeToFamily(familyUid);
-    } else {
-      S.uid = null; familyData = null;
-      el('loadingScreen').classList.add('hidden');
-      el('authScreen').classList.remove('hidden');
-      const joinParam = new URLSearchParams(location.search).get('join');
-      if (joinParam) {
-        setAuthMode('join');
-        el('joinCode').value = joinParam.toUpperCase();
+  const _guestShareToken = new URLSearchParams(location.search).get('share');
+  if (_guestShareToken) {
+    // Guest view — bypass auth entirely
+    el('loadingScreen').classList.add('hidden');
+    _showGuestPanel(_guestShareToken);
+  } else {
+    fbAuth.onAuthStateChanged(user => {
+      if (_registering || _joining) return;
+      if (user) {
+        const familyUid = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
+        S.uid = familyUid;
+        S.lockedMember = localStorage.getItem('familyhub_locked_member_' + user.uid) || null;
+        el('authScreen').classList.add('hidden');
+        subscribeToFamily(familyUid);
       } else {
-        setAuthMode('signin');
+        S.uid = null; familyData = null;
+        el('loadingScreen').classList.add('hidden');
+        el('authScreen').classList.remove('hidden');
+        const joinParam = new URLSearchParams(location.search).get('join');
+        if (joinParam) {
+          setAuthMode('join');
+          el('joinCode').value = joinParam.toUpperCase();
+        } else {
+          setAuthMode('signin');
+        }
       }
-    }
-  });
+    });
+  }
 }
 
 // ════════════════════════════════════════
@@ -9055,4 +9403,983 @@ function _tutEnd() {
   const def = _tutDefs()[_tutTabKey];
   if (def?.onEnd) def.onEnd();
   _tutSteps = []; _tutIdx = 0; _tutTabKey = null;
+}
+
+// ════════════════════════════════════════
+//  LISTS TAB
+// ════════════════════════════════════════
+let _listsUnsub = null;
+let _listsSubscribedUid = null;
+let _shareListUnsubs = {}; // token → unsub fn
+
+function subscribeLists(uid) {
+  if (_listsSubscribedUid === uid) return;
+  if (_listsUnsub) { _listsUnsub(); _listsUnsub = null; }
+  _listsSubscribedUid = uid;
+  _listsUnsub = fbDb.collection('families').doc(uid).collection('lists')
+    .orderBy('createdAt', 'desc')
+    .onSnapshot(snap => {
+      S.lists = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      _autoArchiveCheck(uid, S.lists);
+      _subscribeActiveShares(S.lists);
+      if (S.tab === 'lists') renderLists();
+      if (_listDetailId) _renderListDetail();
+    }, err => { console.error('[lists] subscription error:', err); });
+}
+
+function unsubscribeLists() {
+  if (_listsUnsub) { _listsUnsub(); _listsUnsub = null; }
+  _listsSubscribedUid = null;
+  S.lists = [];
+  Object.values(_shareListUnsubs).forEach(fn => fn());
+  _shareListUnsubs = {};
+}
+
+// Subscribe to active edit-mode share docs so guest checks reflect in the owner's app.
+// Uses token as key so we never re-subscribe to an already-live doc — re-subscribing
+// would immediately fire with the current (stale) share state and undo the owner's checks.
+function _subscribeActiveShares(lists) {
+  const wantedTokens = new Set();
+  for (const list of lists) {
+    for (const share of (list.publicShares || []).filter(s => s.mode === 'edit')) {
+      wantedTokens.add(share.token);
+    }
+  }
+  // Unsubscribe tokens no longer in any list
+  for (const token of Object.keys(_shareListUnsubs)) {
+    if (!wantedTokens.has(token)) { _shareListUnsubs[token](); delete _shareListUnsubs[token]; }
+  }
+  // Subscribe only to tokens not yet subscribed
+  for (const list of lists) {
+    for (const share of (list.publicShares || []).filter(s => s.mode === 'edit')) {
+      if (_shareListUnsubs[share.token]) continue;
+      const listId = list.id;
+      _shareListUnsubs[share.token] = fbDb.collection('publicShares').doc(share.token).onSnapshot(snap => {
+        if (!snap.exists) return;
+        const shareItems = snap.data().items || [];
+        const targetList = (S.lists || []).find(l => l.id === listId);
+        if (!targetList) return;
+        const shareMap = Object.fromEntries(shareItems.map(i => [String(i.id), i]));
+        let changed = false;
+        targetList.items = (targetList.items || []).map(it => {
+          const si = shareMap[String(it.id)];
+          if (!si) return it;
+          const d = !!si.done, cb = si.checkedBy || null;
+          if (d !== !!it.done || cb !== (it.checkedBy || null)) {
+            changed = true;
+            return { ...it, done: d, checkedBy: cb };
+          }
+          return it;
+        });
+        if (changed) {
+          if (S.tab === 'lists') renderLists();
+          if (_listDetailId === listId) _renderListDetail();
+        }
+      }, err => { console.warn('[share-sync]', err); });
+    }
+  }
+}
+
+function _autoArchiveCheck(uid, lists) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const toArchive = lists.filter(l => {
+    if (l.archived) return false;
+    const d = l.meta?.tripDate || l.meta?.eventDate;
+    return d && new Date(d) < today;
+  });
+  if (!toArchive.length) return;
+  const batch = fbDb.batch();
+  toArchive.forEach(l => batch.update(
+    fbDb.collection('families').doc(uid).collection('lists').doc(l.id),
+    { archived: true, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }
+  ));
+  batch.commit().catch(e => console.error('[lists] auto-archive failed:', e));
+}
+
+// ── Render ─────────────────────────────
+let _listsQuery = '';
+
+function renderLists() {
+  const cont = el('listsContent');
+  if (!cont) return;
+  const fab = el('listsFab'); if (fab) fab.style.display = S.tab === 'lists' ? '' : 'none';
+  const lists = S.lists || [];
+
+  if (!lists.length) {
+    cont.innerHTML = `
+      <div class="lists-empty">
+        <div class="lists-empty-icon">📋</div>
+        <div class="lists-empty-title">אין רשימות עדיין</div>
+        <div class="lists-empty-sub">צור רשימה חדשה — אריזה, מתכון, תכנון אירוע...</div>
+        <button class="btn" style="margin-top:16px" onclick="openListWizard()">+ רשימה חדשה</button>
+      </div>`;
+    return;
+  }
+
+  const q = _listsQuery.trim().toLowerCase();
+  const searchBar = `<div class="lists-search-wrap">
+    <input class="lists-search-input" id="listsSearch" type="text" placeholder="🔍 חיפוש ברשימות..." value="${esc(_listsQuery)}"
+      oninput="_listsQuery=this.value;renderLists()" autocomplete="off" autocorrect="off" autocapitalize="off">
+    ${q ? `<button class="lists-search-clear" onclick="_listsQuery='';renderLists()">×</button>` : ''}
+  </div>`;
+
+  const visible = lists.filter(_listVisible);
+  const active   = visible.filter(l => !l.archived);
+  const archived = visible.filter(l =>  l.archived);
+  let html = '';
+
+  if (q) {
+    const pool = visible; // search across all incl. archived
+    const results = pool
+      .map(l => ({ l, m: _listsSearchMatch(l, q) }))
+      .filter(({ m }) => m !== null);
+    if (!results.length) {
+      html = searchBar + `<div class="lists-empty" style="padding-top:32px">
+        <div class="lists-empty-icon">🔍</div>
+        <div class="lists-empty-title">לא נמצאו תוצאות</div>
+        <div class="lists-empty-sub">נסה מילת חיפוש אחרת</div>
+      </div>`;
+    } else {
+      html = searchBar + `<div class="lists-grid">${results.map(({ l, m }) => _renderListTile(l, m)).join('')}</div>`;
+    }
+  } else {
+    const TYPE_META = [
+      { id:'packing', label:'🎒 רשימות אריזה' },
+      { id:'recipe',  label:'👨‍🍳 מתכונים' },
+      { id:'event',   label:'🎉 תכנון אירועים' },
+    ];
+    TYPE_META.forEach(({ id, label }) => {
+      const typeLists = active.filter(l => l.type === id);
+      if (!typeLists.length) return;
+      html += `<div class="lists-section">
+        <div class="lists-section-title">${label}</div>
+        <div class="lists-grid">${typeLists.map(l => _renderListTile(l, null)).join('')}</div>
+      </div>`;
+    });
+    if (!html && active.length) html = `<div class="lists-grid">${active.map(l => _renderListTile(l, null)).join('')}</div>`;
+    if (archived.length) {
+      html += `<div class="lists-archive-section">
+        <div class="lists-archive-hdr" onclick="_toggleArchiveSection(this)">
+          <span>📦 ארכיון (${archived.length})</span>
+          <span class="lists-archive-chevron">›</span>
+        </div>
+        <div class="lists-archive-body">
+          <div class="lists-grid">${archived.map(l => _renderListTile(l, null)).join('')}</div>
+        </div>
+      </div>`;
+    }
+    html = searchBar + html;
+  }
+
+  const wasFocused = document.activeElement?.id === 'listsSearch';
+  const cursor = wasFocused ? document.activeElement.selectionStart : -1;
+  cont.innerHTML = html;
+  if (wasFocused || q) {
+    const sinp = el('listsSearch');
+    if (sinp) { sinp.focus(); if (cursor >= 0) sinp.setSelectionRange(cursor, cursor); }
+  }
+}
+
+function _listsSearchMatch(list, q) {
+  const inName = list.name.toLowerCase().includes(q);
+  const inMeta = [list.meta?.destination, list.meta?.location, list.meta?.eventDate, list.meta?.tripDate]
+    .some(v => v && String(v).toLowerCase().includes(q));
+  const matchItems = (list.items || []).filter(i => i.name?.toLowerCase().includes(q));
+  const matchSteps = (list.steps || []).filter(s => (s.text || s.name || '').toLowerCase().includes(q));
+  if (!inName && !inMeta && !matchItems.length && !matchSteps.length) return null;
+  const firstInside = matchItems[0]?.name || matchSteps[0]?.text || matchSteps[0]?.name || null;
+  return { byName: inName || inMeta, firstInside, count: matchItems.length + matchSteps.length };
+}
+
+function _toggleArchiveSection(hdr) {
+  const body = hdr.nextElementSibling;
+  const chevron = hdr.querySelector('.lists-archive-chevron');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  if (chevron) chevron.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function _listTileMenu(listId, btn) {
+  document.querySelector('.list-tile-popup')?.remove();
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  const archiveLabel = list.archived ? '📤 הוצא מארכיון' : '📦 העבר לארכיון';
+  const menu = document.createElement('div');
+  menu.className = 'list-tile-popup';
+  menu.innerHTML = `
+    <button class="list-tile-popup-item" onclick="listRename('${listId}');_closeTileMenu()">✏️ שנה שם</button>
+    <button class="list-tile-popup-item" onclick="_closeTileMenu();listOpenClone('${listId}')">📋 שכפל</button>
+    ${list.type === 'recipe' ? `<button class="list-tile-popup-item" onclick="listShowStats('${listId}');_closeTileMenu()">📊 סטטיסטיקות</button>` : ''}
+    <button class="list-tile-popup-item" onclick="_closeTileMenu();listOpenShareMenu('${listId}')">🔗 שתף</button>
+    <button class="list-tile-popup-item" onclick="listSetArchived('${listId}',${!list.archived});_closeTileMenu()">${archiveLabel}</button>
+  `;
+  document.body.appendChild(menu);
+  const rect = btn.getBoundingClientRect();
+  const menuW = 170;
+  let left = rect.right - menuW;
+  if (left < 8) left = 8;
+  menu.style.cssText = `top:${rect.bottom + 4}px;left:${left}px;min-width:${menuW}px`;
+  setTimeout(() => document.addEventListener('click', _closeTileMenu, { once: true }), 10);
+}
+
+function _closeTileMenu() { document.querySelector('.list-tile-popup')?.remove(); }
+
+async function listRename(listId) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  const newName = await _promptText('שנה שם רשימה', list.name);
+  if (!newName || newName === list.name) return;
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ name: newName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .catch(e => console.error('[lists] rename failed:', e));
+}
+
+async function listSetArchived(listId, archive) {
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ archived: archive, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .catch(e => console.error('[lists] archive failed:', e));
+}
+
+function listShowStats(listId) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  const log = [...(list.cookLog || [])].reverse(); // newest first
+
+  let summaryHtml = '';
+  if (log.length) {
+    const lastDaysAgo = Math.round((Date.now() - new Date(log[0].date)) / 86400000);
+    const lastLabel = lastDaysAgo === 0 ? 'היום' : lastDaysAgo === 1 ? 'אתמול' : `לפני ${lastDaysAgo} ימים`;
+    summaryHtml = `<div class="stats-summary">
+      <div class="stats-pill">👨‍🍳 <strong>${log.length}</strong> פעמים</div>
+      <div class="stats-pill">🕐 ${lastLabel}</div>
+    </div>`;
+    const rows = log.map((e, i) => `<tr>
+      <td class="stats-num">${log.length - i}</td>
+      <td class="stats-date">${fmtDate(e.date)}</td>
+      <td class="stats-by">${esc(e.by)}</td>
+    </tr>`).join('');
+    summaryHtml += `<div class="stats-table-wrap"><table class="stats-table">
+      <thead><tr><th>#</th><th>תאריך</th><th>מי בישל</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  } else {
+    summaryHtml = `<div class="stats-empty">עדיין לא בושל 🍽️<br><span style="font-size:12px;color:var(--gray-400)">לחץ "התחל בישול" כדי להתחיל לעקוב</span></div>`;
+  }
+
+  const ov = _cmodalEl();
+  ov.innerHTML = `<div class="cmodal-box stats-box" onclick="event.stopPropagation()">
+    <div class="stats-title">📊 ${esc(list.name)}</div>
+    ${summaryHtml}
+    <div class="cmodal-btns" style="margin-top:16px">
+      <button class="cmodal-btn cmodal-ok" onclick="_cmodalClose(true)">סגור</button>
+    </div>
+    ${log.length ? `<div style="text-align:center;margin-top:10px"><button class="stats-clear-link" onclick="listClearStats('${listId}')">מחק היסטוריה</button></div>` : ''}
+  </div>`;
+  requestAnimationFrame(() => ov.classList.add('cmodal-visible'));
+  return new Promise(res => { _cmodalResolve = res; });
+}
+
+async function listClearStats(listId) {
+  _cmodalClose(false);
+  const ok = await _confirm('למחוק את כל היסטוריית הבישול?', { danger: true, okLabel: 'מחק' });
+  if (!ok) return;
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ cookLog: [], updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .catch(e => console.error('[lists] clear stats failed:', e));
+  _showSnackbar('היסטוריית הבישול נמחקה');
+}
+
+function _listVisible(l) {
+  if (!l.sharedWith || l.sharedWith === 'all') return true;
+  if (Array.isArray(l.sharedWith)) return l.sharedWith.includes(S.user);
+  return true;
+}
+
+function _renderListTile(l, matchInfo = null) {
+  const items  = l.items || [];
+  const steps  = l.steps || [];
+  const total  = items.length + (l.type === 'recipe' ? steps.length : 0);
+  const done   = items.filter(i => i.done).length + (l.type === 'recipe' ? steps.filter(s => s.done).length : 0);
+  const left   = total - done;
+  const pct    = total ? Math.round(done / total * 100) : 0;
+  const typeEmoji = { packing:'🎒', recipe:'👨‍🍳', event:'🎉' }[l.type] || '📋';
+  const dateStr = l.meta?.tripDate || l.meta?.eventDate || '';
+  const matchHint = matchInfo && !matchInfo.byName && matchInfo.firstInside
+    ? `<div class="list-tile-match">🔍 ${esc(matchInfo.firstInside)}</div>` : '';
+  return `<div class="list-tile${l.archived ? ' list-tile-archived' : ''}" onclick="openListDetail('${l.id}')">
+    ${dateStr ? `<div class="list-tile-date">${fmtDate(dateStr)}</div>` : ''}
+    <button class="list-tile-menu-btn" onclick="event.stopPropagation();_listTileMenu('${l.id}',this)" title="אפשרויות">⋮</button>
+    <div class="list-tile-icon">${typeEmoji}</div>
+    <div class="list-tile-name">${esc(l.name)}</div>
+    ${matchHint}
+    ${left > 0 ? `<div class="list-tile-badge">${left}</div>` : (total > 0 ? `<div class="list-tile-done-badge">✓</div>` : '')}
+    ${done > 0 ? `<div class="list-tile-progress"><div class="list-tile-bar" style="width:${pct}%"></div></div>` : ''}
+  </div>`;
+}
+
+// ── List Wizard ────────────────────────
+let _wizStep = 1, _wizType = null, _wizData = {}, _wizCloneFrom = null;
+
+function openListWizard() {
+  _wizStep = 1; _wizType = null; _wizData = {}; _wizCloneFrom = null;
+  el('listWizardPanel').classList.remove('hidden');
+  _renderWizard();
+}
+
+function closeListWizard() { el('listWizardPanel').classList.add('hidden'); }
+
+function listOpenClone(listId) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  _wizCloneFrom = listId;
+  _wizType = list.type;
+  _wizStep = 2;
+  _wizData = { name: 'עותק של ' + list.name, meta: { ...(list.meta || {}) } };
+  el('listWizardPanel').classList.remove('hidden');
+  _renderWizard();
+}
+
+function _renderWizard() {
+  el('wizardTitle').textContent = _wizCloneFrom ? 'שכפול רשימה' : (['','בחר סוג','פרטי הרשימה','שיתוף'][_wizStep] || 'רשימה חדשה');
+  const c = el('wizardContent');
+  if (_wizStep === 1) _wizStep1(c);
+  else if (_wizStep === 2) _wizStep2(c);
+  else _wizStep3(c);
+}
+
+function _wizStep1(c) {
+  const types = [
+    { id:'packing', emoji:'🎒', label:'רשימת אריזה', desc:'לטיול, נסיעה או יציאה' },
+    { id:'recipe',  emoji:'👨‍🍳', label:'מתכון',       desc:'מצרכים ושלבי הכנה' },
+    { id:'event',   emoji:'🎉', label:'תכנון אירוע', desc:'מטלות ומשימות לאירוע' },
+  ];
+  c.innerHTML = `<div class="wizard-step">
+    <div class="wizard-hint">מה תרצה לארגן?</div>
+    <div class="wizard-type-grid">
+      ${types.map(t => `<div class="wizard-type-tile" onclick="_wizPickType('${t.id}')">
+        <div class="wizard-type-emoji">${t.emoji}</div>
+        <div class="wizard-type-label">${t.label}</div>
+        <div class="wizard-type-desc">${t.desc}</div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function _wizPickType(type) { _wizType = type; _wizStep = 2; _renderWizard(); }
+
+function _wizStep2(c) {
+  const m = _wizData.meta || {};
+  const meta = { packing:`
+    <input class="add-input" id="wizDestination" type="text" placeholder="יעד (אופציונלי)" value="${esc(m.destination || '')}">
+    <input class="add-input" id="wizTripDate" type="date" style="margin-top:8px" value="${m.tripDate || ''}">
+  `, recipe:`
+    <input class="add-input" id="wizServings" type="number" min="1" placeholder="מספר מנות (אופציונלי)" value="${m.servings || ''}">
+  `, event:`
+    <input class="add-input" id="wizEventDate" type="date" value="${m.eventDate || ''}">
+    <input class="add-input" id="wizEventLocation" type="text" placeholder="מקום (אופציונלי)" style="margin-top:8px" value="${esc(m.location || '')}">
+  ` }[_wizType] || '';
+  const backBtn = _wizCloneFrom
+    ? `<button class="btn-ghost" onclick="closeListWizard()">ביטול</button>`
+    : `<button class="btn-ghost" onclick="_wizStep=1;_renderWizard()">‹ חזור</button>`;
+  c.innerHTML = `<div class="wizard-step">
+    <input class="add-input" id="wizName" type="text" placeholder="שם הרשימה *" style="font-size:16px;font-weight:700" value="${esc(_wizData.name || '')}"
+      onkeydown="if(event.key==='Enter')_wizGoStep3()">
+    <div style="margin-top:12px">${meta}</div>
+    <div class="wizard-nav">
+      ${backBtn}
+      <button class="btn" onclick="_wizGoStep3()">המשך ›</button>
+    </div>
+  </div>`;
+  setTimeout(() => { const inp = el('wizName'); if (inp) { inp.focus(); inp.select(); } }, 80);
+}
+
+function _wizGoStep3() {
+  const name = (el('wizName')?.value || '').trim();
+  if (!name) { el('wizName')?.focus(); el('wizName')?.classList.add('input-error'); return; }
+  _wizData.name = name;
+  _wizData.meta = {};
+  if (_wizType === 'packing') {
+    _wizData.meta.destination = el('wizDestination')?.value || '';
+    _wizData.meta.tripDate    = el('wizTripDate')?.value    || '';
+  } else if (_wizType === 'recipe') {
+    const sv = parseInt(el('wizServings')?.value || '0');
+    if (sv > 0) _wizData.meta.servings = sv;
+  } else if (_wizType === 'event') {
+    _wizData.meta.eventDate = el('wizEventDate')?.value    || '';
+    _wizData.meta.location  = el('wizEventLocation')?.value || '';
+  }
+  if (_wizCloneFrom) { _wizCreate(); return; }
+  _wizStep = 3; _renderWizard();
+}
+
+function _wizStep3(c) {
+  const members = getMembers().filter(m => m.name !== S.user);
+  c.innerHTML = `<div class="wizard-step">
+    <div class="wizard-hint">מי יכול לראות את הרשימה?</div>
+    <div class="card" style="padding:12px;margin-bottom:12px">
+      <label class="wizard-radio-row"><input type="radio" name="wizShare" value="all" checked onchange="_wizShareToggle(this)"> 🏠 כל המשפחה</label>
+      ${members.length ? `<label class="wizard-radio-row" style="margin-top:8px">
+        <input type="radio" name="wizShare" value="select" onchange="_wizShareToggle(this)"> 👤 אנשים ספציפיים
+      </label>
+      <div id="wizMemberPicks" style="display:none;flex-wrap:wrap;gap:6px;padding-top:8px">
+        ${members.map(m => `<label class="wizard-member-chip"><input type="checkbox" value="${esc(m.name)}" checked> ${esc(m.name)}</label>`).join('')}
+      </div>` : ''}
+    </div>
+    <div class="wizard-hint">מי יכול לערוך?</div>
+    <div class="card" style="padding:12px;margin-bottom:16px">
+      <label class="wizard-radio-row"><input type="radio" name="wizEdit" value="all" checked> כולם</label>
+      <label class="wizard-radio-row" style="margin-top:8px"><input type="radio" name="wizEdit" value="parents"> הורים בלבד</label>
+    </div>
+    <div class="wizard-nav">
+      <button class="btn-ghost" onclick="_wizStep=2;_renderWizard()">‹ חזור</button>
+      <button class="btn" onclick="_wizCreate()">צור רשימה ✓</button>
+    </div>
+  </div>`;
+}
+
+function _wizShareToggle(inp) {
+  const picks = el('wizMemberPicks');
+  if (picks) picks.style.display = inp.value === 'select' ? 'flex' : 'none';
+}
+
+async function _wizCreate() {
+  if (!S.uid) return;
+  let sharedWith, canEdit;
+  if (_wizCloneFrom) {
+    const src = (S.lists || []).find(l => l.id === _wizCloneFrom);
+    sharedWith = src?.sharedWith || 'all';
+    canEdit    = src?.canEdit    || 'all';
+  } else {
+    const shareVal = document.querySelector('input[name="wizShare"]:checked')?.value || 'all';
+    sharedWith = 'all';
+    if (shareVal === 'select') {
+      const picked = [...document.querySelectorAll('#wizMemberPicks input[type=checkbox]:checked')].map(i => i.value);
+      sharedWith = picked.length ? [S.user, ...picked] : 'all';
+    }
+    canEdit = document.querySelector('input[name="wizEdit"]:checked')?.value || 'all';
+  }
+  const srcList = _wizCloneFrom ? (S.lists || []).find(l => l.id === _wizCloneFrom) : null;
+  const cloneId = _wizCloneFrom;
+  _wizCloneFrom = null;
+  const doc = {
+    type: _wizType,
+    name: _wizData.name,
+    meta: _wizData.meta || {},
+    sharedWith, canEdit,
+    createdBy: S.user,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    items: srcList ? (srcList.items || []).map(i => ({ ...i, done: false })) : [],
+    ...(_wizType === 'recipe' ? { steps: srcList ? (srcList.steps || []).map(s => ({ ...s, done: false })) : [] } : {}),
+  };
+  try {
+    const ref = await fbDb.collection('families').doc(S.uid).collection('lists').add(doc);
+    closeListWizard();
+    openListDetail(ref.id);
+  } catch(e) {
+    console.error('[lists] create failed:', e);
+    _showSnackbar('שגיאה ביצירת הרשימה');
+  }
+}
+
+// ── List Detail ────────────────────────
+let _listDetailId = null, _listCookMode = false, _listEditMode = false;
+
+function openListDetail(listId) {
+  _listDetailId = listId;
+  _listCookMode = false;
+  _listEditMode = false;
+  el('listDetailPanel').classList.remove('hidden');
+  _renderListDetail();
+}
+
+function closeListDetail() {
+  el('listDetailPanel').classList.add('hidden');
+  _listDetailId = null;
+  _listEditMode = false;
+}
+
+function listDetailBack() {
+  if (_listEditMode) {
+    listToggleEditMode(); // exits edit mode (saves title, shows green ✓)
+  } else {
+    closeListDetail();
+  }
+}
+
+function listToggleEditMode() {
+  const list = _getOpenList();
+  if (!list) return;
+  const editBtn = el('listEditBtn');
+  if (!_listEditMode) {
+    _listEditMode = true;
+    editBtn.textContent = '✓';
+    editBtn.style.color = '#9CA3AF';
+    _renderListDetail();
+    setTimeout(() => { const inp = el('listTitleInput'); if (inp) { inp.focus(); inp.select(); } }, 50);
+  } else {
+    const inp = el('listTitleInput');
+    const newName = (inp ? inp.value : '').trim();
+    if (newName && newName !== list.name) {
+      fbDb.collection('families').doc(S.uid).collection('lists').doc(list.id)
+        .update({ name: newName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        .catch(e => console.error('[lists] rename failed:', e));
+    }
+    _listEditMode = false;
+    _renderListDetail();
+    editBtn.textContent = '✓';
+    editBtn.style.color = 'var(--success)';
+    setTimeout(() => { editBtn.textContent = '✏️'; editBtn.style.color = ''; }, 2000);
+  }
+}
+
+function _getOpenList() { return (S.lists || []).find(l => l.id === _listDetailId) || null; }
+
+function _renderListDetail() {
+  const list = _getOpenList();
+  if (!list) { closeListDetail(); return; }
+  const titleEl = el('listDetailTitle');
+  if (titleEl) {
+    if (_listEditMode) {
+      const curVal = el('listTitleInput')?.value ?? list.name;
+      titleEl.innerHTML = `<input id="listTitleInput" class="list-title-input" type="text" value="${esc(curVal)}">`;
+    } else {
+      titleEl.textContent = list.name;
+    }
+  }
+  const canEdit = _listEditMode;
+  const showEditBtn = list.canEdit === 'all' || isParent();
+  const editBtn = el('listEditBtn'); if (editBtn) editBtn.style.display = showEditBtn ? '' : 'none';
+  const cloneBtn = el('listCloneBtn'); if (cloneBtn) cloneBtn.style.display = (showEditBtn && !_listEditMode) ? '' : 'none';
+  const deleteBtn = el('listDeleteBtn'); if (deleteBtn) deleteBtn.style.display = (isParent() && !_listEditMode) ? '' : 'none';
+  const cont = el('listDetailContent');
+  if (!cont) return;
+  if (list.type === 'packing')     _renderPackingDetail(cont, list, canEdit);
+  else if (list.type === 'recipe') _renderRecipeDetail(cont, list, canEdit);
+  else if (list.type === 'event')  _renderEventDetail(cont, list, canEdit);
+  _initListItemSwipes();
+}
+
+// Packing detail
+function _renderPackingDetail(cont, list, canEdit) {
+  const items = list.items || [];
+  const done  = items.filter(i => i.done);
+  const undone = items.filter(i => !i.done);
+  let h = '';
+  if (list.meta?.destination) h += `<div class="list-meta-chip">✈️ ${esc(list.meta.destination)}</div>`;
+  if (list.meta?.tripDate)    h += `<div class="list-meta-chip">📅 ${fmtDate(list.meta.tripDate)}</div>`;
+  if (undone.length) {
+    h += `<div class="card list-items-card">${undone.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showQty:true})).join('')}</div>`;
+  }
+  if (canEdit) h += _addItemFormHtml(list.id, 'packing', '+ הוסף פריט...');
+  if (done.length) h += _doneSectionHtml(list.id, done, canEdit, 'פריטים שסומנו');
+  cont.innerHTML = h;
+}
+
+const _LIST_REVEAL_W = 110;
+const _listCheckSvg = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="2.5 8 6 11.5 13.5 4.5"/></svg>`;
+
+// Unified swipe-enabled item row for packing, ingredients and event items
+// Swipe reveals edit; × button always visible for delete
+function _listSwipeItemHtml(listId, it, canEdit, opts = {}) {
+  const { showQty = false, showAmount = false, arrayKey = 'items', checkable = true } = opts;
+  const checkBtn = (canEdit || !checkable)
+    ? `<div style="width:28px;flex-shrink:0"></div>`
+    : `<button class="list-check-btn${it.done ? ' checked' : ''}" onclick="listToggleItem('${listId}','${it.id}','${arrayKey}')">${it.done ? _listCheckSvg : ''}</button>`;
+  const inner = `<div class="list-item${it.done ? ' list-item-done' : ''}">
+    ${checkBtn}
+    <span class="list-item-name">${esc(it.name)}</span>
+    ${showQty && it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
+    ${showAmount && it.amount ? `<span class="list-item-qty">${esc(it.amount)}${it.unit ? ' ' + esc(it.unit) : ''}</span>` : ''}
+    ${it.done ? _checkerBadge(it.checkedBy) : ''}
+    ${canEdit ? `<button class="list-item-edit-btn" onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')">✏️</button>` : ''}
+    ${canEdit ? `<button class="list-item-del" onclick="listDeleteItem('${listId}','${it.id}','${arrayKey}')">×</button>` : ''}
+  </div>`;
+  if (!canEdit) return inner;
+  return `<div class="list-item-row" data-item-id="${it.id}">
+    <div class="list-item-reveal">
+      <button class="chore-action-btn chore-action-edit" style="width:${_LIST_REVEAL_W}px" onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')">${_ico.edit}</button>
+    </div>
+    <div class="list-item-slide">${inner}</div>
+  </div>`;
+}
+
+function _addItemFormHtml(listId, type, placeholder) {
+  const hasQty = type === 'packing' || type === 'ingredient';
+  return `<div class="card list-add-card">
+    <div class="mgmt-add-form">
+      <input class="mgmt-input" id="listNewItem" type="text" placeholder="${placeholder}"
+        onkeydown="if(event.key==='Enter')listAddItem('${listId}','${type}')">
+      ${hasQty ? `<input class="mgmt-input" id="listNewItemQty" type="number" min="0" step="0.1" value="1" style="flex:0 0 64px"
+        onkeydown="if(event.key==='Enter')listAddItem('${listId}','${type}')"
+        oninput="this.value=this.value.replace(/[^0-9.]/g,'').replace(/(\\.[0-9])[0-9]*/,'$1')">` : ''}
+      <button class="mgmt-add-btn" onclick="listAddItem('${listId}','${type}')">+</button>
+    </div>
+  </div>`;
+}
+
+function _doneSectionHtml(listId, done, canEdit, label) {
+  return `<div class="card list-items-card list-done-section">
+    <div class="list-done-hdr" onclick="_toggleDoneSection(this)">
+      <span>✓ ${done.length} ${label}</span>
+      <span class="list-done-chevron">›</span>
+    </div>
+    <div class="list-done-body">
+      ${done.map(it => `<div class="list-item list-item-done">
+        ${!canEdit ? `<button class="list-check-btn checked" onclick="listToggleItem('${listId}','${it.id}')">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="2.5 8 6 11.5 13.5 4.5"/></svg>
+        </button>` : `<div style="width:28px;flex-shrink:0"></div>`}
+        <span class="list-item-name">${esc(it.name)}</span>
+        ${it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
+        ${_checkerBadge(it.checkedBy)}
+        ${canEdit ? `<button class="list-item-del" onclick="listDeleteItem('${listId}','${it.id}')">×</button>` : ''}
+      </div>`).join('')}
+      ${canEdit ? `<button class="btn-ghost" style="width:100%;margin-top:8px;font-size:13px" onclick="listClearDone('${listId}')">נקה מסומנים</button>` : ''}
+    </div>
+  </div>`;
+}
+
+function _toggleDoneSection(hdr) {
+  const body = hdr.nextElementSibling;
+  const chevron = hdr.querySelector('.list-done-chevron');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (chevron) chevron.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+// ── List item swipe reveal ─────────────────
+function _initListItemSwipes() {
+  const REVEAL = _LIST_REVEAL_W;
+  document.querySelectorAll('#listDetailContent .list-item-row').forEach(row => {
+    const slide = row.querySelector('.list-item-slide');
+    if (!slide || slide._swipeBound) return;
+    slide._swipeBound = true;
+    let startX = 0, startY = 0, curX = 0, active = false, locked = false, isOpen = false;
+    slide.addEventListener('touchstart', e => {
+      startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+      active = true; locked = false; slide.style.transition = 'none';
+    }, { passive: true });
+    slide.addEventListener('touchmove', e => {
+      if (!active) return;
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      if (!locked) {
+        if (Math.abs(dy) > Math.abs(dx)) { active = false; return; }
+        locked = true;
+      }
+      const raw = isOpen ? dx + REVEAL : dx;
+      curX = Math.max(0, Math.min(REVEAL, raw));
+      slide.style.transform = `translateX(${curX}px)`;
+    }, { passive: true });
+    slide.addEventListener('touchend', () => {
+      active = false; slide.style.transition = 'transform 0.22s ease';
+      if (!isOpen && curX > REVEAL / 2) { slide.style.transform = `translateX(${REVEAL}px)`; isOpen = true; }
+      else if (isOpen && curX < REVEAL / 2) { slide.style.transform = 'translateX(0)'; isOpen = false; }
+      else { slide.style.transform = isOpen ? `translateX(${REVEAL}px)` : 'translateX(0)'; }
+      curX = 0;
+    });
+    slide.addEventListener('click', () => {
+      if (isOpen) { slide.style.transition = 'transform 0.22s ease'; slide.style.transform = 'translateX(0)'; isOpen = false; }
+    });
+  });
+}
+
+function listStartItemEdit(listId, itemId, arrayKey = 'items') {
+  const row = document.querySelector(`#listDetailContent .list-item-row[data-item-id="${itemId}"]`);
+  if (!row) return;
+  const slide = row.querySelector('.list-item-slide');
+  if (slide) { slide.style.transition = 'none'; slide.style.transform = 'translateX(0)'; }
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  const it = (list[arrayKey] || []).find(i => String(i.id) === String(itemId));
+  if (!it) return;
+  const isPacking = list.type === 'packing' && arrayKey === 'items';
+  const isIngredient = list.type === 'recipe' && arrayKey === 'items';
+  if (slide) slide.innerHTML = `<div class="list-item list-item-editing">
+    <input class="list-edit-name" id="listEditName_${itemId}" type="text" value="${esc(it.name)}"
+      onkeydown="if(event.key==='Enter')listSaveItemEdit('${listId}','${itemId}','${arrayKey}');if(event.key==='Escape')_renderListDetail()">
+    ${isPacking ? `<input class="list-edit-qty" id="listEditQty_${itemId}" type="number" min="0" step="0.1" value="${esc(it.qty || '')}">` : ''}
+    ${isIngredient ? `<input class="list-edit-qty" id="listEditQty_${itemId}" type="text" value="${esc(it.amount || '')}">` : ''}
+    <button class="list-edit-save" onclick="listSaveItemEdit('${listId}','${itemId}','${arrayKey}')">✓</button>
+    <button class="list-edit-cancel" onclick="_renderListDetail()">✗</button>
+  </div>`;
+  requestAnimationFrame(() => el(`listEditName_${itemId}`)?.focus());
+}
+
+async function listSaveItemEdit(listId, itemId, arrayKey = 'items') {
+  const name = (el(`listEditName_${itemId}`)?.value || '').trim();
+  if (!name) { el(`listEditName_${itemId}`)?.focus(); return; }
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  const arr = list[arrayKey] || [];
+  const it  = arr.find(i => String(i.id) === String(itemId));
+  if (!it) return;
+  it.name = name;
+  const qtyEl = el(`listEditQty_${itemId}`);
+  if (qtyEl) {
+    if (list.type === 'packing') {
+      const n = parseFloat(qtyEl.value);
+      it.qty = qtyEl.value.trim() ? (isNaN(n) ? qtyEl.value.trim() : String(Math.round(n * 10) / 10)) : '';
+    } else {
+      it.amount = qtyEl.value.trim();
+    }
+  }
+  _renderListDetail();
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ [arrayKey]: arr, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+// Recipe detail
+function _renderRecipeDetail(cont, list, canEdit) {
+  const items = list.items || []; // ingredients
+  const steps = list.steps || [];
+  let h = '';
+  if (list.meta?.servings) h += `<div class="list-meta-chip">👥 ${list.meta.servings} מנות</div>`;
+
+  const cookLog = list.cookLog || [];
+  const cookBadge = cookLog.length
+    ? `<div class="recipe-cook-badge" title="הכנות קודמות">👨‍🍳 ×${cookLog.length}  <span class="recipe-cook-last">אחרון: ${fmtDate(cookLog[cookLog.length-1].date)}</span></div>`
+    : '';
+  h += cookBadge;
+  h += `<button class="btn${_listCookMode ? '' : ' btn-outline'} recipe-cook-btn" onclick="_toggleCookMode('${list.id}')">
+    ${_listCookMode ? '🍳 מצב בישול פעיל — לחץ לסיום' : '🍳 התחל בישול'}
+  </button>`;
+
+  // Ingredients
+  h += `<div class="card list-items-card">
+    <div class="list-section-hdr">🧂 מצרכים</div>
+    ${items.length ? items.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showAmount:true, checkable: _listCookMode})).join('') : `<div class="list-empty-hint">הוסף מצרכים...</div>`}
+  </div>`;
+  if (canEdit) h += `<div class="card list-add-card">
+    <div class="mgmt-add-form">
+      <input class="mgmt-input" id="listNewItem" type="text" placeholder="מצרך"
+        onkeydown="if(event.key==='Enter')listAddItem('${list.id}','ingredient')">
+      <input class="mgmt-input" id="listNewItemQty" type="text" placeholder="כמות" style="flex:0 0 64px"
+        onkeydown="if(event.key==='Enter')listAddItem('${list.id}','ingredient')">
+      <button class="mgmt-add-btn" onclick="listAddItem('${list.id}','ingredient')">+</button>
+    </div>
+  </div>`;
+
+  // Steps
+  const doneSteps = steps.filter(s => s.done && _listCookMode).length;
+  const currentIdx = _listCookMode ? steps.findIndex(s => !s.done) : -1;
+  const stepProgress = _listCookMode && steps.length
+    ? `<span class="list-cook-progress">${doneSteps === steps.length ? '✓ הושלם!' : `שלב ${doneSteps + 1} מתוך ${steps.length}`}</span>`
+    : '';
+  h += `<div class="card list-items-card">
+    <div class="list-section-hdr" style="display:flex;align-items:center;justify-content:space-between">
+      <span>📝 שלבי הכנה</span>${stepProgress}
+    </div>
+    ${steps.length ? steps.map((st, idx) => {
+      const isCurrent = _listCookMode && idx === currentIdx;
+      const isDone = st.done && _listCookMode;
+      return `<div class="list-step${isDone ? ' list-step-done' : ''}${isCurrent ? ' list-step-current' : ''}">
+        <div class="list-step-num${isDone ? ' done' : ''}"
+          onclick="${_listCookMode ? `listToggleStep('${list.id}',${idx})` : ''}"
+          style="${_listCookMode ? 'cursor:pointer' : ''}">
+          ${isDone ? `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="2.5 8 6 11.5 13.5 4.5"/></svg>` : idx + 1}
+        </div>
+        <span class="list-step-text">${esc(st.text)}</span>
+        ${canEdit ? `<button class="list-item-del" onclick="listDeleteStep('${list.id}',${idx})">×</button>` : ''}
+      </div>`;
+    }).join('') : `<div class="list-empty-hint">הוסף שלבי הכנה...</div>`}
+  </div>`;
+  if (canEdit) h += `<div class="card list-add-card">
+    <div class="mgmt-add-form">
+      <input class="mgmt-input" id="listNewStep" type="text" placeholder="תיאור השלב" style="flex:1"
+        onkeydown="if(event.key==='Enter')listAddStep('${list.id}')">
+      <button class="mgmt-add-btn" onclick="listAddStep('${list.id}')">+</button>
+    </div>
+  </div>`;
+
+  cont.innerHTML = h;
+}
+
+function _toggleCookMode(listId) {
+  if (_listCookMode && listId) {
+    const list = (S.lists || []).find(l => l.id === listId);
+    if (list && (list.steps || []).length > 0 && (list.steps || []).every(s => s.done)) {
+      _promptFinishCooking(listId);
+      return;
+    }
+  }
+  _listCookMode = !_listCookMode;
+  if (_listCookMode && listId) {
+    // Reset all steps to unchecked when starting
+    const list = (S.lists || []).find(l => l.id === listId);
+    if (list && (list.steps || []).some(s => s.done)) {
+      list.steps = list.steps.map(s => ({ ...s, done: false }));
+      fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+        .update({ steps: list.steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        .catch(e => console.error('[lists] reset steps failed:', e));
+    }
+  }
+  _renderListDetail();
+  if (_listCookMode) setTimeout(() => document.querySelector('.list-step-current')?.scrollIntoView({ behavior:'smooth', block:'center' }), 120);
+}
+
+// Event detail
+function _renderEventDetail(cont, list, canEdit) {
+  const items = list.items || [];
+  const done  = items.filter(i => i.done);
+  const undone = items.filter(i => !i.done);
+  let h = '';
+  const metaParts = [];
+  if (list.meta?.eventDate) metaParts.push(`📅 ${fmtDate(list.meta.eventDate)}`);
+  if (list.meta?.location)  metaParts.push(`📍 ${esc(list.meta.location)}`);
+  if (metaParts.length) h += `<div class="list-meta-chip">${metaParts.join('  ·  ')}</div>`;
+
+  if (items.length) {
+    const pct = Math.round(done.length / items.length * 100);
+    h += `<div class="card" style="padding:12px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;font-weight:700;color:var(--gray-500);margin-bottom:6px">
+        <span>התקדמות</span><span>${done.length}/${items.length}</span>
+      </div>
+      <div class="list-progress-track"><div class="list-progress-fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }
+
+  if (undone.length) {
+    h += `<div class="card list-items-card">${undone.map(it => _listSwipeItemHtml(list.id, it, canEdit)).join('')}</div>`;
+  }
+
+  if (canEdit) h += _addItemFormHtml(list.id, 'event', '+ הוסף משימה...');
+
+  if (done.length) h += _doneSectionHtml(list.id, done, canEdit, 'משימות שהושלמו');
+
+  cont.innerHTML = h;
+}
+
+// ── List CRUD ───────────────────────────
+async function listToggleItem(listId, itemId, arrayKey = 'items') {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  const arr  = list[arrayKey] || [];
+  const item = arr.find(i => String(i.id) === String(itemId));
+  if (!item) return;
+  item.done = !item.done;
+  item.checkedBy = item.done ? (S.user || null) : null;
+  if (_listDetailId === listId) _renderListDetail();
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ [arrayKey]: arr, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  // Push change to active joint share docs so guests see it in real time
+  _syncToggleToShares(list, itemId, item.done, item.checkedBy);
+}
+
+function _syncToggleToShares(list, itemId, done, checkedBy) {
+  const editShares = (list.publicShares || []).filter(s => s.mode === 'edit');
+  for (const share of editShares) {
+    const docRef = fbDb.collection('publicShares').doc(share.token);
+    docRef.get().then(snap => {
+      if (!snap.exists) return;
+      const items = (snap.data().items || []).map(i =>
+        String(i.id) === String(itemId) ? { ...i, done, checkedBy: checkedBy || null } : i
+      );
+      docRef.update({ items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    }).catch(e => console.warn('[share-sync] push failed:', e));
+  }
+}
+
+async function listDeleteItem(listId, itemId, arrayKey = 'items') {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  list[arrayKey] = (list[arrayKey] || []).filter(i => String(i.id) !== String(itemId));
+  if (_listDetailId === listId) _renderListDetail();
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ [arrayKey]: list[arrayKey], updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+async function listAddItem(listId, type) {
+  const nameEl = el('listNewItem');
+  const name   = nameEl?.value.trim();
+  if (!name) { nameEl?.focus(); return; }
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  const qtyVal = el('listNewItemQty')?.value.trim() || '';
+  const newItem = { id: Date.now(), name, done: false };
+  if (type === 'packing' && qtyVal) {
+    const n = parseFloat(qtyVal);
+    newItem.qty = isNaN(n) ? qtyVal : String(Math.round(n * 10) / 10);
+  }
+  if (type === 'ingredient' && qtyVal) newItem.amount = qtyVal;
+  list.items = [...(list.items || []), newItem];
+  nameEl.value = '';
+  if (el('listNewItemQty')) el('listNewItemQty').value = '1';
+  _renderListDetail();
+  nameEl?.focus();
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ items: list.items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+async function listAddStep(listId) {
+  const inp  = el('listNewStep');
+  const text = inp?.value.trim();
+  if (!text) { inp?.focus(); return; }
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  list.steps = [...(list.steps || []), { id: Date.now(), text, done: false }];
+  inp.value = '';
+  _renderListDetail();
+  inp?.focus();
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ steps: list.steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+async function listToggleStep(listId, idx) {
+  if (!_listCookMode) return;
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  const steps = list.steps || [];
+  if (!steps[idx]) return;
+  steps[idx].done = !steps[idx].done;
+  _renderListDetail();
+  setTimeout(() => document.querySelector('.list-step-current')?.scrollIntoView({ behavior:'smooth', block:'center' }), 120);
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  // Check if all steps are now done
+  if (steps.length > 0 && steps.every(s => s.done)) {
+    setTimeout(() => _promptFinishCooking(listId), 400);
+  }
+}
+
+async function _promptFinishCooking(listId) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  const ok = await _confirm(`🎉 כל השלבים הושלמו!\nלסמן את "${esc(list.name)}" כהכנה שהסתיימה?`, { okLabel: 'כן, סיימתי!' });
+  if (!ok) return;
+  const now = new Date();
+  const entry = { date: now.toISOString().split('T')[0], by: S.user };
+  const cookLog = [...(list.cookLog || []), entry];
+  // Reset steps and exit cook mode
+  const steps = (list.steps || []).map(s => ({ ...s, done: false }));
+  _listCookMode = false;
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ cookLog, steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  _showSnackbar(`בישול מספר ${cookLog.length} נרשם 👨‍🍳`);
+}
+
+async function listDeleteStep(listId, idx) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  list.steps = (list.steps || []).filter((_, i) => i !== idx);
+  _renderListDetail();
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ steps: list.steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+async function listClearDone(listId) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  list.items = (list.items || []).filter(i => !i.done);
+  _renderListDetail();
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ items: list.items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+}
+
+async function listDelete(listId) {
+  if (!isParent()) return;
+  const ok = await _confirm('למחוק את הרשימה לצמיתות?', { danger: true, okLabel: 'מחק' });
+  if (!ok) return;
+  if (_listDetailId === listId) closeListDetail();
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId).delete();
 }

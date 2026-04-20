@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260420wn6') location.reload(true);
+        if (v !== '20260421ls40') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -404,6 +404,43 @@
   </div>
 </div>
 
+<!-- LIST WIZARD PANEL -->
+<div id="listWizardPanel" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeListWizard()">×</button>
+    <div class="mgmt-header-title" id="wizardTitle">רשימה חדשה</div>
+  </div>
+  <div class="mgmt-content" id="wizardContent"></div>
+</div>
+
+<!-- GUEST SHARE PANEL -->
+<div id="guestPanel" class="hidden">
+  <div class="guest-header">
+    <div class="guest-header-top">
+      <span class="guest-app-logo">🏠 FamilyHub</span>
+      <span class="guest-app-logo-sep">·</span>
+      <span id="guestModeBadge" class="guest-mode-badge"></span>
+      <span id="guestUserName" class="guest-user-name" style="display:none"></span>
+    </div>
+    <div class="guest-list-name" id="guestListName"></div>
+  </div>
+  <div class="mgmt-content" id="guestContent"></div>
+</div>
+
+<!-- LIST DETAIL PANEL -->
+<div id="listDetailPanel" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="listDetailBack()">‹</button>
+    <div class="mgmt-header-title" id="listDetailTitle"></div>
+    <div style="display:flex;gap:2px;margin-inline-start:auto">
+      <button class="mgmt-back-btn" id="listEditBtn" style="font-size:16px;padding:4px 8px;display:none" onclick="listToggleEditMode()" title="ערוך שם">✏️</button>
+      <button class="mgmt-back-btn" id="listCloneBtn" style="font-size:16px;padding:4px 8px;display:none" onclick="listOpenClone(_listDetailId)" title="שכפל רשימה">⧉</button>
+      <button class="mgmt-back-btn" id="listDeleteBtn" style="font-size:18px;padding:4px 8px;display:none" onclick="listDelete(_listDetailId)" title="מחק רשימה">🗑</button>
+    </div>
+  </div>
+  <div class="mgmt-content" id="listDetailContent"></div>
+</div>
+
 <!-- Custom autocomplete dropdown -->
 <div id="acDropdown"></div>
 
@@ -577,6 +614,11 @@
       <div id="communityContent"></div>
     </div>
 
+    <!-- LISTS -->
+    <div id="tab-lists" class="tab-content">
+      <div id="listsContent"></div>
+    </div>
+
     <!-- ANALYTICS (admin only) -->
     <div id="tab-analytics" class="tab-content">
       <div id="analyticsContent">
@@ -621,6 +663,10 @@
     </div>
   </div>
 </div>
+
+<button class="chore-fab" id="listsFab" onclick="openListWizard()" aria-label="רשימה חדשה" style="display:none">
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+</button>
 
 <div class="chore-fab-wrap" id="choreFabWrap" style="display:none">
   <div class="chore-fab-picker" id="choreFabPicker"></div>
