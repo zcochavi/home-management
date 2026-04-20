@@ -8,7 +8,7 @@
       try {
         const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
         const {v} = await r.json();
-        if (v !== '20260420wn5') location.reload(true);
+        if (v !== '20260420wn6') location.reload(true);
       } catch(e){}
     })();
   </script>
@@ -329,35 +329,6 @@
           </div>
           <div id="mgmtAddError" style="color:#e53e3e;font-size:12px;font-weight:700;margin-bottom:6px;min-height:16px"></div>
           <button class="auth-btn-main" style="padding:9px 18px;width:auto" onclick="mgmtAddMember()">✓ הוסף</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ── Grocery Categories ── -->
-    <div class="card">
-      <div class="card-title">🛒 קטגוריות קניות</div>
-      <div class="mgmt-section-hint">קטגוריות משמשות לארגון פריטי הקניות</div>
-      <div id="mgmtCatList"></div>
-      <div class="mgmt-add-form">
-        <input class="mgmt-input mgmt-emoji-input" id="mgmtNewCatEmoji" type="text" placeholder="🛒" maxlength="4"
-          oninput="this.dataset.manual='1'">
-        <input class="mgmt-input" id="mgmtNewCatName" type="text" placeholder="שם קטגוריה"
-          oninput="autoSuggestCatEmoji(this.value)"
-          onkeydown="if(event.key==='Enter')mgmtAddCat()">
-        <button class="mgmt-add-btn" onclick="mgmtAddCat()">+</button>
-      </div>
-    </div>
-
-    <!-- ── Homework Subjects ── -->
-    <div class="card">
-      <div class="card-title">📚 נושאי שיעורי בית</div>
-      <div class="mgmt-section-hint">נושאים משמשים לסיווג שיעורי בית</div>
-      <div id="mgmtSubjectList"></div>
-      <div class="mgmt-add-form" style="flex-direction:column;align-items:stretch;gap:6px">
-        <div style="display:flex;gap:6px;align-items:center">
-          <input class="mgmt-input" id="mgmtNewSubjectNameHe" type="text" placeholder="שם הנושא"
-            style="flex:1" onkeydown="if(event.key==='Enter')mgmtAddSubject()">
-          <button class="mgmt-add-btn" onclick="mgmtAddSubject()">+</button>
         </div>
       </div>
     </div>

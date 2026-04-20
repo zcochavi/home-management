@@ -4659,6 +4659,7 @@ async function refreshCommunity() {
 
 // ── Grocery Categories ───────────────────
 function renderMgmtCats() {
+  if (!el('mgmtCatList')) return;
   const cats = getGroceryCats();
   el('mgmtCatList').innerHTML = cats.length ? cats.map((c, i) => `
     <div>
@@ -4737,6 +4738,7 @@ async function mgmtRemoveCat(name) {
 
 // ── Homework Subjects ────────────────────
 function renderMgmtSubjects() {
+  if (!el('mgmtSubjectList')) return;
   const subs = getSubjects();
   el('mgmtSubjectList').innerHTML = subs.length ? subs.map((s, i) => `
     <div>
