@@ -303,6 +303,8 @@ body {
   transition: background var(--t-fast); line-height: 1;
 }
 .notif-bell-btn:hover { background: var(--primary-100); color: var(--primary-500); }
+.tab-settings-btn { background: none; border: none; font-size: 14px; padding: 2px 4px; cursor: pointer; color: var(--gray-400); line-height: 1; border-radius: var(--r-sm); transition: color var(--t-fast); flex-shrink: 0; }
+.tab-settings-btn:hover { color: var(--gray-700); }
 
 .notif-bell-badge {
   position: absolute; top: -4px; right: -4px;
