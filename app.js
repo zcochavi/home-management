@@ -956,7 +956,7 @@ function getAuthError(code) {
     'auth/weak-password':          'הסיסמה קצרה מדי — נדרשים לפחות 6 תווים',
     'auth/network-request-failed': 'בעיית חיבור לרשת — בדוק את האינטרנט ונסה שוב',
     'auth/too-many-requests':      'יותר מדי ניסיונות כושלים — נסה שוב עוד כמה דקות',
-    'permission-denied':           'אין הרשאה לכתוב למסד הנתונים — יש לעדכן את חוקי האבטחה ב-Firebase Console',
+    'permission-denied':           'אין הרשאה לגשת למסד הנתונים — יש לעדכן את חוקי האבטחה ב-Firebase Console',
   };
   return m[code] || 'שגיאה: ' + code;
 }
@@ -9606,9 +9606,15 @@ function renderLists() {
     TYPE_META.forEach(({ id, label }) => {
       const typeLists = active.filter(l => l.type === id);
       if (!typeLists.length) return;
+      const collapsed = _listsSectionCollapsed[id] || false;
       html += `<div class="lists-section">
-        <div class="lists-section-title">${label}</div>
-        <div class="lists-grid">${typeLists.map(l => _renderListTile(l, null)).join('')}</div>
+        <div class="lists-section-title lists-section-hdr" onclick="_toggleListsSection('${id}',this)">
+          <span>${label} <span class="lists-section-count">${typeLists.length}</span></span>
+          <span class="lists-archive-chevron" style="transform:${collapsed ? '' : 'rotate(90deg)'}">›</span>
+        </div>
+        <div class="lists-section-body" style="${collapsed ? 'display:none' : ''}">
+          <div class="lists-grid">${typeLists.map(l => _renderListTile(l, null)).join('')}</div>
+        </div>
       </div>`;
     });
     if (!html && active.length) html = `<div class="lists-grid">${active.map(l => _renderListTile(l, null)).join('')}</div>`;
@@ -9616,9 +9622,9 @@ function renderLists() {
       html += `<div class="lists-archive-section">
         <div class="lists-archive-hdr" onclick="_toggleArchiveSection(this)">
           <span>📦 ארכיון (${archived.length})</span>
-          <span class="lists-archive-chevron">›</span>
+          <span class="lists-archive-chevron" style="transform:rotate(0deg)">›</span>
         </div>
-        <div class="lists-archive-body">
+        <div class="lists-archive-body" style="display:none">
           <div class="lists-grid">${archived.map(l => _renderListTile(l, null)).join('')}</div>
         </div>
       </div>`;
@@ -9626,6 +9632,36 @@ function renderLists() {
   }
 
   cont.innerHTML = html;
+  _initListTiles();
+}
+
+let _tileLongPressed = false;
+
+function _initListTiles() {
+  document.querySelectorAll('#listsContent .list-tile').forEach(tile => {
+    if (tile._tileBound) return;
+    tile._tileBound = true;
+    const listId = tile.dataset.listId;
+
+    tile.addEventListener('click', e => {
+      if (e.target.closest('.list-tile-menu-btn')) return;
+      if (_tileLongPressed) { _tileLongPressed = false; return; }
+      openListDetail(listId);
+    });
+
+    let pressTimer = null;
+    tile.addEventListener('touchstart', () => {
+      pressTimer = setTimeout(() => {
+        pressTimer = null;
+        _tileLongPressed = true;
+        const btn = tile.querySelector('.list-tile-menu-btn') || tile;
+        _listTileMenu(listId, btn);
+      }, 500);
+    }, { passive: true });
+    tile.addEventListener('touchmove',   () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }, { passive: true });
+    tile.addEventListener('touchend',    () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
+    tile.addEventListener('touchcancel', () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } });
+  });
 }
 
 function _listsSearchMatch(list, q) {
@@ -9647,6 +9683,20 @@ function _toggleArchiveSection(hdr) {
   if (chevron) chevron.style.transform = open ? '' : 'rotate(90deg)';
 }
 
+let _listsSectionCollapsed = (() => {
+  try { return JSON.parse(localStorage.getItem('fh_lists_collapsed') || '{}'); } catch { return {}; }
+})();
+
+function _toggleListsSection(id, hdr) {
+  const body = hdr.nextElementSibling;
+  const chevron = hdr.querySelector('.lists-archive-chevron');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : '';
+  if (chevron) chevron.style.transform = open ? '' : 'rotate(90deg)';
+  _listsSectionCollapsed[id] = open;
+  try { localStorage.setItem('fh_lists_collapsed', JSON.stringify(_listsSectionCollapsed)); } catch {}
+}
+
 function _listTileMenu(listId, btn) {
   document.querySelector('.list-tile-popup')?.remove();
   const list = (S.lists || []).find(l => l.id === listId);
@@ -9654,12 +9704,14 @@ function _listTileMenu(listId, btn) {
   const archiveLabel = list.archived ? '📤 הוצא מארכיון' : '📦 העבר לארכיון';
   const menu = document.createElement('div');
   menu.className = 'list-tile-popup';
+  const mi = (ico, label, extra='') => `<button class="list-tile-popup-item${extra}" ><span class="mi-ico">${ico}</span><span>${label}</span></button>`;
   menu.innerHTML = `
-    <button class="list-tile-popup-item" onclick="listRename('${listId}');_closeTileMenu()">✏️ שנה שם</button>
-    <button class="list-tile-popup-item" onclick="_closeTileMenu();listOpenClone('${listId}')">📋 שכפל</button>
-    ${list.type === 'recipe' ? `<button class="list-tile-popup-item" onclick="listShowStats('${listId}');_closeTileMenu()">📊 סטטיסטיקות</button>` : ''}
-    <button class="list-tile-popup-item" onclick="_closeTileMenu();listOpenShareMenu('${listId}')">🔗 שתף</button>
-    <button class="list-tile-popup-item" onclick="listSetArchived('${listId}',${!list.archived});_closeTileMenu()">${archiveLabel}</button>
+    <button class="list-tile-popup-item" onclick="listRename('${listId}');_closeTileMenu()"><span class="mi-ico">✏️</span><span>שנה שם</span></button>
+    <button class="list-tile-popup-item" onclick="_closeTileMenu();listOpenClone('${listId}')"><span class="mi-ico"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="9" height="11" rx="2" fill="#93c5fd"/><rect x="5" y="1" width="9" height="11" rx="2" fill="#3b82f6"/><line x1="7.5" y1="5" x2="12" y2="5" stroke="white" stroke-width="1.3" stroke-linecap="round"/><line x1="7.5" y1="7.5" x2="12" y2="7.5" stroke="white" stroke-width="1.3" stroke-linecap="round"/><line x1="7.5" y1="10" x2="12" y2="10" stroke="white" stroke-width="1.3" stroke-linecap="round"/></svg></span><span>שכפל</span></button>
+    ${list.type === 'recipe' ? `<button class="list-tile-popup-item" onclick="listShowStats('${listId}');_closeTileMenu()"><span class="mi-ico">📊</span><span>סטטיסטיקות</span></button>` : ''}
+    <button class="list-tile-popup-item" onclick="_closeTileMenu();listOpenShareMenu('${listId}')"><span class="mi-ico">🔗</span><span>שתף</span></button>
+    <button class="list-tile-popup-item" onclick="listSetArchived('${listId}',${!list.archived});_closeTileMenu()"><span class="mi-ico">${list.archived ? '📤' : '📦'}</span><span>${list.archived ? 'הוצא מארכיון' : 'העבר לארכיון'}</span></button>
+    ${isParent() && list.createdBy === S.user ? `<button class="list-tile-popup-item list-tile-popup-danger" onclick="_closeTileMenu();listDelete('${listId}')"><span class="mi-ico">🗑</span><span>מחק רשימה</span></button>` : ''}
   `;
   document.body.appendChild(menu);
   const rect = btn.getBoundingClientRect();
@@ -9743,6 +9795,42 @@ function _listVisible(l) {
   return true;
 }
 
+const _TILE_PHOTOS = {
+  recipe: [
+    { kw:['עוגה','cake','שוקולד','chocolate','קצפת'], id:'1578985545062-69928b1d9587' },
+    { kw:['פנקייק','pancake'],                         id:'1554520735-0a6b8b6ce8b7' },
+    { kw:['פיצה','pizza'],                             id:'1565299624946-b28f40a0ae38' },
+    { kw:['פסטה','pasta','ספגטי','spaghetti'],          id:'1555949258-eb67b1ef0ceb' },
+    { kw:['סלט','salad'],                              id:'1512621776951-a57141f2eefd' },
+    { kw:['מרק','soup'],                               id:'1547592166-23ac45744acd' },
+    { kw:['עוגיות','cookie','biscuit'],                 id:'1499636136210-6f4ee915583e' },
+    { kw:['עוף','chicken','turkey','הודו'],             id:'1501200291289-c5a76c232e5f' },
+  ],
+  _recipeDefault: '1556909114-f6e7ad7d3136',
+  packing: [
+    { kw:['ים','beach','חוף','surf','טרופי'],          id:'1507525428034-b723cf961d3e' },
+    { kw:['סקי','ski','שלג','snow'],                   id:'1551698618-1dfe5d97d256' },
+    { kw:['קמפינג','camp','אוהל','tent'],               id:'1504280390367-361c6d9f38f4' },
+  ],
+  _packingDefault: '1488646953014-85cb44e25828',
+  event: [
+    { kw:['חתונה','wedding'],                          id:'1519741497674-611481863552' },
+    { kw:['ילדים','kids','ילד'],                        id:'1602631985686-1bb0e6a8696e' },
+    { kw:['יום הולדת','birthday','birth','בירתדי'],    id:'1530103862676-de8c9debad1d' },
+  ],
+  _eventDefault: '1492684223066-81342ee5ff30',
+};
+
+function _tilePhotoUrl(list) {
+  const n = (list.name || '').toLowerCase();
+  const pool = _TILE_PHOTOS[list.type] || [];
+  const defaultId = _TILE_PHOTOS[`_${list.type}Default`];
+  if (!defaultId) return null;
+  const match = pool.find(p => p.kw.some(k => n.includes(k.toLowerCase())));
+  const id = match ? match.id : defaultId;
+  return `https://images.unsplash.com/photo-${id}?w=300&h=300&fit=crop&q=75&auto=format`;
+}
+
 function _renderListTile(l, matchInfo = null) {
   const items  = l.items || [];
   const steps  = l.steps || [];
@@ -9751,11 +9839,28 @@ function _renderListTile(l, matchInfo = null) {
   const left   = total - done;
   const pct    = total ? Math.round(done / total * 100) : 0;
   const typeEmoji = { packing:'🎒', recipe:'👨‍🍳', event:'🎉' }[l.type] || '📋';
+  const photoUrl = _tilePhotoUrl(l);
   const dateStr = l.meta?.tripDate || l.meta?.eventDate || '';
   const matchHint = matchInfo && !matchInfo.byName && matchInfo.firstInside
     ? `<div class="list-tile-match">🔍 ${esc(matchInfo.firstInside)}</div>` : '';
   const hasJoint = (l.publicShares || []).some(s => s.mode === 'edit');
-  return `<div class="list-tile${l.archived ? ' list-tile-archived' : ''}" onclick="openListDetail('${l.id}')">
+  if (photoUrl) {
+    return `<div class="list-tile list-tile-has-photo${l.archived ? ' list-tile-archived' : ''}" data-list-id="${l.id}">
+      <div class="list-tile-photo-wrap">
+        <img class="list-tile-bg" src="${photoUrl}" alt="" loading="lazy" onerror="this.closest('.list-tile-photo-wrap').remove()">
+        ${dateStr ? `<div class="list-tile-date">${fmtDate(dateStr)}</div>` : ''}
+        <button class="list-tile-menu-btn" onclick="event.stopPropagation();_listTileMenu('${l.id}',this)" title="אפשרויות">⋮</button>
+        ${l.type !== 'recipe' && left > 0 ? `<div class="list-tile-badge">${left}</div>` : (l.type !== 'recipe' && total > 0 ? `<div class="list-tile-done-badge">✓</div>` : '')}
+      </div>
+      <div class="list-tile-caption">
+        <div class="list-tile-name">${esc(l.name)}</div>
+        ${matchHint}
+        ${l.type !== 'recipe' && !l.archived && done > 0 ? `<div class="list-tile-progress"><div class="list-tile-bar" style="width:${pct}%"></div></div>` : ''}
+      </div>
+      ${hasJoint ? `<div class="list-tile-joint">🤝</div>` : ''}
+    </div>`;
+  }
+  return `<div class="list-tile${l.archived ? ' list-tile-archived' : ''}" data-list-id="${l.id}">
     ${dateStr ? `<div class="list-tile-date">${fmtDate(dateStr)}</div>` : ''}
     <button class="list-tile-menu-btn" onclick="event.stopPropagation();_listTileMenu('${l.id}',this)" title="אפשרויות">⋮</button>
     <div class="list-tile-icon">${typeEmoji}</div>
@@ -9790,7 +9895,8 @@ function listOpenClone(listId) {
 }
 
 function _renderWizard() {
-  el('wizardTitle').textContent = _wizCloneFrom ? 'שכפול רשימה' : (['','בחר סוג','פרטי הרשימה','שיתוף'][_wizStep] || 'רשימה חדשה');
+  const _wizStep2Title = { packing:'פרטי האריזה', recipe:'פרטי המתכון', event:'פרטי האירוע' }[_wizType] || 'פרטי הרשימה';
+  el('wizardTitle').textContent = _wizCloneFrom ? 'שכפול רשימה' : (['','בחר סוג', _wizStep2Title,'שיתוף'][_wizStep] || 'רשימה חדשה');
   const c = el('wizardContent');
   if (_wizStep === 1) _wizStep1(c);
   else if (_wizStep === 2) _wizStep2(c);
@@ -9806,11 +9912,19 @@ function _wizStep1(c) {
   c.innerHTML = `<div class="wizard-step">
     <div class="wizard-hint">מה תרצה לארגן?</div>
     <div class="wizard-type-grid">
-      ${types.map(t => `<div class="wizard-type-tile" onclick="_wizPickType('${t.id}')">
-        <div class="wizard-type-emoji">${t.emoji}</div>
-        <div class="wizard-type-label">${t.label}</div>
-        <div class="wizard-type-desc">${t.desc}</div>
-      </div>`).join('')}
+      ${types.map(t => {
+        const photoId = _TILE_PHOTOS[`_${t.id}Default`];
+        const photoUrl = photoId ? `https://images.unsplash.com/photo-${photoId}?w=300&h=300&fit=crop&q=75&auto=format` : '';
+        return `<div class="wizard-type-tile" onclick="_wizPickType('${t.id}')">
+          ${photoUrl ? `<img class="wizard-type-bg" src="${photoUrl}" alt="" loading="lazy">` : ''}
+          <div class="wizard-type-overlay"></div>
+          <div class="wizard-type-emoji">${t.emoji}</div>
+          <div class="wizard-type-text">
+            <div class="wizard-type-label">${t.label}</div>
+            <div class="wizard-type-desc">${t.desc}</div>
+          </div>
+        </div>`;
+      }).join('')}
     </div>
   </div>`;
 }
@@ -9832,7 +9946,7 @@ function _wizStep2(c) {
     ? `<button class="btn-ghost" onclick="closeListWizard()">ביטול</button>`
     : `<button class="btn-ghost" onclick="_wizStep=1;_renderWizard()">‹ חזור</button>`;
   c.innerHTML = `<div class="wizard-step">
-    <input class="add-input" id="wizName" type="text" placeholder="שם הרשימה *" style="font-size:16px;font-weight:700" value="${esc(_wizData.name || '')}"
+    <input class="add-input" id="wizName" type="text" placeholder="${{packing:'שם רשימת האריזה', recipe:'שם המתכון', event:'שם האירוע'}[_wizType] || 'שם הרשימה'} *" style="font-size:16px;font-weight:700" value="${esc(_wizData.name || '')}"
       onkeydown="if(event.key==='Enter')_wizGoStep3()">
     <div style="margin-top:12px">${meta}</div>
     <div class="wizard-nav">
@@ -9874,11 +9988,14 @@ function _wizStep3(c) {
       <div id="wizMemberPicks" style="display:none;flex-wrap:wrap;gap:6px;padding-top:8px">
         ${members.map(m => `<label class="wizard-member-chip"><input type="checkbox" value="${esc(m.name)}" checked> ${esc(m.name)}</label>`).join('')}
       </div>` : ''}
+      <label class="wizard-radio-row" style="margin-top:8px"><input type="radio" name="wizShare" value="personal" onchange="_wizShareToggle(this)"> 🔒 רק אני</label>
     </div>
-    <div class="wizard-hint">מי יכול לערוך?</div>
-    <div class="card" style="padding:12px;margin-bottom:16px">
-      <label class="wizard-radio-row"><input type="radio" name="wizEdit" value="all" checked> כולם</label>
-      <label class="wizard-radio-row" style="margin-top:8px"><input type="radio" name="wizEdit" value="parents"> הורים בלבד</label>
+    <div id="wizEditSection" style="display:none">
+      <div class="wizard-hint">מי יכול לערוך?</div>
+      <div class="card" style="padding:12px;margin-bottom:16px">
+        <label class="wizard-radio-row"><input type="radio" name="wizEdit" value="all" checked> כולם</label>
+        <label class="wizard-radio-row" style="margin-top:8px"><input type="radio" name="wizEdit" value="parents"> הורים בלבד</label>
+      </div>
     </div>
     <div class="wizard-nav">
       <button class="btn-ghost" onclick="_wizStep=2;_renderWizard()">‹ חזור</button>
@@ -9890,6 +10007,8 @@ function _wizStep3(c) {
 function _wizShareToggle(inp) {
   const picks = el('wizMemberPicks');
   if (picks) picks.style.display = inp.value === 'select' ? 'flex' : 'none';
+  const editSection = el('wizEditSection');
+  if (editSection) editSection.style.display = inp.value === 'personal' ? 'none' : 'block';
 }
 
 async function _wizCreate() {
@@ -9901,12 +10020,17 @@ async function _wizCreate() {
     canEdit    = src?.canEdit    || 'all';
   } else {
     const shareVal = document.querySelector('input[name="wizShare"]:checked')?.value || 'all';
-    sharedWith = 'all';
-    if (shareVal === 'select') {
+    if (shareVal === 'personal') {
+      sharedWith = [S.user];
+      canEdit = 'all';
+    } else if (shareVal === 'select') {
       const picked = [...document.querySelectorAll('#wizMemberPicks input[type=checkbox]:checked')].map(i => i.value);
       sharedWith = picked.length ? [S.user, ...picked] : 'all';
+      canEdit = document.querySelector('input[name="wizEdit"]:checked')?.value || 'all';
+    } else {
+      sharedWith = 'all';
+      canEdit = document.querySelector('input[name="wizEdit"]:checked')?.value || 'all';
     }
-    canEdit = document.querySelector('input[name="wizEdit"]:checked')?.value || 'all';
   }
   const srcList = _wizCloneFrom ? (S.lists || []).find(l => l.id === _wizCloneFrom) : null;
   const cloneId = _wizCloneFrom;
@@ -10001,7 +10125,8 @@ function _renderListDetail() {
   const showEditBtn = list.canEdit === 'all' || isParent();
   const editBtn = el('listEditBtn'); if (editBtn) editBtn.style.display = showEditBtn ? '' : 'none';
   const cloneBtn = el('listCloneBtn'); if (cloneBtn) cloneBtn.style.display = (showEditBtn && !_listEditMode) ? '' : 'none';
-  const deleteBtn = el('listDeleteBtn'); if (deleteBtn) deleteBtn.style.display = (isParent() && !_listEditMode) ? '' : 'none';
+  const canDelete = isParent() && !_listEditMode && list.createdBy === S.user;
+  const deleteBtn = el('listDeleteBtn'); if (deleteBtn) deleteBtn.style.display = canDelete ? '' : 'none';
   const cont = el('listDetailContent');
   if (!cont) return;
   if (list.type === 'packing')     _renderPackingDetail(cont, list, canEdit);
@@ -10456,7 +10581,8 @@ async function listClearDone(listId) {
 }
 
 async function listDelete(listId) {
-  if (!isParent()) return;
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!isParent() || !list || list.createdBy !== S.user) return;
   const ok = await _confirm('למחוק את הרשימה לצמיתות?', { danger: true, okLabel: 'מחק' });
   if (!ok) return;
   if (_listDetailId === listId) closeListDetail();
