@@ -6340,8 +6340,8 @@ function addChore(){
 let _grocerySection = 'pool';
 let _poolQtyActiveId = null;  // poolId whose inline qty control is visible (mobile)
 let _poolEditFor = null;     // poolId currently being edited
-let _poolEditQtyType = 'count'; // unit type in active edit row: 'count' | 'g' | 'kg'
-let _poolNewQtyType = 'count';  // unit for next new pool item: 'count' | 'g' | 'kg'
+let _poolEditQtyType = 'count'; // unit type in active edit row: 'count' | 'kg'
+let _poolNewQtyType = 'count';  // unit for next new pool item: 'count' | 'kg'
 let _poolLastCat = null;        // last category chosen when adding a pool item
 const _collapsedPoolCats     = new Set();
 const _collapsedShoppingCats = new Set();
@@ -6427,23 +6427,12 @@ function togglePoolAddForm(forceOpen) {
   }
 }
 
-function _qtyTypeLabel(t) {
-  if (t === 'kg') return 'ק"ג';
-  if (t === 'g')  return 'גר\'';
-  return 'יח\'';
-}
-function _nextQtyType(t) {
-  if (t === 'count') return 'g';
-  if (t === 'g')     return 'kg';
-  return 'count';
-}
 function togglePoolNewQtyType() {
-  _poolNewQtyType = _nextQtyType(_poolNewQtyType);
+  _poolNewQtyType = _poolNewQtyType === 'count' ? 'kg' : 'count';
   const btn = el('poolUnitToggle');
   if (btn) {
-    btn.textContent = _qtyTypeLabel(_poolNewQtyType);
+    btn.textContent = _poolNewQtyType === 'kg' ? 'ק"ג' : 'יח\'';
     btn.classList.toggle('kg', _poolNewQtyType === 'kg');
-    btn.classList.toggle('g',  _poolNewQtyType === 'g');
   }
 }
 
@@ -6451,9 +6440,6 @@ function fmtQty(qty, qtyType) {
   if (qtyType === 'kg') {
     const n = parseFloat(qty) || 0;
     return (Number.isInteger(n) ? n : n) + ' ק"ג';
-  }
-  if (qtyType === 'g') {
-    return (parseFloat(qty) || 0) + ' גר\'';
   }
   return '×' + (parseInt(qty) || 1);
 }
@@ -6556,13 +6542,10 @@ function renderPool() {
     const inCartAlready  = !inShoppingList && S.inCart.some(x => x.poolId === p.id);
     const inList = inShoppingList || inCartAlready;
     const isKg = p.qtyType === 'kg';
-    const isG  = p.qtyType === 'g';
-    const unitLabel = _qtyTypeLabel(p.qtyType);
+    const unitLabel = isKg ? 'ק"ג' : 'יח\'';
 
     if (_poolEditFor === p.id) {
-      const editLabel = _qtyTypeLabel(_poolEditQtyType);
-      const editIsKg  = _poolEditQtyType === 'kg';
-      const editIsG   = _poolEditQtyType === 'g';
+      const editIsKg = _poolEditQtyType === 'kg';
       const catOptions = getGroceryCats().map(c =>
         `<option value="${esc(c.name)}"${c.name===p.category?' selected':''}>${c.emoji} ${esc(c.name)}</option>`).join('');
       return `<div class="pool-item pool-item-edit-row">
@@ -6571,8 +6554,8 @@ function renderPool() {
           onkeydown="if(event.key==='Enter')confirmEditPoolItem(${p.id})">
         <select id="poolEditCat_${p.id}" style="display:none">${catOptions}</select>
         <div id="poolEditCatDd_${p.id}" style="flex-shrink:0"></div>
-        <button class="unit-toggle${editIsKg?' kg':''}${editIsG?' g':''}" id="poolEditUnit_${p.id}"
-          onclick="togglePoolEditQtyType(${p.id})">${editLabel}</button>
+        <button class="unit-toggle${editIsKg?' kg':''}" id="poolEditUnit_${p.id}"
+          onclick="togglePoolEditQtyType(${p.id})">${editIsKg?'ק"ג':'יח\''}</button>
         <button class="cart-btn" onclick="confirmEditPoolItem(${p.id})">✓</button>
         <button class="pool-add-btn" onclick="cancelEditPoolItem()" style="border-color:#718096;color:#718096">✕</button>
       </div>`;
@@ -6607,8 +6590,8 @@ function renderPool() {
         <div class="pool-slide pool-clickable" onclick="addPoolItemNow(${p.id})">
           <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
           <div class="pool-qty-inline" onclick="event.stopPropagation()">
-            <input class="qty-input${isKg?' kg':''}${isG?' g':''}" type="number"
-              min="${(isKg||isG)?'0.001':'1'}" step="${isKg?'0.001':isG?'1':'1'}" value="${qtyVal}"
+            <input class="qty-input${isKg?' kg':''}" type="number"
+              min="${isKg?'0.001':'1'}" step="${isKg?'0.001':'1'}" value="${qtyVal}"
               onfocus="this.select()"
               oninput="updatePoolQty(${p.id},this.value)">
             <span class="qty-unit-label">${unitLabel}</span>
@@ -6811,12 +6794,11 @@ function startEditPoolItem(id) {
 }
 
 function togglePoolEditQtyType(id) {
-  _poolEditQtyType = _nextQtyType(_poolEditQtyType);
+  _poolEditQtyType = _poolEditQtyType === 'count' ? 'kg' : 'count';
   const btn = el(`poolEditUnit_${id}`);
   if (btn) {
-    btn.textContent = _qtyTypeLabel(_poolEditQtyType);
+    btn.textContent = _poolEditQtyType === 'kg' ? 'ק"ג' : 'יח\'';
     btn.classList.toggle('kg', _poolEditQtyType === 'kg');
-    btn.classList.toggle('g',  _poolEditQtyType === 'g');
   }
 }
 
@@ -6868,9 +6850,8 @@ function renderShoppingList() {
     return `<div class="slist-item">
       <div class="slist-item-name">${esc(item.name)} ${qtyBadge}</div>
       <input class="qty-input${isKg?' kg':''}" type="number"
-        min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${actual}"
+        min="${isKg?'0.001':'1'}" step="${isKg?'0.001':'1'}" value="${actual}"
         onfocus="this.select()"
-        ${isKg?`oninput="this.value=this.value.replace(/(\\\.\\d{1})\\d+/,'$1')"`:``}
         onchange="updateListQty(${item.id},this.value)">
       <span class="qty-unit-label">${unitLabel}</span>
       <button class="cart-btn" onclick="moveToCart(${item.id})" aria-label="${t('toCart')}">${_ico.cart}</button>
