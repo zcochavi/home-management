@@ -6340,7 +6340,7 @@ function addChore(){
 let _grocerySection = 'pool';
 let _poolQtyActiveId = null;  // poolId whose inline qty control is visible (mobile)
 let _poolEditFor = null;     // poolId currently being edited
-let _poolEditQtyType = 'count'; // unit type in active edit row
+let _poolEditQtyType = 'count'; // unit type in active edit row: 'count' | 'kg'
 let _poolNewQtyType = 'count';  // unit for next new pool item: 'count' | 'kg'
 let _poolLastCat = null;        // last category chosen when adding a pool item
 const _collapsedPoolCats     = new Set();
@@ -6439,7 +6439,7 @@ function togglePoolNewQtyType() {
 function fmtQty(qty, qtyType) {
   if (qtyType === 'kg') {
     const n = parseFloat(qty) || 0;
-    return (Number.isInteger(n) ? n : n.toFixed(1)) + ' ק"ג';
+    return (Number.isInteger(n) ? n : n) + ' ק"ג';
   }
   return '×' + (parseInt(qty) || 1);
 }
@@ -6591,9 +6591,9 @@ function renderPool() {
           <div class="pool-item-name">${esc(p.name)}<span class="unit-badge">${unitLabel}</span></div>
           <div class="pool-qty-inline" onclick="event.stopPropagation()">
             <input class="qty-input${isKg?' kg':''}" type="number"
-              min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${qtyVal}"
+              min="${isKg?'0.001':'1'}" step="${isKg?'0.001':'1'}" value="${qtyVal}"
               onfocus="this.select()"
-              oninput="updatePoolQty(${p.id},this.value)${isKg?";this.value=this.value.replace(/(\\..{1})./g,'$1')":""}">
+              oninput="updatePoolQty(${p.id},this.value)">
             <span class="qty-unit-label">${unitLabel}</span>
           </div>
           ${ed?`<div class="pool-3dot" id="pool3dot_${p.id}"><button class="chore-3dot-btn" onclick="_pool3dotToggle(${p.id});event.stopPropagation()">${threeDotSVG}</button></div>`:''}
@@ -6850,9 +6850,8 @@ function renderShoppingList() {
     return `<div class="slist-item">
       <div class="slist-item-name">${esc(item.name)} ${qtyBadge}</div>
       <input class="qty-input${isKg?' kg':''}" type="number"
-        min="${isKg?'0.1':'1'}" step="${isKg?'0.1':'1'}" value="${actual}"
+        min="${isKg?'0.001':'1'}" step="${isKg?'0.001':'1'}" value="${actual}"
         onfocus="this.select()"
-        ${isKg?`oninput="this.value=this.value.replace(/(\\\.\\d{1})\\d+/,'$1')"`:``}
         onchange="updateListQty(${item.id},this.value)">
       <span class="qty-unit-label">${unitLabel}</span>
       <button class="cart-btn" onclick="moveToCart(${item.id})" aria-label="${t('toCart')}">${_ico.cart}</button>
