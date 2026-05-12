@@ -1173,6 +1173,9 @@ input[type="date"], input[type="time"] {
   transition: border-color var(--t-fast);
 }
 input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary-500); }
+.date-icon-wrap { position: relative; display: flex; align-items: center; min-width: 0; }
+.date-icon-wrap input[type="date"] { width: 100%; padding-inline-start: 28px; }
+.date-icon { position: absolute; inset-inline-start: 8px; font-size: 14px; pointer-events: none; line-height: 1; }
 
 /* ═══════════════════════════════════════════
    CALENDAR
