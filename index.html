@@ -606,7 +606,7 @@
           <div class="form-row">
             <div id="ddHwSubject" style="flex:1;min-width:0"></div>
             <select id="hwSubject" style="display:none"></select>
-            <div class="date-icon-wrap" style="flex:1"><span class="date-icon">📅</span><input type="date" id="hwDue"></div>
+            <div class="date-icon-wrap" style="flex:1"><input type="date" id="hwDue"><span class="date-icon" onclick="document.getElementById('hwDue').showPicker()">📅</span></div>
             <button class="btn-sm" id="addHwBtn" onclick="addHomework()"></button>
           </div>
         </div>
