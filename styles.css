@@ -1176,6 +1176,8 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .date-icon-wrap { position: relative; display: flex; align-items: center; min-width: 0; }
 .date-icon-wrap input[type="date"] { width: 100%; padding-right: 28px; }
 .date-icon-wrap input[type="date"]::-webkit-calendar-picker-indicator { display: none !important; width: 0; height: 0; padding: 0; margin: 0; }
+.date-icon-wrap input[type="date"]::-webkit-inner-spin-button,
+.date-icon-wrap input[type="date"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .date-icon { position: absolute; right: 8px; font-size: 14px; cursor: pointer; line-height: 1; }
 
 /* ═══════════════════════════════════════════
