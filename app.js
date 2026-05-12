@@ -4388,10 +4388,17 @@ function renderAdminFeatureFlags() {
 
 async function saveFeatureFlag(key, value) {
   _featureFlags[key] = value;
+  // Immediately re-render all affected areas — don't wait for onSnapshot
+  renderAdminFeatureFlags();
+  renderHome();
+  if (S.tab === 'homework') renderHomework();
+  const webtopCard = el('mgmtWebtopCard');
+  if (webtopCard) webtopCard.style.display = isParent() && featureOn('webtopConnection') ? '' : 'none';
   try {
     await fbDb.collection('appConfig').doc('featureFlags').set({ [key]: value }, { merge: true });
     showToast(value ? 'פיצ\'ר הופעל ✓' : 'פיצ\'ר כובה ✓', 'success');
   } catch(e) {
+    _featureFlags[key] = !value;
     showToast('שגיאה בשמירה', 'error');
   }
 }
@@ -5748,10 +5755,10 @@ function renderHome() {
     if (kidCode) wtHomeHw = wtHomeHw.filter(h => h.classCode === kidCode);
   }
 
-  // Merge: tag each item with its type for rendering, then sort by due date
+  // Merge: when webtop is off only show personal homework
   const combined = [
     ...hw.map(h => ({ _type:'hw', _due: h.due||'', ...h })),
-    ...wtHomeHw.map(h => ({ _type:'wt', _due: h.date||'', ...h })),
+    ...(featureOn('webtopConnection') ? wtHomeHw.map(h => ({ _type:'wt', _due: h.date||'', ...h })) : []),
   ].sort((a,b) => {
     if (!a._due && !b._due) return 0;
     if (!a._due) return 1;
