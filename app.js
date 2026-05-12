@@ -5392,7 +5392,7 @@ function renderHomeUpcoming() {
       const d = (a.date||'').localeCompare(b.date||'');
       return d !== 0 ? d : (a.time||'').localeCompare(b.time||'');
     })
-    .slice(0, 5);
+    .slice(0, 3);
 
   if (!all.length) { card.style.display = 'none'; return; }
   card.style.display = '';
@@ -5657,7 +5657,7 @@ function renderHome() {
   let tasks = S.chores.filter(c=>!c.done);
   if (S.filter!=='All') tasks = tasks.filter(c=>c.assignee===S.filter);
   el('homeTasks').innerHTML = tasks.length
-    ? tasks.slice(0,8).map(c => {
+    ? tasks.slice(0,3).map(c => {
         const can = isParent()||c.assignee===S.user;
         const showSub = isParent() && c.assignee && c.assignee !== 'All';
         return `<div class="task-row home-task-row">
@@ -5724,7 +5724,7 @@ function renderHome() {
   }
 
   el('hwSummary').innerHTML = combined.length
-    ? combined.map(h => {
+    ? combined.slice(0,3).map(h => {
         if (h._type === 'wt') {
           const parts = [];
           if (isParent() && S.filter === 'All') {
