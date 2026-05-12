@@ -929,7 +929,7 @@ body {
 .pool-add-expand { padding: 0 4px 8px; }
 .pool-add-expand .sd-trigger { background: var(--surface); border: 1.5px solid var(--gray-200); border-radius: var(--r-input); }
 .comm-add-form .sd-trigger, #ddHwSubject .sd-trigger { width: 100%; box-sizing: border-box; background: var(--surface); border: 1.5px solid var(--gray-200); border-radius: var(--r-input); font-size: 14px; font-weight: 600; color: var(--gray-900); padding: 12px 16px; justify-content: space-between; }
-.comm-add-form .sd-trigger::after, #ddHwSubject .sd-trigger::after { content: '▾'; font-size: 11px; color: var(--gray-400); margin-inline-start: 4px; }
+.comm-add-form .sd-trigger::after { content: '▾'; font-size: 11px; color: var(--gray-400); margin-inline-start: 4px; }
 .grocery-add { display: flex; gap: 7px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
 .g-input { flex: 1; min-width: 120px; padding: 10px 14px; border: 1.5px solid var(--gray-200); border-radius: var(--r-input); font-family: inherit; font-size: 14px; font-weight: 600; outline: none; background: var(--surface); transition: border-color var(--t-fast); }
 .g-input:focus { border-color: var(--primary-500); background: var(--surface); }
