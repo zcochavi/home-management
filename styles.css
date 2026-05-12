@@ -1440,8 +1440,8 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
   z-index: 90;
 }
 
-.lists-topbar { height: 0; overflow: visible; position: relative; z-index: 5; }
-.lists-topbar .pool-search-toggle { position: absolute; top: 6px; inset-inline-end: 0; }
+.lists-topbar { height: 36px; overflow: visible; position: relative; z-index: 5; }
+.lists-topbar .pool-search-toggle { position: absolute; top: 4px; inset-inline-end: 0; }
 .lists-search-bar {
   display: none; padding: 8px 12px; position: relative;
 }
