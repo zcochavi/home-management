@@ -488,6 +488,26 @@ let _presenceInterval   = null;
 let _notifUnsubscribe   = null;
 let _webtopHomework     = []; // [{subject, text, date, studentId, studentName}]
 let _webtopUpdatedAt    = null;
+let _featureFlags       = {}; // loaded from appConfig/featureFlags
+let _ffUnsubscribe      = null;
+
+const featureOn = (key) => _featureFlags[key] !== false; // default true if not set
+
+const FEATURE_FLAGS_DEF = [
+  { key: 'webtopConnection', icon: '📡', labelHe: 'חיבור Webtop', descHe: 'כרטיס חיבור Webtop בהגדרות, שיעורי בית מסונכרנים ועדכון קהילה' },
+];
+
+function subscribeToFeatureFlags() {
+  if (_ffUnsubscribe) { _ffUnsubscribe(); _ffUnsubscribe = null; }
+  _ffUnsubscribe = fbDb.collection('appConfig').doc('featureFlags')
+    .onSnapshot(snap => {
+      _featureFlags = snap.exists ? snap.data() : {};
+      // Re-render affected areas immediately
+      if (S.tab === 'homework') renderHomework();
+      renderMgmtWebtop && renderMgmtWebtop();
+      if (S.tab === 'home') renderHome();
+    }, () => { _featureFlags = {}; });
+}
 
 const isParent    = () => getParents().includes(S.user);
 const isKid       = () => getKids().includes(S.user);
@@ -833,6 +853,7 @@ async function doSignUp() {
     // 4. Manually kick off subscription (onAuthStateChanged was suppressed)
     S.uid = ownerUid;
     el('authScreen').classList.add('hidden');
+    subscribeToFeatureFlags();
     subscribeToFamily(ownerUid);
   } catch(e) {
     _registering = false;
@@ -919,6 +940,7 @@ async function doJoin() {
       el('authScreen').classList.remove('hidden');
       el('joinError').textContent = 'הגישה לנתוני המשפחה נכשלה. ייתכן בעיית הרשאות ב-Firestore.';
     }, 15000);
+    subscribeToFeatureFlags();
     subscribeToFamily(ownerUid);
     fbDb.collection('families').doc(ownerUid).get()
       .then(() => clearTimeout(loadTimeout))
@@ -2303,7 +2325,7 @@ function renderMgmt() {
   // Webtop card — parents only
   const webtopCard = el('mgmtWebtopCard');
   if (webtopCard) {
-    webtopCard.style.display = isParent() ? '' : 'none';
+    webtopCard.style.display = isParent() && featureOn('webtopConnection') ? '' : 'none';
     const codeEl = el('mgmtWebtopCode');
     if (codeEl) codeEl.textContent = S.uid || '';
     renderMgmtWebtop();
@@ -4343,6 +4365,37 @@ function _adminLogHtml(combined) {
   }).join('');
 }
 
+function renderAdminFeatureFlags() {
+  const cont = el('adminFeatureFlags');
+  if (!cont) return;
+  cont.innerHTML = FEATURE_FLAGS_DEF.map(f => {
+    const on = featureOn(f.key);
+    return `<div class="ff-row">
+      <div class="ff-row-info">
+        <span class="ff-icon">${f.icon}</span>
+        <div>
+          <div class="ff-label">${f.labelHe}</div>
+          <div class="ff-desc">${f.descHe}</div>
+        </div>
+      </div>
+      <label class="ff-toggle">
+        <input type="checkbox" ${on ? 'checked' : ''} onchange="saveFeatureFlag('${f.key}',this.checked)">
+        <span class="ff-slider"></span>
+      </label>
+    </div>`;
+  }).join('');
+}
+
+async function saveFeatureFlag(key, value) {
+  _featureFlags[key] = value;
+  try {
+    await fbDb.collection('appConfig').doc('featureFlags').set({ [key]: value }, { merge: true });
+    showToast(value ? 'פיצ\'ר הופעל ✓' : 'פיצ\'ר כובה ✓', 'success');
+  } catch(e) {
+    showToast('שגיאה בשמירה', 'error');
+  }
+}
+
 async function _fetchAdminPanelData() {
   const [logSnap, expiredSnap, notifSnap, lbSnap] = await Promise.all([
     fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get(),
@@ -4374,6 +4427,7 @@ function _applyAdminPanelCache(data, showLog) {
   renderShoppingHistorySettings();
   renderMaintenanceTools();
   renderAdminEventTypes();
+  renderAdminFeatureFlags();
 }
 
 function renderAdminEventTypes() {
@@ -5682,10 +5736,10 @@ function renderHome() {
 
   // Add Webtop homework (undone items for the relevant child/class)
   const _wtDoneMap = familyData?.webtopHomeworkDone || {};
-  let wtHomeHw = _webtopHomework.filter(h => {
+  let wtHomeHw = featureOn('webtopConnection') ? _webtopHomework.filter(h => {
     const key = `${h.classCode}|${h.date}|${h.subject}`;
     return !_wtDoneMap[key];
-  });
+  }) : [];
   if (isKid()) {
     const myCode = getMembers().find(m => m.name === S.user)?.webtopClassCode;
     if (myCode) wtHomeHw = wtHomeHw.filter(h => h.classCode === myCode);
@@ -7193,6 +7247,7 @@ function renderHomework(){
   const webtopSec=el('hwWebtopSection');
   const webtopListEl=el('hwWebtopList');
   if(webtopSec&&webtopListEl){
+    if(!featureOn('webtopConnection')){webtopSec.style.display='none';return;}
     // Show a hint when homework exists but this child has no classCode mapping
     const noMapping = S.child && !childClassCode && anyMapped && _webtopHomework.length > 0;
     if(!wtHw.length && !noMapping){
