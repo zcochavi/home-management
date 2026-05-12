@@ -1174,9 +1174,9 @@ input[type="date"], input[type="time"] {
 }
 input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary-500); }
 .date-icon-wrap { position: relative; display: flex; align-items: center; min-width: 0; }
-.date-icon-wrap input[type="date"] { width: 100%; padding-inline-end: 28px; }
+.date-icon-wrap input[type="date"] { width: 100%; padding-right: 28px; }
 .date-icon-wrap input[type="date"]::-webkit-calendar-picker-indicator { display: none !important; width: 0; height: 0; padding: 0; margin: 0; }
-.date-icon { position: absolute; inset-inline-end: 8px; font-size: 14px; cursor: pointer; line-height: 1; }
+.date-icon { position: absolute; right: 8px; font-size: 14px; cursor: pointer; line-height: 1; }
 
 /* ═══════════════════════════════════════════
    CALENDAR
