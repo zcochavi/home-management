@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "FamilyHub – Webtop Connector",
+  "version": "1.2.0",
+  "description": "מחבר שיעורי בית מ-Webtop ל-FamilyHub אוטומטית",
+  "permissions": ["storage", "cookies", "tabs", "webRequest"],
+  "host_permissions": [
+    "https://webtop.smartschool.co.il/*",
+    "https://webtopserver.smartschool.co.il/*",
+    "https://us-central1-familyhub-7fdd5.cloudfunctions.net/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "FamilyHub Webtop Connector"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

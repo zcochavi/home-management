@@ -1,1040 +1,716 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script>
+    (async function(){
+      try {
+        const r = await fetch('_ver.json?_=' + Date.now(), {cache:'no-store'});
+        const {v} = await r.json();
+        if (v !== '20260421ls89') location.reload(true);
+      } catch(e){}
+    })();
+  </script>
   <title>FamilyHub 🏠</title>
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Nunito', sans-serif; background: #f0f4ff; min-height: 100vh; max-width: 520px; margin: 0 auto; padding-bottom: 32px; }
-
-    /* ── Login ── */
-    #loginScreen { position: fixed; inset: 0; background: linear-gradient(160deg, #6a11cb 0%, #c471ed 50%, #f5576c 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 999; padding: 24px; }
-    #loginScreen.hidden { display: none; }
-    .login-logo { font-size: 52px; margin-bottom: 8px; animation: bounce 1.8s infinite; }
-    @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
-    .login-title { font-size: 32px; font-weight: 900; color: white; letter-spacing: -0.5px; }
-    .login-sub { font-size: 16px; color: rgba(255,255,255,0.75); font-weight: 700; margin-top: 6px; margin-bottom: 32px; }
-    .login-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; width: 100%; max-width: 340px; }
-    .login-grid .login-card:nth-child(5) { grid-column: 1/-1; max-width: 152px; margin: 0 auto; }
-    .login-card { background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); border-radius: 22px; padding: 20px 12px 16px; display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; transition: transform 0.18s, background 0.18s, box-shadow 0.18s; backdrop-filter: blur(6px); }
-    .login-card:hover { transform: scale(1.06); background: rgba(255,255,255,0.28); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
-    .login-card-emoji { width: 62px; height: 62px; background: rgba(255,255,255,0.25); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 32px; border: 2px solid rgba(255,255,255,0.5); }
-    .login-card-name { font-size: 15px; font-weight: 900; color: white; }
-    .login-card-role { font-size: 11px; color: rgba(255,255,255,0.65); font-weight: 700; }
-
-    /* ── App ── */
-    #app { display: none; }
-    #app.visible { display: block; }
-
-    /* ── Header ── */
-    .header { background: linear-gradient(135deg, #6a11cb 0%, #f093fb 55%, #f5576c 100%); padding: 16px 16px 14px; color: white; }
-    .header-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px; }
-    .header-title { font-size: 22px; font-weight: 900; letter-spacing: -0.5px; }
-    .header-greeting { font-size: 18px; font-weight: 900; }
-    .switch-btn { background: rgba(255,255,255,0.2); border: 1.5px solid rgba(255,255,255,0.45); border-radius: 20px; color: white; font-family: 'Nunito', sans-serif; font-size: 11px; font-weight: 800; padding: 5px 12px; cursor: pointer; transition: background 0.18s; white-space: nowrap; }
-    .switch-btn:hover { background: rgba(255,255,255,0.32); }
-    .header-date { font-size: 12px; opacity: 0.8; font-weight: 600; margin-bottom: 14px; }
-    .avatar-row { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 2px; }
-    .avatar-row::-webkit-scrollbar { display: none; }
-    .avatar-chip { display: flex; flex-direction: column; align-items: center; cursor: pointer; flex-shrink: 0; transition: transform 0.15s; }
-    .avatar-chip:active { transform: scale(0.9); }
-    .avatar-bubble { width: 44px; height: 44px; background: rgba(255,255,255,0.2); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 21px; border: 2.5px solid rgba(255,255,255,0.35); transition: all 0.2s; }
-    .avatar-chip.active .avatar-bubble { background: white; border-color: white; box-shadow: 0 0 0 3px rgba(255,255,255,0.4); }
-    .avatar-label { font-size: 10px; font-weight: 800; margin-top: 4px; opacity: 0.9; }
-
-    /* ── Tab bar ── */
-    .tab-bar { display: flex; background: white; border-bottom: 2px solid #e8edf5; position: sticky; top: 0; z-index: 100; box-shadow: 0 3px 10px rgba(0,0,0,0.08); overflow-x: auto; }
-    .tab-bar::-webkit-scrollbar { display: none; }
-    .tab { flex: 0 0 auto; min-width: 72px; padding: 11px 10px 9px; text-align: center; font-size: 11px; font-weight: 800; color: #9aa5b8; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.2s; user-select: none; white-space: nowrap; }
-    .tab.active { color: #6a11cb; border-bottom-color: #6a11cb; }
-    .tab-icon { font-size: 19px; display: block; margin-bottom: 2px; }
-
-    /* ── Content / Cards ── */
-    .content { padding: 14px; }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-    .card { background: white; border-radius: 18px; padding: 16px; margin-bottom: 14px; box-shadow: 0 2px 14px rgba(0,0,0,0.06); }
-    .card-title { font-size: 16px; font-weight: 900; color: #1a202c; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
-    .welcome-banner { border-radius: 18px; padding: 18px 16px; margin-bottom: 14px; color: white; font-weight: 800; }
-    .welcome-banner .wb-emoji { font-size: 36px; }
-    .welcome-banner .wb-name  { font-size: 22px; font-weight: 900; }
-    .welcome-banner .wb-sub   { font-size: 12px; opacity: 0.85; margin-top: 2px; }
-
-    /* ── Task rows ── */
-    .task-row { display: flex; align-items: center; gap: 9px; padding: 9px 0; border-bottom: 1px solid #f3f6ff; }
-    .task-row:last-of-type { border-bottom: none; padding-bottom: 0; }
-    .task-row:first-of-type { padding-top: 0; }
-    .check-box { width: 24px; height: 24px; border-radius: 7px; border: 2px solid #c8d3e8; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; transition: all 0.18s; }
-    .check-box.done { background: linear-gradient(135deg, #6a11cb, #f093fb); border-color: transparent; color: white; }
-    .check-box.readonly { cursor: default; }
-    .task-text { flex: 1; font-size: 14px; font-weight: 700; color: #2d3748; }
-    .task-text.done { text-decoration: line-through; color: #a0aec0; }
-    .mini-avatar { font-size: 18px; width: 30px; height: 30px; background: #f3f6ff; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .del-btn { background: none; border: none; font-size: 17px; cursor: pointer; opacity: 0.35; line-height: 1; padding: 0 3px; transition: opacity 0.15s; }
-    .del-btn:hover { opacity: 0.7; }
-    .pri { font-size: 9px; font-weight: 900; padding: 2px 7px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.3px; flex-shrink: 0; }
-    .pri-high   { background: #fff0f0; color: #e53e3e; }
-    .pri-medium { background: #fffbeb; color: #c87b00; }
-    .pri-low    { background: #f0fff4; color: #38a169; }
-
-    /* ── Stars ── */
-    .star-chart { display: flex; flex-direction: column; gap: 14px; }
-    .star-row { display: flex; align-items: center; gap: 10px; }
-    .star-person { display: flex; align-items: center; gap: 6px; min-width: 80px; }
-    .star-person-emoji { font-size: 20px; }
-    .star-person-name { font-size: 13px; font-weight: 800; color: #2d3748; }
-    .stars { display: flex; gap: 3px; }
-    .star { font-size: 24px; cursor: pointer; transition: transform 0.15s; filter: grayscale(1) opacity(0.25); line-height: 1; }
-    .star.on { filter: none; }
-    .star:hover { transform: scale(1.25); }
-    .star.readonly { cursor: default; }
-    .star.readonly:hover { transform: none; }
-    .star-count { font-size: 11px; color: #a0aec0; font-weight: 800; margin-left: 3px; }
-    .star-row.mine { background: #fefce8; border-radius: 12px; padding: 6px 10px; margin: 0 -10px; }
-
-    /* ── Subject badges ── */
-    .badge { font-size: 10px; font-weight: 900; padding: 3px 9px; border-radius: 20px; flex-shrink: 0; }
-    .b-Maths   { background: #ebf4ff; color: #2b6cb0; }
-    .b-English { background: #f0fff4; color: #276749; }
-    .b-Science { background: #faf5ff; color: #6b46c1; }
-    .b-History { background: #fffaf0; color: #c05621; }
-    .b-Art     { background: #fff5f7; color: #b83280; }
-
-    /* ── Homework ── */
-    .hw-item { padding: 10px 0; border-bottom: 1px solid #f3f6ff; }
-    .hw-item:last-child { border-bottom: none; }
-    .hw-head { display: flex; align-items: center; gap: 7px; }
-    .hw-desc-text { flex: 1; font-size: 13px; font-weight: 700; color: #2d3748; }
-    .hw-desc-text.done { text-decoration: line-through; color: #a0aec0; }
-    .hw-due { font-size: 11px; color: #a0aec0; font-weight: 600; margin-top: 4px; margin-left: 31px; }
-
-    /* ── Grocery ── */
-    .grocery-add { display: flex; gap: 7px; margin-bottom: 14px; flex-wrap: wrap; }
-    .g-input { flex: 1; min-width: 120px; padding: 9px 13px; border: 2px solid #e8edf5; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; outline: none; }
-    .g-input:focus { border-color: #6a11cb; }
-    .g-cat { padding: 9px 8px; border: 2px solid #e8edf5; border-radius: 12px; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700; outline: none; background: white; cursor: pointer; }
-    .g-item { display: flex; align-items: center; gap: 9px; padding: 8px 10px; background: #f8faff; border-radius: 11px; margin-bottom: 6px; }
-    .g-item-text { flex: 1; font-size: 14px; font-weight: 700; color: #2d3748; }
-    .g-item-text.done { text-decoration: line-through; color: #a0aec0; }
-    .cat-title { font-size: 11px; font-weight: 900; color: #8896ab; text-transform: uppercase; letter-spacing: 0.6px; margin: 10px 0 7px; }
-    .cat-title:first-child { margin-top: 0; }
-
-    /* ── Buttons ── */
-    .btn { padding: 9px 16px; border: none; border-radius: 12px; background: linear-gradient(135deg, #6a11cb, #f093fb); color: white; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 800; cursor: pointer; transition: opacity 0.18s, transform 0.12s; flex-shrink: 0; }
-    .btn:active { opacity: 0.8; transform: scale(0.96); }
-    .btn-sm { padding: 8px 14px; border: none; border-radius: 10px; background: linear-gradient(135deg, #6a11cb, #f093fb); color: white; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 800; cursor: pointer; flex-shrink: 0; }
-    .btn-ghost { padding: 6px 12px; border: none; border-radius: 9px; background: #f0f4ff; color: #718096; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 700; cursor: pointer; display: block; margin-top: 10px; margin-left: auto; }
-    .btn-ghost:hover { background: #e2e8f0; }
-
-    /* ── Forms ── */
-    .add-form { margin-top: 12px; padding-top: 12px; border-top: 1.5px dashed #e8edf5; display: flex; flex-direction: column; gap: 8px; }
-    .form-row { display: flex; gap: 7px; }
-    .add-input { flex: 1; padding: 9px 12px; border: 2px solid #e8edf5; border-radius: 11px; font-family: 'Nunito', sans-serif; font-size: 14px; font-weight: 700; outline: none; }
-    .add-input:focus { border-color: #6a11cb; }
-    select { padding: 9px 8px; border: 2px solid #e8edf5; border-radius: 11px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 700; outline: none; background: white; cursor: pointer; }
-    select:focus { border-color: #6a11cb; }
-    input[type="date"], input[type="time"] { padding: 9px 8px; border: 2px solid #e8edf5; border-radius: 11px; font-family: 'Nunito', sans-serif; font-size: 13px; font-weight: 700; outline: none; background: white; }
-    input[type="date"]:focus, input[type="time"]:focus { border-color: #6a11cb; }
-
-    /* ── Child tabs ── */
-    .child-tabs { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
-    .child-tab { padding: 7px 16px; border-radius: 22px; background: #f0f4ff; font-size: 13px; font-weight: 800; color: #718096; cursor: pointer; transition: all 0.2s; user-select: none; }
-    .child-tab.active { background: linear-gradient(135deg, #6a11cb, #f093fb); color: white; }
-    .person-header { font-size: 15px; font-weight: 900; color: #1a202c; margin-bottom: 8px; display: flex; align-items: center; gap: 7px; }
-    .card.mine-card { border: 2px solid #c471ed; }
-    .empty { text-align: center; padding: 22px; color: #a0aec0; font-size: 14px; font-weight: 700; }
-
-    /* ════════════════════════════════════════
-       CALENDAR
-    ════════════════════════════════════════ */
-    /* GCal connect bar */
-    .gcal-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #f8faff; border-radius: 12px; margin-bottom: 14px; }
-    .gcal-status { flex: 1; font-size: 13px; font-weight: 700; color: #4a5568; }
-    .gcal-status .connected { color: #38a169; }
-    .gcal-status .needs-setup { color: #e53e3e; font-size: 11px; }
-    .gcal-btn { padding: 7px 14px; border: none; border-radius: 10px; font-family: 'Nunito', sans-serif; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap; }
-    .gcal-btn-connect    { background: #4285f4; color: white; }
-    .gcal-btn-disconnect { background: #f0f4ff; color: #718096; }
-    .gcal-btn-refresh    { background: #f0f4ff; color: #4285f4; margin-right: 4px; }
-    .gcal-btn:disabled   { opacity: 0.5; cursor: default; }
-    .g-logo { font-size: 16px; }
-
-    /* Calendar grid */
-    .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-    .cal-nav-btn { background: #f0f4ff; border: none; border-radius: 10px; width: 34px; height: 34px; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.18s; color: #6a11cb; font-weight: 900; }
-    .cal-nav-btn:hover { background: #e0e8ff; }
-    .cal-month-label { font-size: 18px; font-weight: 900; color: #1a202c; }
-    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
-    .cal-dow { text-align: center; font-size: 10px; font-weight: 900; color: #a0aec0; text-transform: uppercase; padding: 4px 0 6px; }
-    .cal-day { aspect-ratio: 1; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 5px; cursor: pointer; transition: background 0.15s; position: relative; }
-    .cal-day:hover { background: #f0f4ff; }
-    .cal-day.other-month .cal-day-num { color: #d0d8e8; }
-    .cal-day.today { background: #f0f4ff; }
-    .cal-day.today .cal-day-num { color: #6a11cb; font-weight: 900; }
-    .cal-day.selected { background: linear-gradient(135deg, #6a11cb, #f093fb) !important; }
-    .cal-day.selected .cal-day-num { color: white !important; }
-    .cal-day-num { font-size: 13px; font-weight: 700; color: #2d3748; line-height: 1; }
-    .cal-dots { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; margin-top: 3px; padding: 0 2px; }
-    .cal-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
-    .cal-day.selected .cal-dot { opacity: 0.85; }
-
-    /* Day panel */
-    .day-panel { margin-top: 14px; }
-    .day-panel-title { font-size: 15px; font-weight: 900; color: #1a202c; margin-bottom: 10px; }
-    .event-item { display: flex; align-items: center; gap: 9px; padding: 9px 10px; background: #f8faff; border-radius: 12px; margin-bottom: 7px; border-left: 4px solid #c8d3e8; }
-    .event-item.gcal-event { background: #f0f7ff; }
-    .event-body { flex: 1; min-width: 0; }
-    .event-title { font-size: 14px; font-weight: 800; color: #2d3748; display: flex; align-items: center; gap: 5px; }
-    .event-meta  { font-size: 11px; color: #a0aec0; font-weight: 600; margin-top: 1px; }
-    .event-person-chip { font-size: 11px; font-weight: 800; padding: 2px 8px; border-radius: 12px; background: #f0f4ff; color: #6a11cb; flex-shrink: 0; }
-    .g-badge { font-size: 10px; font-weight: 900; background: #4285f4; color: white; border-radius: 4px; padding: 1px 4px; letter-spacing: 0.2px; }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 4px; height: 4px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #c8d3e8; border-radius: 4px; }
-  </style>
+  <link id="favicon" rel="icon" type="image/png">
+  <link id="appleTouchIcon" rel="apple-touch-icon">
+  <link rel="manifest" href="manifest.json">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="FamilyHub">
+  <meta name="theme-color" content="#6C8CFF">
+  <script>
+    (function(){
+      function makeIcon(size) {
+        const c=document.createElement('canvas');c.width=c.height=size;
+        const x=c.getContext('2d');
+        const g=x.createLinearGradient(0,0,size,size);
+        g.addColorStop(0,'#6a11cb');g.addColorStop(1,'#f5576c');
+        x.fillStyle=g;x.beginPath();
+        x.roundRect(0,0,size,size,size*0.2);x.fill();
+        x.font=(size*0.6)+'px serif';x.textAlign='center';x.textBaseline='middle';
+        x.fillText('🏠',size/2,size*0.54);
+        return c.toDataURL();
+      }
+      document.getElementById('favicon').href=makeIcon(64);
+      document.getElementById('appleTouchIcon').href=makeIcon(180);
+    })();
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&family=Amatic+SC:wght@700&display=swap" rel="stylesheet">
+  <!-- Firebase SDKs — must load before main script -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-functions-compat.js"></script>
+  <link rel="stylesheet" href="styles.css?v=20260415wc">
 </head>
 <body>
 
-<!-- ════════════════ LOGIN ════════════════ -->
-<div id="loginScreen">
-  <div class="login-logo">🏠</div>
-  <div class="login-title">FamilyHub</div>
-  <div class="login-sub">Who's there?</div>
-  <div class="login-grid">
-    <div class="login-card" onclick="login('Zohar')"><div class="login-card-emoji">👩</div><div class="login-card-name">Zohar</div><div class="login-card-role">Mom</div></div>
-    <div class="login-card" onclick="login('Nir')"><div class="login-card-emoji">👨</div><div class="login-card-name">Nir</div><div class="login-card-role">Dad</div></div>
-    <div class="login-card" onclick="login('Roni')"><div class="login-card-emoji">👧</div><div class="login-card-name">Roni</div><div class="login-card-role">Age 12</div></div>
-    <div class="login-card" onclick="login('Shira')"><div class="login-card-emoji">🧒</div><div class="login-card-name">Shira</div><div class="login-card-role">Age 9</div></div>
-    <div class="login-card" onclick="login('Noya')"><div class="login-card-emoji">👶</div><div class="login-card-name">Noya</div><div class="login-card-role">Age 5</div></div>
+<!-- LOADING -->
+<div id="loadingScreen">
+  <div class="loading-emoji">🏠</div>
+  <div class="loading-txt">טוען...</div>
+</div>
+
+<!-- AUTH SCREEN -->
+<div id="authScreen" class="hidden">
+  <div class="auth-logo">🏠</div>
+  <div class="auth-title" style="color:white;margin-bottom:20px">FamilyHub</div>
+  <div class="auth-card">
+    <div class="auth-tabs">
+      <div class="auth-tab active" id="authTabSignin" onclick="setAuthMode('signin')">כניסה</div>
+      <div class="auth-tab"       id="authTabJoin"   onclick="setAuthMode('join')">הצטרף</div>
+    </div>
+
+    <!-- Sign In -->
+    <div id="signinPanel">
+      <input class="auth-input" id="siEmail" type="email"    placeholder="אימייל" dir="ltr" autocomplete="email"            onkeydown="if(event.key==='Enter')doSignIn()">
+      <input class="auth-input" id="siPwd"   type="password" placeholder="סיסמה"  dir="ltr" autocomplete="current-password" onkeydown="if(event.key==='Enter')doSignIn()">
+      <div id="siError" class="auth-error"></div>
+      <button class="auth-btn-main" onclick="doSignIn()">כניסה</button>
+      <button class="auth-link-btn" onclick="setAuthMode('signup')" style="direction:rtl">צור משפחה חדשה ←</button>
+    </div>
+
+    <!-- Join with family code -->
+    <div id="joinPanel" style="display:none">
+      <div class="auth-panel-label" style="text-align:center;margin-bottom:14px">הזן את קוד ההצטרפות שקיבלת מההורה</div>
+      <input class="auth-input" id="joinCode" type="text" placeholder="ABC123" maxlength="6" dir="ltr"
+        autocomplete="off" style="text-align:center;font-size:26px;font-weight:900;letter-spacing:6px;text-transform:uppercase"
+        oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter')doJoin()">
+      <div id="joinError" class="auth-error"></div>
+      <button class="auth-btn-main" onclick="doJoin()" style="direction:rtl">הצטרף ←</button>
+    </div>
+
+    <!-- Sign Up step 1 -->
+    <div id="signupPanel1" style="display:none">
+      <input class="auth-input" id="suFamily" type="text"     placeholder="שם המשפחה (משפחת כהן...)">
+      <input class="auth-input" id="suEmail"  type="email"    placeholder="אימייל" dir="ltr" autocomplete="email">
+      <input class="auth-input" id="suPwd"    type="password" placeholder="סיסמה (לפחות 6 תווים)" dir="ltr" autocomplete="new-password">
+      <div id="su1Error" class="auth-error"></div>
+      <button class="auth-btn-main" onclick="signupNext()">הבא ←</button>
+      <button class="auth-link-btn" onclick="setAuthMode('signin')" style="margin-top:4px">‹ חזרה להתחברות</button>
+    </div>
+
+    <!-- Sign Up step 2: member builder -->
+    <div id="signupPanel2" style="display:none">
+      <div class="auth-panel-label" id="su2Title">קודם כל, הפרטים שלך</div>
+      <div class="su2-subtitle" id="su2Subtitle">נדרש לפני הוספת בני משפחה נוספים</div>
+      <div class="emoji-row" id="emojiRow"></div>
+      <div class="mb-add-row">
+        <input class="auth-input mb-name-input" id="mbName" type="text" placeholder="השם שלך" onkeydown="if(event.key==='Enter')addDraftMember()">
+        <div class="mb-role-toggle" id="su2RoleRow" style="display:none">
+          <button class="mb-role-btn active" id="mbRoleParent" onclick="setMbRole('parent')">הורה</button>
+          <button class="mb-role-btn"        id="mbRoleKid"    onclick="setMbRole('kid')">ילד</button>
+        </div>
+      </div>
+      <div id="mbKidExtras" style="display:none;margin-bottom:8px">
+        <div class="mb-role-toggle" style="margin-bottom:8px">
+          <button class="mb-role-btn" id="mbGenderBoy"  onclick="setMbGender('boy')">👦 בן</button>
+          <button class="mb-role-btn" id="mbGenderGirl" onclick="setMbGender('girl')">👧 בת</button>
+        </div>
+        <input class="auth-input" id="mbDob" type="date" placeholder="תאריך לידה" style="margin-bottom:0">
+      </div>
+      <button class="auth-btn-main su2-self-btn" id="su2AddBtn" onclick="addDraftMember()">הוסף את עצמי ←</button>
+      <div class="member-preview" id="memberPreview"></div>
+      <div class="su2-more-divider" id="su2MoreDivider" style="display:none"><span>הוסף בני משפחה נוספים <span class="su2-optional">(אופציונלי)</span></span></div>
+      <div id="su2Error" class="auth-error"></div>
+      <div class="auth-btns-row" id="su2CreateRow" style="display:none">
+        <button class="auth-btn-back" onclick="signupBack()">‹ חזור</button>
+        <button class="auth-btn-main auth-btn-create" onclick="doSignUp()">✓ צור חשבון</button>
+      </div>
+      <button class="auth-link-btn" id="su2BackLink" onclick="signupBack()" style="margin-top:4px">‹ חזור</button>
+    </div>
+
+    <div id="authLoadingOverlay" style="display:none" class="auth-loading">⏳ טוען...</div>
   </div>
 </div>
 
-<!-- ════════════════ APP ════════════════ -->
-<div id="app">
-  <div class="header">
-    <div class="header-top">
-      <div>
-        <div class="header-title">🏠 FamilyHub</div>
-        <div class="header-greeting" id="headerGreeting"></div>
-      </div>
-      <button class="switch-btn" onclick="switchUser()">Switch user</button>
+<!-- MEMBER PICKER (shown after Firebase auth) -->
+<div id="loginScreen" class="hidden">
+  <div class="login-logo">🏠</div>
+  <div class="login-title">FamilyHub</div>
+  <div class="login-family-name" id="loginFamilyName"></div>
+  <div class="login-sub" id="loginSub">מי אתה?</div>
+  <div class="login-grid" id="loginGrid"></div>
+  <button class="login-signout" onclick="authSignOut()">יציאה מהחשבון ←</button>
+</div>
+
+<!-- TAB EDITOR SCREEN -->
+<div id="tabEditorScreen" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeTabEditor()">×</button>
+    <div class="mgmt-header-title">🗂 התאמת לשוניות</div>
+  </div>
+  <div class="mgmt-content">
+    <div class="card">
+      <div class="card-title">לשוניות פעילות</div>
+      <div class="mgmt-section-hint">שנה סדר עם החצים · לחץ × להסרה</div>
+      <div id="tabEditorActive"></div>
     </div>
-    <div class="header-date" id="headerDate"></div>
-    <div class="avatar-row" id="avatarRow"></div>
+    <div class="card">
+      <div class="card-title">הוסף לשונית</div>
+      <div id="tabEditorPool"></div>
+    </div>
+  </div>
+</div>
+
+<!-- HOME EDITOR SCREEN -->
+<div id="homeEditorScreen" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeHomeEditor()">×</button>
+    <div class="mgmt-header-title">✏️ התאמת דף הבית</div>
+  </div>
+  <div class="mgmt-content">
+    <div class="card">
+      <div class="card-title">סקציות מוצגות</div>
+      <div class="mgmt-section-hint">שנה סדר עם החצים · לחץ × להסתרה</div>
+      <div id="homeEditorActive"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">סקציות מוסתרות</div>
+      <div id="homeEditorHidden"></div>
+    </div>
+  </div>
+</div>
+
+<!-- FAMILY DETAILS PANEL (admin only) -->
+<div id="familyDetailsPanel" class="message-center-panel hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeFamilyDetails()">×</button>
+    <div class="mgmt-header-title" id="familyDetailsPanelTitle">👨‍👩‍👧 פרטי משפחה</div>
+  </div>
+  <div id="familyDetailsBody" style="overflow-y:auto;flex:1;padding:16px"></div>
+</div>
+
+<!-- PENDING REQUESTS PANEL (admin only) -->
+<div id="pendingPanel" class="message-center-panel hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closePendingPanel()">×</button>
+    <div class="mgmt-header-title">📋 בקשות ממתינות</div>
+  </div>
+  <div style="overflow-y:auto;flex:1;padding:16px">
+    <div class="comm-section-label" style="color:#92400e;margin-bottom:6px">⚡ אירועים</div>
+    <div id="ppEventsList" style="margin-bottom:20px"></div>
+    <div id="ppAdminSections">
+      <div class="comm-section-label" style="margin-bottom:6px">👤 מועמדויות לוועד</div>
+      <div id="ppAppsList" style="margin-bottom:20px"></div>
+      <div class="comm-section-label" style="margin-bottom:6px">🏫 בתי ספר</div>
+      <div id="ppSchoolsList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ADMIN PANEL -->
+<div id="adminPanel" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeAdminPanel()">×</button>
+    <div class="mgmt-header-title">⚙️ הגדרות מערכת</div>
+  </div>
+  <div style="padding:16px">
+    <div id="adminLogSection">
+      <div class="comm-section-label">✅ היסטוריית אישורים</div>
+      <div id="adminLogList"></div>
+    </div>
+    <div id="adminSettingsSection">
+      <div class="comm-section-label" style="margin-top:4px">🗂️ סוגי אירועים</div>
+      <div id="adminEventTypes"></div>
+      <div class="comm-section-label" style="margin-top:4px">⚙️ הגדרות התראות</div>
+      <div id="adminNotifSettings"></div>
+      <div class="comm-section-label" style="margin-top:4px">📊 הגדרות לוח מובילים</div>
+      <div id="adminLeaderboardSettings"></div>
+      <div class="comm-section-label" style="margin-top:4px">🛒 היסטוריית קניות</div>
+      <div id="adminShoppingHistorySettings"></div>
+      <div class="comm-section-label" style="margin-top:4px">🚩 פיצ'רים</div>
+      <div id="adminFeatureFlags"></div>
+      <div class="comm-section-label" style="margin-top:4px">🔧 כלי תחזוקה</div>
+      <div id="adminMaintenance"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MESSAGE CENTER -->
+<div id="messageCenterPanel" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeMessageCenter()">×</button>
+    <div class="mgmt-header-title">📬 מרכז הודעות</div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <span id="mcCount" style="font-size:12px;color:var(--gray-400);font-weight:700"></span>
+      <button id="mcDeleteAllBtn" onclick="deleteAllNotifs()" style="display:none;font-size:11px;padding:4px 10px;border:none;border-radius:var(--r-pill);background:var(--error-bg);color:var(--error);font-family:inherit;font-weight:700;cursor:pointer">מחק הכל</button>
+    </div>
+  </div>
+  <div id="mcTabBar" class="mc-tab-bar" style="display:none">
+    <button id="mcTabNotifs"   class="mc-tab mc-tab-active" onclick="switchMcTab('notifs')">🔔 התראות</button>
+    <button id="mcTabFeedback" class="mc-tab"               onclick="switchMcTab('feedback')">💬 פניות<span id="mcFeedbackUnreadDot" class="mc-tab-dot" style="display:none"></span></button>
+  </div>
+  <div style="padding:8px 12px;border-bottom:1px solid var(--gray-100);display:none" id="mcSelectAllRow">
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;cursor:pointer">
+      <input type="checkbox" id="mcSelectAll" onchange="mcToggleSelectAll(this)">
+      בחר הכל
+    </label>
+    <button id="mcDeleteSelectedBtn" onclick="deleteSelectedNotifs()" style="display:none;font-size:12px;padding:4px 12px;border:none;border-radius:var(--r-pill);background:var(--error-bg);color:var(--error);font-family:inherit;font-weight:700;cursor:pointer;margin-right:auto">מחק נבחרים</button>
+  </div>
+  <div id="messageCenterList" style="padding:8px 0"></div>
+  <div id="mcFeedbackList" style="padding:8px 16px;display:none"></div>
+</div>
+
+<div id="feedbackPanel" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeFeedback()">×</button>
+    <div class="mgmt-header-title">💬 פנייה למנהל המערכת</div>
+  </div>
+  <div style="padding:16px;max-width:520px;margin:0 auto">
+    <div id="feedbackForm">
+      <div class="comm-section-label" style="margin-bottom:12px">יש לך משהו לומר? שלח/י לנו!</div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:700;color:var(--gray-500);display:block;margin-bottom:6px">נושא</label>
+        <div id="ddFeedbackTopic"></div>
+        <select id="feedbackTopicSelect" style="display:none"></select>
+      </div>
+      <div style="margin-bottom:12px">
+        <label style="font-size:12px;font-weight:700;color:var(--gray-500);display:block;margin-bottom:6px">הודעה</label>
+        <textarea id="feedbackText" rows="5"
+          style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--r-sm);font-family:inherit;font-size:14px;resize:vertical;background:var(--surface);color:var(--gray-900)"
+          placeholder="ספר/י לנו מה עלי דעתך, מה כדאי לשנות, מה לא עובד..."></textarea>
+      </div>
+      <button class="btn" onclick="sendFeedback()" style="width:100%;padding:12px;font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:5px">📨 שלח פנייה</button>
+      <div id="feedbackError" style="color:var(--error);font-size:13px;font-weight:700;margin-top:8px;text-align:center;display:none"></div>
+    </div>
+    <div id="feedbackSuccess" style="display:none;text-align:center;padding:32px 16px">
+      <div style="font-size:48px;margin-bottom:12px">✅</div>
+      <div style="font-size:18px;font-weight:900;color:var(--gray-900);margin-bottom:8px">הפנייה נשלחה!</div>
+      <div style="font-size:14px;color:var(--gray-500);margin-bottom:24px">תודה על הפנייה, נחזור אליך בהקדם.</div>
+      <button class="btn-ghost" onclick="closeFeedback()" style="padding:10px 24px;font-size:14px">סגור</button>
+    </div>
+    <div id="feedbackHistory" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<div id="mgmtScreen" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeMgmt()">×</button>
+    <div class="mgmt-header-title">⚙️ הגדרות</div>
+  </div>
+  <div class="mgmt-content">
+
+    <!-- ── Family Members ── -->
+    <div class="card">
+      <div class="card-title">👨‍👩‍👧 בני המשפחה</div>
+      <div id="mgmtMemberList"></div>
+      <div style="margin-top:12px">
+        <button class="mgmt-add-btn" style="width:100%;padding:10px" onclick="toggleMgmtAddMember()">+ הוסף בן/בת משפחה</button>
+        <div id="mgmtAddMemberForm" class="mgmt-edit-panel" style="margin-top:8px">
+          <span class="mgmt-edit-label">אימוג'י</span>
+          <div class="emoji-row" id="mgmtNewEmojiRow"></div>
+          <span class="mgmt-edit-label">שם <span style="color:#e53e3e">*</span></span>
+          <input class="auth-input" id="mgmtNewMemberName" type="text" placeholder="שם"
+            onkeydown="if(event.key==='Enter')mgmtAddMember()">
+          <div class="mb-role-toggle" style="margin-bottom:12px;width:fit-content">
+            <button class="mb-role-btn active" id="mgmtNewRoleParent" onclick="setMgmtNewRole('parent')">הורה</button>
+            <button class="mb-role-btn"        id="mgmtNewRoleKid"    onclick="setMgmtNewRole('kid')">ילד</button>
+          </div>
+          <div id="mgmtNewKidSection" style="display:none">
+            <span class="mgmt-edit-label">מין <span style="color:#e53e3e">*</span></span>
+            <div id="mgmtNewGenderRow" class="mb-role-toggle" style="margin-bottom:12px">
+              <button class="mb-role-btn" id="mgmtNewGenderBoy"  onclick="setMgmtNewGender('boy')">👦 בן</button>
+              <button class="mb-role-btn" id="mgmtNewGenderGirl" onclick="setMgmtNewGender('girl')">👧 בת</button>
+            </div>
+            <span class="mgmt-edit-label">תאריך לידה <span style="color:#e53e3e">*</span></span>
+            <input class="auth-input" id="mgmtEditDob_new" type="date" style="margin-bottom:12px">
+            <span class="mgmt-edit-label" style="display:block;margin-bottom:6px">🏫 בית ספר <span style="color:#e53e3e">*</span></span>
+            <input class="auth-input" id="mgmtEditCity_new" placeholder="עיר" style="margin-bottom:6px"
+              oninput="onCityAc(this,'new')" onfocus="onCityAc(this,'new')" onblur="scheduleHideAc()">
+            <input class="auth-input" id="mgmtEditSchoolName_new" placeholder="שם בית הספר" style="margin-bottom:6px"
+              oninput="onSchoolAc(this,'new')" onfocus="onSchoolAc(this,'new')" onblur="scheduleHideAc()">
+            <div style="display:flex;gap:8px;margin-bottom:12px">
+              <select class="auth-input" id="mgmtEditGrade_new" style="flex:1"></select>
+              <input class="auth-input" id="mgmtEditClassNum_new" placeholder="כיתה (מספר/שם)" style="flex:1" maxlength="20">
+            </div>
+          </div>
+          <div id="mgmtAddError" style="color:#e53e3e;font-size:12px;font-weight:700;margin-bottom:6px;min-height:16px"></div>
+          <button class="auth-btn-main" style="padding:9px 18px;width:auto" onclick="mgmtAddMember()">✓ הוסף</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── School Community ── -->
+    <div class="card">
+      <div class="card-title">🏫 קהילת הכיתה</div>
+      <div class="mgmt-section-hint">ילדים מאותה כיתה שמשתמשים ב-FamilyHub</div>
+      <div id="mgmtCommunityList"></div>
+    </div>
+
+    <!-- ── Webtop Integration ── -->
+    <div class="card" id="mgmtWebtopCard">
+      <div class="card-title">📡 חיבור Webtop</div>
+      <div class="mgmt-section-hint">התקן את תוסף FamilyHub ב-Chrome והזן את קוד המשפחה כדי לסנכרן שיעורי בית אוטומטית.</div>
+      <div style="margin:10px 0 6px;font-size:12px;font-weight:700;color:#4a5568">קוד המשפחה שלך</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div id="mgmtWebtopCode" style="flex:1;font-family:monospace;font-size:13px;background:#f1f5f9;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;color:#1a1a2e;word-break:break-all;direction:ltr"></div>
+        <button class="mgmt-add-btn" onclick="copyWebtopCode()" title="העתק">⎘</button>
+      </div>
+      <div id="mgmtWebtopStatus" style="margin-top:8px;font-size:12px;font-weight:600">לא מחובר עדיין</div>
+      <div id="mgmtWebtopMapping" style="display:none;margin-top:12px"></div>
+      <div id="mgmtWebtopIntervalRow" style="margin-top:12px;display:none;align-items:center;gap:8px;flex-wrap:wrap">
+        <span style="font-size:12px;font-weight:600;color:#4a5568">סנכרן אוטומטית:</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="mgmtWebtopIntervalBtns"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- GROCERY SETTINGS PANEL -->
+<div id="grocerySettingsPanel" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeGrocerySettings()">×</button>
+    <div class="mgmt-header-title">🛒 קטגוריות קניות</div>
+  </div>
+  <div class="mgmt-content">
+    <div class="card">
+      <div class="mgmt-section-hint">קטגוריות משמשות לארגון פריטי הקניות</div>
+      <div id="gsCatList"></div>
+      <div class="mgmt-add-form">
+        <input class="mgmt-input mgmt-emoji-input" id="gsNewCatEmoji" type="text" placeholder="🛒" maxlength="4"
+          oninput="this.dataset.manual='1'">
+        <input class="mgmt-input" id="gsNewCatName" type="text" placeholder="שם קטגוריה"
+          oninput="autoSuggestCatEmoji(this.value,'gsNewCatEmoji')"
+          onkeydown="if(event.key==='Enter')gsAddCat()">
+        <button class="mgmt-add-btn" onclick="gsAddCat()">+</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- HOMEWORK SETTINGS PANEL -->
+<div id="homeworkSettingsPanel" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeHomeworkSettings()">×</button>
+    <div class="mgmt-header-title">📚 הגדרות שיעורים</div>
+  </div>
+  <div class="mgmt-content">
+    <div class="card">
+      <div class="card-title">נושאים</div>
+      <div class="mgmt-section-hint">נושאים משמשים לסיווג שיעורי בית</div>
+      <div id="hsSubjectList"></div>
+      <div class="mgmt-add-form" style="flex-direction:column;align-items:stretch;gap:6px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <input class="mgmt-input" id="hsNewSubjectNameHe" type="text" placeholder="שם הנושא"
+            style="flex:1" onkeydown="if(event.key==='Enter')hsAddSubject()">
+          <button class="mgmt-add-btn" onclick="hsAddSubject()">+</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LIST WIZARD PANEL -->
+<div id="listWizardPanel" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="closeListWizard()">×</button>
+    <div class="mgmt-header-title" id="wizardTitle">רשימה חדשה</div>
+  </div>
+  <div class="mgmt-content" id="wizardContent"></div>
+</div>
+
+<!-- GUEST SHARE PANEL -->
+<div id="guestPanel" class="hidden">
+  <div class="guest-header">
+    <div class="guest-header-top">
+      <span class="guest-app-logo">🏠 FamilyHub</span>
+      <span class="guest-app-logo-sep">·</span>
+      <span id="guestModeBadge" class="guest-mode-badge"></span>
+      <span id="guestUserName" class="guest-user-name" style="display:none"></span>
+    </div>
+    <div class="guest-list-name" id="guestListName"></div>
+  </div>
+  <div class="mgmt-content" id="guestContent"></div>
+</div>
+
+<!-- LIST DETAIL PANEL -->
+<div id="listDetailPanel" class="hidden">
+  <div class="mgmt-header">
+    <button class="mgmt-back-btn" onclick="listDetailBack()">‹</button>
+    <div class="mgmt-header-title" id="listDetailTitle"></div>
+    <div style="display:flex;gap:2px;margin-inline-start:auto">
+      <button class="mgmt-back-btn" id="listEditBtn" style="font-size:16px;padding:4px 8px;display:none" onclick="listToggleEditMode()" title="ערוך רשימה">✏️</button>
+      <button class="mgmt-back-btn" id="listCloneBtn" style="font-size:16px;padding:4px 8px;display:none" onclick="listOpenClone(_listDetailId)" title="שכפל רשימה"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="9" height="11" rx="2" fill="#93c5fd"/><rect x="5" y="1" width="9" height="11" rx="2" fill="#3b82f6"/><line x1="7.5" y1="5" x2="12" y2="5" stroke="white" stroke-width="1.3" stroke-linecap="round"/><line x1="7.5" y1="7.5" x2="12" y2="7.5" stroke="white" stroke-width="1.3" stroke-linecap="round"/><line x1="7.5" y1="10" x2="12" y2="10" stroke="white" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+      <button class="mgmt-back-btn" id="listDeleteBtn" style="font-size:18px;padding:4px 8px;display:none" onclick="listDelete(_listDetailId)" title="מחק רשימה">🗑</button>
+    </div>
+  </div>
+  <div class="mgmt-content" id="listDetailContent"></div>
+</div>
+
+<!-- Custom autocomplete dropdown -->
+<div id="acDropdown"></div>
+
+<input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhotoFile(event)">
+
+<!-- HAMBURGER MENU -->
+<div id="menuOverlay" onclick="closeMenu()"></div>
+<div id="menuDropdown"></div>
+
+<!-- APP -->
+<div id="app">
+  <div class="header" id="appHeader">
+    <div class="header-row">
+      <button class="menu-btn" onclick="toggleMenu(this)">☰</button>
+      <div class="header-tab-title" id="headerTabTitle">
+        <span id="headerTabTitleText"></span>
+        <button class="tab-settings-btn" id="tabSettingsBtn" onclick="openTabSettings()" title="הגדרות לשונית" style="display:none">⚙️</button>
+      </div>
+      <div class="header-end">
+        <button class="notif-bell-btn" id="pendingReqBtn" onclick="openPendingPanel()" title="בקשות ממתינות" style="display:none">
+          📋
+          <span class="notif-bell-badge hidden" id="pendingReqBadge"></span>
+        </button>
+        <button class="notif-bell-btn" id="notifBellBtn" onclick="openMessageCenter()" title="מרכז הודעות">
+          🔔
+          <span class="notif-bell-badge hidden" id="notifBellBadge"></span>
+        </button>
+        <button class="header-avatar-btn" id="headerAvatarBtn" onclick="toggleMenu(this)"></button>
+      </div>
+    </div>
+    <div id="notifBanners"></div>
   </div>
 
-  <div class="tab-bar">
-    <div class="tab active"  onclick="switchTab('home')">    <span class="tab-icon">🏡</span>Home</div>
-    <div class="tab"         onclick="switchTab('chores')">  <span class="tab-icon">✅</span>Chores</div>
-    <div class="tab"         onclick="switchTab('grocery')"> <span class="tab-icon">🛒</span>Grocery</div>
-    <div class="tab"         onclick="switchTab('homework')"><span class="tab-icon">📚</span>Homework</div>
-    <div class="tab"         onclick="switchTab('calendar')"><span class="tab-icon">📅</span>Calendar</div>
-  </div>
+  <div class="tab-bar" id="tabBar"></div>
 
   <div class="content">
-
     <!-- HOME -->
     <div id="tab-home" class="tab-content active">
+      <div class="tab-chips-row" id="homeChips"></div>
       <div id="welcomeBanner"></div>
-      <div class="card"><div class="card-title" id="homeChoresTitle">⚡ Today's Chores</div><div id="homeTasks"></div></div>
-      <div class="card"><div class="card-title">⭐ Star Chart</div><div class="star-chart" id="starChart"></div></div>
-      <div class="card"><div class="card-title">📋 Homework Due Soon</div><div id="hwSummary"></div></div>
+      <div id="homeSection-chores">
+        <div class="card"><div class="card-title" id="homeChoresTitle"></div><div id="homeTasks"></div></div>
+      </div>
+      <div id="homeSection-stars">
+        <div class="card"><div class="card-title" id="starChartTitle"></div><div class="star-chart" id="starChart"></div></div>
+      </div>
+      <div id="homeSection-homework">
+        <div class="card"><div class="card-title" id="hwDueSoonTitle"></div><div id="hwSummary"></div></div>
+      </div>
+      <div id="homeSection-upcoming" style="display:none">
+        <div class="card" id="homeUpcomingCard" style="display:none">
+          <div class="card-title">📅 אירועים קרובים</div>
+          <div id="homeUpcoming"></div>
+        </div>
+      </div>
+      <div id="homeSection-shopping"></div>
     </div>
 
     <!-- CHORES -->
     <div id="tab-chores" class="tab-content">
+      <div class="tab-chips-row" id="choresChips"></div>
+      <div class="chore-cat-chips-row" id="choreCatChips" style="display:none"></div>
       <div id="choresContent"></div>
-      <div class="card" id="addChoreCard">
-        <div class="card-title">➕ Add Chore</div>
-        <div class="add-form">
-          <input class="add-input" id="newChoreText" type="text" placeholder="What needs doing…" onkeydown="if(event.key==='Enter')addChore()">
-          <div class="form-row">
-            <select id="newChoreAssignee" style="flex:1">
-              <option value="Zohar">👩 Zohar</option><option value="Nir">👨 Nir</option>
-              <option value="Roni">👧 Roni</option><option value="Shira">🧒 Shira</option><option value="Noya">👶 Noya</option>
-            </select>
-            <select id="newChorePriority" style="flex:1">
-              <option value="high">🔴 High</option><option value="medium">🟡 Medium</option><option value="low">🟢 Low</option>
-            </select>
-            <button class="btn-sm" onclick="addChore()">Add</button>
+      <div class="card chore-quick-add" id="addChoreCard">
+        <div class="chore-qa-input-row">
+          <textarea class="chore-qa-input" id="newChoreText" rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();addChore()}" oninput="_choreInputGrow(this)"></textarea>
+          <button class="chore-qa-plus" id="addChoreBtn" onclick="addChore()">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+          </button>
+        </div>
+        <div class="chore-qa-controls-row">
+          <div id="choreAssigneeLabel" class="chore-qa-assignee-label" style="display:none"></div>
+          <select id="newChorePriority" style="display:none"></select>
+          <div class="pri-seg" id="priSegControl">
+            <button class="pri-seg-btn" data-val="high"   onclick="_priSegPick('high')">גבוהה</button>
+            <button class="pri-seg-btn active" data-val="medium" onclick="_priSegPick('medium')">בינונית</button>
+            <button class="pri-seg-btn" data-val="low"    onclick="_priSegPick('low')">נמוכה</button>
           </div>
+          <div class="chore-qa-sep"></div>
+          <input type="date" class="chore-qa-date" id="newChoreDate">
         </div>
       </div>
+      <div id="choreHistoryWrap"></div>
     </div>
 
-    <!-- GROCERY -->
+    <!-- GROCERY / SUPERMARKET -->
     <div id="tab-grocery" class="tab-content">
-      <div class="card">
-        <div class="card-title">🛒 Shopping List</div>
-        <div class="grocery-add" id="groceryAddForm">
-          <input class="g-input" id="groceryItem" type="text" placeholder="Add item…" onkeydown="if(event.key==='Enter')addGrocery()">
-          <select class="g-cat" id="groceryCat">
-            <option value="Fruit &amp; Veg">🥦 Fruit &amp; Veg</option>
-            <option value="Dairy &amp; Eggs">🥛 Dairy &amp; Eggs</option>
-            <option value="Pantry">🥫 Pantry</option>
-            <option value="Meat &amp; Fish">🥩 Meat &amp; Fish</option>
-          </select>
-          <button class="btn" onclick="addGrocery()">＋</button>
-        </div>
-        <div id="groceryList"></div>
-        <button class="btn-ghost" id="groceryClearBtn" onclick="clearChecked()">🗑 Clear checked</button>
+      <div class="grocery-subtabs">
+        <button class="grocery-subtab active" id="gtab-pool"     onclick="switchGrocerySection('pool')">🏪 מאגר</button>
+        <button class="grocery-subtab"        id="gtab-shopping" onclick="switchGrocerySection('shopping')">🛒 קניות</button>
+        <button class="grocery-subtab"        id="gtab-history"  onclick="switchGrocerySection('history')">📋 היסטוריה</button>
       </div>
+
+      <!-- POOL -->
+      <div id="grocerySec-pool">
+        <div class="card">
+          <div class="pool-title-row">
+            <div class="card-title" id="poolTitle"></div>
+            <button class="pool-search-toggle" id="poolSearchToggle" onclick="togglePoolSearch()">🔍</button>
+          </div>
+          <div class="pool-search-wrap" id="poolSearchWrap" style="display:none">
+            <input class="pool-search" id="poolSearch" type="search" placeholder="חיפוש..." oninput="onPoolSearch(this.value)">
+          </div>
+          <div class="cat-chips-wrap" id="poolCatChips"></div>
+          <div class="pool-add-wrap" id="poolAddWrap">
+            <button class="pool-add-trigger" id="poolAddTrigger" onclick="togglePoolAddForm()">＋ הוסף פריט</button>
+            <div class="grocery-add pool-add-expand" id="poolAddForm" style="display:none">
+              <input class="g-input" id="poolItemInput" type="text" onkeydown="if(event.key==='Enter')addPoolItem()">
+              <select id="poolCatSelect" style="display:none"></select>
+              <div class="soft-dd" id="ddPoolCat"></div>
+              <button class="unit-toggle" id="poolUnitToggle" onclick="togglePoolNewQtyType()">יח'</button>
+              <button class="btn-sm" id="addPoolBtn" onclick="addPoolItem()"></button>
+            </div>
+          </div>
+          <div id="poolList"></div>
+        </div>
+      </div>
+
+      <!-- HISTORY -->
+      <div id="grocerySec-history" style="display:none">
+        <div class="card">
+          <div class="pool-title-row">
+            <div class="card-title" id="historyTitle"></div>
+            <button class="pool-search-toggle" id="historySearchToggle" onclick="toggleHistorySearch()">🔍</button>
+          </div>
+          <div class="pool-search-wrap" id="historySearchWrap" style="display:none">
+            <input class="pool-search" id="historySearch" type="search" placeholder="חיפוש..." oninput="onHistorySearch(this.value)">
+          </div>
+          <div id="historyList"></div>
+        </div>
+      </div>
+
+      <!-- SHOPPING + CART combined -->
+      <div id="grocerySec-shopping" style="display:none">
+        <div class="card">
+          <div class="card-title" id="shoppingListTitle"></div>
+          <div id="shoppingListEl"></div>
+        </div>
+      </div>
+      <button class="done-shopping-sticky" id="doneShoppingBtn" onclick="doneShopping()" style="display:none"></button>
     </div>
 
     <!-- HOMEWORK -->
     <div id="tab-homework" class="tab-content">
-      <div class="child-tabs" id="childTabs">
-        <div class="child-tab active" onclick="switchChild('Roni')">👧 Roni</div>
-        <div class="child-tab"        onclick="switchChild('Shira')">🧒 Shira</div>
-        <div class="child-tab"        onclick="switchChild('Noya')">👶 Noya</div>
+      <div class="tab-chips-row" id="childTabsContainer"></div>
+      <div class="tab-chips-row" id="hwSubjectChips" style="display:none;flex-wrap:wrap;gap:8px"></div>
+      <div class="hw-search-bar" id="hwSearchBar" style="display:none">
+        <input type="search" id="hwSearchInput" class="hw-search-input" placeholder="חיפוש בשיעורי בית..." oninput="setHwSearch(this.value)" autocomplete="off">
+      </div>
+      <div class="card hw-class-card" id="hwWebtopSection" style="display:none">
+        <div class="hw-section-hdr" id="hwWebtopHdr" style="display:flex;justify-content:space-between;align-items:center"><span>📡 Webtop — שיעורי בית מסונכרנים</span><span id="hwWebtopSyncTime" style="font-size:0.75em;color:#9ca3af;font-weight:400"></span></div>
+        <div id="hwWebtopList"></div>
+      </div>
+      <div class="card hw-class-card" id="hwClassSection" style="display:none">
+        <div class="hw-section-hdr">🏫 שיעורי בית של הכיתה</div>
+        <div id="hwClassList"></div>
       </div>
       <div class="card">
-        <div class="card-title" id="hwCardTitle">📖 Roni's Homework</div>
+        <div class="card-title" id="hwCardTitle"></div>
         <div id="hwList"></div>
         <div class="add-form" id="addHwForm">
-          <input class="add-input" id="hwDesc" type="text" placeholder="Assignment description…">
+          <input class="add-input" id="hwDesc" type="text">
           <div class="form-row">
-            <select id="hwSubject" style="flex:1">
-              <option value="Maths">📐 Maths</option><option value="English">📝 English</option>
-              <option value="Science">🔬 Science</option><option value="History">🏛 History</option><option value="Art">🎨 Art</option>
-            </select>
-            <input type="date" id="hwDue" style="flex:1">
-            <button class="btn-sm" onclick="addHomework()">Add</button>
+            <div id="ddHwSubject" style="flex:1;min-width:0"></div>
+            <select id="hwSubject" style="display:none"></select>
+            <div class="date-icon-wrap" style="flex:1"><input type="date" id="hwDue"><span class="date-icon" onclick="document.getElementById('hwDue').showPicker()">📅</span></div>
+            <button class="btn-sm" id="addHwBtn" onclick="addHomework()"></button>
           </div>
         </div>
+      </div>
+      <div id="hwHistoryWrap"></div>
+    </div>
+
+    <!-- COMMUNITY -->
+    <div id="tab-community" class="tab-content">
+      <div class="tab-chips-row" id="communityChips"></div>
+      <div id="communityContent"></div>
+    </div>
+
+    <!-- LISTS -->
+    <div id="tab-lists" class="tab-content">
+      <div class="lists-topbar" id="listsTopbar">
+        <button class="pool-search-toggle" id="listsSearchToggle" onclick="toggleListsSearch()">🔍</button>
+      </div>
+      <div class="lists-search-bar" id="listsSearchInline">
+        <input class="lists-search-input" id="listsSearchInput" type="text" placeholder="חיפוש ברשימות..."
+          autocomplete="off" autocorrect="off" autocapitalize="off"
+          oninput="_listsQuery=this.value;renderLists()"
+          onblur="setTimeout(_closeListsSearchOnBlur,150)">
+        <button class="lists-search-clear" id="listsSearchClearBtn"
+          onmousedown="event.preventDefault()" onclick="_listsQuery='';renderLists();document.getElementById('listsSearchInput').focus()">×</button>
+      </div>
+      <div id="listsContent"></div>
+    </div>
+
+    <!-- ANALYTICS (admin only) -->
+    <div id="tab-analytics" class="tab-content">
+      <div id="analyticsContent">
+        <div style="color:#a0aec0;text-align:center;padding:60px 0;font-size:14px;font-weight:700">טוען נתונים...</div>
       </div>
     </div>
 
     <!-- CALENDAR -->
     <div id="tab-calendar" class="tab-content">
-
-      <!-- Google Calendar connect bar -->
       <div class="gcal-bar" id="gcalBar">
-        <span class="g-logo">📆</span>
-        <div class="gcal-status" id="gcalStatus">Loading…</div>
+        <span>📆</span>
+        <div class="gcal-status" id="gcalStatus"></div>
         <div id="gcalBtns"></div>
       </div>
-
       <div class="card">
         <div class="cal-nav">
           <button class="cal-nav-btn" onclick="calShift(-1)">‹</button>
           <div class="cal-month-label" id="calMonthLabel"></div>
           <button class="cal-nav-btn" onclick="calShift(1)">›</button>
         </div>
+        <div id="calClassToggles"></div>
         <div class="cal-grid" id="calGrid"></div>
         <div class="day-panel" id="dayPanel"></div>
       </div>
-
       <div class="card" id="addEventCard">
-        <div class="card-title">➕ Add Event</div>
+        <div class="card-title" id="addEventTitle"></div>
         <div class="add-form">
-          <input class="add-input" id="newEventTitle" type="text" placeholder="Event title…">
+          <input class="add-input" id="newEventTitle" type="text">
           <div class="form-row">
             <input type="date" id="newEventDate" style="flex:1">
             <input type="time" id="newEventTime" style="flex:0 0 100px">
           </div>
-          <div class="form-row">
-            <select id="newEventPerson" style="flex:1">
-              <option value="All">👨‍👩‍👧‍👧 Everyone</option>
-              <option value="Zohar">👩 Zohar</option><option value="Nir">👨 Nir</option>
-              <option value="Roni">👧 Roni</option><option value="Shira">🧒 Shira</option><option value="Noya">👶 Noya</option>
-            </select>
-            <button class="btn-sm" onclick="addEvent()">Add</button>
-          </div>
+          <input class="add-input" id="newEventLocation" type="text" placeholder="📍 מיקום (אופציונלי)">
+          <div id="newEventPersonPicker" class="event-person-picker"></div>
+          <label id="gcalSyncRow" style="display:none;align-items:center;gap:7px;font-size:13px;font-weight:700;color:#4a5568;cursor:pointer;margin-top:6px">
+            <input type="checkbox" id="gcalSyncCheck" style="width:16px;height:16px;accent-color:#4285f4">
+            <span id="gcalSyncLabel"></span>
+          </label>
+          <button class="btn" id="addEventBtn" onclick="addEvent()" style="margin-top:8px"></button>
         </div>
       </div>
     </div>
-
   </div>
 </div>
 
-<script>
-// ══════════════════════════════════════════════════════
-//  ▶▶  PASTE YOUR GOOGLE OAUTH CLIENT ID BELOW  ◀◀
-// ══════════════════════════════════════════════════════
-const GOOGLE_CLIENT_ID = '34982320669-4sg8h4qmppd7v9jdtflqmoqretjsnffa.apps.googleusercontent.com';
-// ══════════════════════════════════════════════════════
+<button class="chore-fab" id="listsFab" onclick="openListWizard()" aria-label="רשימה חדשה" style="display:none">
+  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+</button>
 
-const GCAL_SCOPE     = 'https://www.googleapis.com/auth/calendar.events';
-const GCAL_DISCOVERY = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
+<div class="chore-fab-wrap" id="choreFabWrap" style="display:none">
+  <div class="chore-fab-picker" id="choreFabPicker"></div>
+  <button class="chore-fab" id="choreFab" onclick="choreFabClick()" aria-label="הוסף משימה">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+  </button>
+</div>
+<button class="scroll-top-fab" id="scrollTopBtn" onclick="_scrollToTop()" aria-label="חזרה לראש הרשימה">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+</button>
+<!-- Tutorial overlay -->
+<div id="tutOverlay" style="display:none">
+  <div id="tutSpot"></div>
+  <div id="tutCard">
+    <div class="tut-title" id="tutTitle"></div>
+    <div class="tut-body"  id="tutText"></div>
+    <div class="tut-footer">
+      <button class="tut-skip-btn" onclick="tutSkip()">דלג על הסבר</button>
+      <div id="tutDots"></div>
+      <button class="tut-next-btn" id="tutNextBtn" onclick="tutNext()">הבא ›</button>
+    </div>
+  </div>
+</div>
+<script src="app.js?v=20260415wc"></script>
 
-// ════════════════════════════════════════
-//  CONSTANTS
-// ════════════════════════════════════════
-const FAMILY = [
-  {name:'All',emoji:'👨‍👩‍👧‍👧'},{name:'Zohar',emoji:'👩'},{name:'Nir',emoji:'👨'},
-  {name:'Roni',emoji:'👧'},{name:'Shira',emoji:'🧒'},{name:'Noya',emoji:'👶'},
-];
-const KIDS    = ['Roni','Shira','Noya'];
-const PARENTS = ['Zohar','Nir'];
-const EMOJI   = {Zohar:'👩',Nir:'👨',Roni:'👧',Shira:'🧒',Noya:'👶'};
-const CATS    = ['Fruit & Veg','Dairy & Eggs','Pantry','Meat & Fish'];
-const CAT_EM  = {'Fruit & Veg':'🥦','Dairy & Eggs':'🥛','Pantry':'🥫','Meat & Fish':'🥩'};
-const PERSON_COLOR = {Zohar:'#c471ed',Nir:'#4facfe',Roni:'#fa709a',Shira:'#43e97b',Noya:'#f9d423',All:'#a0aec0'};
-const KID_COLORS   = {Roni:'#f093fb,#f5576c',Shira:'#43e97b,#38f9d7',Noya:'#fda085,#f6d365'};
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-const DOWS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-
-// ════════════════════════════════════════
-//  DEFAULT DATA
-// ════════════════════════════════════════
-const D_CHORES = [
-  {id:1,text:'Prepare dinner',assignee:'Zohar',priority:'high',done:false},
-  {id:2,text:'Grocery run',assignee:'Nir',priority:'medium',done:false},
-  {id:3,text:'Take out trash',assignee:'Nir',priority:'high',done:false},
-  {id:4,text:'Water the plants',assignee:'Zohar',priority:'low',done:false},
-  {id:5,text:'Clean bedroom',assignee:'Roni',priority:'medium',done:false},
-  {id:6,text:'Fold laundry',assignee:'Roni',priority:'low',done:false},
-  {id:7,text:'Set the table',assignee:'Shira',priority:'low',done:false},
-  {id:8,text:'Feed the fish',assignee:'Shira',priority:'medium',done:false},
-  {id:9,text:'Tidy toys away',assignee:'Noya',priority:'low',done:false},
-  {id:10,text:'Help pack school bag',assignee:'Noya',priority:'medium',done:false},
-];
-const D_GROCERY = [
-  {id:1,text:'Apples',category:'Fruit & Veg',checked:false},
-  {id:2,text:'Bananas',category:'Fruit & Veg',checked:false},
-  {id:3,text:'Baby carrots',category:'Fruit & Veg',checked:false},
-  {id:4,text:'Milk',category:'Dairy & Eggs',checked:false},
-  {id:5,text:'Eggs (12)',category:'Dairy & Eggs',checked:false},
-  {id:6,text:'Yellow cheese',category:'Dairy & Eggs',checked:false},
-  {id:7,text:'Pasta',category:'Pantry',checked:false},
-  {id:8,text:'Tomato sauce',category:'Pantry',checked:false},
-  {id:9,text:'Olive oil',category:'Pantry',checked:false},
-  {id:10,text:'Chicken breast',category:'Meat & Fish',checked:false},
-  {id:11,text:'Salmon fillet',category:'Meat & Fish',checked:false},
-];
-const _now   = new Date();
-const today    = _now.toISOString().slice(0,10);
-const tomorrow = new Date(_now.getTime()+864e5).toISOString().slice(0,10);
-const nextWeek = new Date(_now.getTime()+7*864e5).toISOString().slice(0,10);
-const D_HW = [
-  {id:1,child:'Roni',subject:'Maths',desc:'Chapter 5 exercises pg 42-43',due:tomorrow,done:false},
-  {id:2,child:'Roni',subject:'English',desc:'Book report first draft',due:today,done:false},
-  {id:3,child:'Shira',subject:'Science',desc:'Draw & label the water cycle',due:tomorrow,done:false},
-  {id:4,child:'Shira',subject:'Art',desc:'Finish self-portrait in colour',due:today,done:false},
-  {id:5,child:'Noya',subject:'Maths',desc:'Count to 100 worksheet',due:today,done:false},
-  {id:6,child:'Noya',subject:'Art',desc:'Draw my favourite animal',due:tomorrow,done:false},
-];
-const D_STARS  = {Roni:3,Shira:4,Noya:2};
-const D_EVENTS = [
-  {id:1,date:today,   title:'School pickup',    person:'Nir',  time:'15:30'},
-  {id:2,date:today,   title:'Family dinner',    person:'All',  time:'19:00'},
-  {id:3,date:tomorrow,title:'Roni dance class', person:'Roni', time:'16:00'},
-  {id:4,date:tomorrow,title:'Grocery run',      person:'Zohar',time:'10:00'},
-  {id:5,date:nextWeek,title:'Doctor appointment',person:'Noya',time:'09:30'},
-];
-
-// ════════════════════════════════════════
-//  STATE
-// ════════════════════════════════════════
-let S = {
-  user:null, tab:'home', filter:'All', child:'Roni',
-  chores:[], grocery:[], homework:[], stars:{}, events:[],
-  calYear:_now.getFullYear(), calMonth:_now.getMonth(), calSelected:today,
-};
-// Google Calendar runtime state (never persisted)
-let gcal = {
-  gapiReady: false,
-  gisReady:  false,
-  tokenClient: null,
-  accessToken: null,
-  events: [],        // fetched from Google Calendar
-  syncing: false,
-};
-
-const isParent = () => PARENTS.includes(S.user);
-const isKid    = () => KIDS.includes(S.user);
-const gcalReady = () => gcal.gapiReady && gcal.gisReady && !GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID');
-const gcalConnected = () => !!gcal.accessToken;
-
-// ════════════════════════════════════════
-//  PERSISTENCE
-// ════════════════════════════════════════
-function save() {
-  localStorage.setItem('familyhub_v3', JSON.stringify({
-    chores:S.chores, grocery:S.grocery, homework:S.homework, stars:S.stars, events:S.events,
-  }));
-}
-function load() {
-  const raw = localStorage.getItem('familyhub_v3');
-  if (raw) {
-    const d = JSON.parse(raw);
-    S.chores   = d.chores   || JSON.parse(JSON.stringify(D_CHORES));
-    S.grocery  = d.grocery  || JSON.parse(JSON.stringify(D_GROCERY));
-    S.homework = d.homework || JSON.parse(JSON.stringify(D_HW));
-    S.stars    = d.stars    || {...D_STARS};
-    S.events   = d.events   || JSON.parse(JSON.stringify(D_EVENTS));
-  } else {
-    S.chores   = JSON.parse(JSON.stringify(D_CHORES));
-    S.grocery  = JSON.parse(JSON.stringify(D_GROCERY));
-    S.homework = JSON.parse(JSON.stringify(D_HW));
-    S.stars    = {...D_STARS};
-    S.events   = JSON.parse(JSON.stringify(D_EVENTS));
-  }
-}
-
-// ════════════════════════════════════════
-//  GOOGLE API INIT
-// ════════════════════════════════════════
-function gapiLoaded() {
-  gapi.load('client', async () => {
-    await gapi.client.init({ discoveryDocs: [GCAL_DISCOVERY] });
-    gcal.gapiReady = true;
-    renderGCalBar();
-  });
-}
-
-function gisLoaded() {
-  if (GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID')) {
-    gcal.gisReady = true;
-    renderGCalBar();
-    return;
-  }
-  gcal.tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: GOOGLE_CLIENT_ID,
-    scope: GCAL_SCOPE,
-    callback: onGCalToken,
-  });
-  gcal.gisReady = true;
-  renderGCalBar();
-}
-
-async function onGCalToken(resp) {
-  if (resp.error) { console.error('GCal auth error', resp); return; }
-  gcal.accessToken = resp.access_token;
-  await fetchGCalEvents();
-  renderGCalBar();
-}
-
-async function fetchGCalEvents() {
-  if (!gcalConnected()) return;
-  gcal.syncing = true;
-  renderGCalBar();
-  try {
-    const timeMin = new Date(_now.getTime() - 30*864e5).toISOString();
-    const timeMax = new Date(_now.getTime() + 90*864e5).toISOString();
-    const res = await gapi.client.calendar.events.list({
-      calendarId: 'primary',
-      timeMin, timeMax,
-      maxResults: 250,
-      singleEvents: true,
-      orderBy: 'startTime',
-    });
-    gcal.events = (res.result.items || []).map(ev => ({
-      id:     'gcal_' + ev.id,
-      gcalId: ev.id,
-      title:  ev.summary || '(No title)',
-      date:   (ev.start.dateTime || ev.start.date).slice(0,10),
-      time:   ev.start.dateTime ? ev.start.dateTime.slice(11,16) : '',
-      person: 'All',
-      gcal:   true,
-    }));
-  } catch(e) {
-    console.error('fetchGCalEvents error', e);
-  }
-  gcal.syncing = false;
-  renderGCalBar();
-  renderCalendar();
-}
-
-function connectGCal() {
-  if (!gcalReady() || !gcal.tokenClient) return;
-  gcal.tokenClient.requestAccessToken({prompt: ''});
-}
-
-function disconnectGCal() {
-  if (gcal.accessToken) {
-    google.accounts.oauth2.revoke(gcal.accessToken, () => {});
-    gcal.accessToken = null;
-  }
-  gcal.events = [];
-  renderGCalBar();
-  renderCalendar();
-}
-
-function renderGCalBar() {
-  const statusEl = document.getElementById('gcalStatus');
-  const btnsEl   = document.getElementById('gcalBtns');
-  if (!statusEl) return;
-
-  if (GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID')) {
-    statusEl.innerHTML = '<span class="needs-setup">⚠ Paste your Client ID in the script to enable sync</span>';
-    btnsEl.innerHTML   = '';
-    return;
-  }
-  if (!gcalReady()) {
-    statusEl.textContent = 'Loading Google APIs…';
-    btnsEl.innerHTML = '';
-    return;
-  }
-  if (gcal.syncing) {
-    statusEl.innerHTML = '🔄 Syncing…';
-    btnsEl.innerHTML = '';
-    return;
-  }
-  if (gcalConnected()) {
-    statusEl.innerHTML = '<span class="connected">✓ Google Calendar connected</span>';
-    btnsEl.innerHTML = `
-      <button class="gcal-btn gcal-btn-refresh" onclick="fetchGCalEvents()">↻</button>
-      <button class="gcal-btn gcal-btn-disconnect" onclick="disconnectGCal()">Disconnect</button>`;
-  } else {
-    statusEl.textContent = 'Sync with Google Calendar';
-    btnsEl.innerHTML = `<button class="gcal-btn gcal-btn-connect" onclick="connectGCal()">Connect</button>`;
-  }
-}
-
-// Create event in Google Calendar and return the gcalId
-async function gcalCreateEvent(ev) {
-  if (!gcalConnected() || !isParent()) return null;
-  const tz    = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const body  = {
-    summary: ev.title,
-    start: ev.time
-      ? {dateTime: `${ev.date}T${ev.time}:00`, timeZone: tz}
-      : {date: ev.date},
-    end: ev.time
-      ? {dateTime: `${ev.date}T${pad2(parseInt(ev.time)+1)}:${ev.time.slice(3)}:00`, timeZone: tz}
-      : {date: ev.date},
-  };
-  try {
-    const res = await gapi.client.calendar.events.insert({calendarId:'primary', resource:body});
-    return res.result.id;
-  } catch(e) { console.error('gcalCreateEvent', e); return null; }
-}
-
-async function gcalDeleteEvent(gcalId) {
-  if (!gcalConnected() || !isParent() || !gcalId) return;
-  try {
-    await gapi.client.calendar.events.delete({calendarId:'primary', eventId: gcalId});
-  } catch(e) { console.error('gcalDeleteEvent', e); }
-}
-
-function pad2(n) { return String(n % 24).padStart(2,'0'); }
-
-// ════════════════════════════════════════
-//  HELPERS
-// ════════════════════════════════════════
-function fmtDate(str) {
-  if (!str) return '';
-  return new Date(str+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-}
-function fmtDateLong(str) {
-  if (!str) return '';
-  return new Date(str+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-}
-function esc(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
-// ════════════════════════════════════════
-//  LOGIN
-// ════════════════════════════════════════
-function login(name) {
-  S.user = name; S.filter = name;
-  if (isKid()) S.child = name;
-  localStorage.setItem('familyhub_user', name);
-  document.getElementById('loginScreen').classList.add('hidden');
-  document.getElementById('app').classList.add('visible');
-  renderAll();
-}
-function switchUser() {
-  S.user = null; S.filter = 'All';
-  localStorage.removeItem('familyhub_user');
-  document.getElementById('app').classList.remove('visible');
-  document.getElementById('loginScreen').classList.remove('hidden');
-  switchTab('home');
-}
-
-// ════════════════════════════════════════
-//  RENDER ALL
-// ════════════════════════════════════════
-function renderAll() {
-  renderHeader(); renderHome(); renderChores();
-  renderGrocery(); renderHomework(); renderCalendar(); renderGCalBar();
-  applyRoleUI();
-}
-
-function applyRoleUI() {
-  document.getElementById('addChoreCard').style.display    = isParent() ? '' : 'none';
-  document.getElementById('groceryAddForm').style.display  = isParent() ? '' : 'none';
-  document.getElementById('groceryClearBtn').style.display = isParent() ? '' : 'none';
-  document.getElementById('addEventCard').style.display    = isParent() ? '' : 'none';
-  document.querySelectorAll('.child-tab').forEach(el => {
-    el.style.display = (isParent() || el.textContent.trim().includes(S.user)) ? '' : 'none';
-  });
-}
-
-// ════════════════════════════════════════
-//  HEADER
-// ════════════════════════════════════════
-function renderHeader() {
-  const h = new Date().getHours();
-  const g = h<12?'Good morning':h<17?'Good afternoon':'Good evening';
-  document.getElementById('headerGreeting').textContent = `${g}, ${S.user}! ${EMOJI[S.user]||''}`;
-  document.getElementById('headerDate').textContent =
-    new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-  const members = isParent()
-    ? FAMILY
-    : [{name:'All',emoji:'👨‍👩‍👧‍👧'},{name:S.user,emoji:EMOJI[S.user]}];
-  document.getElementById('avatarRow').innerHTML = members.map(f => `
-    <div class="avatar-chip ${S.filter===f.name?'active':''}" onclick="setFilter('${f.name}')">
-      <div class="avatar-bubble">${f.emoji}</div>
-      <div class="avatar-label">${f.name==='All'?'All':f.name}</div>
-    </div>`).join('');
-}
-
-// ════════════════════════════════════════
-//  HOME
-// ════════════════════════════════════════
-function renderHome() {
-  const bannerEl = document.getElementById('welcomeBanner');
-  if (isKid()) {
-    const col = KID_COLORS[S.user]||'#6a11cb,#f093fb', n = S.stars[S.user]||0;
-    bannerEl.innerHTML = `<div class="welcome-banner" style="background:linear-gradient(135deg,${col})">
-      <div class="wb-emoji">${EMOJI[S.user]}</div>
-      <div class="wb-name">Hi ${S.user}!</div>
-      <div class="wb-sub">You have ${n} ⭐ star${n!==1?'s':''} this week</div></div>`;
-  } else { bannerEl.innerHTML = ''; }
-
-  document.getElementById('homeChoresTitle').textContent =
-    S.filter==='All' ? "⚡ Today's Chores" : `⚡ ${S.filter}'s Chores`;
-
-  let tasks = S.chores.filter(c => !c.done);
-  if (S.filter!=='All') tasks = tasks.filter(c => c.assignee===S.filter);
-  document.getElementById('homeTasks').innerHTML = tasks.length
-    ? tasks.slice(0,8).map(c => {
-        const can = isParent()||c.assignee===S.user;
-        return `<div class="task-row">
-          <div class="check-box ${c.done?'done':''} ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
-            ${c.done?'✓':''}</div>
-          <div class="task-text ${c.done?'done':''}">${esc(c.text)}</div>
-          ${isParent()?`<div class="mini-avatar">${EMOJI[c.assignee]||'👤'}</div>`:''}
-          <span class="pri pri-${c.priority}">${c.priority}</span></div>`;
-      }).join('')
-    : '<div class="empty">🎉 All done! Great job!</div>';
-
-  renderStarChart();
-
-  let hw = S.homework.filter(h => !h.done);
-  if (isKid()) hw = hw.filter(h => h.child===S.user);
-  else if (S.filter!=='All'&&KIDS.includes(S.filter)) hw = hw.filter(h => h.child===S.filter);
-  document.getElementById('hwSummary').innerHTML = hw.length
-    ? hw.slice(0,5).map(h => `<div class="task-row">
-        ${isParent()?`<div class="mini-avatar">${EMOJI[h.child]||'👤'}</div>`:''}
-        <div class="task-text">${esc(h.desc)}</div>
-        <span class="badge b-${esc(h.subject)}">${esc(h.subject)}</span></div>`).join('')
-    : '<div class="empty">📭 No pending homework!</div>';
-}
-
-// ════════════════════════════════════════
-//  STARS
-// ════════════════════════════════════════
-function renderStarChart() {
-  const ed = isParent();
-  document.getElementById('starChart').innerHTML = KIDS.map(kid => {
-    const n = S.stars[kid]||0, me = kid===S.user;
-    return `<div class="star-row ${me?'mine':''}">
-      <div class="star-person">
-        <span class="star-person-emoji">${EMOJI[kid]}</span>
-        <span class="star-person-name">${kid}</span>
-      </div>
-      <div class="stars">${[1,2,3,4,5].map(i =>
-        `<span class="star ${n>=i?'on':''} ${ed?'':'readonly'}"
-               ${ed?`onclick="setStar('${kid}',${i})"`:''}>⭐</span>`).join('')}
-      </div>
-      <span class="star-count">${n}/5</span></div>`;
-  }).join('');
-}
-function setStar(kid,val) {
-  if (!isParent()) return;
-  S.stars[kid] = S.stars[kid]===val ? val-1 : val;
-  save(); renderStarChart(); if (isKid()) renderHome();
-}
-
-// ════════════════════════════════════════
-//  CHORES
-// ════════════════════════════════════════
-function renderChores() {
-  const people = ['Zohar','Nir','Roni','Shira','Noya'];
-  let items = S.filter==='All' ? S.chores : S.chores.filter(c => c.assignee===S.filter);
-  const g = {}; people.forEach(p => g[p]=[]);
-  items.forEach(c => { if (g[c.assignee]) g[c.assignee].push(c); });
-  let html = '';
-  people.forEach(p => {
-    if (!g[p].length) return;
-    const mine = p===S.user;
-    html += `<div class="card ${mine?'mine-card':''}">
-      <div class="person-header">${EMOJI[p]} ${p}${mine?' <span style="font-size:11px;color:#c471ed;font-weight:700">(you)</span>':''}</div>
-      ${g[p].map(c => {
-        const can = isParent()||c.assignee===S.user;
-        return `<div class="task-row">
-          <div class="check-box ${c.done?'done':''} ${can?'':'readonly'}" ${can?`onclick="toggleChore(${c.id})"`:''}>
-            ${c.done?'✓':''}</div>
-          <div class="task-text ${c.done?'done':''}">${esc(c.text)}</div>
-          <span class="pri pri-${c.priority}">${c.priority}</span>
-          ${isParent()?`<button class="del-btn" onclick="deleteChore(${c.id})">×</button>`:''}</div>`;
-      }).join('')}</div>`;
-  });
-  document.getElementById('choresContent').innerHTML =
-    html || '<div class="card"><div class="empty">No chores to show 🎉</div></div>';
-}
-function toggleChore(id) {
-  const c = S.chores.find(x => x.id===id);
-  if (!c||(!isParent()&&c.assignee!==S.user)) return;
-  c.done=!c.done; save(); renderHome(); renderChores();
-}
-function deleteChore(id) {
-  if (!isParent()) return;
-  S.chores=S.chores.filter(x=>x.id!==id); save(); renderHome(); renderChores();
-}
-function addChore() {
-  if (!isParent()) return;
-  const text = document.getElementById('newChoreText').value.trim(); if (!text) return;
-  S.chores.push({id:Date.now(),text,assignee:document.getElementById('newChoreAssignee').value,priority:document.getElementById('newChorePriority').value,done:false});
-  document.getElementById('newChoreText').value=''; save(); renderHome(); renderChores();
-}
-
-// ════════════════════════════════════════
-//  GROCERY
-// ════════════════════════════════════════
-function renderGrocery() {
-  const ed = isParent();
-  let html = '';
-  CATS.forEach(cat => {
-    const items = S.grocery.filter(g => g.category===cat); if (!items.length) return;
-    html += `<div class="cat-title">${CAT_EM[cat]} ${cat}</div>`;
-    html += items.map(g => `<div class="g-item">
-      <div class="check-box ${g.checked?'done':''} ${ed?'':'readonly'}" ${ed?`onclick="toggleGrocery(${g.id})"`:''}>
-        ${g.checked?'✓':''}</div>
-      <div class="g-item-text ${g.checked?'done':''}">${esc(g.text)}</div>
-      ${ed?`<button class="del-btn" onclick="deleteGrocery(${g.id})">🗑</button>`:''}</div>`).join('');
-  });
-  document.getElementById('groceryList').innerHTML = html || '<div class="empty">🛒 List is empty!</div>';
-}
-function addGrocery() {
-  if (!isParent()) return;
-  const text=document.getElementById('groceryItem').value.trim(); if (!text) return;
-  S.grocery.push({id:Date.now(),text,category:document.getElementById('groceryCat').value,checked:false});
-  document.getElementById('groceryItem').value=''; save(); renderGrocery();
-}
-function toggleGrocery(id) {
-  if (!isParent()) return;
-  const g=S.grocery.find(x=>x.id===id); if (g){g.checked=!g.checked; save(); renderGrocery();}
-}
-function deleteGrocery(id) {
-  if (!isParent()) return;
-  S.grocery=S.grocery.filter(x=>x.id!==id); save(); renderGrocery();
-}
-function clearChecked() {
-  if (!isParent()) return;
-  S.grocery=S.grocery.filter(g=>!g.checked); save(); renderGrocery();
-}
-
-// ════════════════════════════════════════
-//  HOMEWORK
-// ════════════════════════════════════════
-function renderHomework() {
-  document.getElementById('hwCardTitle').textContent = `📖 ${S.child}'s Homework`;
-  document.querySelectorAll('.child-tab').forEach(el =>
-    el.classList.toggle('active', el.textContent.trim().includes(S.child)));
-  const canAdd = isParent()||S.child===S.user;
-  document.getElementById('addHwForm').style.display = canAdd ? '' : 'none';
-  const items = S.homework.filter(h => h.child===S.child);
-  document.getElementById('hwList').innerHTML = items.length
-    ? items.map(h => {
-        const can = isParent()||h.child===S.user;
-        return `<div class="hw-item">
-          <div class="hw-head">
-            <div class="check-box ${h.done?'done':''} ${can?'':'readonly'}" ${can?`onclick="toggleHW(${h.id})"`:''}>
-              ${h.done?'✓':''}</div>
-            <span class="badge b-${esc(h.subject)}">${esc(h.subject)}</span>
-            <div class="hw-desc-text ${h.done?'done':''}">${esc(h.desc)}</div>
-            ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">×</button>`:''}</div>
-          ${h.due?`<div class="hw-due">📅 Due: ${fmtDate(h.due)}</div>`:''}</div>`;
-      }).join('')
-    : '<div class="empty">No homework! 🎉</div>';
-}
-function switchChild(c){S.child=c;renderHomework();}
-function toggleHW(id) {
-  const h=S.homework.find(x=>x.id===id);
-  if (!h||(!isParent()&&h.child!==S.user)) return;
-  h.done=!h.done; save(); renderHomework(); renderHome();
-}
-function deleteHW(id) {
-  if (!isParent()) return;
-  S.homework=S.homework.filter(x=>x.id!==id); save(); renderHomework(); renderHome();
-}
-function addHomework() {
-  const desc=document.getElementById('hwDesc').value.trim();
-  if (!desc||(!isParent()&&S.child!==S.user)) return;
-  S.homework.push({id:Date.now(),child:S.child,subject:document.getElementById('hwSubject').value,desc,due:document.getElementById('hwDue').value,done:false});
-  document.getElementById('hwDesc').value=''; save(); renderHomework(); renderHome();
-}
-
-// ════════════════════════════════════════
-//  CALENDAR
-// ════════════════════════════════════════
-function allCalEvents() {
-  // Merge local + GCal events; local events that were synced to GCal
-  // have a gcalId — skip them from the local list to avoid duplicates.
-  const syncedIds = new Set(S.events.filter(e=>e.gcalId).map(e=>e.gcalId));
-  const localOnly = S.events.filter(e => !e.gcalId);
-  // GCal events that are NOT already represented as local events
-  const gcalOnly  = gcal.events.filter(e => !syncedIds.has(e.gcalId));
-  // Also include local events that have gcalId (they exist on both sides — show them once)
-  const synced    = S.events.filter(e => e.gcalId);
-  return [...localOnly, ...synced, ...gcalOnly];
-}
-
-function renderCalendar() {
-  const yr=S.calYear, mo=S.calMonth;
-  document.getElementById('calMonthLabel').textContent = `${MONTHS[mo]} ${yr}`;
-  const di = document.getElementById('newEventDate');
-  if (di && !di.value) di.value = S.calSelected;
-
-  const events = allCalEvents();
-  const dotMap  = {};
-  events.forEach(ev => { if (!dotMap[ev.date]) dotMap[ev.date]=[]; dotMap[ev.date].push(ev.gcal ? '#4285f4' : (PERSON_COLOR[ev.person]||'#a0aec0')); });
-
-  let html = DOWS.map(d=>`<div class="cal-dow">${d}</div>`).join('');
-  const firstDay   = new Date(yr,mo,1).getDay();
-  const daysInMo   = new Date(yr,mo+1,0).getDate();
-  const daysInPrev = new Date(yr,mo,0).getDate();
-  for (let i=firstDay-1;i>=0;i--) {
-    const d=daysInPrev-i;
-    html += dayCell(`${yr}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`,d,true,dotMap);
-  }
-  for (let d=1;d<=daysInMo;d++) {
-    html += dayCell(`${yr}-${String(mo+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,d,false,dotMap);
-  }
-  const filled=firstDay+daysInMo, rem=filled%7===0?0:7-(filled%7);
-  for (let d=1;d<=rem;d++) {
-    html += dayCell(`${yr}-${String(mo+2).padStart(2,'0')}-${String(d).padStart(2,'0')}`,d,true,dotMap);
-  }
-  document.getElementById('calGrid').innerHTML = html;
-  renderDayPanel(events);
-}
-
-function dayCell(dateStr,num,other,dotMap) {
-  const isTod=dateStr===today, isSel=dateStr===S.calSelected;
-  const dots=(dotMap[dateStr]||[]).slice(0,5);
-  const cls=['cal-day',other?'other-month':'',isTod?'today':'',isSel?'selected':''].filter(Boolean).join(' ');
-  return `<div class="${cls}" onclick="selectDay('${dateStr}')">
-    <span class="cal-day-num">${num}</span>
-    <div class="cal-dots">${dots.map(c=>`<span class="cal-dot" style="background:${c}"></span>`).join('')}</div>
-  </div>`;
-}
-
-function selectDay(dateStr) {
-  S.calSelected=dateStr;
-  const di=document.getElementById('newEventDate'); if (di) di.value=dateStr;
-  renderCalendar();
-}
-
-function renderDayPanel(events) {
-  const evs=(events||allCalEvents())
-    .filter(e=>e.date===S.calSelected)
-    .sort((a,b)=>(a.time||'').localeCompare(b.time||''));
-  const title = S.calSelected===today ? 'Today' : fmtDateLong(S.calSelected);
-  let html = `<div class="day-panel-title">📆 ${title}</div>`;
-  if (!evs.length) {
-    html += '<div class="empty" style="padding:12px">No events</div>';
-  } else {
-    html += evs.map(e => {
-      const color = e.gcal ? '#4285f4' : (PERSON_COLOR[e.person]||'#a0aec0');
-      const personLabel = e.gcal ? '' :
-        (e.person==='All'?'👨‍👩‍👧‍👧 All':(EMOJI[e.person]||'')+' '+e.person);
-      const canDel = isParent() && (!e.gcal || gcalConnected());
-      return `<div class="event-item ${e.gcal?'gcal-event':''}" style="border-left-color:${color}">
-        <div class="event-body">
-          <div class="event-title">
-            ${e.gcal?'<span class="g-badge">G</span>':''}
-            ${esc(e.title)}
-          </div>
-          <div class="event-meta">${e.time?'🕐 '+e.time:'All day'}${e.gcal?' · Google Calendar':''}</div>
-        </div>
-        ${personLabel?`<span class="event-person-chip" style="background:${color}22;color:${color}">${personLabel}</span>`:''}
-        ${canDel?`<button class="del-btn" onclick="deleteEvent(${e.id},'${e.gcalId||''}')">×</button>`:''}
-      </div>`;
-    }).join('');
-  }
-  document.getElementById('dayPanel').innerHTML = html;
-}
-
-function calShift(d) {
-  S.calMonth+=d;
-  if (S.calMonth>11){S.calMonth=0;S.calYear++;}
-  if (S.calMonth<0) {S.calMonth=11;S.calYear--;}
-  renderCalendar();
-}
-
-async function addEvent() {
-  if (!isParent()) return;
-  const title=document.getElementById('newEventTitle').value.trim();
-  const date =document.getElementById('newEventDate').value;
-  if (!title||!date) return;
-
-  const ev = {
-    id:     Date.now(),
-    title,  date,
-    time:   document.getElementById('newEventTime').value,
-    person: document.getElementById('newEventPerson').value,
-  };
-
-  // Push to Google Calendar if connected, store gcalId
-  if (gcalConnected()) {
-    const gcalId = await gcalCreateEvent(ev);
-    if (gcalId) ev.gcalId = gcalId;
-  }
-
-  S.events.push(ev);
-  document.getElementById('newEventTitle').value='';
-  document.getElementById('newEventTime').value='';
-  S.calSelected=date;
-  const d2=new Date(date+'T00:00:00');
-  S.calYear=d2.getFullYear(); S.calMonth=d2.getMonth();
-  save();
-  if (gcalConnected()) await fetchGCalEvents(); else renderCalendar();
-}
-
-async function deleteEvent(id, gcalId) {
-  if (!isParent()) return;
-  // Delete from Google Calendar if it's a GCal event or a synced local event
-  if (gcalId && gcalConnected()) await gcalDeleteEvent(gcalId);
-  // Remove from local events (numeric id) — gcal-only events have string ids like 'gcal_xxx'
-  if (typeof id === 'number') S.events = S.events.filter(x => x.id !== id);
-  save();
-  if (gcalConnected()) await fetchGCalEvents(); else renderCalendar();
-}
-
-// ════════════════════════════════════════
-//  TABS & FILTER
-// ════════════════════════════════════════
-const TABS = ['home','chores','grocery','homework','calendar'];
-function switchTab(tab) {
-  S.tab=tab;
-  document.querySelectorAll('.tab').forEach((el,i)=>el.classList.toggle('active',TABS[i]===tab));
-  document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));
-  document.getElementById('tab-'+tab).classList.add('active');
-}
-function setFilter(name) {
-  S.filter=(S.filter===name&&name!=='All')?'All':name;
-  renderHeader(); renderHome(); renderChores();
-}
-
-// ════════════════════════════════════════
-//  INIT
-// ════════════════════════════════════════
-load();
-const savedUser = localStorage.getItem('familyhub_user');
-if (savedUser) login(savedUser);
-</script>
-
-<!-- Google APIs loaded AFTER inline script so gapiLoaded/gisLoaded are already defined -->
 <script src="https://apis.google.com/js/api.js"      onload="gapiLoaded()"></script>
 <script src="https://accounts.google.com/gsi/client" onload="gisLoaded()" async defer></script>
 </body>

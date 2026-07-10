@@ -1,0 +1,11 @@
+{
+  "name": "familyhub-functions",
+  "version": "1.0.0",
+  "engines": { "node": "22" },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^11.11.1",
+    "firebase-functions": "^4.9.0",
+    "node-fetch": "^2.7.0"
+  }
+}
