@@ -742,7 +742,7 @@ function setAuthMode(mode) {
   // Only clear errors for panels being hidden — never wipe the active panel's error
   if (mode !== 'join') { const e=el('joinError'); if(e) e.textContent=''; }
   if (mode !== 'signin' && mode !== 'signup') {
-    ['siError','su1Error','su2Error'].forEach(id => { const e=el(id); if(e) e.textContent=''; });
+    ['siError','su1Error','su2Error'].forEach(id => { const e=el(id); if(e) { e.textContent=''; e.style.color=''; } });
   }
 }
 
@@ -777,6 +777,7 @@ async function doSignIn() {
   const email = el('siEmail').value.trim();
   const pwd   = el('siPwd').value;
   el('siError').textContent = '';
+  el('siError').style.color = '';
   if (!email || !pwd) { el('siError').textContent = 'נדרשים אימייל וסיסמה'; return; }
   setAuthLoading(true);
   try {
@@ -797,6 +798,35 @@ async function doSignIn() {
       emailEl.select();
       emailEl.addEventListener('input', () => emailEl.classList.remove('input-error'), { once: true });
     }
+  }
+}
+
+async function doForgotPassword() {
+  if (!FB_CONFIGURED) return;
+  const email = el('siEmail').value.trim();
+  el('siError').textContent = '';
+  if (!email) {
+    el('siError').textContent = 'יש להזין כתובת אימייל תחילה';
+    el('siEmail').classList.add('input-error');
+    el('siEmail').focus();
+    el('siEmail').addEventListener('input', () => el('siEmail').classList.remove('input-error'), { once: true });
+    return;
+  }
+  setAuthLoading(true);
+  try {
+    await fbAuth.sendPasswordResetEmail(email);
+    setAuthLoading(false);
+    el('siError').style.color = 'var(--success, #4CAF84)';
+    el('siError').textContent = 'נשלח! בדוק את תיבת הדואר שלך לקישור לאיפוס סיסמה';
+    el('siError').addEventListener('animationend', () => {}, { once: true });
+  } catch(e) {
+    setAuthLoading(false);
+    el('siError').style.color = '';
+    el('siError').textContent = getAuthError(e.code);
+    const emailEl = el('siEmail');
+    emailEl.classList.add('input-error');
+    emailEl.select();
+    emailEl.addEventListener('input', () => emailEl.classList.remove('input-error'), { once: true });
   }
 }
 
