@@ -10258,7 +10258,6 @@ function _listSwipeItemHtml(listId, it, canEdit, opts = {}) {
     ${showQty && it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
     ${showAmount && it.amount ? `<span class="list-item-qty">${esc(it.amount)}${it.unit ? ' ' + esc(it.unit) : ''}</span>` : ''}
     ${it.done ? _checkerBadge(it.checkedBy) : ''}
-    ${canEdit ? `<button class="list-item-edit-btn" onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')">✏️</button>` : ''}
     ${canEdit ? `<button class="list-item-del" onclick="listDeleteItem('${listId}','${it.id}','${arrayKey}')">×</button>` : ''}
   </div>`;
   if (!canEdit) return inner;
