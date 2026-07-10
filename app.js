@@ -5747,6 +5747,7 @@ function renderHome() {
   el('homeChoresTitle').textContent = S.filter==='All'?t('todayChores'):t('personChores',S.filter);
   let tasks = S.chores.filter(c=>!c.done);
   if (S.filter!=='All') tasks = tasks.filter(c=>c.assignee===S.filter);
+  tasks = tasks.sort((a,b) => _choreSortScore(a) - _choreSortScore(b));
   el('homeTasks').innerHTML = tasks.length
     ? tasks.slice(0,3).map(c => {
         const can = isParent()||c.assignee===S.user;
