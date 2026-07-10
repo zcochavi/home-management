@@ -616,8 +616,9 @@ exports.getAnalytics = functions.https.onCall(async (data, context) => {
   });
 
   // Admin log — events approved/rejected
-  const logSnap    = await db.collection('adminLog').orderBy('actionAt','desc').get();
-  const logEntries = logSnap.docs.map(d => ({ id:d.id, ...d.data() }));
+  const logSnap    = await db.collection('adminLog').get();
+  const logEntries = logSnap.docs.map(d => ({ id:d.id, ...d.data() }))
+    .sort((a,b) => (b.actionAt?.toMillis?.()??0) - (a.actionAt?.toMillis?.()??0));
 
   const approvedCount  = logEntries.filter(e=>e.action==='approved').length;
   const rejectedCount  = logEntries.filter(e=>e.action==='rejected').length;

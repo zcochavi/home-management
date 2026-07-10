@@ -5747,6 +5747,7 @@ function renderHome() {
   el('homeChoresTitle').textContent = S.filter==='All'?t('todayChores'):t('personChores',S.filter);
   let tasks = S.chores.filter(c=>!c.done);
   if (S.filter!=='All') tasks = tasks.filter(c=>c.assignee===S.filter);
+  tasks = tasks.sort((a,b) => _choreSortScore(a) - _choreSortScore(b));
   el('homeTasks').innerHTML = tasks.length
     ? tasks.slice(0,3).map(c => {
         const can = isParent()||c.assignee===S.user;
@@ -6860,7 +6861,7 @@ function updatePoolQty(poolId, rawValue) {
   const raw = isKg ? parseFloat(parseFloat(rawValue).toFixed(1)) : parseInt(rawValue);
   const qty = isKg ? Math.max(0.1, raw || 0.1) : Math.max(1, raw || 1);
   const listItem = S.shoppingList.find(x => x.poolId === poolId);
-  if (listItem) listItem.qty = qty;
+  if (listItem) { listItem.qty = qty; listItem.requestedQty = qty; }
   pool.lastQty = qty;
   // Update the qty badge in the shopping list without a full re-render
   clearTimeout(_poolQtySaveTimer);
@@ -10258,7 +10259,6 @@ function _listSwipeItemHtml(listId, it, canEdit, opts = {}) {
     ${showQty && it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
     ${showAmount && it.amount ? `<span class="list-item-qty">${esc(it.amount)}${it.unit ? ' ' + esc(it.unit) : ''}</span>` : ''}
     ${it.done ? _checkerBadge(it.checkedBy) : ''}
-    ${canEdit ? `<button class="list-item-edit-btn" onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')">✏️</button>` : ''}
     ${canEdit ? `<button class="list-item-del" onclick="listDeleteItem('${listId}','${it.id}','${arrayKey}')">×</button>` : ''}
   </div>`;
   if (!canEdit) return inner;
