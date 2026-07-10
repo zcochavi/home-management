@@ -6861,7 +6861,7 @@ function updatePoolQty(poolId, rawValue) {
   const raw = isKg ? parseFloat(parseFloat(rawValue).toFixed(1)) : parseInt(rawValue);
   const qty = isKg ? Math.max(0.1, raw || 0.1) : Math.max(1, raw || 1);
   const listItem = S.shoppingList.find(x => x.poolId === poolId);
-  if (listItem) listItem.qty = qty;
+  if (listItem) { listItem.qty = qty; listItem.requestedQty = qty; }
   pool.lastQty = qty;
   // Update the qty badge in the shopping list without a full re-render
   clearTimeout(_poolQtySaveTimer);
