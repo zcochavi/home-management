@@ -8,10 +8,44 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // All other collections: allow any authenticated user to read and write.
-    // This preserves the existing behaviour that was in place before this file was created.
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    // Maps a joined member's own Firebase Auth uid (family-code or kid-code account) to the
+    // family they belong to. A user may only ever write their own mapping; read is open since
+    // the mapping itself (uid -> uid) isn't sensitive on its own.
+    function familyOfUid(uid) {
+      return get(/databases/$(database)/documents/uidToFamily/$(uid)).data.familyUid;
+    }
+    match /uidToFamily/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // A family's private data: chores, grocery, homework, members (incl. kids' name/dob/gender/
+    // school), join codes, fcm tokens, notifications. Accessible to the family owner (whose own
+    // auth uid equals the family doc id) and to joined members via the uidToFamily mapping above.
+    match /families/{familyUid} {
+      allow read, write: if request.auth != null && (
+        request.auth.uid == familyUid ||
+        (exists(/databases/$(database)/documents/uidToFamily/$(request.auth.uid)) &&
+         familyOfUid(request.auth.uid) == familyUid)
+      );
+      match /{document=**} {
+        allow read, write: if request.auth != null && (
+          request.auth.uid == familyUid ||
+          (exists(/databases/$(database)/documents/uidToFamily/$(request.auth.uid)) &&
+           familyOfUid(request.auth.uid) == familyUid)
+        );
+      }
+    }
+
+    // All other collections (school community directory, pending requests, join codes, public
+    // list shares, etc.) — any authenticated user may read/write, same as before this file
+    // existed. These are intentionally cross-family (community features) or need pre-mapping
+    // access (e.g. reading a join code before the uidToFamily mapping above can exist yet).
+    // Firestore evaluates every matching rule as OR'd together, so "families" and "uidToFamily"
+    // must be explicitly excluded here — otherwise this catch-all would re-open them anyway.
+    match /{collection}/{rest=**} {
+      allow read, write: if request.auth != null
+        && !(collection in ['families', 'uidToFamily', 'webtopClasses']);
     }
   }
 }

@@ -545,6 +545,19 @@ const _memberCommitteeClasses = (m) => {
   return familyData?.committeeClasses || [];
 };
 const _isOwner       = () => fbAuth.currentUser?.uid === S.uid;
+
+// Joined members (family-code or kid-code accounts) authenticate with their own Firebase Auth
+// UID, distinct from the family document's id. Firestore rules can't see localStorage, so they
+// need a server-side record of "this auth UID belongs to this family" to grant access — this
+// lazily (self-)writes that mapping on every login, which also backfills it for members who
+// joined before this mapping existed, the first time they log in again.
+async function _ensureUidFamilyMapping(familyUid) {
+  const authUid = fbAuth.currentUser?.uid;
+  if (!authUid || authUid === familyUid || !fbDb) return;
+  try {
+    await fbDb.collection('uidToFamily').doc(authUid).set({ familyUid }, { merge: true });
+  } catch(e) { console.warn('[uidToFamily] mapping write failed:', e.message); }
+}
 const isCommittee    = () => isAdmin() || _memberCommitteeClasses(_myMember()).length > 0 || (_isOwner() && familyData?.role === 'committee');
 const isCommitteeFor = (cid) => {
   if (isAdmin() || (_isOwner() && familyData?.role === 'committee')) return true;
@@ -988,6 +1001,7 @@ async function doJoin() {
       el('authScreen').classList.remove('hidden');
       el('joinError').textContent = 'הגישה לנתוני המשפחה נכשלה. ייתכן בעיית הרשאות ב-Firestore.';
     }, 15000);
+    await _ensureUidFamilyMapping(ownerUid);
     subscribeToFeatureFlags();
     subscribeToFamily(ownerUid);
     fbDb.collection('families').doc(ownerUid).get()
@@ -2391,6 +2405,11 @@ let _mgmtEditEmoji = {}; // keyed by memberIndex
 
 function openMgmt() { renderMgmt(); el('mgmtScreen').classList.remove('hidden'); loadCities(); }
 function closeMgmt() { el('mgmtScreen').classList.add('hidden'); }
+
+function openTerms()    { el('termsScreen').classList.remove('hidden'); }
+function closeTerms()   { el('termsScreen').classList.add('hidden'); }
+function openPrivacy()  { el('privacyScreen').classList.remove('hidden'); }
+function closePrivacy() { el('privacyScreen').classList.add('hidden'); }
 
 function hardRefreshApp() {
   const url = location.origin + location.pathname + '?_r=' + Date.now();
@@ -9420,13 +9439,14 @@ if (!FB_CONFIGURED) {
     el('loadingScreen').classList.add('hidden');
     _showGuestPanel(_guestShareToken);
   } else {
-    fbAuth.onAuthStateChanged(user => {
+    fbAuth.onAuthStateChanged(async user => {
       if (_registering || _joining) return;
       if (user) {
         const familyUid = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
         S.uid = familyUid;
         S.lockedMember = localStorage.getItem('familyhub_locked_member_' + user.uid) || null;
         el('authScreen').classList.add('hidden');
+        await _ensureUidFamilyMapping(familyUid);
         subscribeToFeatureFlags();
         subscribeToFamily(familyUid);
       } else {

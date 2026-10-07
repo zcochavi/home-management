@@ -1586,6 +1586,12 @@ exports.webtopLink = functions.https.onRequest(async (req, res) => {
     const doc = await db.collection('families').doc(familyId).get();
     if (!doc.exists) return res.status(404).json({ error: 'family not found' });
     const familyName = doc.data()?.familyName || '';
+    // Record that a link step actually happened for this family, so webtopSetup below can
+    // require it — without this, a bare webtopSetup call with a leaked/guessed family UID
+    // (no link step at all) would be accepted.
+    await db.collection('families').doc(familyId).update({
+      webtopLinkedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
     return res.json({ ok: true, familyName });
   } catch (err) {
     console.error('webtopLink error', err);
@@ -1606,9 +1612,14 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
     return res.status(400).json({ error: 'missing fields' });
   }
 
-  // Verify the family exists
+  // Verify the family exists and was actually linked first (webtopLink), or has already
+  // synced before this check existed (grandfathered — avoids breaking existing connections).
   const familyDoc = await db.collection('families').doc(familyId).get();
   if (!familyDoc.exists) return res.status(404).json({ error: 'family not found' });
+  const famDataForAuth = familyDoc.data() || {};
+  if (!famDataForAuth.webtopLinkedAt && !famDataForAuth.webtopHomework && !famDataForAuth.webtopStudents) {
+    return res.status(403).json({ error: 'not linked — call webtopLink first' });
+  }
 
   try {
     const classCode = String(syncParams.classCode || syncParams.studentID || '');
