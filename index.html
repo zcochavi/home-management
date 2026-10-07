@@ -360,6 +360,13 @@
       </div>
     </div>
 
+    <!-- ── App Update ── -->
+    <div class="card">
+      <div class="card-title">🔄 עדכון גרסה</div>
+      <div class="mgmt-section-hint">אם שינויים חדשים באפליקציה לא מופיעים אצלכם (בעיקר בנייד), לחצו לרענון מלא שמושך את הגרסה העדכנית.</div>
+      <button class="mgmt-add-btn" style="width:100%;padding:10px;margin-top:10px" onclick="hardRefreshApp()">🔄 רענון מלא</button>
+    </div>
+
   </div>
 </div>
 
@@ -605,6 +612,10 @@
         <div class="card-title" id="hwCardTitle"></div>
         <div id="hwList"></div>
         <div class="add-form" id="addHwForm">
+          <div class="hw-scope-seg" id="hwScopeSeg" style="display:none">
+            <button class="hw-scope-btn active" data-val="personal" onclick="_hwScopePick('personal')">אישי</button>
+            <button class="hw-scope-btn" data-val="class" onclick="_hwScopePick('class')">🏫 לכל הכיתה</button>
+          </div>
           <input class="add-input" id="hwDesc" type="text">
           <div class="form-row">
             <div id="ddHwSubject" style="flex:1;min-width:0"></div>

@@ -49,7 +49,7 @@ const STRINGS = {
     hwDueSoon:'📋 שיעורים להגשה',
     allDone:'🎉 הכל גמור! כל הכבוד!',
     noPendingHw:'📭 אין שיעורים ממתינים!',
-    hwHistory:'📋 היסטוריה', hwHistoryEmpty:'אין שיעורים שהושלמו עדיין', hwHistorySearch:'חיפוש בהיסטוריה...',
+    hwHistory:'📋 שיעורים שהסתיימו', hwHistoryEmpty:'אין שיעורים שהושלמו עדיין', hwHistorySearch:'חיפוש בהיסטוריה...',
     wbHi: n => `שלום ${n}!`,
     wbStars: n => `יש לך ${n} ⭐ כוכבים השבוע`,
     addChoreTitle:'➕ הוסף משימה', chorePlaceholder:'מה צריך לעשות...',
@@ -489,7 +489,9 @@ let _notifUnsubscribe   = null;
 let _webtopHomework     = []; // [{subject, text, date, studentId, studentName}]
 let _webtopUpdatedAt    = null;
 let _featureFlags       = {}; // loaded from appConfig/featureFlags
+let _ffServerKnown      = {}; // last server-confirmed values — used only for diffing, untouched by local optimistic updates
 let _ffUnsubscribe      = null;
+let _ffFirstLoad        = true; // suppress toast for the initial snapshot on (re)subscribe
 
 const featureOn = (key) => _featureFlags[key] !== false; // default true if not set
 
@@ -499,14 +501,30 @@ const FEATURE_FLAGS_DEF = [
 
 function subscribeToFeatureFlags() {
   if (_ffUnsubscribe) { _ffUnsubscribe(); _ffUnsubscribe = null; }
+  _ffFirstLoad = true;
   _ffUnsubscribe = fbDb.collection('appConfig').doc('featureFlags')
     .onSnapshot(snap => {
-      _featureFlags = snap.exists ? snap.data() : {};
+      const next = snap.exists ? snap.data() : {};
+      // Notify everyone (including the admin who made the change) when a flag flips —
+      // this is the only place that shows the toast, so all connected clients see it.
+      // Diffed against _ffServerKnown (not _featureFlags), since saveFeatureFlag mutates
+      // _featureFlags optimistically before this snapshot arrives — comparing against that
+      // would always see "no change" for the client that made the edit.
+      if (!_ffFirstLoad) {
+        FEATURE_FLAGS_DEF.forEach(f => {
+          const was = _ffServerKnown[f.key] !== false;
+          const now = next[f.key] !== false;
+          if (was !== now) showToast(`${f.labelHe} ${now ? 'הופעל' : 'כובה'} ✓`, 'success');
+        });
+      }
+      _featureFlags = next;
+      _ffServerKnown = {...next}; // independent copy — _featureFlags gets mutated in place by saveFeatureFlag
+      _ffFirstLoad = false;
       // Re-render affected areas immediately
       if (S.tab === 'homework') renderHomework();
       renderMgmtWebtop && renderMgmtWebtop();
       if (S.tab === 'home') renderHome();
-    }, () => { _featureFlags = {}; });
+    }, () => { _featureFlags = {}; _ffServerKnown = {}; });
 }
 
 const isParent    = () => getParents().includes(S.user);
@@ -1189,6 +1207,24 @@ async function _dismissNotifById(id) {
     .catch(() => {});
 }
 
+// Resolving a request from the full Pending Requests panel (rather than the quick
+// banner ✓/✗) never touched the admin notification that spawned the banner, leaving
+// it stuck forever. Call this after a panel-driven approve/deny reaches a terminal state.
+async function _dismissNotifsForReq(type, reqId) {
+  if (!S.uid || !fbDb) return;
+  try {
+    const snap = await fbDb.collection('families').doc(S.uid)
+      .collection('notifications')
+      .where('type', '==', type)
+      .where('reqId', '==', reqId)
+      .where('dismissed', '==', false)
+      .get();
+    await Promise.all(snap.docs.map(d =>
+      d.ref.update({ dismissed: true, dismissedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    ));
+  } catch(e) { console.warn('_dismissNotifsForReq:', e); }
+}
+
 async function quickApproveReq(notifId, type, reqId, btn) {
   btn.closest('.notif-banner-actions').querySelectorAll('button').forEach(b => b.disabled = true);
   try {
@@ -1200,7 +1236,8 @@ async function quickApproveReq(notifId, type, reqId, btn) {
         const cityStatus = req.cityStatus || 'pending';
         if (cityStatus === 'pending') {
           btn.closest('.notif-banner-actions').querySelectorAll('button').forEach(b => b.disabled = false);
-          showToast('יש לאשר את העיר תחילה — פתח את לוח הבקשות', 'error');
+          showToast('יש לאשר את העיר תחילה — נפתח לוח הבקשות', 'error');
+          closeMenu(); openPendingPanel();
           return;
         }
         // City already approved — approve the school part
@@ -1466,13 +1503,16 @@ function _renderCommPendingBanner(el) {
   }
 }
 
+const _REQUEST_NOTIF_TYPES = ['school_pending','event_pending','application_pending'];
+
 function renderMessageCenter() {
   const list = el('messageCenterList');
   if (!list) return;
   const notifs = _allNotifs.filter(n =>
-    !['school_pending','event_pending','application_pending','admin_message'].includes(n.type) &&
+    n.type !== 'admin_message' &&
     (n.type !== 'shopping_done' || !isKid()) &&
-    (n.type !== 'admin_reply'   || n.recipientUid === S.uid)
+    (n.type !== 'admin_reply'   || n.recipientUid === S.uid) &&
+    (!_REQUEST_NOTIF_TYPES.includes(n.type) || (n.recipientUid === S.uid && n.requestedByUid !== S.uid))
   );
   el('mcCount').textContent = notifs.length ? `${notifs.length} הודעות` : '';
   el('mcDeleteAllBtn').style.display = notifs.length ? '' : 'none';
@@ -1483,11 +1523,15 @@ function renderMessageCenter() {
     return;
   }
   list.innerHTML = notifs.map(n => {
+    const isRequest = _REQUEST_NOTIF_TYPES.includes(n.type);
     const isGood = n.type?.includes('approved') || n.type === 'member_joined';
     const isDenied = n.type?.includes('denied') || n.type?.includes('rejected');
-    const icon   = n.type === 'shopping_done' ? '🛒' : n.type === 'member_joined' ? '👋' : n.type === 'admin_reply' ? '↩️' : isGood ? '✅' : isDenied ? '❌' : '🔔';
+    const icon   = n.type === 'shopping_done' ? '🛒' : n.type === 'member_joined' ? '👋' : n.type === 'admin_reply' ? '↩️' : isRequest ? '📋' : isGood ? '✅' : isDenied ? '❌' : '🔔';
     const dt     = n.createdAt?.toDate ? n.createdAt.toDate().toLocaleString('he-IL', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
     const dimmed = n.dismissed ? 'opacity:0.55;' : '';
+    const action = (isRequest && !n.dismissed)
+      ? `<button onclick="closeMessageCenter();openPendingPanel()" style="font-size:11px;border:none;background:var(--primary-50,#eff6ff);color:var(--primary-600);cursor:pointer;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:var(--r-pill);white-space:nowrap">📋 פתח בקשות</button>`
+      : '';
     return `<div class="mc-item" id="mcItem_${n.id}" style="${dimmed}">
       <input type="checkbox" class="mc-checkbox" id="mcChk_${n.id}" onchange="mcOnCheck()">
       <span class="mc-item-icon">${icon}</span>
@@ -1495,6 +1539,7 @@ function renderMessageCenter() {
         <div class="mc-item-msg">${esc(n.message)}</div>
         <div class="mc-item-date">${dt}</div>
       </div>
+      ${action}
     </div>`;
   }).join('');
 }
@@ -2346,6 +2391,15 @@ let _mgmtEditEmoji = {}; // keyed by memberIndex
 
 function openMgmt() { renderMgmt(); el('mgmtScreen').classList.remove('hidden'); loadCities(); }
 function closeMgmt() { el('mgmtScreen').classList.add('hidden'); }
+
+function hardRefreshApp() {
+  const url = location.origin + location.pathname + '?_r=' + Date.now();
+  if ('caches' in window) {
+    caches.keys().then(names => Promise.all(names.map(n => caches.delete(n)))).finally(() => location.replace(url));
+  } else {
+    location.replace(url);
+  }
+}
 
 function renderMgmt() {
   renderMgmtMembers();
@@ -3801,6 +3855,7 @@ async function deleteClassEvent(scope, scopeId, eventId) {
 async function approveEvent(cid, pendingId) {
   try {
     await fbFunctions.httpsCallable('approveEvent')({ cid, pendingId });
+    await _dismissNotifsForReq('event_pending', cid + '|' + pendingId);
     await renderPendingPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('approveEvent:', e); }
@@ -3810,6 +3865,7 @@ async function rejectEvent(cid, pendingId) {
   if (!await _confirm('לדחות את הבקשה?', { danger: true, okLabel: 'דחה' })) return;
   try {
     await fbFunctions.httpsCallable('rejectEvent')({ cid, pendingId });
+    await _dismissNotifsForReq('event_pending', cid + '|' + pendingId);
     await renderPendingPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('rejectEvent:', e); }
@@ -4426,7 +4482,8 @@ async function saveFeatureFlag(key, value) {
   if (webtopCard) webtopCard.style.display = isParent() && featureOn('webtopConnection') ? '' : 'none';
   try {
     await fbDb.collection('appConfig').doc('featureFlags').set({ [key]: value }, { merge: true });
-    showToast(value ? 'פיצ\'ר הופעל ✓' : 'פיצ\'ר כובה ✓', 'success');
+    // Success toast comes from subscribeToFeatureFlags' onSnapshot — shown to every
+    // connected client (including this one) so the change is visible to the whole family.
   } catch(e) {
     _featureFlags[key] = !value;
     showToast('שגיאה בשמירה', 'error');
@@ -4693,6 +4750,7 @@ async function voteForApplication(appId, cid) {
 async function adminApproveApplication(appId, cid) {
   try {
     await fbFunctions.httpsCallable('adminApproveApplication')({ appId });
+    await _dismissNotifsForReq('application_pending', appId + '|' + cid);
     await renderPendingPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('adminApproveApplication:', e); }
@@ -4702,6 +4760,7 @@ async function adminDenyApplication(appId, cid) {
   if (!await _confirm('לדחות מועמדות זו?', { danger: true, okLabel: 'דחה' })) return;
   try {
     await fbFunctions.httpsCallable('adminDenyApplication')({ appId });
+    await _dismissNotifsForReq('application_pending', appId + '|' + cid);
     await renderPendingPanel();
     // onSnapshot handles community re-render
   } catch(e) { console.error('adminDenyApplication:', e); }
@@ -4713,14 +4772,16 @@ async function approveSchoolPart(id, part) {
       const docSnap = await fbDb.collection('pendingSchools').doc(id).get();
       if (docSnap.exists) await updateSchoolIndex(docSnap.data().city, null);
     }
-    await fbFunctions.httpsCallable('resolveSchoolPart')({ id, part, action: 'approved', adminName: myFullName() });
+    const res = await fbFunctions.httpsCallable('resolveSchoolPart')({ id, part, action: 'approved', adminName: myFullName() });
+    if (res.data?.state !== 'partial') await _dismissNotifsForReq('school_pending', id);
     await renderPendingPanel();
   } catch(e) { console.error('approveSchoolPart:', e); _alert('שגיאה: ' + e.message); }
 }
 
 async function denySchoolPart(id, part) {
   try {
-    await fbFunctions.httpsCallable('resolveSchoolPart')({ id, part, action: 'denied', adminName: myFullName() });
+    const res = await fbFunctions.httpsCallable('resolveSchoolPart')({ id, part, action: 'denied', adminName: myFullName() });
+    if (res.data?.state !== 'partial') await _dismissNotifsForReq('school_pending', id);
     await renderPendingPanel();
   } catch(e) { console.error('denySchoolPart:', e); _alert('שגיאה: ' + e.message); }
 }
@@ -4733,6 +4794,7 @@ async function approveSchool(id) {
     await updateSchoolIndex(req.city, req.schoolName);
     // registerInClass is now handled by the Cloud Function with the correct familyUid
     await fbFunctions.httpsCallable('approveSchoolRequest')({ id, adminName: myFullName() });
+    await _dismissNotifsForReq('school_pending', id);
     await renderPendingPanel();
   } catch(e) { console.error('approveSchool:', e); _alert('שגיאה: ' + e.message); }
 }
@@ -4740,6 +4802,7 @@ async function approveSchool(id) {
 async function denySchool(id) {
   try {
     await fbFunctions.httpsCallable('denySchoolRequest')({ id, adminName: myFullName() });
+    await _dismissNotifsForReq('school_pending', id);
     await renderPendingPanel();
   } catch(e) { console.error('denySchool:', e); _alert('שגיאה: ' + e.message); }
 }
@@ -5509,7 +5572,7 @@ function renderHomeShopping() {
   if (!sec) return;
   const placeholder = t('locale') === 'he-IL' ? 'חפש מהמאגר...' : 'Search pool…';
   sec.innerHTML = `<div class="card">
-    <div class="card-title">🛒 קניות מהירות</div>
+    <div class="card-title">🛒 הוסף לרשימת הקניות</div>
     <div class="home-quick-ac-outer">
       <div class="home-quick-add-wrap">
         <input class="home-quick-add-input" id="homeQuickAddInput" type="text"
@@ -7192,6 +7255,7 @@ function renderShoppingHistory() {
 let _hwHistOpen = false;
 let _hwSearch = '';
 let _hwSubjectFilter = null;
+let _hwScope = 'personal'; // 'personal' | 'class' — class only selectable when Webtop isn't managing class homework
 
 function fmtDoneAt(ts) {
   if (!ts) return '';
@@ -7211,6 +7275,11 @@ function renderHomework(){
   childTabsEl.style.display = showKidChips ? '' : 'none';
   if (showKidChips) { childTabsEl.innerHTML = _hwKidChipsHtml(kids); _applyChipsSpread('childTabsContainer'); }
 
+  // Scope toggle: parents only, and only when Webtop isn't the source of class homework
+  const scopeEl = el('hwScopeSeg');
+  const scopeAllowed = isParent() && !featureOn('webtopConnection');
+  if (scopeEl) scopeEl.style.display = scopeAllowed ? '' : 'none';
+  if (!scopeAllowed) _hwScope = 'personal';
 
   // Search bar
   const searchBar = el('hwSearchBar');
@@ -7243,12 +7312,14 @@ function renderHomework(){
       ? (filtered.length ? filtered : _webtopHomework)    // mapped: filtered, fallback to all if empty
       : (!anyMapped ? _webtopHomework : []);               // unmapped kid: all only if nobody is mapped yet
 
-  // Subject filter chips — union of subjects across all three sections
+  // Subject filter chips — union of subjects across active AND history (all three sections)
   const subjChipsEl=el('hwSubjectChips');
   if(subjChipsEl){
-    const classNotDone=classHw.filter(h=>!(h.doneBy&&h.doneBy[S.child]));
-    const allSubjs=[...new Set([...classNotDone,...allPending,...allWtHw].map(h=>h.subject).filter(Boolean))];
-    if(allSubjs.length>=1){
+    const allPersonal=S.child
+      ? S.homework.filter(h=>(!h.scope||h.scope==='personal')&&h.child===S.child)
+      : [];
+    const allSubjs=[...new Set([...classHw,...allPersonal,...allWtHw].map(h=>h.subject).filter(Boolean))];
+    if(allSubjs.length>1){
       if(_hwSubjectFilter&&!allSubjs.includes(_hwSubjectFilter))_hwSubjectFilter=null;
       subjChipsEl.style.display='';
       subjChipsEl.innerHTML=allSubjs.map(s=>
@@ -7285,42 +7356,47 @@ function renderHomework(){
   const webtopSec=el('hwWebtopSection');
   const webtopListEl=el('hwWebtopList');
   if(webtopSec&&webtopListEl){
-    if(!featureOn('webtopConnection')){webtopSec.style.display='none';return;}
-    // Show a hint when homework exists but this child has no classCode mapping
-    const noMapping = S.child && !childClassCode && anyMapped && _webtopHomework.length > 0;
-    if(!wtHw.length && !noMapping){
+    if(!featureOn('webtopConnection')){
       webtopSec.style.display='none';
       const syncTimeEl=el('hwWebtopSyncTime');
       if(syncTimeEl) syncTimeEl.textContent='';
-    } else if (noMapping) {
-      webtopSec.style.display='';
-      const syncTimeEl=el('hwWebtopSyncTime');
-      if(syncTimeEl) syncTimeEl.textContent='';
-      webtopListEl.innerHTML = `<div class="empty" style="font-size:13px;padding:8px 0">לא משויך לכיתה — הגדר בהגדרות</div>`;
     } else {
-      webtopSec.style.display='';
-      const syncTimeEl=el('hwWebtopSyncTime');
-      if(syncTimeEl&&_webtopUpdatedAt){
-        syncTimeEl.textContent=_webtopUpdatedAt.toLocaleString(t('locale'),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+      // Show a hint when homework exists but this child has no classCode mapping
+      const noMapping = S.child && !childClassCode && anyMapped && _webtopHomework.length > 0;
+      if(!wtHw.length && !noMapping){
+        webtopSec.style.display='none';
+        const syncTimeEl=el('hwWebtopSyncTime');
+        if(syncTimeEl) syncTimeEl.textContent='';
+      } else if (noMapping) {
+        webtopSec.style.display='';
+        const syncTimeEl=el('hwWebtopSyncTime');
+        if(syncTimeEl) syncTimeEl.textContent='';
+        webtopListEl.innerHTML = `<div class="empty" style="font-size:13px;padding:8px 0">לא משויך לכיתה — הגדר בהגדרות</div>`;
+      } else {
+        webtopSec.style.display='';
+        const syncTimeEl=el('hwWebtopSyncTime');
+        if(syncTimeEl&&_webtopUpdatedAt){
+          syncTimeEl.textContent=_webtopUpdatedAt.toLocaleString(t('locale'),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+        }
+        const doneMap = familyData?.webtopHomeworkDone || {};
+        webtopListEl.innerHTML=wtHw.map(h=>{
+          const doneKey = `${h.classCode}|${h.date}|${h.subject}`;
+          const isDone = !!doneMap[doneKey];
+          const canToggle = isParent() ||
+            (isKid() && getMembers().find(m=>m.name===S.user)?.webtopClassCode === h.classCode);
+          return `<div class="hw-item hw-webtop-item${isDone?' hw-webtop-done':''}">
+            <div class="hw-head">
+              ${canToggle
+                ? `<div class="check-box${isDone?' done':''}" onclick="toggleWebtopDone('${esc(doneKey)}')"></div>`
+                : `<span class="hw-webtop-icon">📡</span>`}
+              <div class="hw-desc-text${isDone?' done':''}">${esc(h.text)}</div>
+              ${h.subject?`<span class="badge" style="${webtopSubjectStyle(h.subject)}">${esc(h.subject)}</span>`:''}
+            </div>
+            ${h.context?`<div class="hw-webtop-context">${esc(h.context)}</div>`:''}
+            ${h.date?`<div class="hw-due">${fmtDate(h.date.slice(0,10))}</div>`:''}
+          </div>`;
+        }).join('');
       }
-      const doneMap = familyData?.webtopHomeworkDone || {};
-      webtopListEl.innerHTML=wtHw.map(h=>{
-        const doneKey = `${h.classCode}|${h.date}|${h.subject}`;
-        const isDone = !!doneMap[doneKey];
-        const canToggle = isParent() ||
-          (isKid() && getMembers().find(m=>m.name===S.user)?.webtopClassCode === h.classCode);
-        return `<div class="hw-item hw-webtop-item${isDone?' hw-webtop-done':''}">
-          <div class="hw-head">
-            ${canToggle
-              ? `<div class="check-box${isDone?' done':''}" onclick="toggleWebtopDone('${esc(doneKey)}')"></div>`
-              : `<span class="hw-webtop-icon">📡</span>`}
-            <div class="hw-desc-text${isDone?' done':''}">${esc(h.text)}</div>
-            ${h.subject?`<span class="badge" style="${webtopSubjectStyle(h.subject)}">${esc(h.subject)}</span>`:''}
-          </div>
-          ${h.context?`<div class="hw-webtop-context">${esc(h.context)}</div>`:''}
-          ${h.date?`<div class="hw-due">${fmtDate(h.date.slice(0,10))}</div>`:''}
-        </div>`;
-      }).join('');
     }
   }
 
@@ -7449,6 +7525,7 @@ function toggleHwHistory() {
 function switchChild(c){if(!isParent()&&c!==S.user)return;S.child=c;_hwSubjectFilter=null;_hwSearch='';renderHomework();}
 function switchHwSubject(s){_hwSubjectFilter=(_hwSubjectFilter===s)?null:s;renderHomework();}
 function _hwScopePick(val) {
+  _hwScope = val;
   document.querySelectorAll('#hwScopeSeg .hw-scope-btn').forEach(b =>
     b.classList.toggle('active', b.dataset.val === val));
   const childTabsEl = el('childTabsContainer');
@@ -7552,9 +7629,14 @@ function addHomework(){
   const descEl=el('hwDesc');
   const desc=descEl.value.trim();
   if(!desc){descEl.focus();descEl.classList.add('input-shake');setTimeout(()=>descEl.classList.remove('input-shake'),500);return;}
-  if(!S.child)return;
-  if(!isParent()&&S.child!==S.user)return;
-  S.homework.push({id:Date.now(),scope:'personal',child:S.child,subject:el('hwSubject').value,desc,due:el('hwDue').value,done:false});
+  if(_hwScope==='class'){
+    if(!isParent()||featureOn('webtopConnection'))return;
+    S.homework.push({id:Date.now(),scope:'class',subject:el('hwSubject').value,desc,due:el('hwDue').value,doneBy:{},doneAtBy:{}});
+  } else {
+    if(!S.child)return;
+    if(!isParent()&&S.child!==S.user)return;
+    S.homework.push({id:Date.now(),scope:'personal',child:S.child,subject:el('hwSubject').value,desc,due:el('hwDue').value,done:false});
+  }
   el('hwDesc').value='';save();renderHomework();renderHome();
 }
 
@@ -8801,7 +8883,7 @@ const HOME_SECTIONS = [
   { id:'stars',    icon:'⭐', labelKey:'starChart'   },
   { id:'homework', icon:'📚', labelKey:'hwDueSoon'   },
   { id:'upcoming', icon:'📅', labelHe:'אירועים קרובים', labelEn:'Upcoming events' },
-  { id:'shopping', icon:'🛒', labelHe:'קניות מהירות',  labelEn:'Quick shopping' },
+  { id:'shopping', icon:'🛒', labelHe:'הוסף לרשימת הקניות', labelEn:'Quick shopping' },
 ];
 
 function _normaliseHomePrefs(p) {
@@ -9345,6 +9427,7 @@ if (!FB_CONFIGURED) {
         S.uid = familyUid;
         S.lockedMember = localStorage.getItem('familyhub_locked_member_' + user.uid) || null;
         el('authScreen').classList.add('hidden');
+        subscribeToFeatureFlags();
         subscribeToFamily(familyUid);
       } else {
         S.uid = null; familyData = null;
