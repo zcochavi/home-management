@@ -7,6 +7,9 @@ on:
       - 'app.js'
       - 'styles.css'
 
+permissions:
+  contents: write
+
 jobs:
   bump-version:
     name: Update cache-busting version in index.html
