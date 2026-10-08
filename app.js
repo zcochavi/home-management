@@ -9445,9 +9445,14 @@ if (!FB_CONFIGURED) {
   const _guestShareToken = new URLSearchParams(location.search).get('share');
   if (_guestShareToken) {
     // Guest view — no family login required, but Firestore rules still need
-    // request.auth != null, so sign in anonymously if no session exists yet.
+    // request.auth != null. Wait for Firebase to resolve any persisted session
+    // first (currentUser is unreliable before that), then sign in anonymously
+    // only if the visitor truly has none — never replace a real logged-in session.
     el('loadingScreen').classList.add('hidden');
-    (fbAuth.currentUser ? Promise.resolve() : fbAuth.signInAnonymously())
+    new Promise(resolve => {
+      const unsub = fbAuth.onAuthStateChanged(user => { unsub(); resolve(user); });
+    })
+      .then(user => user ? null : fbAuth.signInAnonymously())
       .then(() => _showGuestPanel(_guestShareToken))
       .catch(e => {
         console.error('[guest] anonymous sign-in failed:', e);
