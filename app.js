@@ -2411,13 +2411,22 @@ function closeTerms()   { el('termsScreen').classList.add('hidden'); }
 function openPrivacy()  { el('privacyScreen').classList.remove('hidden'); }
 function closePrivacy() { el('privacyScreen').classList.add('hidden'); }
 
-function hardRefreshApp() {
+async function hardRefreshApp() {
   const url = location.origin + location.pathname + '?_r=' + Date.now();
-  if ('caches' in window) {
-    caches.keys().then(names => Promise.all(names.map(n => caches.delete(n)))).finally(() => location.replace(url));
-  } else {
-    location.replace(url);
-  }
+  try {
+    if ('caches' in window) {
+      const names = await caches.keys();
+      await Promise.all(names.map(n => caches.delete(n)));
+    }
+    // Installed home-screen PWAs (iOS/Android) can cache far more aggressively than a normal
+    // browser tab — unregistering any service worker forces a clean re-fetch on next load,
+    // on top of the Cache Storage clear above and the cache-busting query string below.
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+  } catch(e) { console.warn('[hardRefreshApp] cleanup failed:', e.message); }
+  location.replace(url);
 }
 
 function renderMgmt() {
@@ -9435,12 +9444,19 @@ if (!FB_CONFIGURED) {
 } else {
   const _guestShareToken = new URLSearchParams(location.search).get('share');
   if (_guestShareToken) {
-    // Guest view — bypass auth entirely
+    // Guest view — no family login required, but Firestore rules still need
+    // request.auth != null, so sign in anonymously if no session exists yet.
     el('loadingScreen').classList.add('hidden');
-    _showGuestPanel(_guestShareToken);
+    (fbAuth.currentUser ? Promise.resolve() : fbAuth.signInAnonymously())
+      .then(() => _showGuestPanel(_guestShareToken))
+      .catch(e => {
+        console.error('[guest] anonymous sign-in failed:', e);
+        _showGuestPanel(_guestShareToken);
+      });
   } else {
     fbAuth.onAuthStateChanged(async user => {
       if (_registering || _joining) return;
+      if (user && user.isAnonymous) { await fbAuth.signOut().catch(() => {}); return; }
       if (user) {
         const familyUid = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
         S.uid = familyUid;
