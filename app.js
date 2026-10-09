@@ -10153,12 +10153,17 @@ const _TILE_PHOTOS = {
     { kw:['ים','beach','חוף','surf','טרופי'],          id:'1507525428034-b723cf961d3e' },
     { kw:['סקי','ski','שלג','snow'],                   id:'1551698618-1dfe5d97d256' },
     { kw:['קמפינג','camp','אוהל','tent'],               id:'1504280390367-361c6d9f38f4' },
+    { kw:['טיול','trip','נסיעה','travel','טיסה','flight'], src:'images.unsplash.com/photo-1469854523086-cc02fe5d8800' },
+    { kw:['לילה','night','לינה','sleepover'],           src:'images.unsplash.com/photo-1556634202-129a046351c0' },
+    { kw:['חופשה','vacation','holiday','נופש'],          src:'plus.unsplash.com/premium_photo-1677343210638-5d3ce6ddbf85' },
+    { kw:['הריון','היריון','pregnancy','לידה','maternity'], src:'images.unsplash.com/photo-1457342813143-a1ae27448a82' },
   ],
   _packingDefault: '1488646953014-85cb44e25828',
   event: [
     { kw:['חתונה','wedding'],                          id:'1519741497674-611481863552' },
     { kw:['ילדים','kids','ילד'],                        id:'1602631985686-1bb0e6a8696e' },
     { kw:['יום הולדת','birthday','birth','בירתדי'],    id:'1530103862676-de8c9debad1d' },
+    { kw:['חגיגה','חגיגת','celebration','מסיבה'],        src:'plus.unsplash.com/premium_photo-1661344231470-10b4ec4cf094' },
   ],
   _eventDefault: '1492684223066-81342ee5ff30',
 };
@@ -10200,6 +10205,7 @@ function _tilePhotoUrl(list) {
     const cover = _RECIPE_EMOJI_COVERS.find(p => p.kw.some(k => n.includes(k.toLowerCase())));
     if (cover) return `https://${cover.src}?w=300&h=300&fit=crop&q=75&auto=format`;
   }
+  if (match?.src) return `https://${match.src}?w=300&h=300&fit=crop&q=75&auto=format`;
   const id = match ? match.id : defaultId;
   return `https://images.unsplash.com/photo-${id}?w=300&h=300&fit=crop&q=75&auto=format`;
 }
