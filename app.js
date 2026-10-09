@@ -10163,25 +10163,25 @@ const _TILE_PHOTOS = {
   _eventDefault: '1492684223066-81342ee5ff30',
 };
 
-// Extra recipe categories rendered as built-in emoji covers (no external image needed).
-// Checked after the photo keywords above, before falling back to the default photo.
+// Extra recipe categories. `src` is the Unsplash photo (host + path); the emoji gradient cover
+// is only a fallback if the photo fails to load. Checked after the photo keywords above.
 const _RECIPE_EMOJI_COVERS = [
-  { kw:['מאפין','muffin','קאפקייק','cupcake'],            emoji:'🧁', c:['#fbcfe8','#f9a8d4'] },
-  { kw:['לחם','bread','חלה','פיתה','לחמניה','בייגל'],      emoji:'🍞', c:['#fde68a','#fbbf24'] },
-  { kw:['דג','fish','סלמון','salmon','טונה','tuna'],       emoji:'🐟', c:['#bae6fd','#7dd3fc'] },
-  { kw:['המבורגר','burger','קבב','סטייק','steak','בשר','meat','שניצל','schnitzel'], emoji:'🥩', c:['#fecaca','#f87171'] },
-  { kw:['אורז','rice','סושי','sushi'],                    emoji:'🍚', c:['#e7e5e4','#d6d3d1'] },
-  { kw:['ביצ','egg','שקשוקה','חביתה','omelet'],            emoji:'🍳', c:['#fef3c7','#fcd34d'] },
-  { kw:['חומוס','hummus','פלאפל','falafel','טחינה'],       emoji:'🧆', c:['#fed7aa','#fdba74'] },
-  { kw:['גלידה','ice cream','סורבה','קינוח','dessert'],    emoji:'🍨', c:['#fbcfe8','#c4b5fd'] },
-  { kw:['שייק','smoothie','משקה','drink','לימונדה','מיץ','juice'], emoji:'🥤', c:['#bbf7d0','#86efac'] },
-  { kw:['ירק','ברוקולי','broccoli','veggie','vegetable','כרובית','קישוא'], emoji:'🥦', c:['#bbf7d0','#4ade80'] },
-  { kw:['תפוח אדמה','תפוחי אדמה','potato','צ\'יפס','fries','פירה'], emoji:'🍟', c:['#fef08a','#facc15'] },
-  { kw:['כריך','sandwich','טוסט','toast','טורטייה','wrap'], emoji:'🥪', c:['#fde68a','#fcd34d'] },
-  { kw:['פאי','pie','טארט','tart','פשטידה','quiche'],      emoji:'🥧', c:['#fed7aa','#fb923c'] },
-  { kw:['קפה','coffee','קפוצ\'ינו'],                      emoji:'☕', c:['#e7d5c4','#c4a484'] },
-  { kw:['לביבות','סופגניה','דונט','donut','וופל','waffle'], emoji:'🍩', c:['#fbcfe8','#f472b6'] },
-  { kw:['תבשיל','stew','צ\'ילי','chili','קארי','curry','שקשוקה'], emoji:'🍲', c:['#fed7aa','#f97316'] },
+  { kw:['מאפין','muffin','קאפקייק','cupcake'],            emoji:'🧁', src:'images.unsplash.com/photo-1607958996333-41aef7caefaa', c:['#fbcfe8','#f9a8d4'] },
+  { kw:['לחם','bread','חלה','פיתה','לחמניה','בייגל'],      emoji:'🍞', src:'images.unsplash.com/photo-1598373182133-52452f7691ef', c:['#fde68a','#fbbf24'] },
+  { kw:['דג','fish','סלמון','salmon','טונה','tuna'],       emoji:'🐟', src:'plus.unsplash.com/premium_photo-1693221705305-6eff5fa8e483', c:['#bae6fd','#7dd3fc'] },
+  { kw:['המבורגר','burger','קבב','סטייק','steak','בשר','meat','שניצל','schnitzel'], emoji:'🥩', src:'images.unsplash.com/photo-1607623814075-e51df1bdc82f', c:['#fecaca','#f87171'] },
+  { kw:['אורז','rice','סושי','sushi'],                    emoji:'🍚', src:'images.unsplash.com/photo-1536304993881-ff6e9eefa2a6', c:['#e7e5e4','#d6d3d1'] },
+  { kw:['ביצ','egg','שקשוקה','חביתה','omelet'],            emoji:'🍳', src:'images.unsplash.com/photo-1533089860892-a7c6f0a88666', c:['#fef3c7','#fcd34d'] },
+  { kw:['חומוס','hummus','פלאפל','falafel','טחינה'],       emoji:'🧆', src:'plus.unsplash.com/premium_photo-1672174773811-a483dacc407d', c:['#fed7aa','#fdba74'] },
+  { kw:['גלידה','ice cream','סורבה','קינוח','dessert'],    emoji:'🍨', src:'images.unsplash.com/photo-1497034825429-c343d7c6a68f', c:['#fbcfe8','#c4b5fd'] },
+  { kw:['שייק','smoothie','משקה','drink','לימונדה','מיץ','juice'], emoji:'🥤', src:'images.unsplash.com/photo-1551024709-8f23befc6f87', c:['#bbf7d0','#86efac'] },
+  { kw:['ירק','ברוקולי','broccoli','veggie','vegetable','כרובית','קישוא'], emoji:'🥦', src:'images.unsplash.com/photo-1579113800032-c38bd7635818', c:['#bbf7d0','#4ade80'] },
+  { kw:['תפוח אדמה','תפוחי אדמה','potato','צ\'יפס','fries','פירה'], emoji:'🍟', src:'images.unsplash.com/photo-1518977676601-b53f82aba655', c:['#fef08a','#facc15'] },
+  { kw:['כריך','sandwich','טוסט','toast','טורטייה','wrap'], emoji:'🥪', src:'images.unsplash.com/photo-1553909489-cd47e0907980', c:['#fde68a','#fcd34d'] },
+  { kw:['פאי','pie','טארט','tart','פשטידה','quiche'],      emoji:'🥧', src:'plus.unsplash.com/premium_photo-1663840344827-ee2d5d5cafb6', c:['#fed7aa','#fb923c'] },
+  { kw:['קפה','coffee','קפוצ\'ינו'],                      emoji:'☕', src:'plus.unsplash.com/premium_photo-1675435644687-562e8042b9db', c:['#e7d5c4','#c4a484'] },
+  { kw:['לביבות','סופגניה','דונט','donut','וופל','waffle'], emoji:'🍩', src:'plus.unsplash.com/premium_photo-1683121823310-121e5fe5a06d', c:['#fbcfe8','#f472b6'] },
+  { kw:['תבשיל','stew','צ\'ילי','chili','קארי','curry','שקשוקה'], emoji:'🍲', src:'images.unsplash.com/photo-1608500219063-e5164085cd6f', c:['#fed7aa','#f97316'] },
 ];
 
 function _emojiCoverUrl(emoji, [c1, c2]) {
@@ -10198,10 +10198,19 @@ function _tilePhotoUrl(list) {
   const match = pool.find(p => p.kw.some(k => n.includes(k.toLowerCase())));
   if (!match && list.type === 'recipe') {
     const cover = _RECIPE_EMOJI_COVERS.find(p => p.kw.some(k => n.includes(k.toLowerCase())));
-    if (cover) return _emojiCoverUrl(cover.emoji, cover.c);
+    if (cover) return `https://${cover.src}?w=300&h=300&fit=crop&q=75&auto=format`;
   }
   const id = match ? match.id : defaultId;
   return `https://images.unsplash.com/photo-${id}?w=300&h=300&fit=crop&q=75&auto=format`;
+}
+
+// Emoji cover used if a keyword photo fails to load (null when the list has none)
+function _tilePhotoFallback(list) {
+  if (list.photo || list.type !== 'recipe') return null;
+  const n = (list.name || '').toLowerCase();
+  if (_TILE_PHOTOS.recipe.some(p => p.kw.some(k => n.includes(k.toLowerCase())))) return null;
+  const cover = _RECIPE_EMOJI_COVERS.find(p => p.kw.some(k => n.includes(k.toLowerCase())));
+  return cover ? _emojiCoverUrl(cover.emoji, cover.c) : null;
 }
 
 function _renderListTile(l, matchInfo = null) {
@@ -10220,7 +10229,7 @@ function _renderListTile(l, matchInfo = null) {
   if (photoUrl) {
     return `<div class="list-tile list-tile-has-photo${l.archived ? ' list-tile-archived' : ''}" data-list-id="${l.id}">
       <div class="list-tile-photo-wrap">
-        <img class="list-tile-bg" src="${photoUrl}" alt="" loading="lazy" onerror="this.closest('.list-tile-photo-wrap').remove()">
+        <img class="list-tile-bg" src="${photoUrl}" alt="" loading="lazy"${_tilePhotoFallback(l) ? ` data-fb="${_tilePhotoFallback(l)}"` : ''} onerror="if(this.dataset.fb&&this.src!==this.dataset.fb){this.src=this.dataset.fb}else{this.closest('.list-tile-photo-wrap').remove()}">
         ${dateStr ? `<div class="list-tile-date">${fmtDate(dateStr)}</div>` : ''}
         <button class="list-tile-menu-btn" onclick="event.stopPropagation();_listTileMenu('${l.id}',this)" title="אפשרויות">⋮</button>
         ${l.type !== 'recipe' && left > 0 ? `<div class="list-tile-badge">${left}</div>` : (l.type !== 'recipe' && total > 0 ? `<div class="list-tile-done-badge">✓</div>` : '')}
