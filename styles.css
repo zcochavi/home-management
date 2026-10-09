@@ -2208,6 +2208,10 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .guest-header-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .guest-app-logo { font-size: 13px; font-weight: 700; color: var(--primary-500); letter-spacing: 0.2px; }
 .guest-app-logo-sep { font-size: 12px; color: var(--gray-300); }
+.guest-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.guest-title-row .guest-list-name { flex: 1; min-width: 0; }
+.guest-save-btn { flex-shrink: 0; padding: 7px 14px; border: none; border-radius: var(--r-pill); background: var(--primary-500); color: white; font-family: inherit; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.guest-save-btn:disabled { opacity: 0.7; cursor: default; }
 .guest-list-name { font-size: 17px; font-weight: 800; color: var(--gray-900); line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .guest-mode-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: var(--r-pill); background: var(--gray-100); color: var(--gray-500); }
 .guest-mode-badge.guest-mode-edit { background: var(--primary-100); color: var(--primary-600); }
