@@ -9387,7 +9387,6 @@ function _renderGuestShare(token, share) {
         <span class="list-step-text">${esc(st.text)}</span>
       </div>`).join('')}
     </div>`;
-    if (_guestRealUser()) h += `<button class="btn" id="guestSaveRecipeBtn" style="width:100%;margin-top:12px" onclick="guestSaveRecipe('${token}')">➕ הוסף למתכונים שלי</button>`;
   } else {
     const items = share.items || [];
     const undone = items.filter(it => !itemDone(it));
@@ -9413,6 +9412,17 @@ function _renderGuestShare(token, share) {
     </div>`;
   }
   cont.innerHTML = h;
+  // "Add to my recipes" sits next to the title, for real (non-anonymous) logged-in visitors only
+  const saveBtn = el('guestSaveRecipeBtn');
+  if (saveBtn) {
+    const show = share.type === 'recipe' && !!_guestRealUser();
+    saveBtn.style.display = show ? '' : 'none';
+    if (show && !saveBtn.dataset.saved) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = '➕ הוסף למתכונים שלי';
+      saveBtn.onclick = () => guestSaveRecipe(token);
+    }
+  }
 }
 
 // Real (non-anonymous) logged-in user → the family their lists belong to
@@ -9441,7 +9451,7 @@ async function guestSaveRecipe(token) {
       items: clean(_guestShare.items),
       steps: clean(_guestShare.steps),
     });
-    if (btn) { btn.textContent = '✓ נוסף למתכונים שלך'; }
+    if (btn) { btn.dataset.saved = '1'; btn.textContent = '✓ נוסף למתכונים שלך'; }
   } catch(e) {
     console.error('[guest] save recipe failed:', e);
     if (btn) { btn.disabled = false; btn.textContent = 'שגיאה — נסה שוב'; }
