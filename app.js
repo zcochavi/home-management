@@ -9225,6 +9225,7 @@ async function listCreateShare(listId) {
     : rawItems;
   const shareDoc = {
     familyUid: S.uid, listId, mode,
+    sharedBy: S.user || null,
     type: list.type, name: list.name,
     items: shareItems,
     meta:  JSON.parse(JSON.stringify(list.meta  || {})),
@@ -9412,6 +9413,16 @@ function _renderGuestShare(token, share) {
         ${_checkerBadge(checkerName(it))}
       </div>`).join('')}
     </div>`;
+  }
+  // Info disclaimer: who shared the link and when (older shares have no sharer name)
+  const sharedAt = share.createdAt?.toDate?.();
+  if (share.sharedBy || sharedAt) {
+    const when = sharedAt
+      ? sharedAt.toLocaleDateString('he-IL', { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' +
+        sharedAt.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+      : '';
+    const who = share.sharedBy ? `שותף על ידי ${esc(share.sharedBy)}` : 'שותף';
+    h += `<div class="guest-share-info">ℹ️ ${who}${when ? ' · ' + when : ''}</div>`;
   }
   cont.innerHTML = h;
   // "Add to my recipes" sits next to the title, for real (non-anonymous) logged-in visitors only
