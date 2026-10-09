@@ -10543,7 +10543,7 @@ function _renderRecipeDetail(cont, list, canEdit) {
     ${canEdit ? `<div class="mgmt-add-form">
       <input class="mgmt-input" id="listNewItem" type="text" placeholder="מצרך"
         onkeydown="if(event.key==='Enter')listAddItem('${list.id}','ingredient')">
-      <input class="mgmt-input" id="listNewItemQty" type="text" placeholder="כמות" style="flex:0 0 64px"
+      <input class="mgmt-input" id="listNewItemQty" type="text" placeholder="כמות" style="flex:0 0 76px;width:76px"
         onkeydown="if(event.key==='Enter')listAddItem('${list.id}','ingredient')">
       <button class="mgmt-add-btn" onclick="listAddItem('${list.id}','ingredient')">+</button>
     </div>` : ''}

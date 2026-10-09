@@ -1832,6 +1832,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 
 .mgmt-add-form { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
 .mgmt-input { flex: 1; padding: 10px 14px; border: 1.5px solid var(--gray-200); border-radius: var(--r-input); font-family: inherit; font-size: 13px; font-weight: 600; outline: none; color: var(--gray-900); background: var(--surface); transition: border-color var(--t-fast); }
+.mgmt-add-form .mgmt-input { min-width: 0; box-sizing: border-box; }
 .mgmt-input:focus { border-color: var(--primary-500); }
 .mgmt-emoji-input { width: 52px; flex: none; text-align: center; font-size: 20px; padding: 9px 4px; }
 .mgmt-add-btn { padding: 10px 16px; border: none; border-radius: var(--r-pill); background: var(--primary-500); color: white; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; flex-shrink: 0; transition: all var(--t-fast); }
