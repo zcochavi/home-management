@@ -9394,14 +9394,16 @@ function _renderGuestShare(token, share) {
     const checkBtn = (it, isDone) => canCheck
       ? `<button class="list-check-btn${isDone?' checked':''}" onclick="guestToggleItem('${token}','${it.id}')">${isDone?chkSvg:''}</button>`
       : `<div style="width:28px;flex-shrink:0"></div>`;
-    h += `<div class="card list-items-card">
+    // Only show the "empty" hint when there are no items at all; if everything is
+    // checked off, the completed section below is all that's needed.
+    if (undone.length || !done.length) h += `<div class="card list-items-card">
       ${undone.length ? undone.map(it => `<div class="list-item">
         ${checkBtn(it, false)}
         <span class="list-item-name">${esc(it.name)}</span>
         ${it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
       </div>`).join('') : `<div class="list-empty-hint">הרשימה ריקה</div>`}
     </div>`;
-    if (done.length) h += `<div class="card list-items-card" style="margin-top:8px">
+    if (done.length) h += `<div class="card list-items-card" style="margin-top:${undone.length ? 8 : 0}px">
       <div class="list-section-hdr">✓ ${done.length} הושלם</div>
       ${done.map(it => `<div class="list-item list-item-done">
         ${checkBtn(it, true)}
