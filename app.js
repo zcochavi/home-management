@@ -9985,6 +9985,8 @@ function _listTileMenu(listId, btn, pt) {
     <button class="list-tile-popup-item" onclick="listRename('${listId}');_closeTileMenu()"><span class="mi-ico">✏️</span><span>שנה שם</span></button>
     <button class="list-tile-popup-item" onclick="_closeTileMenu();listOpenClone('${listId}')"><span class="mi-ico"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="3" width="9" height="11" rx="2" fill="#93c5fd"/><rect x="5" y="1" width="9" height="11" rx="2" fill="#3b82f6"/><line x1="7.5" y1="5" x2="12" y2="5" stroke="white" stroke-width="1.3" stroke-linecap="round"/><line x1="7.5" y1="7.5" x2="12" y2="7.5" stroke="white" stroke-width="1.3" stroke-linecap="round"/><line x1="7.5" y1="10" x2="12" y2="10" stroke="white" stroke-width="1.3" stroke-linecap="round"/></svg></span><span>שכפל</span></button>
     ${list.type === 'recipe' ? `<button class="list-tile-popup-item" onclick="listShowStats('${listId}');_closeTileMenu()"><span class="mi-ico">📊</span><span>סטטיסטיקות</span></button>` : ''}
+    <button class="list-tile-popup-item" onclick="_closeTileMenu();listPickPhoto('${listId}')"><span class="mi-ico">📷</span><span>${list.photo ? 'החלף תמונה' : 'הוסף תמונה'}</span></button>
+    ${list.photo ? `<button class="list-tile-popup-item" onclick="_closeTileMenu();listRemovePhoto('${listId}')"><span class="mi-ico">🖼️</span><span>הסר תמונה</span></button>` : ''}
     <button class="list-tile-popup-item" onclick="_closeTileMenu();listOpenShareMenu('${listId}')"><span class="mi-ico">🔗</span><span>שתף</span></button>
     <button class="list-tile-popup-item" onclick="listSetArchived('${listId}',${!list.archived});_closeTileMenu()"><span class="mi-ico">${list.archived ? '📤' : '📦'}</span><span>${list.archived ? 'הוצא מארכיון' : 'העבר לארכיון'}</span></button>
     ${isParent() && list.createdBy === S.user ? `<button class="list-tile-popup-item list-tile-popup-danger" onclick="_closeTileMenu();listDelete('${listId}')"><span class="mi-ico">🗑</span><span>מחק רשימה</span></button>` : ''}
@@ -10006,6 +10008,60 @@ function _listTileMenu(listId, btn, pt) {
   left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
   menu.style.cssText = `top:${top}px;left:${left}px;min-width:${menuW}px`;
   setTimeout(() => document.addEventListener('click', _closeTileMenu, { once: true }), 10);
+}
+
+// ── Custom list cover photo ──────────────
+// Photos are downscaled on-device and stored as a small JPEG data URL on the list doc
+// (no Storage bucket needed; stays well under Firestore's 1MB doc limit).
+function listPickPhoto(listId) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.accept = 'image/*';
+  inp.onchange = async () => {
+    const file = inp.files && inp.files[0];
+    if (!file) return;
+    try {
+      const dataUrl = await _resizeImageToDataUrl(file, 480);
+      await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+        .update({ photo: dataUrl, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      _showSnackbar('התמונה עודכנה');
+    } catch(e) {
+      console.error('[lists] photo upload failed:', e);
+      _showSnackbar('שגיאה בהעלאת התמונה');
+    }
+  };
+  inp.click();
+}
+
+async function listRemovePhoto(listId) {
+  try {
+    await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+      .update({ photo: firebase.firestore.FieldValue.delete(), updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    _showSnackbar('התמונה הוסרה');
+  } catch(e) {
+    console.error('[lists] photo remove failed:', e);
+    _showSnackbar('שגיאה בהסרת התמונה');
+  }
+}
+
+function _resizeImageToDataUrl(file, maxSide) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * scale);
+      c.height = Math.round(img.height * scale);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      let q = 0.8, out = c.toDataURL('image/jpeg', q);
+      while (out.length > 200000 && q > 0.4) { q -= 0.1; out = c.toDataURL('image/jpeg', q); }
+      resolve(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image load failed')); };
+    img.src = url;
+  });
 }
 
 function _closeTileMenu() { document.querySelector('.list-tile-popup')?.remove(); }
@@ -10107,12 +10163,43 @@ const _TILE_PHOTOS = {
   _eventDefault: '1492684223066-81342ee5ff30',
 };
 
+// Extra recipe categories rendered as built-in emoji covers (no external image needed).
+// Checked after the photo keywords above, before falling back to the default photo.
+const _RECIPE_EMOJI_COVERS = [
+  { kw:['מאפין','muffin','קאפקייק','cupcake'],            emoji:'🧁', c:['#fbcfe8','#f9a8d4'] },
+  { kw:['לחם','bread','חלה','פיתה','לחמניה','בייגל'],      emoji:'🍞', c:['#fde68a','#fbbf24'] },
+  { kw:['דג','fish','סלמון','salmon','טונה','tuna'],       emoji:'🐟', c:['#bae6fd','#7dd3fc'] },
+  { kw:['המבורגר','burger','קבב','סטייק','steak','בשר','meat','שניצל','schnitzel'], emoji:'🥩', c:['#fecaca','#f87171'] },
+  { kw:['אורז','rice','סושי','sushi'],                    emoji:'🍚', c:['#e7e5e4','#d6d3d1'] },
+  { kw:['ביצ','egg','שקשוקה','חביתה','omelet'],            emoji:'🍳', c:['#fef3c7','#fcd34d'] },
+  { kw:['חומוס','hummus','פלאפל','falafel','טחינה'],       emoji:'🧆', c:['#fed7aa','#fdba74'] },
+  { kw:['גלידה','ice cream','סורבה','קינוח','dessert'],    emoji:'🍨', c:['#fbcfe8','#c4b5fd'] },
+  { kw:['שייק','smoothie','משקה','drink','לימונדה','מיץ','juice'], emoji:'🥤', c:['#bbf7d0','#86efac'] },
+  { kw:['ירק','ברוקולי','broccoli','veggie','vegetable','כרובית','קישוא'], emoji:'🥦', c:['#bbf7d0','#4ade80'] },
+  { kw:['תפוח אדמה','תפוחי אדמה','potato','צ\'יפס','fries','פירה'], emoji:'🍟', c:['#fef08a','#facc15'] },
+  { kw:['כריך','sandwich','טוסט','toast','טורטייה','wrap'], emoji:'🥪', c:['#fde68a','#fcd34d'] },
+  { kw:['פאי','pie','טארט','tart','פשטידה','quiche'],      emoji:'🥧', c:['#fed7aa','#fb923c'] },
+  { kw:['קפה','coffee','קפוצ\'ינו'],                      emoji:'☕', c:['#e7d5c4','#c4a484'] },
+  { kw:['לביבות','סופגניה','דונט','donut','וופל','waffle'], emoji:'🍩', c:['#fbcfe8','#f472b6'] },
+  { kw:['תבשיל','stew','צ\'ילי','chili','קארי','curry','שקשוקה'], emoji:'🍲', c:['#fed7aa','#f97316'] },
+];
+
+function _emojiCoverUrl(emoji, [c1, c2]) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient></defs><rect width="300" height="300" fill="url(#g)"/><text x="150" y="150" font-size="130" text-anchor="middle" dominant-baseline="central">${emoji}</text></svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+
 function _tilePhotoUrl(list) {
+  if (list.photo) return list.photo; // user-uploaded cover wins over everything
   const n = (list.name || '').toLowerCase();
   const pool = _TILE_PHOTOS[list.type] || [];
   const defaultId = _TILE_PHOTOS[`_${list.type}Default`];
   if (!defaultId) return null;
   const match = pool.find(p => p.kw.some(k => n.includes(k.toLowerCase())));
+  if (!match && list.type === 'recipe') {
+    const cover = _RECIPE_EMOJI_COVERS.find(p => p.kw.some(k => n.includes(k.toLowerCase())));
+    if (cover) return _emojiCoverUrl(cover.emoji, cover.c);
+  }
   const id = match ? match.id : defaultId;
   return `https://images.unsplash.com/photo-${id}?w=300&h=300&fit=crop&q=75&auto=format`;
 }
