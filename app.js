@@ -4520,8 +4520,8 @@ async function saveFeatureFlag(key, value) {
 
 async function _fetchAdminPanelData() {
   const [logSnap, expiredSnap, notifSnap, lbSnap] = await Promise.all([
-    fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get(),
-    fbDb.collectionGroup('pendingEvents').get(),
+    fbDb.collection('adminLog').orderBy('actionAt', 'desc').limit(100).get().catch(e => { console.warn('adminLog:', e); return { docs: [] }; }),
+    fbDb.collectionGroup('pendingEvents').get().catch(e => { console.warn('pendingEvents:', e); return { docs: [] }; }),
     fbDb.collection('appConfig').doc('notifications').get().catch(() => null),
     fbDb.collection('appConfig').doc('leaderboard').get().catch(() => null),
   ]);
@@ -4543,13 +4543,14 @@ async function _fetchAdminPanelData() {
 }
 
 function _applyAdminPanelCache(data, showLog) {
-  if (showLog) el('adminLogList').innerHTML = _adminLogHtml(data.combined);
-  _renderNotifSettingsFromCfg(data.notifCfg);
-  _renderLeaderboardFromDays(data.lbDays);
-  renderShoppingHistorySettings();
-  renderMaintenanceTools();
-  renderAdminEventTypes();
-  renderAdminFeatureFlags();
+  const safe = (name, fn) => { try { fn(); } catch(e) { console.error('adminPanel ' + name + ':', e); } };
+  if (showLog) safe('log', () => { el('adminLogList').innerHTML = _adminLogHtml(data.combined); });
+  safe('notif', () => _renderNotifSettingsFromCfg(data.notifCfg));
+  safe('leaderboard', () => _renderLeaderboardFromDays(data.lbDays));
+  safe('shopping', renderShoppingHistorySettings);
+  safe('maintenance', renderMaintenanceTools);
+  safe('eventTypes', renderAdminEventTypes);
+  safe('featureFlags', renderAdminFeatureFlags);
 }
 
 function renderAdminEventTypes() {
