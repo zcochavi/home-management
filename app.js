@@ -9225,7 +9225,7 @@ async function listCreateShare(listId) {
     : rawItems;
   const shareDoc = {
     familyUid: S.uid, listId, mode,
-    sharedBy: S.user || null,
+    sharedBy: S.user || localStorage.getItem('familyhub_member_' + S.uid) || null,
     type: list.type, name: list.name,
     items: shareItems,
     meta:  JSON.parse(JSON.stringify(list.meta  || {})),
