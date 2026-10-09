@@ -9911,12 +9911,14 @@ function _initListTiles() {
     });
 
     let pressTimer = null;
-    tile.addEventListener('touchstart', () => {
+    tile.addEventListener('touchstart', e => {
+      const t = e.touches[0];
+      const pt = t ? { x: t.clientX, y: t.clientY } : null;
       pressTimer = setTimeout(() => {
         pressTimer = null;
         _tileLongPressed = true;
-        const btn = tile.querySelector('.list-tile-menu-btn') || tile;
-        _listTileMenu(listId, btn);
+        // The ⋮ button is hidden on touch devices (zero rect), so anchor to the press point
+        _listTileMenu(listId, tile, pt);
       }, 500);
     }, { passive: true });
     tile.addEventListener('touchmove',   () => { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }, { passive: true });
@@ -9958,7 +9960,7 @@ function _toggleListsSection(id, hdr) {
   try { localStorage.setItem('fh_lists_collapsed', JSON.stringify(_listsSectionCollapsed)); } catch {}
 }
 
-function _listTileMenu(listId, btn) {
+function _listTileMenu(listId, btn, pt) {
   document.querySelector('.list-tile-popup')?.remove();
   const list = (S.lists || []).find(l => l.id === listId);
   if (!list) return;
@@ -9977,9 +9979,19 @@ function _listTileMenu(listId, btn) {
   document.body.appendChild(menu);
   const rect = btn.getBoundingClientRect();
   const menuW = 170;
-  let left = rect.right - menuW;
-  if (left < 8) left = 8;
-  menu.style.cssText = `top:${rect.bottom + 4}px;left:${left}px;min-width:${menuW}px`;
+  const menuH = menu.offsetHeight;
+  let left, top;
+  if (pt) {
+    left = pt.x - menuW / 2;
+    top = pt.y + 8;
+  } else {
+    left = rect.right - menuW;
+    top = rect.bottom + 4;
+  }
+  // Keep the menu fully on screen; flip above the anchor if it would overflow the bottom
+  if (top + menuH > window.innerHeight - 8) top = Math.max(8, (pt ? pt.y - 8 : rect.top - 4) - menuH);
+  left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
+  menu.style.cssText = `top:${top}px;left:${left}px;min-width:${menuW}px`;
   setTimeout(() => document.addEventListener('click', _closeTileMenu, { once: true }), 10);
 }
 
