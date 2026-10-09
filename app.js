@@ -9387,6 +9387,7 @@ function _renderGuestShare(token, share) {
         <span class="list-step-text">${esc(st.text)}</span>
       </div>`).join('')}
     </div>`;
+    if (_guestRealUser()) h += `<button class="btn" id="guestSaveRecipeBtn" style="width:100%;margin-top:12px" onclick="guestSaveRecipe('${token}')">➕ הוסף למתכונים שלי</button>`;
   } else {
     const items = share.items || [];
     const undone = items.filter(it => !itemDone(it));
@@ -9412,6 +9413,39 @@ function _renderGuestShare(token, share) {
     </div>`;
   }
   cont.innerHTML = h;
+}
+
+// Real (non-anonymous) logged-in user → the family their lists belong to
+function _guestRealUser() {
+  const u = fbAuth?.currentUser;
+  return u && !u.isAnonymous ? u : null;
+}
+
+async function guestSaveRecipe(token) {
+  const u = _guestRealUser();
+  if (!u || !_guestShare || _guestShare.type !== 'recipe') return;
+  const btn = el('guestSaveRecipeBtn');
+  if (btn) btn.disabled = true;
+  const familyUid = localStorage.getItem('familyhub_family_uid_' + u.uid) || u.uid;
+  const member = localStorage.getItem('familyhub_member_' + familyUid) || null;
+  const clean = arr => (arr || []).map(({ done, checkedBy, ...rest }) => ({ ...rest, done: false }));
+  try {
+    await fbDb.collection('families').doc(familyUid).collection('lists').add({
+      type: 'recipe',
+      name: _guestShare.name,
+      meta: JSON.parse(JSON.stringify(_guestShare.meta || {})),
+      sharedWith: 'all', canEdit: 'all',
+      createdBy: member,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      items: clean(_guestShare.items),
+      steps: clean(_guestShare.steps),
+    });
+    if (btn) { btn.textContent = '✓ נוסף למתכונים שלך'; }
+  } catch(e) {
+    console.error('[guest] save recipe failed:', e);
+    if (btn) { btn.disabled = false; btn.textContent = 'שגיאה — נסה שוב'; }
+  }
 }
 
 async function guestToggleItem(token, itemId) {
