@@ -10166,7 +10166,7 @@ const _TILE_PHOTOS = {
 // Extra recipe categories. `src` is the Unsplash photo (host + path); the emoji gradient cover
 // is only a fallback if the photo fails to load. Checked after the photo keywords above.
 const _RECIPE_EMOJI_COVERS = [
-  { kw:['מאפין','muffin','קאפקייק','cupcake'],            emoji:'🧁', src:'images.unsplash.com/photo-1607958996333-41aef7caefaa', c:['#fbcfe8','#f9a8d4'] },
+  { kw:['מאפין','מאפינס','muffin','קאפקייק','cupcake'],            emoji:'🧁', src:'images.unsplash.com/photo-1607958996333-41aef7caefaa', c:['#fbcfe8','#f9a8d4'] },
   { kw:['לחם','bread','חלה','פיתה','לחמניה','בייגל'],      emoji:'🍞', src:'images.unsplash.com/photo-1598373182133-52452f7691ef', c:['#fde68a','#fbbf24'] },
   { kw:['דג','fish','סלמון','salmon','טונה','tuna'],       emoji:'🐟', src:'plus.unsplash.com/premium_photo-1693221705305-6eff5fa8e483', c:['#bae6fd','#7dd3fc'] },
   { kw:['המבורגר','burger','קבב','סטייק','steak','בשר','meat','שניצל','schnitzel'], emoji:'🥩', src:'images.unsplash.com/photo-1607623814075-e51df1bdc82f', c:['#fecaca','#f87171'] },
