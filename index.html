@@ -13,31 +13,15 @@
     })();
   </script>
   <title>FamilyHub 🏠</title>
-  <link id="favicon" rel="icon" type="image/png">
-  <link id="appleTouchIcon" rel="apple-touch-icon">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <link rel="manifest" href="manifest.json">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="FamilyHub">
   <meta name="theme-color" content="#6C8CFF">
-  <script>
-    (function(){
-      function makeIcon(size) {
-        const c=document.createElement('canvas');c.width=c.height=size;
-        const x=c.getContext('2d');
-        const g=x.createLinearGradient(0,0,size,size);
-        g.addColorStop(0,'#6a11cb');g.addColorStop(1,'#f5576c');
-        x.fillStyle=g;x.beginPath();
-        x.roundRect(0,0,size,size,size*0.2);x.fill();
-        x.font=(size*0.6)+'px serif';x.textAlign='center';x.textBaseline='middle';
-        x.fillText('🏠',size/2,size*0.54);
-        return c.toDataURL();
-      }
-      document.getElementById('favicon').href=makeIcon(64);
-      document.getElementById('appleTouchIcon').href=makeIcon(180);
-    })();
-  </script>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800;900&family=Inter:wght@400;500;600;700;800&family=Poppins:wght@600;700;800&family=Amatic+SC:wght@700&display=swap" rel="stylesheet">
   <!-- Firebase SDKs — must load before main script -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -51,7 +35,12 @@
 
 <!-- LOADING -->
 <div id="loadingScreen">
-  <div class="loading-emoji">🏠</div>
+  <div class="loading-emoji"><svg class="fh-logo" viewBox="96 104 320 310" width="96" height="94" aria-hidden="true">
+    <path class="fh-roof" d="M104 244 L256 122 L408 244" fill="none" stroke="#fff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+    <g class="fh-p1"><circle cx="190" cy="290" r="28" fill="#fff"/><path d="M148 400 a42 42 0 0 1 84 0Z" fill="#fff"/></g>
+    <g class="fh-p2"><circle cx="322" cy="290" r="28" fill="#fff"/><path d="M280 400 a42 42 0 0 1 84 0Z" fill="#fff"/></g>
+    <g class="fh-p3"><circle cx="256" cy="268" r="34" fill="#FFD166"/><path d="M212 400 a44 44 0 0 1 88 0Z" fill="#FFD166"/></g>
+  </svg></div>
   <div class="loading-txt">טוען...</div>
 </div>
 
