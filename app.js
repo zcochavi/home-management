@@ -365,6 +365,40 @@ const DEFAULT_GROCERY_CATS = [
   { name:'מזווה', emoji:'🥫' },
   { name:'בשר ודגים', emoji:'🥩' },
 ];
+// Starter bank of common supermarket items seeded into every NEW family's pool
+// on sign-up (see doSignUp). Existing families' pools are never touched.
+const DEFAULT_GROCERY_POOL = [
+  // פירות וירקות
+  'עגבניות','מלפפונים','בצל','תפוחי אדמה','גזר','פלפל אדום','פלפל צהוב','חסה','כרוב',
+  'קישואים','חציל','שום','תפוחים','בננות','תפוזים','לימון','אבוקדו','ענבים','אבטיח',
+  'מלון','ברוקולי','כרובית',
+].map(name => ({ name, category: 'פירות וירקות' }))
+.concat([
+  // חלב וביצים
+  'חלב','ביצים','גבינה צהובה','גבינה לבנה 5%','קוטג\'','יוגורט','שמנת מתוקה',
+  'שמנת חמוצה','חמאה','גבינת שמנת','לבן','גבינה בולגרית','גבינת פטה',
+].map(name => ({ name, category: 'חלב וביצים' })))
+.concat([
+  // מזווה
+  'אורז','פסטה','קמח לבן','סוכר','שמן זית','שמן קנולה','מלח','פלפל שחור גרוס',
+  'רוטב עגבניות','טונה בקופסה','תירס בקופסה','שעועית בקופסה','חומוס קופסה',
+  'טחינה גולמית','ריבה','דבש','קורנפלקס','גרנולה','עדשים','קינואה','קמח תופח',
+  'אבקת אפייה','שמרים יבשים','חרדל','מיונז','קטשופ','חומץ בלסמי','אבקת מרק עוף',
+  'קפה נמס','תה',
+].map(name => ({ name, category: 'מזווה' })))
+.concat([
+  // בשר ודגים
+  'חזה עוף','שניצל עוף','כנפי עוף','בשר טחון בקר','סטייק אנטריקוט','קבב',
+  'נקניקיות','המבורגר','פילה סלמון','דג אמנון','טונה טרייה','קציצות דגים',
+].map(name => ({ name, category: 'בשר ודגים' })))
+.concat([
+  // כללי (מאפים, משקאות, חטיפים, קפואים, ניקיון וטיפוח)
+  'לחם פרוס','פיתות','חלה','בגט','מים מינרליים','מיץ תפוזים','קולה','סודה',
+  'בירה','יין אדום','ביסלי','במבה','עוגיות שוקולד צ\'יפס','וופלים','גלידה',
+  'פיצה קפואה','ירקות קפואים','שקיות זבל','נייר טואלט','מגבות נייר',
+  'סבון כלים','אבקת כביסה','מרכך כביסה','אקונומיקה','שמפו','משחת שיניים','דאודורנט',
+].map(name => ({ name, category: 'כללי' })))
+.map((item, i) => ({ id: i + 1, ...item }));
 const DEFAULT_SUBJECTS = [
   { name:'Maths',   nameHe:'מתמטיקה', bg:'#f0f4ff', color:'#4a65cc' },
   { name:'English', nameHe:'אנגלית',  bg:'#fdf2f8', color:'#9d174d' },
@@ -977,7 +1011,7 @@ async function doSignUp() {
       familyName, email, members, familyCode: code,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       chores: [], grocery: [], homework: [], events: [], stars: {},
-      groceryPool: [], shoppingList: [], inCart: [], shoppingHistory: [],
+      groceryPool: DEFAULT_GROCERY_POOL, shoppingList: [], inCart: [], shoppingHistory: [],
     });
     await fbDb.collection('joinCodes').doc(code).set({ ownerUid });
     // Generate personal codes for each kid
@@ -3427,6 +3461,17 @@ function subscribeToCommClass(cid) {
         rerender();
       }, e => console.warn('[community] members:', e.code))
   );
+
+  // Live: class-level homework — shared across every family in this class
+  _commListeners[cid].push(
+    fbDb.collection('schoolClasses').doc(cid).collection('homework').orderBy('createdAt')
+      .onSnapshot(snap => {
+        if (!_commCache[cid]) return;
+        _commCache[cid].homework = snap.docs.map(d => ({id:d.id,...d.data()}));
+        if (S.tab === 'homework') renderHomework();
+        rerender();
+      }, e => console.warn('[community] homework:', e.code))
+  );
 }
 
 async function loadCommunityData(kidsWithSchool) {
@@ -3470,15 +3515,23 @@ async function loadCommunityData(kidsWithSchool) {
           });
         } catch(e) { console.warn('getClassParents failed:', e.message); }
       }
-      // Seed cache with static data; live fields start empty — onSnapshot fills them
+      // Seed cache with static data; live fields start empty — onSnapshot fills them.
+      // Merge onto any existing cache rather than replacing it outright: loadCommunityData
+      // can be called more than once for the same class before the first call's listeners
+      // are registered (e.g. Home tab's upcoming-events refresh racing the Homework tab's
+      // lazy-load), and replacing wholesale would wipe out live data an earlier call's
+      // listener already populated (e.g. class homework arriving before this resolves).
+      const prevCache = _commCache[cid] || {};
       _commCache[cid] = {
+        ...prevCache,
         classmates,
         classmateRoles,
-        events:        [],
+        events:        prevCache.events        || [],
         gradeEvents:   gradeSnap.docs.map(d=>({id:d.id,...d.data(),scope:'grade',scopeId:gid})),
         schoolEvents:  schoolSnap.docs.map(d=>({id:d.id,...d.data(),scope:'school',scopeId:sid})),
-        pendingEvents: [],
-        applications:  [],
+        pendingEvents: prevCache.pendingEvents  || [],
+        applications:  prevCache.applications  || [],
+        homework:      prevCache.homework      || [],
         schedule:      classDocSnap?.data()?.schedule || null,
         loadedAt:      Date.now(),
       };
@@ -3486,7 +3539,7 @@ async function loadCommunityData(kidsWithSchool) {
       subscribeToCommClass(cid);
     } catch(e) {
       console.error('loadCommunityData error (classId=' + cid + '):', e);
-      _commCache[cid] = { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[], applications:[], schedule:null, loadedAt:Date.now(), error: e.code||e.message };
+      _commCache[cid] = { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[], applications:[], homework:[], schedule:null, loadedAt:Date.now(), error: e.code||e.message };
     }
   }));
 }
@@ -7859,13 +7912,19 @@ function renderHomework(){
   const sq = _hwSearch.toLowerCase();
 
   // Build full (unfiltered) lists first for subject chip computation
-  let classHw=S.homework.filter(h=>h.scope==='class');
+  const childMember = S.child ? getMembers().find(m=>m.name===S.child) : null;
+  // Class homework is shared cross-family per actual class (city+school+grade+classNum),
+  // not family-wide — a kid only ever sees their own class's homework, not a sibling's.
+  const classCid = childMember?.school ? classIdFor(childMember.school) : null;
+  if (classCid && !_commCache[classCid]) {
+    loadCommunityData([childMember]).then(() => { if (S.tab === 'homework') renderHomework(); });
+  }
+  let classHw = classCid ? (_commCache[classCid]?.homework || []) : [];
   const allPending=S.child
     ? S.homework.filter(h=>(!h.scope||h.scope==='personal')&&h.child===S.child&&!h.done)
     : [];
 
   // Base webtop list filtered by child/classCode only (no subject/search yet)
-  const childMember = S.child ? getMembers().find(m=>m.name===S.child) : null;
   const childClassCode = childMember?.webtopClassCode || null;
   // anyMapped: at least one KID in the family has a classCode assigned
   const anyMapped = getKids().some(k => getMembers().find(m => m.name === k)?.webtopClassCode);
@@ -7968,7 +8027,7 @@ function renderHomework(){
     }
   }
 
-  // Class homework section
+  // Class homework section — shared cross-family; done-state keyed per real kid (familyUid__kidName)
   const classSec=el('hwClassSection');
   const classListEl=el('hwClassList');
   if(classSec&&classListEl){
@@ -7977,22 +8036,25 @@ function renderHomework(){
     } else {
       classSec.style.display='';
       const child=S.child;
-      const allKids=getKids();
+      const myKey = (classCid && child) ? classMemberId(S.uid, child) : null;
+      const classmatesCount = (_commCache[classCid]?.classmates || []).length;
+      const myKidsInClass = getKids().filter(k => classIdFor(getMembers().find(m=>m.name===k)?.school) === classCid).length;
+      const totalInClass = classmatesCount + myKidsInClass;
       classListEl.innerHTML=classHw.map(h=>{
-        const myDone=!!(h.doneBy&&h.doneBy[child]);
+        const myDone=!!(myKey && h.doneBy && h.doneBy[myKey]);
         const can=child&&(isParent()||child===S.user);
-        const doneCount=allKids.filter(k=>h.doneBy&&h.doneBy[k]).length;
+        const doneCount=h.doneBy ? Object.values(h.doneBy).filter(Boolean).length : 0;
+        const canDelete = isParent() && (isAdmin() || h.createdBy?.familyUid === S.uid);
         return `<div class="hw-item hw-class-item ${myDone?'hw-class-done':''}" data-hw-id="${h.id}">
           <div class="hw-head">
-            <div class="check-box ${myDone?'done':''} ${can&&!myDone?'':'readonly'}" ${can&&!myDone?`onclick="toggleHW(${h.id})"`:''}>
+            <div class="check-box ${myDone?'done':''} ${can&&!myDone?'':'readonly'}" ${can&&!myDone?`onclick="toggleClassHW('${classCid}','${h.id}')"`:''}>
             </div>
             <div class="hw-desc-text ${myDone?'done':''}">${esc(h.desc)}</div>
-            ${doneCount>0?`<span class="hw-done-count">${doneCount}/${allKids.length}</span>`:''}
+            ${doneCount>0?`<span class="hw-done-count">${doneCount}/${totalInClass||1}</span>`:''}
             <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
-            ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}
+            ${canDelete?`<button class="del-btn" onclick="deleteClassHW('${classCid}','${h.id}')">${_ico.x}</button>`:''}
           </div>
           ${h.due?`<div class="hw-due">${t('hwDueLabel',fmtDate(h.due))}</div>`:''}
-          <div class="hw-done-by">${allKids.map(k=>`<span class="hw-done-pip ${h.doneBy&&h.doneBy[k]?'hw-done-pip-done':''}" title="${esc(k)}">${esc(k.charAt(0))}</span>`).join('')}</div>
         </div>`;
       }).join('');
     }
@@ -8024,15 +8086,24 @@ function renderHomework(){
   renderHwHistory(S.child);
 }
 
+// Class homework done by `child` is stored on the shared class doc, keyed by familyUid__kidName
+function _classDoneForChild(child) {
+  const member = getMembers().find(m => m.name === child);
+  const cid = member?.school ? classIdFor(member.school) : null;
+  if (!cid) return [];
+  const key = classMemberId(S.uid, child);
+  return (_commCache[cid]?.homework || [])
+    .filter(h => h.doneBy && h.doneBy[key])
+    .map(h => ({...h, _doneAt: h.doneAtBy && h.doneAtBy[key], _isClass: true, _cid: cid}));
+}
+
 function renderHwHistory(child) {
   const wrap = el('hwHistoryWrap');
   if (!wrap || !child) return;
   const personalDone=S.homework
     .filter(h=>(!h.scope||h.scope==='personal')&&h.child===child&&h.done)
     .map(h=>({...h,_doneAt:h.doneAt,_isClass:false}));
-  const classDone=S.homework
-    .filter(h=>h.scope==='class'&&h.doneBy&&h.doneBy[child])
-    .map(h=>({...h,_doneAt:h.doneAtBy&&h.doneAtBy[child],_isClass:true}));
+  const classDone = _classDoneForChild(child);
   const allDone=[...personalDone,...classDone].sort((a,b)=>(b._doneAt||0)-(a._doneAt||0));
   if (!allDone.length) { wrap.innerHTML = ''; return; }
 
@@ -8055,16 +8126,21 @@ function renderHwHistory(child) {
 }
 
 function hwHistListHTML(filtered) {
-  return filtered.length ? filtered.map(h=>`
+  const canToggleClass = S.child && (isParent() || S.child === S.user);
+  return filtered.length ? filtered.map(h=>{
+    const canDeleteClass = h._isClass && isParent() && (isAdmin() || h.createdBy?.familyUid === S.uid);
+    return `
     <div class="hw-hist-item" data-hw-id="${h.id}">
       ${h._isClass?`<span class="hw-class-badge">כיתה</span>`:''}
       <div class="hw-hist-desc">${esc(h.desc)}</div>
       <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
       <span class="hw-hist-ts">${fmtDoneAt(h._doneAt)}</span>
       ${isParent()&&!h._isClass?`<button class="del-btn" title="בטל סימון" onclick="toggleHW(${h.id})">${_ico.undo}</button>`:''}
-      ${h._isClass?`<button class="del-btn" title="בטל סימון" onclick="toggleHW(${h.id})">${_ico.undo}</button>`:''}
-      ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}
-    </div>`).join('')
+      ${h._isClass&&canToggleClass?`<button class="del-btn" title="בטל סימון" onclick="toggleClassHW('${h._cid}','${h.id}')">${_ico.undo}</button>`:''}
+      ${!h._isClass&&isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}
+      ${canDeleteClass?`<button class="del-btn" onclick="deleteClassHW('${h._cid}','${h.id}')">${_ico.x}</button>`:''}
+    </div>`;
+  }).join('')
   : `<div class="empty" style="padding:8px 0">${t('hwHistoryEmpty')}${_hwSubjectFilter ? ' ב' + esc(subjectLabel(_hwSubjectFilter)) : ''}</div>`;
 }
 function filterHwHistory(child) {
@@ -8073,9 +8149,7 @@ function filterHwHistory(child) {
   const personalDone=S.homework
     .filter(h=>(!h.scope||h.scope==='personal')&&h.child===child&&h.done)
     .map(h=>({...h,_doneAt:h.doneAt,_isClass:false}));
-  const classDone=S.homework
-    .filter(h=>h.scope==='class'&&h.doneBy&&h.doneBy[child])
-    .map(h=>({...h,_doneAt:h.doneAtBy&&h.doneAtBy[child],_isClass:true}));
+  const classDone = _classDoneForChild(child);
   const allDone=[...personalDone,...classDone].sort((a,b)=>(b._doneAt||0)-(a._doneAt||0));
   const q = _hwSearch.toLowerCase();
   const filtered = allDone.filter(h=>{
@@ -8123,39 +8197,49 @@ async function toggleWebtopDone(doneKey) {
   await fbDb.collection('families').doc(S.uid).update(update);
 }
 
+// Class homework lives in schoolClasses/{cid}/homework (shared cross-family), keyed by
+// familyUid__kidName so each family's own kid(s) track done-state independently.
+async function toggleClassHW(cid, id){
+  const h = _commCache[cid]?.homework?.find(x => x.id === id);
+  if(!h) return;
+  const child = S.child;
+  if(!child || (!isParent() && child !== S.user)) return;
+  const key = classMemberId(S.uid, child);
+  const isDone = !!(h.doneBy && h.doneBy[key]);
+  const ref = fbDb.collection('schoolClasses').doc(cid).collection('homework').doc(id);
+  const finish = async () => {
+    try {
+      if(!isDone){
+        await ref.update({ [`doneBy.${key}`]: true, [`doneAtBy.${key}`]: Date.now() });
+        _hwHistOpen = true;
+      } else {
+        await ref.update({
+          [`doneBy.${key}`]: firebase.firestore.FieldValue.delete(),
+          [`doneAtBy.${key}`]: firebase.firestore.FieldValue.delete(),
+        });
+      }
+    } catch(e) { console.error('toggleClassHW:', e); showToast('שגיאה: ' + e.message, 'error'); }
+  };
+  if(!isDone){
+    const row=document.querySelector(`.hw-item[data-hw-id="${id}"]`);
+    if(row){ row.classList.add('hw-fly-out'); setTimeout(finish,270); return; }
+  } else {
+    const histRow=document.querySelector(`.hw-hist-item[data-hw-id="${id}"]`);
+    if(histRow){ histRow.classList.add('hw-fly-out-hist'); setTimeout(finish,270); return; }
+  }
+  await finish();
+}
+async function deleteClassHW(cid, id){
+  const h = _commCache[cid]?.homework?.find(x => x.id === id);
+  if(!isParent() || !(isAdmin() || h?.createdBy?.familyUid === S.uid)) return;
+  try {
+    await fbDb.collection('schoolClasses').doc(cid).collection('homework').doc(id).delete();
+  } catch(e) { console.error('deleteClassHW:', e); showToast('שגיאה: ' + e.message, 'error'); }
+}
+
 function toggleHW(id){
   const h=S.homework.find(x=>x.id===id);
   if(!h)return;
-  if(h.scope==='class'){
-    const child=S.child;
-    if(!child||(!isParent()&&child!==S.user))return;
-    const isDone=!!(h.doneBy&&h.doneBy[child]);
-    if(!isDone){
-      const row=document.querySelector(`.hw-item[data-hw-id="${id}"]`);
-      if(row){
-        row.classList.add('hw-fly-out');
-        setTimeout(()=>{
-          if(!h.doneBy)h.doneBy={};
-          if(!h.doneAtBy)h.doneAtBy={};
-          h.doneBy[child]=true;h.doneAtBy[child]=Date.now();
-          _hwHistOpen=true;save();renderHomework();renderHome();
-        },270);return;
-      }
-      if(!h.doneBy)h.doneBy={};if(!h.doneAtBy)h.doneAtBy={};
-      h.doneBy[child]=true;h.doneAtBy[child]=Date.now();_hwHistOpen=true;
-    } else {
-      const histRow=document.querySelector(`.hw-hist-item[data-hw-id="${id}"]`);
-      if(histRow){
-        histRow.classList.add('hw-fly-out-hist');
-        setTimeout(()=>{
-          delete h.doneBy[child];delete h.doneAtBy[child];
-          save();renderHomework();renderHome();
-        },270);return;
-      }
-      delete h.doneBy[child];delete h.doneAtBy[child];
-    }
-    save();renderHomework();renderHome();return;
-  }
   // Personal item
   if(!isParent()&&h.child!==S.user)return;
   if(!h.done){
@@ -8193,19 +8277,30 @@ function toggleHW(id){
 }
 
 function deleteHW(id){if(!isParent())return;S.homework=S.homework.filter(x=>x.id!==id);save();renderHomework();renderHome();}
-function addHomework(){
+async function addHomework(){
   const descEl=el('hwDesc');
   const desc=descEl.value.trim();
   if(!desc){descEl.focus();descEl.classList.add('input-shake');setTimeout(()=>descEl.classList.remove('input-shake'),500);return;}
   if(_hwScope==='class'){
     if(!isParent()||featureOn('webtopConnection'))return;
-    S.homework.push({id:Date.now(),scope:'class',subject:el('hwSubject').value,desc,due:el('hwDue').value,doneBy:{},doneAtBy:{}});
+    const childMember = S.child ? getMembers().find(m=>m.name===S.child) : null;
+    const cid = childMember?.school ? classIdFor(childMember.school) : null;
+    if(!cid){ showToast('יש לשייך את הילד/ה לבית ספר ולכיתה לפני הוספת שיעור בית לכיתה', 'error'); return; }
+    try {
+      await fbDb.collection('schoolClasses').doc(cid).collection('homework').add({
+        subject: el('hwSubject').value, desc, due: el('hwDue').value,
+        createdBy: { familyUid: S.uid, name: S.user },
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        doneBy: {}, doneAtBy: {},
+      });
+    } catch(e) { console.error('addHomework (class):', e); showToast('שגיאה: ' + e.message, 'error'); return; }
   } else {
     if(!S.child)return;
     if(!isParent()&&S.child!==S.user)return;
     S.homework.push({id:Date.now(),scope:'personal',child:S.child,subject:el('hwSubject').value,desc,due:el('hwDue').value,done:false});
+    save();
   }
-  el('hwDesc').value='';save();renderHomework();renderHome();
+  el('hwDesc').value='';renderHomework();renderHome();
 }
 
 // ════════════════════════════════════════
