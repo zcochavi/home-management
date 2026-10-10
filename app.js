@@ -109,6 +109,10 @@ const STRINGS = {
     commSchedulePrint:'🖨️ להדפסה',
     commSchedulePrintTitle: name => `מערכת השעות של ${name}`,
     commSchedulePopupBlocked:'יש לאפשר חלונות קופצים כדי להדפיס את מערכת השעות',
+    scheduleTodayTitle:'מערכת שעות - היום',
+    scheduleDayTitle: day => `מערכת שעות - יום ${day}`,
+    scheduleLesson: n => `שיעור ${n}`,
+    scheduleNoLessons:'אין שיעורים ביום זה',
     commAddEvent:'➕ הוסף אירוע לכיתה',
     commNewEvent:'אירוע חדש',
     commPost:'פרסם',
@@ -214,6 +218,10 @@ const STRINGS = {
     commSchedulePrint:'🖨️ Print',
     commSchedulePrintTitle: name => `${name}'s Class Schedule`,
     commSchedulePopupBlocked:'Please allow pop-ups to print the schedule',
+    scheduleTodayTitle:'Schedule - Today',
+    scheduleDayTitle: day => `Schedule - ${day}`,
+    scheduleLesson: n => `Period ${n}`,
+    scheduleNoLessons:'No lessons this day',
     commAddEvent:'➕ Add class event',
     commNewEvent:'New Event',
     commPost:'Post',
@@ -1151,6 +1159,8 @@ function showToast(msg, type = 'info', duration = 4000) {
 // ── Notification system (banners + message center) ───────────
 let _allNotifs    = []; // cached for message center
 let _pendingCount = 0; // pending requests count for committee tab badge
+let _pendingSchoolsCache = {}; // { [reqId]: pendingSchools doc data } — lets banners know if a school_pending notif is part of a combined city+school request
+let _pendingSchoolsUnsub = null;
 
 function initNotifBanners() {
   if (_notifUnsubscribe) { _notifUnsubscribe(); _notifUnsubscribe = null; }
@@ -1161,20 +1171,37 @@ function initNotifBanners() {
     .orderBy('createdAt', 'desc')
     .onSnapshot(snap => {
       _allNotifs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Request-type notifs only show if explicitly addressed to this user (recipientUid match)
-      const _visibleNotif = n => !n.dismissed
-        && (n.type !== 'admin_message' || isAdmin())
-        && (n.type !== 'admin_reply'   || n.recipientUid === S.uid)
-        && (!['school_pending','event_pending','application_pending'].includes(n.type) ||
-            (n.recipientUid === S.uid && n.requestedByUid !== S.uid))
-        && (n.type !== 'shopping_done' || !isKid());
-      renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
+      _refreshNotifBanners();
       if (isAdmin()) _patchMissingReqIds(_allNotifs);
       _updateBellBadge();
       if (!el('messageCenterPanel')?.classList.contains('hidden')) renderMessageCenter();
       if (isCommittee()) _fetchPendingBadge();
       if (!el('messageCenterPanel')?.classList.contains('hidden')) renderMessageCenter();
     }, err => console.error('[notif] onSnapshot error:', err.code, err.message));
+  _initPendingSchoolsCache();
+}
+
+function _refreshNotifBanners() {
+  // Request-type notifs only show if explicitly addressed to this user (recipientUid match)
+  const _visibleNotif = n => !n.dismissed
+    && (n.type !== 'admin_message' || isAdmin())
+    && (n.type !== 'admin_reply'   || n.recipientUid === S.uid)
+    && (!['school_pending','event_pending','application_pending'].includes(n.type) ||
+        (n.recipientUid === S.uid && n.requestedByUid !== S.uid))
+    && (n.type !== 'shopping_done' || !isKid());
+  renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
+}
+
+function _initPendingSchoolsCache() {
+  if (_pendingSchoolsUnsub) { _pendingSchoolsUnsub(); _pendingSchoolsUnsub = null; }
+  if (!isAdmin() || !fbDb) { _pendingSchoolsCache = {}; return; }
+  _pendingSchoolsUnsub = fbDb.collection('pendingSchools')
+    .where('status', '==', 'pending')
+    .onSnapshot(snap => {
+      _pendingSchoolsCache = {};
+      snap.docs.forEach(d => { _pendingSchoolsCache[d.id] = d.data(); });
+      _refreshNotifBanners();
+    }, err => console.warn('[pendingSchools cache]', err.code, err.message));
 }
 
 async function _patchMissingReqIds(notifs) {
@@ -1201,7 +1228,9 @@ async function _patchMissingReqIds(notifs) {
 
 function stopNotifBanners() {
   if (_notifUnsubscribe) { _notifUnsubscribe(); _notifUnsubscribe = null; }
+  if (_pendingSchoolsUnsub) { _pendingSchoolsUnsub(); _pendingSchoolsUnsub = null; }
   _allNotifs = [];
+  _pendingSchoolsCache = {};
   const c = el('notifBanners'); if (c) c.innerHTML = '';
   _updateBellBadge();
 }
@@ -1245,12 +1274,17 @@ function renderNotifBanners(undismissed) {
     const color  = isDenied ? '#c53030' : isAdminMsg ? '#6b21a8' : isAdminReply ? '#276749' : '#2b6cb0';
     const icon   = isInfo ? '🛒' : isGood ? '✅' : isDenied ? '❌' : isRequest ? '📋' : (isAdminMsg || isAdminReply) ? '💬' : '🔔';
     const div = document.createElement('div');
-    div.className = 'notif-banner notif-banner-in';
+    // Combined city+school requests can't be approved with a single tap (city must
+    // land first), so route them straight to the pending panel instead of showing ✓/✗.
+    const isCombinedCitySchool = n.type === 'school_pending' && _pendingSchoolsCache[n.reqId]?.type === 'city';
+    const openPanelOnTap = isRequest && isAdmin() && (!n.reqId || isCombinedCitySchool);
+    div.className = 'notif-banner notif-banner-in' + (openPanelOnTap ? ' notif-banner-tappable' : '');
     div.id = 'notifBanner_' + n.id;
     div.style.cssText = `background:${bg};border-color:${border};color:${color}`;
+    if (openPanelOnTap) div.onclick = (e) => { if (e.target.closest('button')) return; closeMenu(); openPendingPanel(); };
     let requestActions = '';
     if (isRequest && isAdmin()) {
-      if (!n.reqId) {
+      if (openPanelOnTap) {
         requestActions = `<div class="notif-banner-actions"><button class="notif-banner-act approve" onclick="closeMenu();openPendingPanel()" title="פתח בקשות">📋</button></div>`;
       } else {
         let evExpired = false;
@@ -1533,7 +1567,15 @@ async function renderPendingPanel() {
     const total = activePending.length + adminCount;
     const badge = el('pendingReqBadge');
     if (badge) { badge.textContent = total || ''; badge.classList.toggle('hidden', !total); }
-  } catch(e) { console.error('renderPendingPanel:', e); }
+  } catch(e) {
+    console.error('renderPendingPanel:', e);
+    const errorMsg = `<div style="color:#c53030;font-size:13px;padding:8px 0">שגיאה בטעינת הבקשות: ${esc(e.message)}</div>`;
+    el('ppEventsList').innerHTML = errorMsg;
+    if (admin) {
+      el('ppAppsList').innerHTML    = errorMsg;
+      el('ppSchoolsList').innerHTML = errorMsg;
+    }
+  }
 }
 async function _fetchPendingBadge() {
   if (!isCommittee() || !fbDb) return;
@@ -4091,6 +4133,7 @@ async function renderCommunity() {
 
   await loadCommunityData(kidsWithSchool);
   renderHomeUpcoming();
+  renderHomeSchedule();
   _commVisibleCids = kidsWithSchool.map(k => classIdFor(k.school)).filter(Boolean);
   _commVisibleKids = kidsWithSchool
     .map(k => ({ name: k.name, cid: classIdFor(k.school) }))
@@ -4830,6 +4873,32 @@ async function adminSaveHistoryTtl() {
   if (msg) { msg.textContent = 'נשמר ✓'; setTimeout(() => { msg.textContent = ''; }, 2000); }
 }
 
+function renderScheduleCutoffSettings() {
+  const hour = getScheduleCutoffHour();
+  const container = el('adminScheduleCutoffSettings');
+  if (!container) return;
+  container.innerHTML = `
+    <div style="padding:8px 0">
+      <div style="font-size:13px;color:#4a5568;margin-bottom:8px">החל איזו שעה ביום להציג בדף הבית את מערכת השעות של היום הבא במקום היום הנוכחי</div>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:nowrap">
+        <input type="number" min="0" max="23" value="${hour}" id="adminScheduleCutoffInput"
+          style="width:72px;text-align:center;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px;font-size:14px;font-family:inherit">
+        <span style="font-size:13px;color:#4a5568;line-height:1">:00</span>
+        <button class="admin-btn" onclick="adminSaveScheduleCutoff()" style="padding:6px 14px;font-size:13px;line-height:1;margin-bottom:0">שמור</button>
+        <span id="adminScheduleCutoffMsg" style="font-size:12px;color:#38a169;min-width:40px"></span>
+      </div>
+    </div>`;
+}
+
+async function adminSaveScheduleCutoff() {
+  const val = parseInt(el('adminScheduleCutoffInput').value, 10);
+  if (isNaN(val) || val < 0 || val > 23) return;
+  await saveScheduleCutoffHour(val);
+  renderHomeSchedule();
+  const msg = el('adminScheduleCutoffMsg');
+  if (msg) { msg.textContent = 'נשמר ✓'; setTimeout(() => { msg.textContent = ''; }, 2000); }
+}
+
 let _adminPanelCache = null;
 const _ADMIN_CACHE_TTL = 120_000; // 2 minutes
 
@@ -4930,6 +4999,7 @@ function _applyAdminPanelCache(data, showLog) {
   safe('notif', () => _renderNotifSettingsFromCfg(data.notifCfg));
   safe('leaderboard', () => _renderLeaderboardFromDays(data.lbDays));
   safe('shopping', renderShoppingHistorySettings);
+  safe('scheduleCutoff', renderScheduleCutoffSettings);
   safe('maintenance', renderMaintenanceTools);
   safe('eventTypes', renderAdminEventTypes);
   safe('featureFlags', renderAdminFeatureFlags);
@@ -5913,6 +5983,7 @@ async function refreshHomeUpcoming() {
     .filter(m => m?.school?.city && m?.school?.grade);
   if (kidsWithSchool.length) await loadCommunityData(kidsWithSchool);
   renderHomeUpcoming();
+  renderHomeSchedule();
 }
 
 function renderHomeUpcoming() {
@@ -5920,10 +5991,13 @@ function renderHomeUpcoming() {
   const container = el('homeUpcoming');
   if (!card || !container) return;
 
+  // A kid chip selected (parent view) — narrow events down to that kid only.
+  const filterKid = isParent() && S.filter !== 'All' && getKids().includes(S.filter) ? S.filter : null;
+
   // Personal calendar events
   const personal = (S.events || [])
     .filter(e => isEventUpcoming(e.date))
-    .filter(e => isParent() || _calEventVisibleToKid(e, S.user))
+    .filter(e => filterKid ? _calEventVisibleToKid(e, filterKid) : (isParent() || _calEventVisibleToKid(e, S.user)))
     .map(e => ({ ...e, _src: 'personal' }));
 
   // Class/grade/school events from cache
@@ -5931,6 +6005,7 @@ function renderHomeUpcoming() {
   const _seenHomeClassKeys = new Set();
   getKids().forEach(name => {
     if (!isParent() && name !== S.user) return; // kids only see their own class
+    if (filterKid && name !== filterKid) return; // kid chip selected — only that kid's class
     const member = getMembers().find(m => m.name === name);
     if (!member?.school) return;
     const cid = classIdFor(member.school);
@@ -5975,12 +6050,80 @@ function renderHomeUpcoming() {
   }).join('');
 }
 
+const _SCHEDULE_DAY_KEY_BY_JS_DAY = ['sunday','monday','tuesday','wednesday','thursday','friday', null]; // Date.getDay(): 0=Sun..6=Sat
+function _scheduleDayKeyFor(date) {
+  return _SCHEDULE_DAY_KEY_BY_JS_DAY[date.getDay()];
+}
+function _scheduleTargetDate() {
+  const cutoff = getScheduleCutoffHour();
+  const now = new Date();
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (now.getHours() >= cutoff) d.setDate(d.getDate() + 1);
+  for (let i = 0; i < 7 && _scheduleDayKeyFor(d) === null; i++) d.setDate(d.getDate() + 1); // skip Saturday
+  return d;
+}
+
+function renderHomeSchedule() {
+  const card = el('homeScheduleCard');
+  const titleEl = el('homeScheduleTitle');
+  const container = el('homeSchedule');
+  if (!card || !titleEl || !container) return;
+
+  // A specific parent chip is selected (not 'All', not a kid) — schedule isn't relevant to a parent.
+  if (isParent() && S.filter !== 'All' && !getKids().includes(S.filter)) {
+    card.style.display = 'none';
+    return;
+  }
+
+  const kidsToShow = isKid() ? [S.user]
+    : (S.filter !== 'All' && getKids().includes(S.filter)) ? [S.filter]
+    : getKids();
+
+  const targetDate = _scheduleTargetDate();
+  const dayKey  = _scheduleDayKeyFor(targetDate);
+  const dayInfo = _SCHEDULE_DAYS.find(d => d.key === dayKey);
+  const isToday = targetDate.toDateString() === new Date().toDateString();
+  const lang = getLang();
+  const dayLabel = dayInfo ? (lang === 'he' ? dayInfo.he : dayInfo.en) : '';
+
+  const rows = kidsToShow
+    .map(name => getMembers().find(m => m.name === name))
+    .filter(m => m?.school?.city && m?.school?.grade)
+    .map(kid => {
+      const cid = classIdFor(kid.school);
+      const schedule = cid ? _commCache[cid]?.schedule : null;
+      if (!schedule?.rows) return null;
+      const subjects = Array.from({length: schedule.rows}, (_, i) => (schedule.grid?.[dayKey]?.[i] || '').trim());
+      return { kid, subjects };
+    })
+    .filter(Boolean);
+
+  if (!rows.length) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  titleEl.textContent = isToday ? `📅 ${t('scheduleTodayTitle')}` : `📅 ${t('scheduleDayTitle', dayLabel)}`;
+
+  const showKidName = rows.length > 1;
+  container.innerHTML = rows.map(({ kid, subjects }) => {
+    const lessonRows = subjects.map((val, i) => !val ? '' : `<div class="task-row home-task-row">
+        <div class="home-type-icon home-type-schedule">${_scheduleSubjectIcon(val)}</div>
+        <div class="task-body">
+          <div class="task-text">${esc(val)}</div>
+          <div class="task-sub">${t('scheduleLesson', i+1)}</div>
+        </div>
+      </div>`).join('');
+    const kidHeader = showKidName ? `<div class="home-schedule-kid-label">${getAvatar(kid.name, 20)} ${esc(kid.name)}</div>` : '';
+    return `<div class="home-schedule-kid-block">${kidHeader}${lessonRows || `<div class="empty" style="padding:6px 0;font-size:12px">${t('scheduleNoLessons')}</div>`}</div>`;
+  }).join('');
+}
+
 let _homeQuickPickId = null;
 let _quickAddConfirm = 0; // timestamp — renders ✓ while within 1.5s
 
 function renderHomeShopping() {
   const sec = el('homeSection-shopping');
   if (!sec) return;
+  // A kid chip is selected — the shared shopping list isn't kid-specific data.
+  if (isParent() && S.filter !== 'All' && getKids().includes(S.filter)) { sec.innerHTML = ''; return; }
   const placeholder = t('locale') === 'he-IL' ? 'חפש מהמאגר...' : 'Search pool…';
   sec.innerHTML = `<div class="card">
     <div class="card-title">🛒 הוסף לרשימת הקניות</div>
@@ -6320,6 +6463,7 @@ function renderHome() {
     : t('noPendingHw');
 
   renderHomeUpcoming();
+  renderHomeSchedule();
   renderHomeShopping();
   applyHomePrefs();
 }
@@ -6329,7 +6473,7 @@ function renderHome() {
 // ════════════════════════════════════════
 function renderStarChart() {
   const ed = isParent();
-  const kids = getKids();
+  const kids = (isParent() && S.filter !== 'All' && getKids().includes(S.filter)) ? [S.filter] : getKids();
   if (!kids.length) { el('starChart').innerHTML=''; return; }
   el('starChart').innerHTML = kids.map(kid => {
     const n = S.stars[kid]||0, me = kid===S.user;
@@ -7035,6 +7179,16 @@ async function saveShoppingHistory() {
 
 function getShoppingHistoryTtlDays() {
   return familyData?.shoppingHistoryTtlDays ?? 60;
+}
+
+function getScheduleCutoffHour() {
+  return familyData?.scheduleCutoffHour ?? 16;
+}
+
+async function saveScheduleCutoffHour(hour) {
+  if (!S.uid || !fbDb) return;
+  await fbDb.collection('families').doc(S.uid).update({ scheduleCutoffHour: hour });
+  if (familyData) familyData.scheduleCutoffHour = hour;
 }
 
 function pruneShoppingHistory() {
@@ -9294,6 +9448,7 @@ const HOME_SECTIONS = [
   { id:'stars',    icon:'⭐', labelKey:'starChart'   },
   { id:'homework', icon:'📚', labelKey:'hwDueSoon'   },
   { id:'upcoming', icon:'📅', labelHe:'אירועים קרובים', labelEn:'Upcoming events' },
+  { id:'schedule', icon:'🗓️', labelHe:'מערכת שעות', labelEn:'Class schedule' },
   { id:'shopping', icon:'🛒', labelHe:'הוסף לרשימת הקניות', labelEn:'Quick shopping' },
 ];
 
