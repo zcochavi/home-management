@@ -106,6 +106,9 @@ const STRINGS = {
     commScheduleUpdatedBy: name => `עודכן ע"י ${name}`,
     commScheduleAddPeriod:'+ הוסף שיעור',
     commScheduleRemovePeriod:'− הסר שיעור',
+    commSchedulePrint:'🖨️ להדפסה',
+    commSchedulePrintTitle: name => `מערכת השעות של ${name}`,
+    commSchedulePopupBlocked:'יש לאפשר חלונות קופצים כדי להדפיס את מערכת השעות',
     commAddEvent:'➕ הוסף אירוע לכיתה',
     commNewEvent:'אירוע חדש',
     commPost:'פרסם',
@@ -208,6 +211,9 @@ const STRINGS = {
     commScheduleUpdatedBy: name => `Updated by ${name}`,
     commScheduleAddPeriod:'+ Add period',
     commScheduleRemovePeriod:'− Remove period',
+    commSchedulePrint:'🖨️ Print',
+    commSchedulePrintTitle: name => `${name}'s Class Schedule`,
+    commSchedulePopupBlocked:'Please allow pop-ups to print the schedule',
     commAddEvent:'➕ Add class event',
     commNewEvent:'New Event',
     commPost:'Post',
@@ -3723,6 +3729,114 @@ async function saveClassSchedule(cid) {
   } catch(e) { console.error('saveClassSchedule:', e); _alert('שמירת מערכת השעות נכשלה'); }
 }
 
+const _SCHEDULE_PALETTE = [
+  { bg:'#FDEAF0', header:'#F7B9CF' }, // ראשון — pink
+  { bg:'#EAE6FB', header:'#C7B5F2' }, // שני — lavender
+  { bg:'#E3F6EC', header:'#A9E2C4' }, // שלישי — mint
+  { bg:'#FFF6DE', header:'#FADE86' }, // רביעי — butter
+  { bg:'#E2F1FB', header:'#A9D8F2' }, // חמישי — sky
+  { bg:'#FFEAE0', header:'#FFC29E' }, // שישי — peach
+];
+
+const _SCHEDULE_ICONS = [
+  [/חשבון|מתמטיקה|גיאומטריה/, '🧮'],
+  [/עברית/, '✏️'],
+  [/אנגלית/, '🔤'],
+  [/מדעי?ם?\b|מדע/, '🔬'],
+  [/אומנות|ציור/, '🎨'],
+  [/חינוך גופני|ספורט/, '⚽'],
+  [/תנ"?ך|תושבע|תורה|פרש(ת|ה)/, '📜'],
+  [/היסטוריה/, '🏛️'],
+  [/גיאוגרפיה|גאוגרפיה/, '🌍'],
+  [/מחשב/, '💻'],
+  [/מוזיקה/, '🎵'],
+  [/ספרות|סיפור/, '📚'],
+  [/לב|רגש/, '❤️'],
+  [/זהות/, '🛡️'],
+  [/חוג|העשרה/, '🌟'],
+];
+function _scheduleSubjectIcon(subject) {
+  const s = (subject || '').trim();
+  if (!s) return '';
+  const hit = _SCHEDULE_ICONS.find(([re]) => re.test(s));
+  return hit ? hit[1] : '📘';
+}
+
+function _buildSchedulePrintHtml(schedule, kidName, classLabel) {
+  const lang = getLang();
+  const title = t('commSchedulePrintTitle', kidName || '');
+  const dayCols = _SCHEDULE_DAYS.map((d, di) => {
+    const pal = _SCHEDULE_PALETTE[di % _SCHEDULE_PALETTE.length];
+    const cells = Array.from({length: schedule.rows}, (_, i) => {
+      const val = (schedule.grid?.[d.key]?.[i] || '').trim();
+      return `<div class="sp-cell">${val ? `<span class="sp-icon">${_scheduleSubjectIcon(val)}</span><span class="sp-subj">${esc(val)}</span>` : ''}</div>`;
+    }).join('');
+    return `<div class="sp-col" style="background:${pal.bg}">
+      <div class="sp-col-head" style="background:${pal.header}">${esc(lang === 'he' ? d.he : d.en)}</div>
+      ${cells}
+    </div>`;
+  }).join('');
+  const periodCol = `<div class="sp-col sp-period-col">
+    <div class="sp-col-head sp-period-head">&nbsp;</div>
+    ${Array.from({length: schedule.rows}, (_, i) => `<div class="sp-cell sp-period-num">${i+1}</div>`).join('')}
+  </div>`;
+
+  return `<!DOCTYPE html>
+<html lang="${lang}" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>${esc(title)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; margin: 0; padding: 24px; background: #fff; }
+  .sp-header { text-align: center; margin-bottom: 18px; }
+  .sp-title { font-size: 30px; font-weight: 900; color: #6b4a8a; margin: 0; }
+  .sp-sub { font-size: 14px; font-weight: 700; color: #a78bbd; margin-top: 4px; }
+  .sp-decor { font-size: 20px; letter-spacing: 10px; margin-bottom: 4px; }
+  .sp-grid { display: flex; gap: 10px; }
+  .sp-col { flex: 1; border-radius: 16px; overflow: hidden; border: 1px solid rgba(0,0,0,0.06); display: flex; flex-direction: column; }
+  .sp-col-head { text-align: center; font-weight: 900; font-size: 15px; color: #4a3b52; padding: 10px 4px; }
+  .sp-period-col { flex: 0 0 90px; background: #f3eefc !important; }
+  .sp-period-head { background: transparent !important; }
+  .sp-cell { min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 6px 4px; border-top: 1px dashed rgba(0,0,0,0.08); text-align: center; }
+  .sp-period-num { font-size: 20px; font-weight: 900; color: #8a76ad; }
+  .sp-icon { font-size: 20px; line-height: 1; }
+  .sp-subj { font-size: 12px; font-weight: 700; color: #4a3b52; }
+  .sp-print-bar { text-align: center; margin-bottom: 16px; }
+  .sp-print-btn { background: #8a76ad; color: #fff; border: none; border-radius: 999px; padding: 10px 24px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
+  @media print {
+    .sp-print-bar { display: none; }
+    body { padding: 8px; }
+    @page { size: landscape; margin: 10mm; }
+  }
+</style>
+</head>
+<body>
+  <div class="sp-print-bar"><button class="sp-print-btn" onclick="window.print()">${esc(t('commSchedulePrint'))}</button></div>
+  <div class="sp-header">
+    <div class="sp-decor">🌈 ✨ 💕 ⭐ 💕 ✨ 🌈</div>
+    <h1 class="sp-title">${esc(title)}</h1>
+    ${classLabel ? `<div class="sp-sub">🏫 ${esc(classLabel)}</div>` : ''}
+  </div>
+  <div class="sp-grid">${periodCol}${dayCols}</div>
+</body>
+</html>`;
+}
+
+function printClassSchedule(cid) {
+  const schedule = _commCache[cid]?.schedule;
+  if (!schedule || !schedule.rows) return;
+  const kid = getKids().map(n => getMembers().find(m => m.name === n)).find(m => classIdFor(m?.school) === cid);
+  const html = _buildSchedulePrintHtml(schedule, kid?.name || '', kid ? classLabelFor(kid.school) : '');
+  const win = window.open('', '_blank');
+  if (!win) { _alert(t('commSchedulePopupBlocked')); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { try { win.print(); } catch(e) {} }, 300);
+}
+
 function renderCommCard(kid) {
   const cid    = classIdFor(kid.school);
   const cache  = _commCache[cid] || { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[], applications:[] };
@@ -3756,7 +3870,10 @@ function renderCommCard(kid) {
 
     <div class="comm-section-label" style="margin-top:4px;display:flex;align-items:center;justify-content:space-between">
       <span>${t('commSchedule')}</span>
-      ${isParent() && !_commSchedEditOpen[cid] ? `<button class="comm-schedule-edit-btn" onclick="openScheduleEditor('${cid}')">${t('commScheduleEdit')}</button>` : ''}
+      ${!_commSchedEditOpen[cid] ? `<div style="display:flex;gap:10px">
+        ${cache.schedule?.rows ? `<button class="comm-schedule-edit-btn" onclick="printClassSchedule('${cid}')">${t('commSchedulePrint')}</button>` : ''}
+        ${isParent() ? `<button class="comm-schedule-edit-btn" onclick="openScheduleEditor('${cid}')">${t('commScheduleEdit')}</button>` : ''}
+      </div>` : ''}
     </div>
     <div id="commSchedule_${cid}">
       ${_commSchedEditOpen[cid]
