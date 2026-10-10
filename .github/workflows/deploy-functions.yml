@@ -1,4 +1,4 @@
-name: Deploy Firebase Functions
+name: Deploy Firebase Functions & Rules
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 jobs:
   deploy-functions:
-    name: Deploy Cloud Functions
+    name: Deploy Cloud Functions & Firestore Rules
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -29,6 +29,6 @@ jobs:
         run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/sa.json
 
       - name: Deploy to Firebase
-        run: npx firebase-tools@latest deploy --only functions --project familyhub-7fdd5
+        run: npx firebase-tools@latest deploy --only functions,firestore:rules --project familyhub-7fdd5
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
