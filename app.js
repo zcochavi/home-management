@@ -3729,14 +3729,47 @@ async function saveClassSchedule(cid) {
   } catch(e) { console.error('saveClassSchedule:', e); _alert('שמירת מערכת השעות נכשלה'); }
 }
 
-const _SCHEDULE_PALETTE = [
-  { bg:'#FDEAF0', header:'#F7B9CF' }, // ראשון — pink
-  { bg:'#EAE6FB', header:'#C7B5F2' }, // שני — lavender
-  { bg:'#E3F6EC', header:'#A9E2C4' }, // שלישי — mint
-  { bg:'#FFF6DE', header:'#FADE86' }, // רביעי — butter
-  { bg:'#E2F1FB', header:'#A9D8F2' }, // חמישי — sky
-  { bg:'#FFEAE0', header:'#FFC29E' }, // שישי — peach
-];
+const _SCHEDULE_THEMES = {
+  girl: {
+    palette: [
+      { bg:'#FDEAF0', header:'#F7B9CF' }, // ראשון — pink
+      { bg:'#EAE6FB', header:'#C7B5F2' }, // שני — lavender
+      { bg:'#E3F6EC', header:'#A9E2C4' }, // שלישי — mint
+      { bg:'#FFF6DE', header:'#FADE86' }, // רביעי — butter
+      { bg:'#E2F1FB', header:'#A9D8F2' }, // חמישי — sky
+      { bg:'#FFEAE0', header:'#FFC29E' }, // שישי — peach
+    ],
+    decor:'🦄 ✨ 🐱 ⭐ 💕 ✨ 🦄',
+    accent:'#6b4a8a', subAccent:'#a78bbd', periodBg:'#f3eefc', printBtn:'#8a76ad',
+  },
+  boy: {
+    palette: [
+      { bg:'#DCEEFC', header:'#8EC9F3' }, // ראשון — sky blue
+      { bg:'#E0F6EA', header:'#93E1AC' }, // שני — green
+      { bg:'#D9F3F0', header:'#86DCD2' }, // שלישי — teal
+      { bg:'#FFE8D2', header:'#FFBD85' }, // רביעי — orange
+      { bg:'#E3EEFD', header:'#A9CFF5' }, // חמישי — light blue
+      { bg:'#E7E4FC', header:'#B9AEF2' }, // שישי — periwinkle
+    ],
+    decor:'🚀 ⭐ 🦖 🪐 ⚽ ⭐ 🎮',
+    accent:'#1f4e8c', subAccent:'#5a86c2', periodBg:'#e9f1fc', printBtn:'#3b7dd4',
+  },
+  neutral: {
+    palette: [
+      { bg:'#FDEAF0', header:'#F7B9CF' },
+      { bg:'#EAE6FB', header:'#C7B5F2' },
+      { bg:'#E3F6EC', header:'#A9E2C4' },
+      { bg:'#FFF6DE', header:'#FADE86' },
+      { bg:'#E2F1FB', header:'#A9D8F2' },
+      { bg:'#FFEAE0', header:'#FFC29E' },
+    ],
+    decor:'🌟 📚 🎈 ✏️ 🎈 📚 🌟',
+    accent:'#5a5470', subAccent:'#9790ab', periodBg:'#f0eef5', printBtn:'#8a76ad',
+  },
+};
+function _scheduleThemeFor(gender) {
+  return _SCHEDULE_THEMES[gender] || _SCHEDULE_THEMES.neutral;
+}
 
 const _SCHEDULE_ICONS = [
   [/חשבון|מתמטיקה|גיאומטריה/, '🧮'],
@@ -3762,11 +3795,12 @@ function _scheduleSubjectIcon(subject) {
   return hit ? hit[1] : '📘';
 }
 
-function _buildSchedulePrintHtml(schedule, kidName, classLabel) {
+function _buildSchedulePrintHtml(schedule, kidName, classLabel, gender) {
   const lang = getLang();
+  const theme = _scheduleThemeFor(gender);
   const title = t('commSchedulePrintTitle', kidName || '');
   const dayCols = _SCHEDULE_DAYS.map((d, di) => {
-    const pal = _SCHEDULE_PALETTE[di % _SCHEDULE_PALETTE.length];
+    const pal = theme.palette[di % theme.palette.length];
     const cells = Array.from({length: schedule.rows}, (_, i) => {
       const val = (schedule.grid?.[d.key]?.[i] || '').trim();
       return `<div class="sp-cell">${val ? `<span class="sp-icon">${_scheduleSubjectIcon(val)}</span><span class="sp-subj">${esc(val)}</span>` : ''}</div>`;
@@ -3790,20 +3824,20 @@ function _buildSchedulePrintHtml(schedule, kidName, classLabel) {
   * { box-sizing: border-box; }
   body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; margin: 0; padding: 24px; background: #fff; }
   .sp-header { text-align: center; margin-bottom: 18px; }
-  .sp-title { font-size: 30px; font-weight: 900; color: #6b4a8a; margin: 0; }
-  .sp-sub { font-size: 14px; font-weight: 700; color: #a78bbd; margin-top: 4px; }
+  .sp-title { font-size: 30px; font-weight: 900; color: ${theme.accent}; margin: 0; }
+  .sp-sub { font-size: 14px; font-weight: 700; color: ${theme.subAccent}; margin-top: 4px; }
   .sp-decor { font-size: 20px; letter-spacing: 10px; margin-bottom: 4px; }
   .sp-grid { display: flex; gap: 10px; }
   .sp-col { flex: 1; border-radius: 16px; overflow: hidden; border: 1px solid rgba(0,0,0,0.06); display: flex; flex-direction: column; }
   .sp-col-head { text-align: center; font-weight: 900; font-size: 15px; color: #4a3b52; padding: 10px 4px; }
-  .sp-period-col { flex: 0 0 90px; background: #f3eefc !important; }
+  .sp-period-col { flex: 0 0 90px; background: ${theme.periodBg} !important; }
   .sp-period-head { background: transparent !important; }
   .sp-cell { min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 6px 4px; border-top: 1px dashed rgba(0,0,0,0.08); text-align: center; }
-  .sp-period-num { font-size: 20px; font-weight: 900; color: #8a76ad; }
+  .sp-period-num { font-size: 20px; font-weight: 900; color: ${theme.subAccent}; }
   .sp-icon { font-size: 20px; line-height: 1; }
   .sp-subj { font-size: 12px; font-weight: 700; color: #4a3b52; }
   .sp-print-bar { text-align: center; margin-bottom: 16px; }
-  .sp-print-btn { background: #8a76ad; color: #fff; border: none; border-radius: 999px; padding: 10px 24px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
+  .sp-print-btn { background: ${theme.printBtn}; color: #fff; border: none; border-radius: 999px; padding: 10px 24px; font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer; }
   @media print {
     .sp-print-bar { display: none; }
     body { padding: 8px; }
@@ -3814,7 +3848,7 @@ function _buildSchedulePrintHtml(schedule, kidName, classLabel) {
 <body>
   <div class="sp-print-bar"><button class="sp-print-btn" onclick="window.print()">${esc(t('commSchedulePrint'))}</button></div>
   <div class="sp-header">
-    <div class="sp-decor">🌈 ✨ 💕 ⭐ 💕 ✨ 🌈</div>
+    <div class="sp-decor">${theme.decor}</div>
     <h1 class="sp-title">${esc(title)}</h1>
     ${classLabel ? `<div class="sp-sub">🏫 ${esc(classLabel)}</div>` : ''}
   </div>
@@ -3827,7 +3861,7 @@ function printClassSchedule(cid) {
   const schedule = _commCache[cid]?.schedule;
   if (!schedule || !schedule.rows) return;
   const kid = getKids().map(n => getMembers().find(m => m.name === n)).find(m => classIdFor(m?.school) === cid);
-  const html = _buildSchedulePrintHtml(schedule, kid?.name || '', kid ? classLabelFor(kid.school) : '');
+  const html = _buildSchedulePrintHtml(schedule, kid?.name || '', kid ? classLabelFor(kid.school) : '', kid?.gender);
   const win = window.open('', '_blank');
   if (!win) { _alert(t('commSchedulePopupBlocked')); return; }
   win.document.open();
