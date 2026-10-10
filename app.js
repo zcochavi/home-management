@@ -4874,16 +4874,15 @@ async function adminSaveHistoryTtl() {
 }
 
 function renderScheduleCutoffSettings() {
-  const hour = getScheduleCutoffHour();
+  const time = getScheduleCutoffTime();
   const container = el('adminScheduleCutoffSettings');
   if (!container) return;
   container.innerHTML = `
     <div style="padding:8px 0">
       <div style="font-size:13px;color:#4a5568;margin-bottom:8px">החל איזו שעה ביום להציג בדף הבית את מערכת השעות של היום הבא במקום היום הנוכחי</div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:nowrap">
-        <input type="number" min="0" max="23" value="${hour}" id="adminScheduleCutoffInput"
-          style="width:72px;text-align:center;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px;font-size:14px;font-family:inherit">
-        <span style="font-size:13px;color:#4a5568;line-height:1">:00</span>
+        <input type="time" value="${esc(time)}" id="adminScheduleCutoffInput" dir="ltr"
+          style="text-align:center;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 10px;font-size:14px;font-family:inherit">
         <button class="admin-btn" onclick="adminSaveScheduleCutoff()" style="padding:6px 14px;font-size:13px;line-height:1;margin-bottom:0">שמור</button>
         <span id="adminScheduleCutoffMsg" style="font-size:12px;color:#38a169;min-width:40px"></span>
       </div>
@@ -4891,9 +4890,9 @@ function renderScheduleCutoffSettings() {
 }
 
 async function adminSaveScheduleCutoff() {
-  const val = parseInt(el('adminScheduleCutoffInput').value, 10);
-  if (isNaN(val) || val < 0 || val > 23) return;
-  await saveScheduleCutoffHour(val);
+  const val = el('adminScheduleCutoffInput').value;
+  if (!/^\d{2}:\d{2}$/.test(val)) return;
+  await saveScheduleCutoffTime(val);
   renderHomeSchedule();
   const msg = el('adminScheduleCutoffMsg');
   if (msg) { msg.textContent = 'נשמר ✓'; setTimeout(() => { msg.textContent = ''; }, 2000); }
@@ -6055,10 +6054,11 @@ function _scheduleDayKeyFor(date) {
   return _SCHEDULE_DAY_KEY_BY_JS_DAY[date.getDay()];
 }
 function _scheduleTargetDate() {
-  const cutoff = getScheduleCutoffHour();
+  const [cutoffH, cutoffM] = getScheduleCutoffTime().split(':').map(Number);
   const now = new Date();
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  if (now.getHours() >= cutoff) d.setDate(d.getDate() + 1);
+  const pastCutoff = now.getHours() > cutoffH || (now.getHours() === cutoffH && now.getMinutes() >= cutoffM);
+  if (pastCutoff) d.setDate(d.getDate() + 1);
   for (let i = 0; i < 7 && _scheduleDayKeyFor(d) === null; i++) d.setDate(d.getDate() + 1); // skip Saturday
   return d;
 }
@@ -7181,14 +7181,17 @@ function getShoppingHistoryTtlDays() {
   return familyData?.shoppingHistoryTtlDays ?? 60;
 }
 
-function getScheduleCutoffHour() {
-  return familyData?.scheduleCutoffHour ?? 16;
+function getScheduleCutoffTime() {
+  if (familyData?.scheduleCutoffTime) return familyData.scheduleCutoffTime;
+  const legacyHour = familyData?.scheduleCutoffHour; // migrate old hour-only setting
+  if (typeof legacyHour === 'number') return String(legacyHour).padStart(2, '0') + ':00';
+  return '16:00';
 }
 
-async function saveScheduleCutoffHour(hour) {
+async function saveScheduleCutoffTime(time) {
   if (!S.uid || !fbDb) return;
-  await fbDb.collection('families').doc(S.uid).update({ scheduleCutoffHour: hour });
-  if (familyData) familyData.scheduleCutoffHour = hour;
+  await fbDb.collection('families').doc(S.uid).update({ scheduleCutoffTime: time });
+  if (familyData) familyData.scheduleCutoffTime = time;
 }
 
 function pruneShoppingHistory() {
