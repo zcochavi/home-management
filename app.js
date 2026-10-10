@@ -2264,7 +2264,7 @@ function renderGCalBar() {
   if (GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID')) {
     st.innerHTML=`<span class="needs-setup">${t('gcalSetup')}</span>`; bt.innerHTML=''; return;
   }
-  if (!gcalReady())   { st.textContent=t('gcalLoading'); bt.innerHTML=''; return; }
+  if (!gcalReady())   { st.textContent=t('gcalLoading')+` (gapi ${gcal.gapiReady?'✓':'✗'} gis ${gcal.gisReady?'✓':'✗'})`; bt.innerHTML=''; return; }
   if (gcal.syncing)   { st.textContent=t('gcalSyncing'); bt.innerHTML=''; return; }
   if (gcalConnected()) {
     st.innerHTML=`<span class="connected">${t('gcalConnected')}</span>`;
