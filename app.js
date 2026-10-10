@@ -2181,7 +2181,13 @@ function afterLoad() {
 // ════════════════════════════════════════
 function gapiLoaded() {
   gapi.load('client', async () => {
-    await gapi.client.init({discoveryDocs:[GCAL_DISCOVERY]});
+    // If the discovery-doc fetch fails, init() rejects; without this catch gapiReady
+    // never flips and the calendar bar stays on "loading" forever.
+    try { await gapi.client.init({discoveryDocs:[GCAL_DISCOVERY]}); }
+    catch(e) {
+      console.error('gapi init failed, falling back to client.load', e);
+      try { await gapi.client.load('calendar','v3'); } catch(e2) { console.error(e2); }
+    }
     gcal.gapiReady=true; renderGCalBar(); tryAutoConnectGCal();
   });
 }
