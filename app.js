@@ -632,6 +632,8 @@ const gcalConnected = () => !!gcal.accessToken;
 const JOIN_DOMAIN = 'fh.familyhub';
 let _registering = false;
 let _joining = false;
+let _googleFlow = false;   // true while a Google sign-in is being resolved (suppresses onAuthStateChanged)
+let _googlePending = null; // Google user with no family yet, mid-way through family creation
 
 const EMOJI_OPTIONS = ['👩','👨','👧','👦','🧒','👶','🧑','👵','👴','🧔','🧑‍🍼','👱'];
 const GRADE_OPTIONS = ['','א','ב','ג','ד','ה','ו','ז','ח','ט','י','י"א','י"ב'];
@@ -764,6 +766,7 @@ function renderMemberPreview() {
 }
 
 function setAuthMode(mode) {
+  if (_googlePending && mode !== 'signup') _cancelGoogleSignup();
   el('signinPanel').style.display   = mode==='signin' ? '' : 'none';
   el('signupPanel1').style.display  = mode==='signup' ? '' : 'none';
   el('signupPanel2').style.display  = 'none';
@@ -784,7 +787,7 @@ function signupNext() {
   el('su1Error').textContent = '';
   if (!familyName) { el('su1Error').textContent = 'נדרש שם משפחה'; return; }
   if (!email)      { el('su1Error').textContent = 'נדרש אימייל';   return; }
-  if (pwd.length < 6) { el('su1Error').textContent = 'הסיסמה חייבת להיות לפחות 6 תווים'; return; }
+  if (!_googlePending && pwd.length < 6) { el('su1Error').textContent = 'הסיסמה חייבת להיות לפחות 6 תווים'; return; }
   el('signupPanel1').style.display = 'none';
   el('signupPanel2').style.display = '';
   _draftMembers   = [];
@@ -832,6 +835,52 @@ async function doSignIn() {
   }
 }
 
+async function doGoogleSignIn() {
+  if (!FB_CONFIGURED) return;
+  el('siError').textContent = '';
+  el('siError').style.color = '';
+  _googleFlow = true;
+  setAuthLoading(true);
+  try {
+    const cred = await fbAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    const user = cred.user;
+    // Existing family owner, or a joined member already mapped to a family?
+    const [own, mapped] = await Promise.all([
+      fbDb.collection('families').doc(user.uid).get(),
+      fbDb.collection('uidToFamily').doc(user.uid).get(),
+    ]);
+    if (own.exists || mapped.exists) {
+      _googleFlow = false;
+      await _enterApp(user);
+      return;
+    }
+    // Brand-new Google account: collect family name + members, then create the family
+    _googlePending = user;
+    setAuthLoading(false);
+    setAuthMode('signup');
+    el('suEmail').value    = user.email || '';
+    el('suEmail').readOnly = true;
+    el('suPwd').style.display = 'none';
+    el('suFamily').focus();
+  } catch(e) {
+    _googleFlow = false;
+    setAuthLoading(false);
+    if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
+    el('siError').textContent = e.code === 'auth/popup-blocked'
+      ? 'הדפדפן חסם את חלון ההתחברות — אפשר חלונות קופצים ונסה שוב'
+      : getAuthError(e.code);
+  }
+}
+
+function _cancelGoogleSignup() {
+  _googlePending = null;
+  _googleFlow = false;
+  el('suEmail').readOnly = false;
+  el('suEmail').value = '';
+  el('suPwd').style.display = '';
+  fbAuth.signOut().catch(() => {});
+}
+
 async function doForgotPassword() {
   if (!FB_CONFIGURED) return;
   const email = el('siEmail').value.trim();
@@ -875,14 +924,15 @@ async function doSignUp() {
     return entry;
   });
   const familyName = el('suFamily').value.trim();
-  const email      = el('suEmail').value.trim();
+  const email      = _googlePending ? _googlePending.email : el('suEmail').value.trim();
   const pwd        = el('suPwd').value;
   setAuthLoading(true);
   _registering = true;
   try {
-    // 1. Create owner account (Firebase auto-signs in as owner)
-    const ownerCred = await fbAuth.createUserWithEmailAndPassword(email, pwd);
-    const ownerUid  = ownerCred.user.uid;
+    // 1. Create owner account (Firebase auto-signs in as owner), or reuse the signed-in Google account
+    const ownerUid = _googlePending
+      ? _googlePending.uid
+      : (await fbAuth.createUserWithEmailAndPassword(email, pwd)).user.uid;
     // 2. Generate family code + create invite account via secondary app instance
     const code = generateFamilyCode();
     const inviteEmail = code + '@' + JOIN_DOMAIN;
@@ -911,6 +961,7 @@ async function doSignUp() {
       await fbDb.collection('families').doc(ownerUid).update({ members: updatedMembers });
     }
     _registering = false;
+    _googlePending = null; _googleFlow = false;
     // 4. Manually kick off subscription (onAuthStateChanged was suppressed)
     S.uid = ownerUid;
     el('authScreen').classList.add('hidden');
@@ -9495,6 +9546,16 @@ async function guestToggleItem(token, itemId) {
 // ════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════
+async function _enterApp(user) {
+  const familyUid = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
+  S.uid = familyUid;
+  S.lockedMember = localStorage.getItem('familyhub_locked_member_' + user.uid) || null;
+  el('authScreen').classList.add('hidden');
+  await _ensureUidFamilyMapping(familyUid);
+  subscribeToFeatureFlags();
+  subscribeToFamily(familyUid);
+}
+
 if (!FB_CONFIGURED) {
   // Firebase not configured — show helpful message
   el('loadingScreen').querySelector('.loading-txt').textContent = '⚠ Firebase לא מוגדר';
@@ -9518,16 +9579,10 @@ if (!FB_CONFIGURED) {
       });
   } else {
     fbAuth.onAuthStateChanged(async user => {
-      if (_registering || _joining) return;
+      if (_registering || _joining || _googleFlow) return;
       if (user && user.isAnonymous) { await fbAuth.signOut().catch(() => {}); return; }
       if (user) {
-        const familyUid = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
-        S.uid = familyUid;
-        S.lockedMember = localStorage.getItem('familyhub_locked_member_' + user.uid) || null;
-        el('authScreen').classList.add('hidden');
-        await _ensureUidFamilyMapping(familyUid);
-        subscribeToFeatureFlags();
-        subscribeToFamily(familyUid);
+        await _enterApp(user);
       } else {
         S.uid = null; familyData = null;
         el('loadingScreen').classList.add('hidden');

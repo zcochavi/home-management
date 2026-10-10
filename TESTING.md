@@ -8,6 +8,8 @@ Run through this before any significant deploy (major refactor, new feature, Clo
 
 - [ ] **Sign up** — create a new family with at least one parent and one kid; verify family doc appears in Firestore
 - [ ] **Sign in** — sign out and back in with email/password
+- [ ] **Google sign-in (existing family)** — "המשך עם Google" with the owner's Google account; verify it lands in the family
+- [ ] **Google sign-in (new account)** — verify it goes to family setup with email locked and no password field; after creating, verify family doc exists and refresh works. Backing out returns to sign-in and signs out
 - [ ] **Join via family code** — on a second device/browser, join with the family code; verify login screen shows all members
 - [ ] **Join via kid code** — join with a kid's personal code; verify auto-login as that kid with no member switcher shown
 - [ ] **Refresh after join** — refresh the page after joining; verify it loads correctly (no infinite spinner, no blank page)

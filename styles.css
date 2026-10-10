@@ -206,6 +206,12 @@ body {
 .auth-btns-row { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
 .auth-btn-back { background: none; border: none; color: var(--primary-500); font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; padding: 0; }
 .auth-btn-create { width: auto !important; padding: 10px 24px !important; }
+.auth-btn-google {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 12px; border-radius: var(--r-md, 12px); border: 1.5px solid var(--gray-200, #e0e0e0);
+  background: var(--surface); color: inherit; font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer;
+}
+.auth-btn-google:hover { background: var(--gray-50, #f7f7f7); }
 .auth-link-btn {
   background: none; border: none; color: var(--primary-500);
   font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
