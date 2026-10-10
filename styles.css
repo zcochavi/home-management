@@ -123,7 +123,8 @@ body {
   width: 100%; max-width: 360px;
   box-shadow: 0 24px 64px rgba(0,0,0,0.18);
 }
-.auth-logo { font-size: 40px; text-align: center; margin-bottom: 4px; }
+.auth-logo { text-align: center; margin-bottom: 4px; }
+.auth-logo img, .login-logo img { display: block; margin: 0 auto; }
 .auth-title { font-size: 24px; font-weight: 800; text-align: center; color: var(--gray-900); margin-bottom: 20px; }
 
 .auth-tabs {
@@ -246,7 +247,7 @@ body {
   padding: 24px;
 }
 #loginScreen.hidden { display: none; }
-.login-logo { font-size: 52px; margin-bottom: 8px; animation: bounce 1.8s infinite; }
+.login-logo { margin-bottom: 8px; animation: bounce 1.8s infinite; }
 .login-title { font-size: 32px; font-weight: 800; color: white; letter-spacing: -0.5px; }
 .login-family-name { font-size: 14px; color: rgba(255,255,255,0.7); font-weight: 600; margin-top: 2px; }
 .login-sub { font-size: 16px; color: rgba(255,255,255,0.8); font-weight: 600; margin-top: 6px; margin-bottom: 28px; }
@@ -2219,6 +2220,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 #guestPanel.hidden { display: none; }
 .guest-header { position: sticky; top: 0; z-index: 10; background: var(--surface); border-bottom: 1px solid var(--gray-100); box-shadow: 0 2px 8px rgba(0,0,0,0.04); padding: 12px 16px 10px; flex-shrink: 0; }
 .guest-header-top { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.guest-app-icon { vertical-align: -4px; border-radius: 5px; }
 .guest-app-logo { font-size: 13px; font-weight: 700; color: var(--primary-500); letter-spacing: 0.2px; }
 .guest-app-logo-sep { font-size: 12px; color: var(--gray-300); }
 .guest-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
