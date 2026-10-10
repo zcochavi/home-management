@@ -3469,6 +3469,7 @@ function subscribeToCommClass(cid) {
         if (!_commCache[cid]) return;
         _commCache[cid].homework = snap.docs.map(d => ({id:d.id,...d.data()}));
         if (S.tab === 'homework') renderHomework();
+        if (S.tab === 'home') renderHome();
         rerender();
       }, e => console.warn('[community] homework:', e.code))
   );
@@ -6442,6 +6443,27 @@ function renderHome() {
   if (isKid()) hw = hw.filter(h=>h.child===S.user);
   else if (S.filter!=='All'&&getKids().includes(S.filter)) hw = hw.filter(h=>h.child===S.filter);
 
+  // Class homework (shared cross-family, scoped per kid's actual class) — not-done items
+  // for whichever kid(s) are relevant to the current filter.
+  const relevantKidsForClassHw = isKid() ? [S.user]
+    : (S.filter !== 'All' && getKids().includes(S.filter)) ? [S.filter]
+    : getKids();
+  let classHw = [];
+  const _classHwNeedsLoad = [];
+  relevantKidsForClassHw.forEach(kidName => {
+    const member = getMembers().find(m => m.name === kidName);
+    const cid = member?.school ? classIdFor(member.school) : null;
+    if (!cid) return;
+    if (!_commCache[cid]) { _classHwNeedsLoad.push(member); return; }
+    const key = classMemberId(S.uid, kidName);
+    (_commCache[cid].homework || [])
+      .filter(h => !(h.doneBy && h.doneBy[key]))
+      .forEach(h => classHw.push({...h, _kid: kidName}));
+  });
+  if (_classHwNeedsLoad.length) {
+    loadCommunityData(_classHwNeedsLoad).then(() => { if (S.tab === 'home') renderHome(); });
+  }
+
   // Add Webtop homework (undone items for the relevant child/class)
   const _wtDoneMap = familyData?.webtopHomeworkDone || {};
   let wtHomeHw = featureOn('webtopConnection') ? _webtopHomework.filter(h => {
@@ -6459,6 +6481,7 @@ function renderHome() {
   // Merge: when webtop is off only show personal homework
   const combined = [
     ...hw.map(h => ({ _type:'hw', _due: h.due||'', ...h })),
+    ...classHw.map(h => ({ _type:'class', _due: h.due||'', ...h })),
     ...(featureOn('webtopConnection') ? wtHomeHw.map(h => ({ _type:'wt', _due: h.date||'', ...h })) : []),
   ].sort((a,b) => {
     if (!a._due && !b._due) return 0;
@@ -6502,6 +6525,20 @@ function renderHome() {
               ${parts.length ? `<div class="task-sub">${parts.join(' · ')}</div>` : ''}
             </div>
             <div class="home-type-icon">📡</div>
+          </div>`;
+        }
+        if (h._type === 'class') {
+          const parts = [];
+          if (isParent() && S.filter === 'All') parts.push(esc(h._kid));
+          if (h.subject) parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);
+          if (h.due) parts.push(fmtDate(h.due));
+          return `<div class="task-row home-task-row">
+            <div class="check-box readonly"></div>
+            <div class="task-body">
+              <div class="task-text">${esc(h.desc)}</div>
+              ${parts.length ? `<div class="task-sub">${parts.join(' · ')}</div>` : ''}
+            </div>
+            <div class="home-type-icon">🏫</div>
           </div>`;
         }
         return `<div class="task-row home-task-row">
@@ -8730,6 +8767,7 @@ function switchTab(tab) {
   _updateScrollTopBtn();
   if (tab !== 'chores') el('choreFabWrap')?.style.setProperty('display', 'none');
   if (tab === 'chores') renderChores();
+  if (tab === 'home') renderHome();
   if (tab === 'community') renderCommunity();
   if (tab === 'analytics') renderAnalytics();
   if (tab === 'lists') renderLists();
