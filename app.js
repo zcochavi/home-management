@@ -98,6 +98,14 @@ const STRINGS = {
     commNoEvents:'אין אירועים קרובים',
     commPast:'עברו',
     commClassmates:'חברי כיתה ב-FamilyHub',
+    commSchedule:'🗓️ מערכת שעות',
+    commScheduleEdit:'עריכה',
+    commScheduleSave:'שמירה',
+    commScheduleCancel:'ביטול',
+    commScheduleEmpty:'עדיין לא הוזנה מערכת שעות לכיתה',
+    commScheduleUpdatedBy: name => `עודכן ע"י ${name}`,
+    commScheduleAddPeriod:'+ הוסף שיעור',
+    commScheduleRemovePeriod:'− הסר שיעור',
     commAddEvent:'➕ הוסף אירוע לכיתה',
     commNewEvent:'אירוע חדש',
     commPost:'פרסם',
@@ -192,6 +200,14 @@ const STRINGS = {
     commNoEvents:'No upcoming events',
     commPast:'Past',
     commClassmates:'Classmates on FamilyHub',
+    commSchedule:'🗓️ Class Schedule',
+    commScheduleEdit:'Edit',
+    commScheduleSave:'Save',
+    commScheduleCancel:'Cancel',
+    commScheduleEmpty:'No schedule entered for this class yet',
+    commScheduleUpdatedBy: name => `Updated by ${name}`,
+    commScheduleAddPeriod:'+ Add period',
+    commScheduleRemovePeriod:'− Remove period',
     commAddEvent:'➕ Add class event',
     commNewEvent:'New Event',
     commPost:'Post',
@@ -3256,6 +3272,16 @@ function fmtEventDate(dateStr) {
 let _commCache       = {}; // { [classId]: { classmates, events, loadedAt, error? } }
 let _commListeners   = {}; // { [classId]: [unsubFn, ...] }
 let _commAddOpen     = {}; // { [classId]: bool }
+let _commSchedEditOpen = {}; // { [classId]: bool }
+let _commSchedDraft    = {}; // { [classId]: { rows, grid: { [dayKey]: [subject, ...] } } }
+const _SCHEDULE_DAYS = [
+  { key:'sunday',    he:'ראשון', en:'Sun' },
+  { key:'monday',    he:'שני',   en:'Mon' },
+  { key:'tuesday',   he:'שלישי', en:'Tue' },
+  { key:'wednesday', he:'רביעי', en:'Wed' },
+  { key:'thursday',  he:'חמישי', en:'Thu' },
+  { key:'friday',    he:'שישי',  en:'Fri' },
+];
 let _commVisibleCids = []; // cids currently rendered in community tab
 let _commVisibleKids = []; // { name, cid } for kids currently rendered
 
@@ -3271,6 +3297,16 @@ function subscribeToCommClass(cid) {
   if (_commListeners[cid]) return; // already subscribed
   _commListeners[cid] = [];
   const rerender = () => { if (S.tab === 'community') renderCommunity(); };
+
+  // Live: class schedule (מערכת שעות) — shared by all parents in the class
+  _commListeners[cid].push(
+    fbDb.collection('schoolClasses').doc(cid)
+      .onSnapshot(snap => {
+        if (!_commCache[cid]) return;
+        _commCache[cid].schedule = snap.data()?.schedule || null;
+        rerender();
+      }, e => console.warn('[community] schedule:', e.code))
+  );
 
   // Live: class events
   _commListeners[cid].push(
@@ -3352,10 +3388,11 @@ async function loadCommunityData(kidsWithSchool) {
     const safeGet = q => q.get().catch(() => ({docs:[]}));
     try {
       // Fetch static data once (classmates, grade events, school events rarely change)
-      const [membersSnap, gradeSnap, schoolSnap] = await Promise.all([
+      const [membersSnap, gradeSnap, schoolSnap, classDocSnap] = await Promise.all([
         fbDb.collection('schoolClasses').doc(cid).collection('members').get(),
         gid ? safeGet(fbDb.collection('schoolGrades').doc(gid).collection('events').orderBy('date')) : Promise.resolve({docs:[]}),
         sid ? safeGet(fbDb.collection('schools').doc(sid).collection('events').orderBy('date')) : Promise.resolve({docs:[]}),
+        fbDb.collection('schoolClasses').doc(cid).get().catch(() => null),
       ]);
       const classmates = membersSnap.docs.map(d=>d.data()).filter(m=>m.familyUid!==S.uid);
       // Fetch classmate roles (admin-only)
@@ -3388,13 +3425,14 @@ async function loadCommunityData(kidsWithSchool) {
         schoolEvents:  schoolSnap.docs.map(d=>({id:d.id,...d.data(),scope:'school',scopeId:sid})),
         pendingEvents: [],
         applications:  [],
+        schedule:      classDocSnap?.data()?.schedule || null,
         loadedAt:      Date.now(),
       };
       // Start live listeners for events / pending events / applications
       subscribeToCommClass(cid);
     } catch(e) {
       console.error('loadCommunityData error (classId=' + cid + '):', e);
-      _commCache[cid] = { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[], applications:[], loadedAt:Date.now(), error: e.code||e.message };
+      _commCache[cid] = { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[], applications:[], schedule:null, loadedAt:Date.now(), error: e.code||e.message };
     }
   }));
 }
@@ -3553,6 +3591,132 @@ function filterClassmates(cid, q) {
   });
 }
 
+// ── Class Schedule (מערכת שעות) ───────────
+function _scheduleToDraft(schedule) {
+  const rows = schedule?.rows || 8;
+  const grid = {};
+  _SCHEDULE_DAYS.forEach(d => {
+    grid[d.key] = Array.from({length: rows}, (_, i) => schedule?.grid?.[d.key]?.[i] || '');
+  });
+  return { rows, grid };
+}
+
+function renderScheduleView(cid, schedule) {
+  if (!schedule || !schedule.rows) {
+    return `<div class="comm-schedule-empty">${t('commScheduleEmpty')}</div>`;
+  }
+  const lang = getLang();
+  const rows = schedule.rows;
+  let html = `<div class="sched-table-wrap"><table class="sched-table"><thead><tr><th></th>${
+    _SCHEDULE_DAYS.map(d => `<th>${esc(lang === 'he' ? d.he : d.en)}</th>`).join('')
+  }</tr></thead><tbody>`;
+  for (let i = 0; i < rows; i++) {
+    html += `<tr><td class="sched-period-num">${i+1}</td>${
+      _SCHEDULE_DAYS.map(d => {
+        const val = (schedule.grid?.[d.key]?.[i] || '').trim();
+        return `<td class="sched-cell${val ? '' : ' sched-cell-empty'}">${val ? esc(val) : '–'}</td>`;
+      }).join('')
+    }</tr>`;
+  }
+  html += `</tbody></table></div>`;
+  if (schedule.updatedBy) {
+    const name = schedule.updatedBy.firstName || schedule.updatedBy.name || '';
+    const ago  = timeAgo(schedule.updatedAt);
+    html += `<div class="comm-schedule-updated">${t('commScheduleUpdatedBy', name)}${ago ? ' · ' + ago : ''}</div>`;
+  }
+  return html;
+}
+
+function renderScheduleEdit(cid, draft) {
+  const lang = getLang();
+  let html = `<div class="sched-table-wrap"><table class="sched-table" id="schedTable_${cid}"><thead><tr><th></th>${
+    _SCHEDULE_DAYS.map(d => `<th>${esc(lang === 'he' ? d.he : d.en)}</th>`).join('')
+  }</tr></thead><tbody>`;
+  for (let i = 0; i < draft.rows; i++) {
+    html += `<tr><td class="sched-period-num">${i+1}</td>${
+      _SCHEDULE_DAYS.map(d => `<td><input class="sched-cell-input" data-day="${d.key}" data-period="${i}" value="${esc(draft.grid?.[d.key]?.[i] || '')}"></td>`).join('')
+    }</tr>`;
+  }
+  html += `</tbody></table></div>
+    <div class="sched-edit-actions">
+      <button class="sched-row-btn" onclick="addSchedulePeriodRow('${cid}')">${t('commScheduleAddPeriod')}</button>
+      <button class="sched-row-btn" onclick="removeSchedulePeriodRow('${cid}')">${t('commScheduleRemovePeriod')}</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="auth-btn-main" style="flex:1;padding:10px" onclick="saveClassSchedule('${cid}')">${t('commScheduleSave')}</button>
+      <button class="auth-btn-back" style="flex:1;padding:10px" onclick="closeScheduleEditor('${cid}')">${t('commScheduleCancel')}</button>
+    </div>`;
+  return html;
+}
+
+function _captureScheduleDraft(cid) {
+  const table = el('schedTable_' + cid);
+  const rows  = _commSchedDraft[cid]?.rows || 8;
+  const grid  = {};
+  _SCHEDULE_DAYS.forEach(d => grid[d.key] = Array.from({length: rows}, () => ''));
+  table?.querySelectorAll('.sched-cell-input').forEach(inp => {
+    const day = inp.dataset.day, period = +inp.dataset.period;
+    if (grid[day]) grid[day][period] = inp.value;
+  });
+  return { rows, grid };
+}
+
+function openScheduleEditor(cid) {
+  _commSchedEditOpen[cid] = true;
+  _commSchedDraft[cid] = _scheduleToDraft(_commCache[cid]?.schedule);
+  const container = el('commSchedule_' + cid);
+  if (container) container.innerHTML = renderScheduleEdit(cid, _commSchedDraft[cid]);
+  renderCommunity(); // refresh header to hide the Edit button while editing
+}
+
+function closeScheduleEditor(cid) {
+  delete _commSchedEditOpen[cid];
+  delete _commSchedDraft[cid];
+  renderCommunity();
+}
+
+function addSchedulePeriodRow(cid) {
+  _commSchedDraft[cid] = _captureScheduleDraft(cid);
+  _commSchedDraft[cid].rows++;
+  _SCHEDULE_DAYS.forEach(d => _commSchedDraft[cid].grid[d.key].push(''));
+  const container = el('commSchedule_' + cid);
+  if (container) container.innerHTML = renderScheduleEdit(cid, _commSchedDraft[cid]);
+}
+
+function removeSchedulePeriodRow(cid) {
+  _commSchedDraft[cid] = _captureScheduleDraft(cid);
+  if (_commSchedDraft[cid].rows <= 1) return;
+  _commSchedDraft[cid].rows--;
+  _SCHEDULE_DAYS.forEach(d => _commSchedDraft[cid].grid[d.key].pop());
+  const container = el('commSchedule_' + cid);
+  if (container) container.innerHTML = renderScheduleEdit(cid, _commSchedDraft[cid]);
+}
+
+async function saveClassSchedule(cid) {
+  const draft = _captureScheduleDraft(cid);
+  let lastNonEmpty = -1;
+  _SCHEDULE_DAYS.forEach(d => {
+    (draft.grid[d.key] || []).forEach((v, i) => { if ((v || '').trim()) lastNonEmpty = Math.max(lastNonEmpty, i); });
+  });
+  const rows = Math.max(1, lastNonEmpty + 1);
+  const grid = {};
+  _SCHEDULE_DAYS.forEach(d => {
+    grid[d.key] = Array.from({length: rows}, (_, i) => (draft.grid[d.key]?.[i] || '').trim());
+  });
+  const scheduleData = {
+    rows, grid,
+    updatedBy: { familyUid: S.uid, firstName: S.user },
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  try {
+    await fbDb.collection('schoolClasses').doc(cid).set({ schedule: scheduleData }, { merge: true });
+    if (_commCache[cid]) _commCache[cid].schedule = { ...scheduleData, updatedAt: new Date() };
+    delete _commSchedEditOpen[cid];
+    delete _commSchedDraft[cid];
+    renderCommunity();
+  } catch(e) { console.error('saveClassSchedule:', e); _alert('שמירת מערכת השעות נכשלה'); }
+}
+
 function renderCommCard(kid) {
   const cid    = classIdFor(kid.school);
   const cache  = _commCache[cid] || { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[], applications:[] };
@@ -3583,6 +3747,16 @@ function renderCommCard(kid) {
     </div>
 
     ${isCommitteeFor(cid) && !isAdmin() ? `<div style="text-align:end;margin:-4px 0 8px"><button class="comm-leave-btn" onclick="leaveCommittee('${cid}')">${t('commLeaveCommittee')}</button></div>` : ''}
+
+    <div class="comm-section-label" style="margin-top:4px;display:flex;align-items:center;justify-content:space-between">
+      <span>${t('commSchedule')}</span>
+      ${isParent() && !_commSchedEditOpen[cid] ? `<button class="comm-schedule-edit-btn" onclick="openScheduleEditor('${cid}')">${t('commScheduleEdit')}</button>` : ''}
+    </div>
+    <div id="commSchedule_${cid}">
+      ${_commSchedEditOpen[cid]
+        ? renderScheduleEdit(cid, _commSchedDraft[cid] || _scheduleToDraft(cache.schedule))
+        : renderScheduleView(cid, cache.schedule)}
+    </div>
 
     ${upcoming.length
       ? `<div class="post-feed">${upcoming.map(ev=>renderPostCard(ev,cid)).join('')}</div>`
