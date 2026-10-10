@@ -2448,7 +2448,7 @@ async function setWebtopKidClass(classCode, kidName) {
   if (!fbDb || !S.uid) return;
   const members = getMembers().map(m => ({
     ...m,
-    webtopClassCode: m.name === kidName ? classCode : (m.webtopClassCode === classCode ? '' : m.webtopClassCode),
+    webtopClassCode: m.name === kidName ? classCode : (m.webtopClassCode === classCode ? '' : (m.webtopClassCode || '')),
   }));
   if (familyData) familyData.members = members;
   await fbDb.collection('families').doc(S.uid).update({ members });
