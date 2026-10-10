@@ -1308,6 +1308,23 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .scope-grade  { background: var(--gray-100); color: var(--gray-500); }
 .scope-school { background: #eff6ff; color: #3b82f6; }
 
+.comm-schedule-edit-btn { background: none; border: none; font-size: 12px; color: var(--primary-500); cursor: pointer; padding: 2px 4px; font-family: inherit; font-weight: 700; }
+.comm-schedule-edit-btn:hover { text-decoration: underline; }
+.comm-schedule-empty { font-size: 12px; color: var(--gray-400); padding: 4px 0; font-weight: 600; }
+.comm-schedule-updated { font-size: 11px; color: var(--gray-400); font-weight: 600; margin-top: 6px; }
+.sched-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.sched-table { border-collapse: collapse; width: 100%; min-width: 480px; }
+.sched-table th, .sched-table td { border: 1px solid var(--gray-200); text-align: center; padding: 4px; }
+.sched-table th { font-size: 11px; font-weight: 800; color: var(--gray-500); background: var(--gray-50); padding: 6px 4px; }
+.sched-table td.sched-period-num { font-size: 11px; font-weight: 800; color: var(--gray-400); background: var(--gray-50); width: 24px; }
+.sched-table td.sched-cell { font-size: 12px; font-weight: 600; color: var(--gray-700); }
+.sched-table td.sched-cell-empty { color: var(--gray-200); }
+.sched-cell-input { width: 100%; min-width: 64px; border: none; background: transparent; text-align: center; font-family: inherit; font-size: 12px; font-weight: 600; color: var(--gray-700); padding: 6px 2px; }
+.sched-cell-input:focus { outline: none; background: var(--primary-50); border-radius: 6px; }
+.sched-edit-actions { display: flex; gap: 8px; margin-top: 8px; }
+.sched-row-btn { background: var(--gray-100); color: var(--gray-500); border: none; font-family: inherit; font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 8px; cursor: pointer; transition: all var(--t-fast); }
+.sched-row-btn:hover { background: var(--gray-200); }
+
 .comm-event { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .comm-event:last-child { border-bottom: none; }
 .comm-event-icon { font-size: 22px; flex-shrink: 0; width: 30px; text-align: center; margin-top: 1px; }
