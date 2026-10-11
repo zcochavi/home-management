@@ -3770,6 +3770,28 @@ function _reactionBtns(ev, scope, sid) {
   }).join('');
 }
 
+// Small confetti burst from a reaction button's center — purely decorative, no assets/libraries.
+function _spawnReactionConfetti(btn) {
+  const rect = btn.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const colors = ['#FF6B6B', '#FFD93D', '#6BCB77', '#4D96FF', '#C77DFF', '#FF922B'];
+  const count = 7;
+  for (let i = 0; i < count; i++) {
+    const dot = document.createElement('span');
+    dot.className = 'reaction-confetti-dot';
+    const angle = (Math.PI * 2 * i) / count + (Math.random() * 0.5 - 0.25);
+    const dist = 18 + Math.random() * 14;
+    dot.style.setProperty('--dx', (Math.cos(angle) * dist) + 'px');
+    dot.style.setProperty('--dy', (Math.sin(angle) * dist) + 'px');
+    dot.style.background = colors[i % colors.length];
+    dot.style.left = cx + 'px';
+    dot.style.top = cy + 'px';
+    document.body.appendChild(dot);
+    dot.addEventListener('animationend', () => dot.remove(), { once: true });
+  }
+}
+
 async function toggleReaction(scope, scopeId, evId, reactionKey) {
   if (isKid() && _isOwner()) return; // parent viewing as kid — read-only
   const collName = scope === 'grade' ? 'schoolGrades' : scope === 'school' ? 'schools' : 'schoolClasses';
@@ -3817,6 +3839,7 @@ async function toggleReaction(scope, scopeId, evId, reactionKey) {
       if (btn && !active) {
         btn.classList.add('post-reaction-bounce');
         btn.addEventListener('animationend', () => btn.classList.remove('post-reaction-bounce'), { once: true });
+        _spawnReactionConfetti(btn);
       }
     }
   }
