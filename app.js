@@ -120,6 +120,9 @@ const STRINGS = {
     commEventNote:'הערה (אופציונלי)',
     commEventPaybox:'קישור Paybox (אופציונלי)',
     commPayNow:'💳 שלם עכשיו',
+    commWhosCelebrating:'🎂 מי חוגגים?',
+    commWhosAttending:'מי מגיע?',
+    commImAttending:'🙋 אני מגיע/ה',
     commScopeClass:'כיתה', commScopeGrade:'שכבה', commScopeSchool:'בית ספר',
     commScopeLabel:'רמת האירוע',
     commTomorrow:'מחר',
@@ -229,6 +232,9 @@ const STRINGS = {
     commEventNote:'Note (optional)',
     commEventPaybox:'Paybox link (optional)',
     commPayNow:'💳 Pay now',
+    commWhosCelebrating:'🎂 Who\'s celebrating?',
+    commWhosAttending:'Who\'s coming?',
+    commImAttending:'🙋 I\'m attending',
     commScopeClass:'Class', commScopeGrade:'Grade', commScopeSchool:'School',
     commScopeLabel:'Audience',
     commTomorrow:'Tomorrow',
@@ -3286,21 +3292,36 @@ async function renderMgmtCommunity() {
 
 // ── Community Tab ─────────────────────────
 const _DEFAULT_EVENT_TYPES = [
-  { id:'birthday',     icon:'🎂', labelHe:'יום הולדת', labelEn:'Birthday',    mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:true  },
-  { id:'trip',         icon:'🚌', labelHe:'טיול',       labelEn:'Trip',        mDate:true,  mTime:false, mLoc:false, hasGenderFilter:false },
-  { id:'party',        icon:'🎉', labelHe:'מסיבה',      labelEn:'Party',       mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:false },
-  { id:'announcement', icon:'📢', labelHe:'הודעה',      labelEn:'Announcement',mDate:false, mTime:false, mLoc:false, hasGenderFilter:false },
-  { id:'other',        icon:'📝', labelHe:'אחר',         labelEn:'Other',       mDate:false, mTime:false, mLoc:false, hasGenderFilter:false },
+  { id:'birthday',     icon:'🎂', labelHe:'יום הולדת', labelEn:'Birthday',    mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:true,  illustration:'event-icons/birthday.png' },
+  { id:'trip',         icon:'🚌', labelHe:'טיול',       labelEn:'Trip',        mDate:true,  mTime:false, mLoc:false, hasGenderFilter:false, illustration:'event-icons/trip.png' },
+  { id:'party',        icon:'🎉', labelHe:'מסיבה',      labelEn:'Party',       mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:false, illustration:'event-icons/party.png' },
+  { id:'announcement', icon:'📢', labelHe:'הודעה',      labelEn:'Announcement',mDate:false, mTime:false, mLoc:false, hasGenderFilter:false, illustration:'event-icons/announcement.png' },
+  { id:'other',        icon:'📝', labelHe:'אחר',         labelEn:'Other',       mDate:false, mTime:false, mLoc:false, hasGenderFilter:false, illustration:'event-icons/other.png' },
+  // 'classEvent' also appears elsewhere as an unrelated FCM notification-type tag and an unrelated
+  // calendar-merge boolean flag — same string, different namespace, no functional collision.
+  { id:'classEvent',   icon:'📅', labelHe:'אירוע כיתתי', labelEn:'Class event', mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:false, illustration:'event-icons/class-event.png' },
 ];
 let _eventTypesCfg = _DEFAULT_EVENT_TYPES.map(t => ({ ...t, enabled:true }));
 let _evtCfgLoaded  = false;
 
 async function loadEventTypesCfg() {
   try {
-    const snap = await fbDb.collection('appConfig').doc('eventTypes').get();
-    if (snap.exists && Array.isArray(snap.data().types) && snap.data().types.length) {
-      _eventTypesCfg = snap.data().types;
-    }
+    const snap  = await fbDb.collection('appConfig').doc('eventTypes').get();
+    const saved = (snap.exists && Array.isArray(snap.data().types)) ? snap.data().types : [];
+    if (!saved.length) return; // no saved doc (or empty) — keep in-memory defaults as-is
+
+    const savedById = new Map(saved.map(t => [t.id, t]));
+    // Base: current code defaults (so a new field like `illustration`, or a brand-new type like
+    // `classEvent`, automatically reaches families whose appConfig/eventTypes doc already exists).
+    // Overlay: saved per-type overrides (icon/label/flags/enabled edits made via the admin UI).
+    _eventTypesCfg = _DEFAULT_EVENT_TYPES.map(def => {
+      const override = savedById.get(def.id);
+      return override ? { ...def, ...override } : { ...def, enabled: true };
+    });
+    // Preserve fully-custom types added via the admin "+ הוסף סוג אירוע" button (their id isn't
+    // in _DEFAULT_EVENT_TYPES at all, so the map() above never sees them).
+    const defaultIds = new Set(_DEFAULT_EVENT_TYPES.map(d => d.id));
+    saved.filter(t => !defaultIds.has(t.id)).forEach(t => _eventTypesCfg.push(t));
   } catch(e) { /* keep defaults */ }
 }
 async function _saveEventTypesCfg() {
@@ -3313,6 +3334,9 @@ function eventTypeName(type) {
   const cfg = _eventTypesCfg.find(e => e.id === type);
   if (cfg) return getLang() === 'he' ? (cfg.labelHe || cfg.id) : (cfg.labelEn || cfg.labelHe || cfg.id);
   return type;
+}
+function eventTypeIllustration(type) {
+  return _eventTypesCfg.find(e=>e.id===type)?.illustration || 'event-icons/other.png';
 }
 function classLabelFromId(classId) {
   if (!classId) return '';
@@ -3559,6 +3583,57 @@ function _authorAvatar(name) {
   return `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:${color}22;color:${color};font-size:18px;font-weight:800;border-radius:50%">${letter}</span>`;
 }
 
+// Resolves "whose family is this" for an attendee familyUid into display avatar+label,
+// reusing the same lookup renderPostCard already does for the post author.
+function _myKidInClass(cid) {
+  return getKids().map(n=>getMembers().find(m=>m.name===n)).find(m=>classIdFor(m?.school)===cid);
+}
+function _familyAvatarForUid(uid, cid) {
+  if (uid === S.uid) {
+    const myKid = _myKidInClass(cid);
+    return { html: getAvatar(myKid?.name), label: myKid?.name || S.user };
+  }
+  const mate = (_commCache[cid]?.classmates || []).find(c => c.familyUid === uid);
+  const label = mate?.kidName || mate?.familyName || '?';
+  return { html: _authorAvatar(label), label };
+}
+
+function _attendSectionHtml(ev, scope, scopeId, cid) {
+  if (!ev.date) return ''; // doesn't apply to date-less announcement/other posts
+  const attendees = ev.attendees || [];
+  const readOnly  = isKid() && _isOwner();
+  const iAttend   = attendees.includes(S.uid);
+  const shown     = attendees.slice(0, 6).map(uid => _familyAvatarForUid(uid, cid).html);
+  return `<div class="post-card-attend">
+    <div class="post-card-section-label">${t('commWhosAttending')}</div>
+    <div class="post-card-attend-row">
+      <div class="post-card-attend-avatars">
+        ${shown.map(html => `<span class="post-card-attend-avatar">${html}</span>`).join('')}
+        ${attendees.length ? `<span class="post-card-attend-count">${attendees.length}</span>` : ''}
+      </div>
+      <button class="post-card-attend-btn${iAttend ? ' post-card-attend-active' : ''}${readOnly ? ' post-attend-readonly' : ''}"
+        ${readOnly ? '' : `onclick="toggleAttendance('${scope}','${scopeId}','${ev.id}')"`}>
+        ${t('commImAttending')}
+      </button>
+    </div>
+  </div>`;
+}
+
+function _celebrantsHtml(ev) {
+  if (!ev.celebrants?.length) return '';
+  return `<div class="post-card-celebrants">
+    <div class="post-card-section-label">${t('commWhosCelebrating')}</div>
+    <div class="post-card-celebrants-grid">
+      ${ev.celebrants.map(c => `
+        <div class="post-card-celebrant">
+          <span class="post-card-celebrant-avatar">${_authorAvatar(c.kidName)}</span>
+          <span class="post-card-celebrant-name">${esc(c.kidName)}</span>
+          ${c.paybox ? `<a class="paybox-btn" href="${esc(c.paybox)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
 function renderPostCard(ev, cid) {
   const cache    = _commCache[cid] || {};
   const canDel   = isParent() && ev.postedBy?.familyUid === S.uid;
@@ -3574,23 +3649,30 @@ function renderPostCard(ev, cid) {
     : _authorAvatar(ev.postedBy?.firstName || '?');
 
   const scopeTag = scopeBadge(scope);
-  return `<div class="post-card" data-ev-id="${ev.id}">
+  return `<div class="post-card" data-ev-id="${ev.id}" data-cid="${esc(cid)}">
     <div class="post-card-header">
       <div class="post-card-avatar">${avatarHtml}</div>
       <div class="post-card-meta">
         <div class="post-card-author">${esc(author)}</div>
         ${kidName ? `<div class="post-card-child">${esc(kidName)}</div>` : ''}
-        <div class="post-card-sub">${eventTypeIcon(ev.type)} ${esc(classLabelFromId(cid))}${ago ? ' · ' + ago : ''}${scopeTag ? ' ' + scopeTag : ''}</div>
+        <div class="post-card-sub">${esc(classLabelFromId(cid))}${ago ? ' · ' + ago : ''}${scopeTag ? ' ' + scopeTag : ''}</div>
       </div>
       ${canDel ? `<button class="post-card-del" onclick="deleteClassEvent('${scope}','${sid}','${ev.id}')">×</button>` : ''}
     </div>
     <div class="post-card-body">
+      <span class="post-card-type-badge">${eventTypeIcon(ev.type)} ${esc(eventTypeName(ev.type))}</span>
       <div class="post-card-title">${esc(ev.title)}</div>
-      ${ev.location ? `<div class="post-card-location">${_ico.pin} ${esc(ev.location)}</div>` : ''}
+      <div class="post-card-illustration"><img src="${eventTypeIllustration(ev.type)}" alt="" loading="lazy"></div>
       ${ev.note ? `<div class="post-card-note">${esc(ev.note)}</div>` : ''}
+      ${(ev.location || ev.date || ev.time) ? `<div class="post-card-info-row">
+        ${ev.location ? `<span class="post-card-info-pill">${_ico.pin} ${esc(ev.location)}</span>` : ''}
+        ${ev.date ? `<span class="post-card-info-pill">📅 ${fmtEventDate(ev.date)}</span>` : ''}
+        ${ev.time ? `<span class="post-card-info-pill">🕐 ${ev.time}</span>` : ''}
+      </div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
-    ${ev.date || ev.time ? `<div class="post-card-date">${ev.date ? '📅 ' + fmtEventDate(ev.date) : ''}${ev.time ? (ev.date ? ' · ' : '') + '🕐 ' + ev.time : ''}</div>` : ''}
+    ${_celebrantsHtml(ev)}
+    ${_attendSectionHtml(ev, scope, sid, cid)}
     <div class="post-card-reactions">
       ${_reactionBtns(ev, scope, sid)}
     </div>
@@ -3688,6 +3770,39 @@ async function toggleReaction(scope, scopeId, evId, reactionKey) {
       update.likedBy = firebase.firestore.FieldValue.arrayRemove(S.uid);
     await ref.update(update);
   } catch(e) { console.error('toggleReaction:', e); }
+}
+
+async function toggleAttendance(scope, scopeId, evId) {
+  if (isKid() && _isOwner()) return; // read-only in kid-impersonated view, mirrors toggleReaction
+  const collName = scope === 'grade' ? 'schoolGrades' : scope === 'school' ? 'schools' : 'schoolClasses';
+  const ref = fbDb.collection(collName).doc(scopeId).collection('events').doc(evId);
+  const allCached = Object.values(_commCache).flatMap(c => [...(c.events||[]),...(c.gradeEvents||[]),...(c.schoolEvents||[])]);
+  const ev = allCached.find(e => e.id === evId);
+  if (!ev) return;
+
+  const attending = (ev.attendees || []).includes(S.uid);
+
+  // Optimistic update — mutate cache immediately (same pattern as toggleReaction)
+  ev.attendees = attending
+    ? (ev.attendees || []).filter(u => u !== S.uid)
+    : [...(ev.attendees || []), S.uid];
+
+  // Re-render just this card's attendance section
+  const cardEl = document.querySelector(`.post-card[data-ev-id="${evId}"]`);
+  if (cardEl) {
+    const cid = cardEl.dataset.cid;
+    const section = cardEl.querySelector('.post-card-attend');
+    if (section) section.outerHTML = _attendSectionHtml(ev, scope, scopeId, cid);
+  }
+
+  // Sync to Firestore in background
+  try {
+    await ref.update({
+      attendees: attending
+        ? firebase.firestore.FieldValue.arrayRemove(S.uid)
+        : firebase.firestore.FieldValue.arrayUnion(S.uid),
+    });
+  } catch(e) { console.error('toggleAttendance:', e); }
 }
 
 function filterClassmates(cid, q) {
@@ -4121,6 +4236,22 @@ function renderCommCard(kid) {
       </div>` : `<input type="hidden" id="commEvScope_${cid}" value="class">`}
       <input class="auth-input" id="commEvLocation_${cid}" placeholder="📍 מיקום (אופציונלי)" style="margin-bottom:6px" oninput="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
       <input class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" style="margin-bottom:6px">
+      ${cache.classmates.length ? `
+      <div class="comm-celeb-picker" id="commEvCelebWrap_${cid}" style="margin-bottom:6px">
+        <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">${t('commWhosCelebrating')}</div>
+        <div id="commEvCelebList_${cid}">
+          ${cache.classmates.map((c,i) => `
+            <div class="comm-celeb-row">
+              <label class="comm-celeb-check-label">
+                <input type="checkbox" class="comm-celeb-check" data-uid="${esc(c.familyUid)}" data-kid="${esc(c.kidName)}"
+                  onchange="onCelebCheckToggle('${cid}', ${i})">
+                ${esc(c.kidName)} ${esc(c.familyName||'')}
+              </label>
+              <input type="url" class="auth-input comm-celeb-paybox" id="commEvCelebPaybox_${cid}_${i}"
+                placeholder="${t('commEventPaybox')}" dir="ltr" style="display:none;margin-top:4px">
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
       <input class="auth-input" id="commEvPaybox_${cid}" placeholder="${t('commEventPaybox')}" style="margin-bottom:10px" type="url" dir="ltr">
       <div id="commEvError_${cid}" style="display:none;font-size:12px;color:var(--error);font-weight:700;margin-bottom:8px;padding:6px 10px;background:var(--error-bg);border-radius:8px"></div>
       <div style="display:flex;gap:8px">
@@ -4222,6 +4353,21 @@ function onCommEvTypeChange(cid) {
   if (dateHint) dateHint.style.display = typeCfg.mDate ? 'none' : '';
 }
 
+function onCelebCheckToggle(cid, i) {
+  // Resolve the container via el() first — cid contains literal "~~", which breaks a raw
+  // CSS selector string (parsed as the general-sibling combinator). Never interpolate cid
+  // directly into a querySelector string.
+  const rows = el('commEvCelebList_' + cid)?.querySelectorAll('.comm-celeb-row');
+  const row  = rows?.[i];
+  if (!row) return;
+  const checked = row.querySelector('.comm-celeb-check')?.checked;
+  const paybox  = row.querySelector('.comm-celeb-paybox');
+  if (paybox) {
+    paybox.style.display = checked ? '' : 'none';
+    if (!checked) paybox.value = ''; // unchecking always clears — no orphaned paybox state
+  }
+}
+
 function matchesGenderFilter(ev, kidName) {
   if (!ev.genderFilter || ev.genderFilter === 'all') return true;
   // Poster always sees their own event
@@ -4300,6 +4446,16 @@ async function submitClassEvent(cid) {
   const note       = el('commEvNote_'   + cid)?.value.trim() || '';
   const payboxRaw  = el('commEvPaybox_' + cid)?.value.trim() || '';
   const payboxUrl  = payboxRaw && (payboxRaw.startsWith('http://') || payboxRaw.startsWith('https://')) ? payboxRaw : '';
+  const celebrants = [];
+  el('commEvCelebList_' + cid)?.querySelectorAll('.comm-celeb-row').forEach(row => {
+    const chk = row.querySelector('.comm-celeb-check');
+    if (!chk?.checked) return;
+    const celebPayboxRaw = row.querySelector('.comm-celeb-paybox')?.value.trim() || '';
+    const celebPaybox = celebPayboxRaw && (celebPayboxRaw.startsWith('http://') || celebPayboxRaw.startsWith('https://')) ? celebPayboxRaw : '';
+    const entry = { familyUid: chk.dataset.uid, kidName: chk.dataset.kid };
+    if (celebPaybox) entry.paybox = celebPaybox;
+    celebrants.push(entry);
+  });
   const typeCfg  = _eventTypesCfg.find(t => t.id === type) || {};
   const genderFilter = typeCfg.hasGenderFilter
     ? (document.querySelector(`input[name="commEvGender_${cid}"]:checked`)?.value || 'all')
@@ -4326,9 +4482,10 @@ async function submitClassEvent(cid) {
   if (time) docData.time = time;
   if (location) docData.location = location;
   if (payboxUrl) docData.payboxUrl = payboxUrl;
+  if (celebrants.length) docData.celebrants = celebrants;
 
   // Resolve target collection and document ID
-  const kid = getKids().map(n=>getMembers().find(m=>m.name===n)).find(m=>classIdFor(m?.school)===cid);
+  const kid = _myKidInClass(cid);
   let collName = 'schoolClasses', docId = cid;
   if (scope === 'grade') { collName = 'schoolGrades'; docId = gradeIdFor(kid?.school) || cid; }
   if (scope === 'school') { collName = 'schools'; docId = schoolIdFor(kid?.school) || cid; }
