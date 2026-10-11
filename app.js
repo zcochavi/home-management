@@ -6495,7 +6495,7 @@ function renderHome() {
   // Fallback: if only one unique classCode exists in stored homework and only
   // one kid is mapped in webtop, all items belong to that kid.
   const _wtCodeToKid = {};
-  if (isParent() && S.filter === 'All') {
+  if (isParent()) {
     getKids().forEach(k => {
       const cc = getMembers().find(m => m.name === k)?.webtopClassCode;
       if (cc) _wtCodeToKid[cc] = k;
@@ -6512,9 +6512,9 @@ function renderHome() {
     ? combined.slice(0,5).map(h => {
         if (h._type === 'wt') {
           const parts = [];
-          if (isParent() && S.filter === 'All') {
+          if (isParent()) {
             const kid = _wtCodeToKid[h.classCode];
-            if (kid) parts.push(esc(kid));
+            if (kid && S.filter !== kid) parts.push(esc(kid));
           }
           if (h.subject) parts.push(`<span style="${webtopSubjectStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(h.subject)}</span>`);
           if (h.date) parts.push(fmtDate(h.date.slice(0,10)));
@@ -6531,7 +6531,7 @@ function renderHome() {
         }
         if (h._type === 'class') {
           const parts = [];
-          if (isParent() && S.filter === 'All') parts.push(esc(h._kid));
+          if (isParent() && S.filter !== h._kid) parts.push(esc(h._kid));
           if (h.subject) parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);
           if (h.due) parts.push(fmtDate(h.due));
           const canToggle = isParent() || h._kid === S.user;
@@ -6549,7 +6549,7 @@ function renderHome() {
           <div class="check-box ${canToggleHw?'':'readonly'}" ${canToggleHw?`onclick="toggleHW(${h.id})"`:''}></div>
           <div class="task-body">
             <div class="task-text">${esc(h.desc)}</div>
-            <div class="task-sub">${(()=>{const parts=[];if(isParent()&&h.child)parts.push(esc(h.child));if(h.subject)parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);if(h.due)parts.push(fmtDate(h.due));return parts.join(' · ');})()}</div>
+            <div class="task-sub">${(()=>{const parts=[];if(isParent()&&h.child&&S.filter!==h.child)parts.push(esc(h.child));if(h.subject)parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);if(h.due)parts.push(fmtDate(h.due));return parts.join(' · ');})()}</div>
           </div>
           <div class="home-type-icon home-type-hw">📚</div>
         </div>`;
@@ -7918,6 +7918,18 @@ let _hwHistOpen = false;
 let _hwSearch = '';
 let _hwSubjectFilter = null;
 let _hwScope = 'personal'; // 'personal' | 'class' — class only selectable when Webtop isn't managing class homework
+let _hwAddOpen = false; // add-homework form is collapsed behind a FAB, like Lists/Community
+
+function toggleHwAddForm() {
+  _hwAddOpen = !_hwAddOpen;
+  renderHomework();
+  if (_hwAddOpen) {
+    setTimeout(() => {
+      el('addHwForm')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      el('hwDesc')?.focus();
+    }, 50);
+  }
+}
 
 function fmtDoneAt(ts) {
   if (!ts) return '';
@@ -8020,6 +8032,13 @@ function renderHomework(){
     );
   }
 
+  // Once the current child has marked a class item done, it belongs in history only —
+  // not left inline (struck-through) in the active class list.
+  if (classCid && S.child) {
+    const myDoneKey = classMemberId(S.uid, S.child);
+    classHw = classHw.filter(h => !(h.doneBy && h.doneBy[myDoneKey]));
+  }
+
   // Webtop homework section
   const webtopSec=el('hwWebtopSection');
   const webtopListEl=el('hwWebtopList');
@@ -8106,11 +8125,18 @@ function renderHomework(){
     el('hwList').innerHTML=`<div class="empty">${t('noKids')}</div>`;
     el('addHwForm').style.display='none';
     el('hwHistoryWrap').innerHTML='';
+    const _hf0=el('hwFab'); if(_hf0) _hf0.style.display='none';
     return;
   }
   el('hwCardTitle').textContent=t('hwTitle',S.child);
   const canAdd=isParent()||S.child===S.user;
-  el('addHwForm').style.display=canAdd?'':'none';
+  const _hf=el('hwFab');
+  if(_hf){
+    _hf.style.display=(S.tab==='homework'&&canAdd)?'':'none';
+    _hf.classList.toggle('chore-fab-open', !!_hwAddOpen);
+  }
+  if(!canAdd) _hwAddOpen=false;
+  el('addHwForm').style.display=(canAdd&&_hwAddOpen)?'':'none';
 
   el('hwList').innerHTML=pending.length?pending.map(h=>{
     const can=isParent()||h.child===S.user;
@@ -8341,7 +8367,7 @@ async function addHomework(){
     S.homework.push({id:Date.now(),scope:'personal',child:S.child,subject:el('hwSubject').value,desc,due:el('hwDue').value,done:false});
     save();
   }
-  el('hwDesc').value='';renderHomework();renderHome();
+  el('hwDesc').value='';_hwAddOpen=false;renderHomework();renderHome();
 }
 
 // ════════════════════════════════════════
@@ -8776,6 +8802,7 @@ function switchTab(tab) {
   if (tab === 'analytics') renderAnalytics();
   if (tab === 'lists') renderLists();
   const _lf = el('listsFab'); if (_lf) _lf.style.display = tab === 'lists' ? '' : 'none';
+  if (tab !== 'homework') { const _hf = el('hwFab'); if (_hf) _hf.style.display = 'none'; }
   if (tab === 'homework' && getKids().includes(S.filter)) S.child = S.filter;
   if (tab === 'homework') renderHomework();
   if (_tutDefs()[tab]) setTimeout(() => _tutMaybeTrigger(tab), 700);
