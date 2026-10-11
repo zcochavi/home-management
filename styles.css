@@ -2121,17 +2121,17 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
   display: flex; gap: 6px; border-top: 1px solid var(--gray-100); padding-top: 10px;
 }
 .post-reaction {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 4px 2px; border: none; border-radius: var(--r-sm, 4px);
-  font-size: 13px; font-weight: 700; color: var(--gray-500);
-  background: none; cursor: pointer; transition: all var(--t-fast); font-family: inherit;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 12px; border: 1px solid var(--gray-200); border-radius: var(--r-pill);
+  font-size: 13px; font-weight: 700; color: var(--gray-600);
+  background: var(--surface); cursor: pointer; transition: all var(--t-fast); font-family: inherit;
 }
 .post-reaction-emoji { font-size: 16px; line-height: 1; }
 .post-reaction-count { font-size: 12px; font-weight: 700; }
-.post-reaction:hover { color: var(--primary-600); }
+.post-reaction:hover { background: var(--primary-50); border-color: var(--primary-200); }
 .post-reaction.post-reaction-readonly { cursor: default; pointer-events: none; opacity: 0.65; }
-.post-reaction.post-reaction-active { color: var(--primary-600); }
-.post-reaction.post-reaction-active:hover { color: var(--primary-700); }
+.post-reaction.post-reaction-active { border-color: var(--primary-300); background: var(--primary-50); color: var(--primary-600); }
+.post-reaction.post-reaction-active:hover { background: var(--primary-100); }
 @keyframes reaction-bounce { 0%{transform:scale(1)} 35%{transform:scale(1.35)} 65%{transform:scale(0.92)} 100%{transform:scale(1)} }
 .post-reaction-bounce { animation: reaction-bounce 0.35s ease; }
 
