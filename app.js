@@ -148,6 +148,8 @@ const STRINGS = {
     commApplicationApprove:'✓ אשר',
     commApplicationDeny:'✕ דחה',
     commMyApplication:'המועמדות שלך',
+    commApplicationApprovedMsg:'המועמדות שלך לוועד אושרה',
+    commApplicationDeniedMsg:'המועמדות שלך לוועד נדחתה',
     commApplicationExpires: d => `פג תוקף: ${d}`,
     commCancelApplication:'בטל מועמדות',
     commLeaveCommittee:'עזוב ועד',
@@ -265,6 +267,8 @@ const STRINGS = {
     commApplicationApprove:'✓ Approve',
     commApplicationDeny:'✕ Deny',
     commMyApplication:'Your Application',
+    commApplicationApprovedMsg:'Your committee application was approved',
+    commApplicationDeniedMsg:'Your committee application was denied',
     commApplicationExpires: d => `Expires: ${d}`,
     commCancelApplication:'Cancel Application',
     commLeaveCommittee:'Leave Committee',
@@ -3465,6 +3469,21 @@ function subscribeToCommClass(cid) {
       }, e => console.warn('[community] applications:', e.code))
   );
 
+  // Live: my own applications regardless of status — lets the applicant see the
+  // outcome (approved/denied) even after it leaves the pending list above.
+  if (isParent()) {
+    _commListeners[cid].push(
+      fbDb.collection('committeeApplications')
+        .where('classId','==',cid).where('applicantUid','==',S.uid)
+        .onSnapshot(snap => {
+          if (!_commCache[cid]) return;
+          _commCache[cid].myApps = snap.docs.map(d => ({id:d.id,...d.data()}))
+            .sort((a,b) => (b.appliedAt?.toMillis?.()||0) - (a.appliedAt?.toMillis?.()||0));
+          rerender();
+        }, e => console.warn('[community] myApps:', e.code))
+    );
+  }
+
   // Live: class members — updates classmates list in real-time and notifies on new joins
   let _membersInited = false;
   _commListeners[cid].push(
@@ -3575,7 +3594,7 @@ async function loadCommunityData(kidsWithSchool) {
       subscribeToCommClass(cid);
     } catch(e) {
       console.error('loadCommunityData error (classId=' + cid + '):', e);
-      _commCache[cid] = { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[], applications:[], homework:[], schedule:null, loadedAt:Date.now(), error: e.code||e.message };
+      _commCache[cid] = { classmates:[], classmateRoles:{}, events:[], gradeEvents:[], schoolEvents:[], pendingEvents:[], applications:[], myApps:[], homework:[], schedule:null, loadedAt:Date.now(), error: e.code||e.message };
     }
   }));
 }
@@ -4201,26 +4220,38 @@ function renderCommCard(kid) {
 
     ${(() => {
   const apps = cache.applications || [];
-  if (!apps.length && (isCommitteeFor(cid) || isAdmin())) return '';
-  if (!apps.length && !isCommitteeFor(cid)) {
+  const myLatestApp = (cache.myApps || [])[0]; // most recent application regardless of status
+  const myPendingApp = apps.find(a => a.applicantUid === S.uid);
+  const showResolvedBanner = !myPendingApp && myLatestApp && myLatestApp.status !== 'pending';
+  const canApply = isParent() && !isCommitteeFor(cid) && !myPendingApp;
+
+  if (!apps.length && !showResolvedBanner) {
+    if (isCommitteeFor(cid) || isAdmin()) return '';
     // Show apply button if this parent hasn't applied yet and isn't committee for this class
     if (!isParent() || isCommitteeFor(cid)) return '';
     return `<button class="apply-committee-btn" onclick="applyForCommittee('${cid}')">${t('commApplyCommittee')}</button>`;
   }
-  const myApp = apps.find(a => a.applicantUid === S.uid);
   const otherApps = apps.filter(a => a.applicantUid !== S.uid);
-  const canApply = isParent() && !isCommitteeFor(cid) && !myApp;
   let html = `<div class="comm-section-label" style="margin-top:16px">${t('commApplicationsTitle')}</div>`;
-  if (myApp) {
-    const pct = Math.min(100, Math.round((myApp.voteCount||0)/15*100));
-    const exp = myApp.expiresAt?.toDate ? fmtDate(myApp.expiresAt.toDate().toISOString().slice(0,10)) : '';
+  if (myPendingApp) {
+    const pct = Math.min(100, Math.round((myPendingApp.voteCount||0)/15*100));
+    const exp = myPendingApp.expiresAt?.toDate ? fmtDate(myPendingApp.expiresAt.toDate().toISOString().slice(0,10)) : '';
     html += `<div class="application-row">
       <div class="application-info">
         <div class="application-name">✋ ${t('commMyApplication')}</div>
-        <div class="application-meta">${myApp.voteCount||0}/15 תמיכות${exp ? ' · ' + t('commApplicationExpires',exp) : ''}</div>
+        <div class="application-meta">${myPendingApp.voteCount||0}/15 תמיכות${exp ? ' · ' + t('commApplicationExpires',exp) : ''}</div>
         <div class="application-progress"><div class="application-progress-fill" style="width:${pct}%"></div></div>
       </div>
-      <button class="comm-cancel-app-btn" onclick="cancelCommitteeApplication('${myApp.id}','${cid}')">${t('commCancelApplication')}</button>
+      <button class="comm-cancel-app-btn" onclick="cancelCommitteeApplication('${myPendingApp.id}','${cid}')">${t('commCancelApplication')}</button>
+    </div>`;
+  } else if (showResolvedBanner) {
+    const approved = myLatestApp.status === 'approved';
+    const dt = myLatestApp.decidedAt?.toDate ? fmtDate(myLatestApp.decidedAt.toDate().toISOString().slice(0,10)) : '';
+    html += `<div class="application-row">
+      <div class="application-info">
+        <div class="application-name">${approved ? '✅' : '❌'} ${t(approved ? 'commApplicationApprovedMsg' : 'commApplicationDeniedMsg')}</div>
+        ${dt ? `<div class="application-meta">${esc(dt)}</div>` : ''}
+      </div>
     </div>`;
   }
   otherApps.forEach(app => {
@@ -5189,6 +5220,18 @@ function _adminLogHtml(combined) {
     }
     const approved = entry.action === 'approved';
     const dt = entry.actionAt?.toDate ? entry.actionAt.toDate().toLocaleString('he-IL') : '';
+    if (entry.type === 'application') {
+      const actor = entry.decisionReason === 'vote' ? 'בהצבעת הורים'
+        : entry.decisionReason === 'expired' ? '(פג תוקף)'
+        : 'ע"י ' + (esc(personFullName(entry.actionBy)) || 'מנהל המערכת');
+      return `<div class="admin-log-row">
+        <div class="admin-log-title">
+          <span class="admin-log-badge ${approved ? 'approved' : 'rejected'}">${approved ? '✓ אושר' : '✕ נדחה'}</span>מועמדות לוועד: ${esc(entry.applicantName||'?')}
+        </div>
+        <div class="admin-log-meta">${approved ? 'אושר' : 'נדחה'} ${actor} · ${dt}</div>
+        <div class="admin-log-meta">כיתה: ${esc(classLabelFromId(entry.classId||''))}</div>
+      </div>`;
+    }
     return `<div class="admin-log-row">
       <div class="admin-log-title">
         <span class="admin-log-badge ${approved ? 'approved' : 'rejected'}">${approved ? '✓ אושר' : '✕ נדחה'}</span>${esc(entry.eventTitle)}
