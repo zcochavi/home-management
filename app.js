@@ -122,6 +122,7 @@ const STRINGS = {
     commPayNow:'💳 שלם עכשיו',
     commPayboxGift:'🎁 לתשלום ב-Paybox',
     commWhosCelebrating:'🎂 מי חוגגים?',
+    commCelebrantsPickerLabel:'🎂 מי חוגגים? (ניתן לסמן עד 3)',
     commWhosAttending:'מי מגיע?',
     commAttendingCount:'מגיעים',
     commAttendHint:'לחצו לסמן הגעה (רק מי שמגיע)',
@@ -238,6 +239,7 @@ const STRINGS = {
     commPayNow:'💳 Pay now',
     commPayboxGift:'🎁 Pay via Paybox',
     commWhosCelebrating:'🎂 Who\'s celebrating?',
+    commCelebrantsPickerLabel:'🎂 Who\'s celebrating? (up to 3)',
     commWhosAttending:'Who\'s coming?',
     commAttendingCount:'coming',
     commAttendHint:'Tap to mark you\'re coming (only if you\'re actually going)',
@@ -4259,9 +4261,10 @@ function renderCommCard(kid) {
       </div>` : `<input type="hidden" id="commEvScope_${cid}" value="class">`}
       <input class="auth-input" id="commEvLocation_${cid}" placeholder="📍 מיקום (אופציונלי)" style="margin-bottom:6px" oninput="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
       <input class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" style="margin-bottom:6px">
+      <input class="auth-input" id="commEvPaybox_${cid}" placeholder="${t('commEventPaybox')}" style="margin-bottom:6px" type="url" dir="ltr">
       ${cache.classmates.length ? `
-      <div class="comm-celeb-picker" id="commEvCelebWrap_${cid}" style="margin-bottom:6px">
-        <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">${t('commWhosCelebrating')}</div>
+      <div class="comm-celeb-picker" id="commEvCelebWrap_${cid}" style="margin-bottom:6px;display:${(getEventTypes()[0]?.id === 'birthday') ? '' : 'none'}">
+        <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">${t('commCelebrantsPickerLabel')}</div>
         <div id="commEvCelebList_${cid}">
           ${cache.classmates.map((c,i) => `
             <div class="comm-celeb-row">
@@ -4275,7 +4278,6 @@ function renderCommCard(kid) {
             </div>`).join('')}
         </div>
       </div>` : ''}
-      <input class="auth-input" id="commEvPaybox_${cid}" placeholder="${t('commEventPaybox')}" style="margin-bottom:10px" type="url" dir="ltr">
       <div id="commEvError_${cid}" style="display:none;font-size:12px;color:var(--error);font-weight:700;margin-bottom:8px;padding:6px 10px;background:var(--error-bg);border-radius:8px"></div>
       <div style="display:flex;gap:8px">
         <button class="auth-btn-main" style="flex:1;padding:10px" onclick="submitClassEvent('${cid}')">${t('commPost')}</button>
@@ -4374,6 +4376,8 @@ function onCommEvTypeChange(cid) {
   if (genderWrap) genderWrap.style.display = typeCfg.hasGenderFilter ? '' : 'none';
   const dateHint = el('commEvDateHint_' + cid);
   if (dateHint) dateHint.style.display = typeCfg.mDate ? 'none' : '';
+  const celebWrap = el('commEvCelebWrap_' + cid);
+  if (celebWrap) celebWrap.style.display = type === 'birthday' ? '' : 'none';
 }
 
 function onCelebCheckToggle(cid, i) {
@@ -4476,15 +4480,17 @@ async function submitClassEvent(cid) {
   const payboxRaw  = el('commEvPaybox_' + cid)?.value.trim() || '';
   const payboxUrl  = payboxRaw && (payboxRaw.startsWith('http://') || payboxRaw.startsWith('https://')) ? payboxRaw : '';
   const celebrants = [];
-  el('commEvCelebList_' + cid)?.querySelectorAll('.comm-celeb-row').forEach(row => {
-    const chk = row.querySelector('.comm-celeb-check');
-    if (!chk?.checked) return;
-    const celebPayboxRaw = row.querySelector('.comm-celeb-paybox')?.value.trim() || '';
-    const celebPaybox = celebPayboxRaw && (celebPayboxRaw.startsWith('http://') || celebPayboxRaw.startsWith('https://')) ? celebPayboxRaw : '';
-    const entry = { familyUid: chk.dataset.uid, kidName: chk.dataset.kid };
-    if (celebPaybox) entry.paybox = celebPaybox;
-    celebrants.push(entry);
-  });
+  if (type === 'birthday') {
+    el('commEvCelebList_' + cid)?.querySelectorAll('.comm-celeb-row').forEach(row => {
+      const chk = row.querySelector('.comm-celeb-check');
+      if (!chk?.checked) return;
+      const celebPayboxRaw = row.querySelector('.comm-celeb-paybox')?.value.trim() || '';
+      const celebPaybox = celebPayboxRaw && (celebPayboxRaw.startsWith('http://') || celebPayboxRaw.startsWith('https://')) ? celebPayboxRaw : '';
+      const entry = { familyUid: chk.dataset.uid, kidName: chk.dataset.kid };
+      if (celebPaybox) entry.paybox = celebPaybox;
+      celebrants.push(entry);
+    });
+  }
   const typeCfg  = _eventTypesCfg.find(t => t.id === type) || {};
   const genderFilter = typeCfg.hasGenderFilter
     ? (document.querySelector(`input[name="commEvGender_${cid}"]:checked`)?.value || 'all')
