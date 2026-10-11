@@ -3624,14 +3624,14 @@ function _attendSectionHtml(ev, scope, scopeId, cid) {
       ${attendees.length ? `<div class="post-card-attend-count">${attendees.length} ${t('commAttendingCount')}</div>` : '<div></div>'}
     </div>
     <div class="post-card-attend-row">
-      <div class="post-card-attend-avatars">
-        ${shown.map(html => `<span class="post-card-attend-avatar">${html}</span>`).join('')}
-        ${overflow > 0 ? `<span class="post-card-attend-more" dir="ltr">+${overflow}</span>` : ''}
-      </div>
       <button class="post-card-attend-btn${iAttend ? ' post-card-attend-active' : ''}${readOnly ? ' post-attend-readonly' : ''}"
         ${readOnly ? '' : `onclick="toggleAttendance('${scope}','${scopeId}','${ev.id}')"`}>
         ${iAttend ? '✓' : '🙋'} ${t('commImAttending')}
       </button>
+      <div class="post-card-attend-avatars">
+        ${shown.map(html => `<span class="post-card-attend-avatar">${html}</span>`).join('')}
+        ${overflow > 0 ? `<span class="post-card-attend-more" dir="ltr">+${overflow}</span>` : ''}
+      </div>
     </div>
   </div>`;
 }
