@@ -8777,6 +8777,7 @@ function switchTab(tab) {
   if (tab === 'lists') renderLists();
   const _lf = el('listsFab'); if (_lf) _lf.style.display = tab === 'lists' ? '' : 'none';
   if (tab === 'homework' && getKids().includes(S.filter)) S.child = S.filter;
+  if (tab === 'homework') renderHomework();
   if (_tutDefs()[tab]) setTimeout(() => _tutMaybeTrigger(tab), 700);
   // Stop presence auto-refresh when leaving analytics
   if (tab !== 'analytics' && _presenceRefreshTimer) {
