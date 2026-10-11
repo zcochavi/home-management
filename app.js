@@ -123,6 +123,7 @@ const STRINGS = {
     commPayboxGift:'🎁 לתשלום ב-Paybox',
     commWhosCelebrating:'🎂 מי חוגגים?',
     commWhosAttending:'מי מגיע?',
+    commAttendingCount:'מגיעים',
     commAttendHint:'לחצו לסמן הגעה (רק מי שמגיע)',
     commImAttending:'אני מגיע/ה',
     commNavigate:'נווט במפה',
@@ -238,6 +239,7 @@ const STRINGS = {
     commPayboxGift:'🎁 Pay via Paybox',
     commWhosCelebrating:'🎂 Who\'s celebrating?',
     commWhosAttending:'Who\'s coming?',
+    commAttendingCount:'coming',
     commAttendHint:'Tap to mark you\'re coming (only if you\'re actually going)',
     commImAttending:'I\'m attending',
     commNavigate:'Navigate',
@@ -3610,18 +3612,24 @@ function _attendSectionHtml(ev, scope, scopeId, cid) {
   const readOnly  = isKid() && _isOwner();
   const iAttend   = attendees.includes(S.uid);
   const shown     = attendees.slice(0, 6).map(uid => _familyAvatarForUid(uid, cid).html);
-  return `<div class="post-card-attend">
-    <div class="post-card-section-label">${t('commWhosAttending')}</div>
-    <div class="post-card-attend-hint">${t('commAttendHint')}</div>
-    <div class="post-card-info-panel post-card-attend-row">
+  const overflow  = attendees.length - shown.length;
+  return `<div class="post-card-attend post-card-info-panel">
+    <div class="post-card-attend-top">
+      <div class="post-card-attend-label-col">
+        <div class="post-card-section-label">${t('commWhosAttending')}</div>
+        <div class="post-card-attend-hint">${t('commAttendHint')}</div>
+      </div>
+      ${attendees.length ? `<div class="post-card-attend-count">${attendees.length} ${t('commAttendingCount')}</div>` : '<div></div>'}
+    </div>
+    <div class="post-card-attend-row">
+      <div class="post-card-attend-avatars">
+        ${shown.map(html => `<span class="post-card-attend-avatar">${html}</span>`).join('')}
+        ${overflow > 0 ? `<span class="post-card-attend-more" dir="ltr">+${overflow}</span>` : ''}
+      </div>
       <button class="post-card-attend-btn${iAttend ? ' post-card-attend-active' : ''}${readOnly ? ' post-attend-readonly' : ''}"
         ${readOnly ? '' : `onclick="toggleAttendance('${scope}','${scopeId}','${ev.id}')"`}>
         ${iAttend ? '✓' : '🙋'} ${t('commImAttending')}
       </button>
-      <div class="post-card-attend-avatars">
-        ${shown.map(html => `<span class="post-card-attend-avatar">${html}</span>`).join('')}
-        ${attendees.length ? `<span class="post-card-attend-count">${attendees.length}</span>` : ''}
-      </div>
     </div>
   </div>`;
 }
@@ -3678,10 +3686,10 @@ function renderPostCard(ev, cid) {
       ${(ev.location || ev.date || ev.time) ? `<div class="post-card-info-panel">
         ${ev.location ? `<div class="post-card-info-item">
           <span class="post-card-info-icon">${_ico.pin}</span>
-          <div><div>${esc(ev.location)}</div><a class="post-card-info-link" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.location)}" target="_blank" rel="noopener noreferrer">${t('commNavigate')}</a></div>
+          <div class="post-card-info-text"><div>${esc(ev.location)}</div><a class="post-card-info-link" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.location)}" target="_blank" rel="noopener noreferrer">${t('commNavigate')}</a></div>
         </div>` : ''}
-        ${ev.date ? `<div class="post-card-info-item"><span class="post-card-info-icon">📅</span><div>${fmtEventDate(ev.date)}</div></div>` : ''}
-        ${ev.time ? `<div class="post-card-info-item"><span class="post-card-info-icon">🕐</span><div>${esc(ev.time)}</div></div>` : ''}
+        ${ev.date ? `<div class="post-card-info-item"><span class="post-card-info-icon">📅</span><div class="post-card-info-text">${fmtEventDate(ev.date)}</div></div>` : ''}
+        ${ev.time ? `<div class="post-card-info-item"><span class="post-card-info-icon">🕐</span><div class="post-card-info-text">${esc(ev.time)}</div></div>` : ''}
       </div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
