@@ -3598,14 +3598,21 @@ function _authorAvatar(name) {
 function _myKidInClass(cid) {
   return getKids().map(n=>getMembers().find(m=>m.name===n)).find(m=>classIdFor(m?.school)===cid);
 }
+// "<first name> <first letter of last name>." — e.g. "נויה זילכה" -> "נויה ז."
+function _chipTooltipName(firstName, lastName) {
+  const first = (firstName || '').trim();
+  const lastInitial = (lastName || '').trim()[0];
+  return [first, lastInitial ? lastInitial + '.' : ''].filter(Boolean).join(' ');
+}
 function _familyAvatarForUid(uid, cid) {
   if (uid === S.uid) {
     const myKid = _myKidInClass(cid);
-    return { html: getAvatar(myKid?.name), label: myKid?.name || S.user };
+    const name = myKid?.name || S.user;
+    return { html: getAvatar(name), label: name, tooltip: _chipTooltipName(name, familyData?.familyName) };
   }
   const mate = (_commCache[cid]?.classmates || []).find(c => c.familyUid === uid);
   const label = mate?.kidName || mate?.familyName || '?';
-  return { html: _authorAvatar(label), label };
+  return { html: _authorAvatar(label), label, tooltip: _chipTooltipName(mate?.kidName || label, mate?.familyName) };
 }
 
 function _attendSectionHtml(ev, scope, scopeId, cid) {
@@ -3613,7 +3620,7 @@ function _attendSectionHtml(ev, scope, scopeId, cid) {
   const attendees = ev.attendees || [];
   const readOnly  = isKid() && _isOwner();
   const iAttend   = attendees.includes(S.uid);
-  const shown     = attendees.slice(0, 6).map(uid => _familyAvatarForUid(uid, cid).html);
+  const shown     = attendees.slice(0, 6).map(uid => _familyAvatarForUid(uid, cid));
   const overflow  = attendees.length - shown.length;
   return `<div class="post-card-attend post-card-info-panel">
     <div class="post-card-attend-top">
@@ -3629,7 +3636,10 @@ function _attendSectionHtml(ev, scope, scopeId, cid) {
         ${iAttend ? '✓' : '🙋'} ${t('commImAttending')}
       </button>
       <div class="post-card-attend-avatars">
-        ${shown.map(html => `<span class="post-card-attend-avatar">${html}</span>`).join('')}
+        ${shown.map(a => `<span class="post-card-attend-chip" onclick="event.stopPropagation();this.classList.toggle('tt-open')">
+          <span class="post-card-attend-avatar">${a.html}</span>
+          ${a.tooltip ? `<span class="post-card-attend-tooltip">${esc(a.tooltip)}</span>` : ''}
+        </span>`).join('')}
         ${overflow > 0 ? `<span class="post-card-attend-more" dir="ltr">+${overflow}</span>` : ''}
       </div>
     </div>
