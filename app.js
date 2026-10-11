@@ -3286,21 +3286,36 @@ async function renderMgmtCommunity() {
 
 // ── Community Tab ─────────────────────────
 const _DEFAULT_EVENT_TYPES = [
-  { id:'birthday',     icon:'🎂', labelHe:'יום הולדת', labelEn:'Birthday',    mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:true  },
-  { id:'trip',         icon:'🚌', labelHe:'טיול',       labelEn:'Trip',        mDate:true,  mTime:false, mLoc:false, hasGenderFilter:false },
-  { id:'party',        icon:'🎉', labelHe:'מסיבה',      labelEn:'Party',       mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:false },
-  { id:'announcement', icon:'📢', labelHe:'הודעה',      labelEn:'Announcement',mDate:false, mTime:false, mLoc:false, hasGenderFilter:false },
-  { id:'other',        icon:'📝', labelHe:'אחר',         labelEn:'Other',       mDate:false, mTime:false, mLoc:false, hasGenderFilter:false },
+  { id:'birthday',     icon:'🎂', labelHe:'יום הולדת', labelEn:'Birthday',    mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:true,  illustration:'event-icons/birthday.png' },
+  { id:'trip',         icon:'🚌', labelHe:'טיול',       labelEn:'Trip',        mDate:true,  mTime:false, mLoc:false, hasGenderFilter:false, illustration:'event-icons/trip.png' },
+  { id:'party',        icon:'🎉', labelHe:'מסיבה',      labelEn:'Party',       mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:false, illustration:'event-icons/party.png' },
+  { id:'announcement', icon:'📢', labelHe:'הודעה',      labelEn:'Announcement',mDate:false, mTime:false, mLoc:false, hasGenderFilter:false, illustration:'event-icons/announcement.png' },
+  { id:'other',        icon:'📝', labelHe:'אחר',         labelEn:'Other',       mDate:false, mTime:false, mLoc:false, hasGenderFilter:false, illustration:'event-icons/other.png' },
+  // 'classEvent' also appears elsewhere as an unrelated FCM notification-type tag and an unrelated
+  // calendar-merge boolean flag — same string, different namespace, no functional collision.
+  { id:'classEvent',   icon:'📅', labelHe:'אירוע כיתתי', labelEn:'Class event', mDate:true,  mTime:true,  mLoc:true,  hasGenderFilter:false, illustration:'event-icons/class-event.png' },
 ];
 let _eventTypesCfg = _DEFAULT_EVENT_TYPES.map(t => ({ ...t, enabled:true }));
 let _evtCfgLoaded  = false;
 
 async function loadEventTypesCfg() {
   try {
-    const snap = await fbDb.collection('appConfig').doc('eventTypes').get();
-    if (snap.exists && Array.isArray(snap.data().types) && snap.data().types.length) {
-      _eventTypesCfg = snap.data().types;
-    }
+    const snap  = await fbDb.collection('appConfig').doc('eventTypes').get();
+    const saved = (snap.exists && Array.isArray(snap.data().types)) ? snap.data().types : [];
+    if (!saved.length) return; // no saved doc (or empty) — keep in-memory defaults as-is
+
+    const savedById = new Map(saved.map(t => [t.id, t]));
+    // Base: current code defaults (so a new field like `illustration`, or a brand-new type like
+    // `classEvent`, automatically reaches families whose appConfig/eventTypes doc already exists).
+    // Overlay: saved per-type overrides (icon/label/flags/enabled edits made via the admin UI).
+    _eventTypesCfg = _DEFAULT_EVENT_TYPES.map(def => {
+      const override = savedById.get(def.id);
+      return override ? { ...def, ...override } : { ...def, enabled: true };
+    });
+    // Preserve fully-custom types added via the admin "+ הוסף סוג אירוע" button (their id isn't
+    // in _DEFAULT_EVENT_TYPES at all, so the map() above never sees them).
+    const defaultIds = new Set(_DEFAULT_EVENT_TYPES.map(d => d.id));
+    saved.filter(t => !defaultIds.has(t.id)).forEach(t => _eventTypesCfg.push(t));
   } catch(e) { /* keep defaults */ }
 }
 async function _saveEventTypesCfg() {
@@ -3313,6 +3328,9 @@ function eventTypeName(type) {
   const cfg = _eventTypesCfg.find(e => e.id === type);
   if (cfg) return getLang() === 'he' ? (cfg.labelHe || cfg.id) : (cfg.labelEn || cfg.labelHe || cfg.id);
   return type;
+}
+function eventTypeIllustration(type) {
+  return _eventTypesCfg.find(e=>e.id===type)?.illustration || 'event-icons/other.png';
 }
 function classLabelFromId(classId) {
   if (!classId) return '';
@@ -3574,23 +3592,28 @@ function renderPostCard(ev, cid) {
     : _authorAvatar(ev.postedBy?.firstName || '?');
 
   const scopeTag = scopeBadge(scope);
-  return `<div class="post-card" data-ev-id="${ev.id}">
+  return `<div class="post-card" data-ev-id="${ev.id}" data-cid="${esc(cid)}">
     <div class="post-card-header">
       <div class="post-card-avatar">${avatarHtml}</div>
       <div class="post-card-meta">
         <div class="post-card-author">${esc(author)}</div>
         ${kidName ? `<div class="post-card-child">${esc(kidName)}</div>` : ''}
-        <div class="post-card-sub">${eventTypeIcon(ev.type)} ${esc(classLabelFromId(cid))}${ago ? ' · ' + ago : ''}${scopeTag ? ' ' + scopeTag : ''}</div>
+        <div class="post-card-sub">${esc(classLabelFromId(cid))}${ago ? ' · ' + ago : ''}${scopeTag ? ' ' + scopeTag : ''}</div>
       </div>
       ${canDel ? `<button class="post-card-del" onclick="deleteClassEvent('${scope}','${sid}','${ev.id}')">×</button>` : ''}
     </div>
     <div class="post-card-body">
+      <span class="post-card-type-badge">${eventTypeIcon(ev.type)} ${esc(eventTypeName(ev.type))}</span>
       <div class="post-card-title">${esc(ev.title)}</div>
-      ${ev.location ? `<div class="post-card-location">${_ico.pin} ${esc(ev.location)}</div>` : ''}
+      <div class="post-card-illustration"><img src="${eventTypeIllustration(ev.type)}" alt="" loading="lazy"></div>
       ${ev.note ? `<div class="post-card-note">${esc(ev.note)}</div>` : ''}
+      ${(ev.location || ev.date || ev.time) ? `<div class="post-card-info-row">
+        ${ev.location ? `<span class="post-card-info-pill">${_ico.pin} ${esc(ev.location)}</span>` : ''}
+        ${ev.date ? `<span class="post-card-info-pill">📅 ${fmtEventDate(ev.date)}</span>` : ''}
+        ${ev.time ? `<span class="post-card-info-pill">🕐 ${ev.time}</span>` : ''}
+      </div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
-    ${ev.date || ev.time ? `<div class="post-card-date">${ev.date ? '📅 ' + fmtEventDate(ev.date) : ''}${ev.time ? (ev.date ? ' · ' : '') + '🕐 ' + ev.time : ''}</div>` : ''}
     <div class="post-card-reactions">
       ${_reactionBtns(ev, scope, sid)}
     </div>
