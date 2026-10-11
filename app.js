@@ -6518,8 +6518,10 @@ function renderHome() {
           }
           if (h.subject) parts.push(`<span style="${webtopSubjectStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(h.subject)}</span>`);
           if (h.date) parts.push(fmtDate(h.date.slice(0,10)));
+          const doneKey = `${h.classCode}|${h.date}|${h.subject}`;
+          const canToggle = isParent() || (isKid() && getMembers().find(m=>m.name===S.user)?.webtopClassCode === h.classCode);
           return `<div class="task-row home-task-row">
-            <div class="check-box readonly"></div>
+            <div class="check-box ${canToggle?'':'readonly'}" ${canToggle?`onclick="toggleWebtopDone('${esc(doneKey)}')"`:''}></div>
             <div class="task-body">
               <div class="task-text">${esc(h.text)}</div>
               ${parts.length ? `<div class="task-sub">${parts.join(' · ')}</div>` : ''}
@@ -6532,8 +6534,9 @@ function renderHome() {
           if (isParent() && S.filter === 'All') parts.push(esc(h._kid));
           if (h.subject) parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);
           if (h.due) parts.push(fmtDate(h.due));
+          const canToggle = isParent() || h._kid === S.user;
           return `<div class="task-row home-task-row">
-            <div class="check-box readonly"></div>
+            <div class="check-box ${canToggle?'':'readonly'}" ${canToggle?`onclick="toggleClassHW('${h._cid}','${h.id}','${esc(h._kid)}')"`:''}></div>
             <div class="task-body">
               <div class="task-text">${esc(h.desc)}</div>
               ${parts.length ? `<div class="task-sub">${parts.join(' · ')}</div>` : ''}
@@ -6541,8 +6544,9 @@ function renderHome() {
             <div class="home-type-icon">🏫</div>
           </div>`;
         }
+        const canToggleHw = isParent() || h.child === S.user;
         return `<div class="task-row home-task-row">
-          <div class="check-box readonly"></div>
+          <div class="check-box ${canToggleHw?'':'readonly'}" ${canToggleHw?`onclick="toggleHW(${h.id})"`:''}></div>
           <div class="task-body">
             <div class="task-text">${esc(h.desc)}</div>
             <div class="task-sub">${(()=>{const parts=[];if(isParent()&&h.child)parts.push(esc(h.child));if(h.subject)parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);if(h.due)parts.push(fmtDate(h.due));return parts.join(' · ');})()}</div>
