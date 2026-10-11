@@ -8182,15 +8182,44 @@ let _hwSubjectFilter = null;
 let _hwScope = 'personal'; // 'personal' | 'class' — class only selectable when Webtop isn't managing class homework
 let _hwAddOpen = false; // add-homework form is collapsed behind a FAB, like Lists/Community
 
-function toggleHwAddForm() {
-  _hwAddOpen = !_hwAddOpen;
+function hwFabClick() {
+  if (!S.child || !(isParent() || S.child === S.user)) return;
+  const scopeAllowed = isParent() && !featureOn('webtopConnection');
+  if (!scopeAllowed) { _hwScopePick('personal'); _hwOpenAddForm(); return; }
+  const picker = el('hwFabPicker');
+  if (!picker) return;
+  if (picker.classList.contains('open')) { _hwHidePicker(); return; }
+  picker.innerHTML = `
+    <button class="comm-fab-pick-item" onclick="_hwFabPick('class')">🏫 שיעורי בית כיתתיים</button>
+    <button class="comm-fab-pick-item" onclick="_hwFabPick('personal')">שיעורים אישיים</button>
+  `;
+  picker.classList.add('open');
+  el('hwFab')?.classList.add('chore-fab-open');
+  setTimeout(() => {
+    document.addEventListener('click', function _h(e) {
+      if (!el('hwFabWrap')?.contains(e.target)) { _hwHidePicker(); document.removeEventListener('click', _h); }
+    });
+  }, 0);
+}
+
+function _hwFabPick(scope) {
+  _hwHidePicker();
+  _hwScopePick(scope);
+  _hwOpenAddForm();
+}
+
+function _hwHidePicker() {
+  el('hwFabPicker')?.classList.remove('open');
+  el('hwFab')?.classList.remove('chore-fab-open');
+}
+
+function _hwOpenAddForm() {
+  _hwAddOpen = true;
   renderHomework();
-  if (_hwAddOpen) {
-    setTimeout(() => {
-      el('addHwForm')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      el('hwDesc')?.focus();
-    }, 50);
-  }
+  setTimeout(() => {
+    el('addHwForm')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    el('hwDesc')?.focus();
+  }, 50);
 }
 
 function fmtDoneAt(ts) {
@@ -8387,17 +8416,16 @@ function renderHomework(){
     el('hwList').innerHTML=`<div class="empty">${t('noKids')}</div>`;
     el('addHwForm').style.display='none';
     el('hwHistoryWrap').innerHTML='';
-    const _hf0=el('hwFab'); if(_hf0) _hf0.style.display='none';
+    const _hfw0=el('hwFabWrap'); if(_hfw0) _hfw0.style.display='none';
+    _hwHidePicker();
     return;
   }
   el('hwCardTitle').textContent=t('hwTitle',S.child);
   const canAdd=isParent()||S.child===S.user;
-  const _hf=el('hwFab');
-  if(_hf){
-    _hf.style.display=(S.tab==='homework'&&canAdd)?'':'none';
-    _hf.classList.toggle('chore-fab-open', !!_hwAddOpen);
-  }
-  if(!canAdd) _hwAddOpen=false;
+  const _hfw=el('hwFabWrap');
+  if(_hfw) _hfw.style.display=(S.tab==='homework'&&canAdd)?'':'none';
+  el('hwFab')?.classList.toggle('chore-fab-open', !!_hwAddOpen);
+  if(!canAdd){ _hwAddOpen=false; _hwHidePicker(); }
   el('addHwForm').style.display=(canAdd&&_hwAddOpen)?'':'none';
 
   el('hwList').innerHTML=pending.length?pending.map(h=>{
@@ -9064,7 +9092,7 @@ function switchTab(tab) {
   if (tab === 'analytics') renderAnalytics();
   if (tab === 'lists') renderLists();
   const _lf = el('listsFab'); if (_lf) _lf.style.display = tab === 'lists' ? '' : 'none';
-  if (tab !== 'homework') { const _hf = el('hwFab'); if (_hf) _hf.style.display = 'none'; }
+  if (tab !== 'homework') { const _hfw = el('hwFabWrap'); if (_hfw) _hfw.style.display = 'none'; _hwHidePicker(); }
   if (tab === 'homework' && getKids().includes(S.filter)) S.child = S.filter;
   if (tab === 'homework') renderHomework();
   if (_tutDefs()[tab]) setTimeout(() => _tutMaybeTrigger(tab), 700);
