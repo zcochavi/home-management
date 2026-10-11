@@ -2097,6 +2097,11 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .post-card-info-item:last-child { border-inline-end:none; }
 .post-card-info-text { text-align:center; }
 .post-card-info-icon { font-size:14px; line-height:1.5; }
+.post-card-info-badge { display:flex; align-items:center; justify-content:center; width:30px; height:30px; border-radius:50%; flex-shrink:0; }
+.post-card-info-badge svg { width:16px !important; height:16px !important; }
+.post-card-info-badge-pin    { background:var(--primary-50); color:var(--primary-600); }
+.post-card-info-badge-clock  { background:#E6F3FF; color:#2F80ED; }
+.post-card-info-badge-date   { background:#E8F8EE; color:#1DB954; }
 .post-card-info-link { display:inline-block; font-size:11px; font-weight:700; color:var(--primary-500); text-decoration:none; margin-top:1px; }
 .post-card-info-link:hover { text-decoration:underline; }
 .post-card-section-label { font-size:11px; font-weight:800; color:var(--gray-400); margin:10px 0 2px; }
