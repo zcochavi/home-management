@@ -2088,11 +2088,15 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 /* Note: easy to read, clearly secondary to title */
 .post-card-note { font-size: 13px; font-weight: 400; color: var(--gray-500); line-height: 1.6; white-space: pre-line; margin-top: 4px; }
 .post-card-type-badge { display:inline-flex; align-items:center; gap:4px; font-size:11px; font-weight:800; padding:3px 10px; border-radius:var(--r-pill); background:var(--primary-50); color:var(--primary-600); margin-bottom:6px; }
-.post-card-illustration { background:var(--primary-50); border-radius:var(--r-md); display:flex; align-items:center; justify-content:center; padding:18px; margin:8px 0; }
-.post-card-illustration img { width:88px; height:88px; object-fit:contain; display:block; }
-.post-card-info-row { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
-.post-card-info-pill { font-size:11px; font-weight:700; color:var(--gray-500); background:var(--gray-50); border-radius:var(--r-pill); padding:4px 10px; }
-.post-card-section-label { font-size:11px; font-weight:800; color:var(--gray-400); margin:10px 0 6px; }
+.post-card-illustration { display:flex; align-items:center; justify-content:center; margin:8px 0 12px; }
+.post-card-illustration img { width:140px; height:140px; object-fit:contain; display:block; }
+.post-card-info-panel { display:flex; flex-wrap:wrap; gap:16px; background:var(--gray-50); border-radius:var(--r-md); padding:10px 14px; margin:8px 0; }
+.post-card-info-item { display:flex; align-items:flex-start; gap:6px; font-size:12px; font-weight:700; color:var(--gray-600); }
+.post-card-info-icon { font-size:14px; line-height:1.5; }
+.post-card-info-link { display:inline-block; font-size:11px; font-weight:700; color:var(--primary-500); text-decoration:none; margin-top:1px; }
+.post-card-info-link:hover { text-decoration:underline; }
+.post-card-section-label { font-size:11px; font-weight:800; color:var(--gray-400); margin:10px 0 2px; }
+.post-card-attend-hint { font-size:11px; color:var(--gray-400); font-weight:500; margin-bottom:6px; }
 .post-card-celebrants-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 .post-card-celebrant { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12px; }
 .post-card-celebrant-avatar { width:24px; height:24px; border-radius:50%; overflow:hidden; flex-shrink:0; }
@@ -2101,7 +2105,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .post-card-attend-avatars { display:flex; align-items:center; }
 .post-card-attend-avatar { width:26px; height:26px; border-radius:50%; overflow:hidden; margin-inline-end:-8px; border:2px solid var(--bg-primary); }
 .post-card-attend-count { margin-inline-start:12px; font-size:11px; font-weight:700; color:var(--gray-400); }
-.post-card-attend-btn { border:1.5px solid var(--primary-300); background:var(--primary-50); color:var(--primary-600); font-weight:800; font-size:13px; padding:8px 16px; border-radius:var(--r-pill); cursor:pointer; font-family:inherit; white-space:nowrap; }
+.post-card-attend-btn { border:1.5px solid var(--primary-300); background:var(--primary-50); color:var(--primary-600); font-weight:800; font-size:14px; padding:10px 20px; border-radius:var(--r-pill); cursor:pointer; font-family:inherit; white-space:nowrap; }
 .post-card-attend-btn.post-card-attend-active { background:var(--primary-500); color:#fff; border-color:var(--primary-500); }
 .post-card-attend-btn.post-attend-readonly { cursor:default; pointer-events:none; opacity:0.65; }
 .post-card-reactions {
@@ -2109,16 +2113,16 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 }
 .post-reaction {
   display: inline-flex; align-items: center; gap: 4px;
-  padding: 5px 12px; border: 1.5px solid var(--gray-200); border-radius: var(--r-pill);
+  padding: 4px 2px; border: none; border-radius: var(--r-sm, 4px);
   font-size: 13px; font-weight: 700; color: var(--gray-500);
   background: none; cursor: pointer; transition: all var(--t-fast); font-family: inherit;
 }
 .post-reaction-emoji { font-size: 16px; line-height: 1; }
 .post-reaction-count { font-size: 12px; font-weight: 700; }
-.post-reaction:hover { background: var(--primary-50); border-color: var(--primary-200); }
+.post-reaction:hover { color: var(--primary-600); }
 .post-reaction.post-reaction-readonly { cursor: default; pointer-events: none; opacity: 0.65; }
-.post-reaction.post-reaction-active { border-color: var(--primary-300); background: var(--primary-50); color: var(--primary-600); }
-.post-reaction.post-reaction-active:hover { background: var(--primary-100); }
+.post-reaction.post-reaction-active { color: var(--primary-600); }
+.post-reaction.post-reaction-active:hover { color: var(--primary-700); }
 @keyframes reaction-bounce { 0%{transform:scale(1)} 35%{transform:scale(1.35)} 65%{transform:scale(0.92)} 100%{transform:scale(1)} }
 .post-reaction-bounce { animation: reaction-bounce 0.35s ease; }
 
