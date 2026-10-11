@@ -1341,6 +1341,8 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 
 .comm-add-form { background: var(--gray-50); border-radius: var(--r-md); padding: 14px; margin-top: 8px; display: none; border: 1px solid var(--gray-100); }
 .comm-add-form.open { display: block; }
+.comm-celeb-row { padding:4px 0; }
+.comm-celeb-check-label { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:600; cursor:pointer; }
 
 /* ═══════════════════════════════════════════
    ANALYTICS
@@ -2091,6 +2093,10 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .post-card-info-row { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0; }
 .post-card-info-pill { font-size:11px; font-weight:700; color:var(--gray-500); background:var(--gray-50); border-radius:var(--r-pill); padding:4px 10px; }
 .post-card-section-label { font-size:11px; font-weight:800; color:var(--gray-400); margin:10px 0 6px; }
+.post-card-celebrants-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.post-card-celebrant { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12px; }
+.post-card-celebrant-avatar { width:24px; height:24px; border-radius:50%; overflow:hidden; flex-shrink:0; }
+.post-card-celebrant-name { font-weight:700; color:var(--gray-700); }
 .post-card-reactions {
   display: flex; gap: 6px; border-top: 1px solid var(--gray-100); padding-top: 10px;
 }

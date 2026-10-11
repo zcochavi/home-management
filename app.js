@@ -120,6 +120,7 @@ const STRINGS = {
     commEventNote:'הערה (אופציונלי)',
     commEventPaybox:'קישור Paybox (אופציונלי)',
     commPayNow:'💳 שלם עכשיו',
+    commWhosCelebrating:'🎂 מי חוגגים?',
     commScopeClass:'כיתה', commScopeGrade:'שכבה', commScopeSchool:'בית ספר',
     commScopeLabel:'רמת האירוע',
     commTomorrow:'מחר',
@@ -229,6 +230,7 @@ const STRINGS = {
     commEventNote:'Note (optional)',
     commEventPaybox:'Paybox link (optional)',
     commPayNow:'💳 Pay now',
+    commWhosCelebrating:'🎂 Who\'s celebrating?',
     commScopeClass:'Class', commScopeGrade:'Grade', commScopeSchool:'School',
     commScopeLabel:'Audience',
     commTomorrow:'Tomorrow',
@@ -3577,6 +3579,21 @@ function _authorAvatar(name) {
   return `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:${color}22;color:${color};font-size:18px;font-weight:800;border-radius:50%">${letter}</span>`;
 }
 
+function _celebrantsHtml(ev) {
+  if (!ev.celebrants?.length) return '';
+  return `<div class="post-card-celebrants">
+    <div class="post-card-section-label">${t('commWhosCelebrating')}</div>
+    <div class="post-card-celebrants-grid">
+      ${ev.celebrants.map(c => `
+        <div class="post-card-celebrant">
+          <span class="post-card-celebrant-avatar">${_authorAvatar(c.kidName)}</span>
+          <span class="post-card-celebrant-name">${esc(c.kidName)}</span>
+          ${c.paybox ? `<a class="paybox-btn" href="${esc(c.paybox)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
+        </div>`).join('')}
+    </div>
+  </div>`;
+}
+
 function renderPostCard(ev, cid) {
   const cache    = _commCache[cid] || {};
   const canDel   = isParent() && ev.postedBy?.familyUid === S.uid;
@@ -3614,6 +3631,7 @@ function renderPostCard(ev, cid) {
       </div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
+    ${_celebrantsHtml(ev)}
     <div class="post-card-reactions">
       ${_reactionBtns(ev, scope, sid)}
     </div>
@@ -4144,6 +4162,22 @@ function renderCommCard(kid) {
       </div>` : `<input type="hidden" id="commEvScope_${cid}" value="class">`}
       <input class="auth-input" id="commEvLocation_${cid}" placeholder="📍 מיקום (אופציונלי)" style="margin-bottom:6px" oninput="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
       <input class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" style="margin-bottom:6px">
+      ${cache.classmates.length ? `
+      <div class="comm-celeb-picker" id="commEvCelebWrap_${cid}" style="margin-bottom:6px">
+        <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">${t('commWhosCelebrating')}</div>
+        <div id="commEvCelebList_${cid}">
+          ${cache.classmates.map((c,i) => `
+            <div class="comm-celeb-row">
+              <label class="comm-celeb-check-label">
+                <input type="checkbox" class="comm-celeb-check" data-uid="${esc(c.familyUid)}" data-kid="${esc(c.kidName)}"
+                  onchange="onCelebCheckToggle('${cid}', ${i})">
+                ${esc(c.kidName)} ${esc(c.familyName||'')}
+              </label>
+              <input type="url" class="auth-input comm-celeb-paybox" id="commEvCelebPaybox_${cid}_${i}"
+                placeholder="${t('commEventPaybox')}" dir="ltr" style="display:none;margin-top:4px">
+            </div>`).join('')}
+        </div>
+      </div>` : ''}
       <input class="auth-input" id="commEvPaybox_${cid}" placeholder="${t('commEventPaybox')}" style="margin-bottom:10px" type="url" dir="ltr">
       <div id="commEvError_${cid}" style="display:none;font-size:12px;color:var(--error);font-weight:700;margin-bottom:8px;padding:6px 10px;background:var(--error-bg);border-radius:8px"></div>
       <div style="display:flex;gap:8px">
@@ -4245,6 +4279,21 @@ function onCommEvTypeChange(cid) {
   if (dateHint) dateHint.style.display = typeCfg.mDate ? 'none' : '';
 }
 
+function onCelebCheckToggle(cid, i) {
+  // Resolve the container via el() first — cid contains literal "~~", which breaks a raw
+  // CSS selector string (parsed as the general-sibling combinator). Never interpolate cid
+  // directly into a querySelector string.
+  const rows = el('commEvCelebList_' + cid)?.querySelectorAll('.comm-celeb-row');
+  const row  = rows?.[i];
+  if (!row) return;
+  const checked = row.querySelector('.comm-celeb-check')?.checked;
+  const paybox  = row.querySelector('.comm-celeb-paybox');
+  if (paybox) {
+    paybox.style.display = checked ? '' : 'none';
+    if (!checked) paybox.value = ''; // unchecking always clears — no orphaned paybox state
+  }
+}
+
 function matchesGenderFilter(ev, kidName) {
   if (!ev.genderFilter || ev.genderFilter === 'all') return true;
   // Poster always sees their own event
@@ -4323,6 +4372,16 @@ async function submitClassEvent(cid) {
   const note       = el('commEvNote_'   + cid)?.value.trim() || '';
   const payboxRaw  = el('commEvPaybox_' + cid)?.value.trim() || '';
   const payboxUrl  = payboxRaw && (payboxRaw.startsWith('http://') || payboxRaw.startsWith('https://')) ? payboxRaw : '';
+  const celebrants = [];
+  el('commEvCelebList_' + cid)?.querySelectorAll('.comm-celeb-row').forEach(row => {
+    const chk = row.querySelector('.comm-celeb-check');
+    if (!chk?.checked) return;
+    const celebPayboxRaw = row.querySelector('.comm-celeb-paybox')?.value.trim() || '';
+    const celebPaybox = celebPayboxRaw && (celebPayboxRaw.startsWith('http://') || celebPayboxRaw.startsWith('https://')) ? celebPayboxRaw : '';
+    const entry = { familyUid: chk.dataset.uid, kidName: chk.dataset.kid };
+    if (celebPaybox) entry.paybox = celebPaybox;
+    celebrants.push(entry);
+  });
   const typeCfg  = _eventTypesCfg.find(t => t.id === type) || {};
   const genderFilter = typeCfg.hasGenderFilter
     ? (document.querySelector(`input[name="commEvGender_${cid}"]:checked`)?.value || 'all')
@@ -4349,6 +4408,7 @@ async function submitClassEvent(cid) {
   if (time) docData.time = time;
   if (location) docData.location = location;
   if (payboxUrl) docData.payboxUrl = payboxUrl;
+  if (celebrants.length) docData.celebrants = celebrants;
 
   // Resolve target collection and document ID
   const kid = getKids().map(n=>getMembers().find(m=>m.name===n)).find(m=>classIdFor(m?.school)===cid);
