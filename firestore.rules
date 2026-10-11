@@ -47,5 +47,14 @@ service cloud.firestore {
       allow read, write: if request.auth != null
         && !(collection in ['families', 'uidToFamily', 'webtopClasses']);
     }
+
+    // Collection-group queries (e.g. collectionGroup('pendingEvents') in the admin Pending
+    // Requests panel) are evaluated separately from the catch-all above — Firestore only honors
+    // them against a rule shaped as {path=**}/<collectionId>/{doc}, so each collection group
+    // used that way needs its own explicit match here even though the catch-all already covers
+    // direct reads of the same documents.
+    match /{path=**}/pendingEvents/{pendingId} {
+      allow read, write: if request.auth != null;
+    }
   }
 }
