@@ -121,6 +121,8 @@ const STRINGS = {
     commEventPaybox:'קישור Paybox (אופציונלי)',
     commPayNow:'💳 שלם עכשיו',
     commWhosCelebrating:'🎂 מי חוגגים?',
+    commWhosAttending:'מי מגיע?',
+    commImAttending:'🙋 אני מגיע/ה',
     commScopeClass:'כיתה', commScopeGrade:'שכבה', commScopeSchool:'בית ספר',
     commScopeLabel:'רמת האירוע',
     commTomorrow:'מחר',
@@ -231,6 +233,8 @@ const STRINGS = {
     commEventPaybox:'Paybox link (optional)',
     commPayNow:'💳 Pay now',
     commWhosCelebrating:'🎂 Who\'s celebrating?',
+    commWhosAttending:'Who\'s coming?',
+    commImAttending:'🙋 I\'m attending',
     commScopeClass:'Class', commScopeGrade:'Grade', commScopeSchool:'School',
     commScopeLabel:'Audience',
     commTomorrow:'Tomorrow',
@@ -3579,6 +3583,42 @@ function _authorAvatar(name) {
   return `<span style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;background:${color}22;color:${color};font-size:18px;font-weight:800;border-radius:50%">${letter}</span>`;
 }
 
+// Resolves "whose family is this" for an attendee familyUid into display avatar+label,
+// reusing the same lookup renderPostCard already does for the post author.
+function _myKidInClass(cid) {
+  return getKids().map(n=>getMembers().find(m=>m.name===n)).find(m=>classIdFor(m?.school)===cid);
+}
+function _familyAvatarForUid(uid, cid) {
+  if (uid === S.uid) {
+    const myKid = _myKidInClass(cid);
+    return { html: getAvatar(myKid?.name), label: myKid?.name || S.user };
+  }
+  const mate = (_commCache[cid]?.classmates || []).find(c => c.familyUid === uid);
+  const label = mate?.kidName || mate?.familyName || '?';
+  return { html: _authorAvatar(label), label };
+}
+
+function _attendSectionHtml(ev, scope, scopeId, cid) {
+  if (!ev.date) return ''; // doesn't apply to date-less announcement/other posts
+  const attendees = ev.attendees || [];
+  const readOnly  = isKid() && _isOwner();
+  const iAttend   = attendees.includes(S.uid);
+  const shown     = attendees.slice(0, 6).map(uid => _familyAvatarForUid(uid, cid).html);
+  return `<div class="post-card-attend">
+    <div class="post-card-section-label">${t('commWhosAttending')}</div>
+    <div class="post-card-attend-row">
+      <div class="post-card-attend-avatars">
+        ${shown.map(html => `<span class="post-card-attend-avatar">${html}</span>`).join('')}
+        ${attendees.length ? `<span class="post-card-attend-count">${attendees.length}</span>` : ''}
+      </div>
+      <button class="post-card-attend-btn${iAttend ? ' post-card-attend-active' : ''}${readOnly ? ' post-attend-readonly' : ''}"
+        ${readOnly ? '' : `onclick="toggleAttendance('${scope}','${scopeId}','${ev.id}')"`}>
+        ${t('commImAttending')}
+      </button>
+    </div>
+  </div>`;
+}
+
 function _celebrantsHtml(ev) {
   if (!ev.celebrants?.length) return '';
   return `<div class="post-card-celebrants">
@@ -3632,6 +3672,7 @@ function renderPostCard(ev, cid) {
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
     ${_celebrantsHtml(ev)}
+    ${_attendSectionHtml(ev, scope, sid, cid)}
     <div class="post-card-reactions">
       ${_reactionBtns(ev, scope, sid)}
     </div>
@@ -3729,6 +3770,39 @@ async function toggleReaction(scope, scopeId, evId, reactionKey) {
       update.likedBy = firebase.firestore.FieldValue.arrayRemove(S.uid);
     await ref.update(update);
   } catch(e) { console.error('toggleReaction:', e); }
+}
+
+async function toggleAttendance(scope, scopeId, evId) {
+  if (isKid() && _isOwner()) return; // read-only in kid-impersonated view, mirrors toggleReaction
+  const collName = scope === 'grade' ? 'schoolGrades' : scope === 'school' ? 'schools' : 'schoolClasses';
+  const ref = fbDb.collection(collName).doc(scopeId).collection('events').doc(evId);
+  const allCached = Object.values(_commCache).flatMap(c => [...(c.events||[]),...(c.gradeEvents||[]),...(c.schoolEvents||[])]);
+  const ev = allCached.find(e => e.id === evId);
+  if (!ev) return;
+
+  const attending = (ev.attendees || []).includes(S.uid);
+
+  // Optimistic update — mutate cache immediately (same pattern as toggleReaction)
+  ev.attendees = attending
+    ? (ev.attendees || []).filter(u => u !== S.uid)
+    : [...(ev.attendees || []), S.uid];
+
+  // Re-render just this card's attendance section
+  const cardEl = document.querySelector(`.post-card[data-ev-id="${evId}"]`);
+  if (cardEl) {
+    const cid = cardEl.dataset.cid;
+    const section = cardEl.querySelector('.post-card-attend');
+    if (section) section.outerHTML = _attendSectionHtml(ev, scope, scopeId, cid);
+  }
+
+  // Sync to Firestore in background
+  try {
+    await ref.update({
+      attendees: attending
+        ? firebase.firestore.FieldValue.arrayRemove(S.uid)
+        : firebase.firestore.FieldValue.arrayUnion(S.uid),
+    });
+  } catch(e) { console.error('toggleAttendance:', e); }
 }
 
 function filterClassmates(cid, q) {
@@ -4411,7 +4485,7 @@ async function submitClassEvent(cid) {
   if (celebrants.length) docData.celebrants = celebrants;
 
   // Resolve target collection and document ID
-  const kid = getKids().map(n=>getMembers().find(m=>m.name===n)).find(m=>classIdFor(m?.school)===cid);
+  const kid = _myKidInClass(cid);
   let collName = 'schoolClasses', docId = cid;
   if (scope === 'grade') { collName = 'schoolGrades'; docId = gradeIdFor(kid?.school) || cid; }
   if (scope === 'school') { collName = 'schools'; docId = schoolIdFor(kid?.school) || cid; }

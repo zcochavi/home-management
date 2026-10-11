@@ -2097,6 +2097,13 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .post-card-celebrant { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12px; }
 .post-card-celebrant-avatar { width:24px; height:24px; border-radius:50%; overflow:hidden; flex-shrink:0; }
 .post-card-celebrant-name { font-weight:700; color:var(--gray-700); }
+.post-card-attend-row { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.post-card-attend-avatars { display:flex; align-items:center; }
+.post-card-attend-avatar { width:26px; height:26px; border-radius:50%; overflow:hidden; margin-inline-end:-8px; border:2px solid var(--bg-primary); }
+.post-card-attend-count { margin-inline-start:12px; font-size:11px; font-weight:700; color:var(--gray-400); }
+.post-card-attend-btn { border:1.5px solid var(--primary-300); background:var(--primary-50); color:var(--primary-600); font-weight:800; font-size:13px; padding:8px 16px; border-radius:var(--r-pill); cursor:pointer; font-family:inherit; white-space:nowrap; }
+.post-card-attend-btn.post-card-attend-active { background:var(--primary-500); color:#fff; border-color:var(--primary-500); }
+.post-card-attend-btn.post-attend-readonly { cursor:default; pointer-events:none; opacity:0.65; }
 .post-card-reactions {
   display: flex; gap: 6px; border-top: 1px solid var(--gray-100); padding-top: 10px;
 }
