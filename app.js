@@ -1206,7 +1206,7 @@ function initNotifBanners() {
     .onSnapshot(snap => {
       _allNotifs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       _refreshNotifBanners();
-      if (isAdmin()) _patchMissingReqIds(_allNotifs);
+      if (isAdmin() && !isKid()) _patchMissingReqIds(_allNotifs);
       _updateBellBadge();
       if (!el('messageCenterPanel')?.classList.contains('hidden')) renderMessageCenter();
       if (isCommittee()) _fetchPendingBadge();
@@ -1216,19 +1216,21 @@ function initNotifBanners() {
 }
 
 function _refreshNotifBanners() {
-  // Request-type notifs only show if explicitly addressed to this user (recipientUid match)
+  // Request-type notifs only show if explicitly addressed to this user (recipientUid match).
+  // A kid "viewing as" a profile inside the admin's own family shares S.uid with the admin,
+  // so admin-only notif types must also be explicitly excluded for isKid().
   const _visibleNotif = n => !n.dismissed
-    && (n.type !== 'admin_message' || isAdmin())
+    && (n.type !== 'admin_message' || (isAdmin() && !isKid()))
     && (n.type !== 'admin_reply'   || n.recipientUid === S.uid)
     && (!['school_pending','event_pending','application_pending'].includes(n.type) ||
-        (n.recipientUid === S.uid && n.requestedByUid !== S.uid))
+        (n.recipientUid === S.uid && n.requestedByUid !== S.uid && !isKid()))
     && (n.type !== 'shopping_done' || !isKid());
   renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
 }
 
 function _initPendingSchoolsCache() {
   if (_pendingSchoolsUnsub) { _pendingSchoolsUnsub(); _pendingSchoolsUnsub = null; }
-  if (!isAdmin() || !fbDb) { _pendingSchoolsCache = {}; return; }
+  if (!isAdmin() || isKid() || !fbDb) { _pendingSchoolsCache = {}; return; }
   _pendingSchoolsUnsub = fbDb.collection('pendingSchools')
     .where('status', '==', 'pending')
     .onSnapshot(snap => {
@@ -1308,16 +1310,19 @@ function renderNotifBanners(undismissed) {
     const color  = isDenied ? '#c53030' : isAdminMsg ? '#6b21a8' : isAdminReply ? '#276749' : '#2b6cb0';
     const icon   = isInfo ? '🛒' : isGood ? '✅' : isDenied ? '❌' : isRequest ? '📋' : (isAdminMsg || isAdminReply) ? '💬' : '🔔';
     const div = document.createElement('div');
+    // A kid "viewing as" a profile inside the admin's own family must not get admin
+    // approve/deny actions, even though isAdmin() alone can't tell the two apart.
+    const realAdmin = isAdmin() && !isKid();
     // Combined city+school requests can't be approved with a single tap (city must
     // land first), so route them straight to the pending panel instead of showing ✓/✗.
     const isCombinedCitySchool = n.type === 'school_pending' && _pendingSchoolsCache[n.reqId]?.type === 'city';
-    const openPanelOnTap = isRequest && isAdmin() && (!n.reqId || isCombinedCitySchool);
+    const openPanelOnTap = isRequest && realAdmin && (!n.reqId || isCombinedCitySchool);
     div.className = 'notif-banner notif-banner-in' + (openPanelOnTap ? ' notif-banner-tappable' : '');
     div.id = 'notifBanner_' + n.id;
     div.style.cssText = `background:${bg};border-color:${border};color:${color}`;
     if (openPanelOnTap) div.onclick = (e) => { if (e.target.closest('button')) return; closeMenu(); openPendingPanel(); };
     let requestActions = '';
-    if (isRequest && isAdmin()) {
+    if (isRequest && realAdmin) {
       if (openPanelOnTap) {
         requestActions = `<div class="notif-banner-actions"><button class="notif-banner-act approve" onclick="closeMenu();openPendingPanel()" title="פתח בקשות">📋</button></div>`;
       } else {
@@ -1488,7 +1493,7 @@ function closePendingPanel() {
   setTimeout(() => { panel.classList.add('hidden'); panel.classList.remove('mc-open','mc-closing'); }, 280);
 }
 async function renderPendingPanel() {
-  const admin = isAdmin();
+  const admin = isAdmin() && !isKid();
   // Show/hide admin-only sections
   const adminSec = el('ppAdminSections');
   if (adminSec) adminSec.style.display = admin ? '' : 'none';
@@ -1614,7 +1619,7 @@ async function renderPendingPanel() {
 async function _fetchPendingBadge() {
   if (!isCommittee() || !fbDb) return;
   try {
-    const admin = isAdmin();
+    const admin = isAdmin() && !isKid();
     const fetches = [fbDb.collectionGroup('pendingEvents').get()];
     if (admin) {
       fetches.push(
@@ -4064,7 +4069,7 @@ function renderCommCard(kid) {
     const voted = (app.votes||[]).includes(S.uid);
     const pct = Math.min(100, Math.round((app.voteCount||0)/15*100));
     const exp = app.expiresAt?.toDate ? fmtDate(app.expiresAt.toDate().toISOString().slice(0,10)) : '';
-    const approveBtn = isAdmin() ? `<button class="pending-approve-btn" onclick="adminApproveApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationApprove')}</button><button class="pending-reject-btn" onclick="adminDenyApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationDeny')}</button>` : '';
+    const approveBtn = (isAdmin() && !isKid()) ? `<button class="pending-approve-btn" onclick="adminApproveApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationApprove')}</button><button class="pending-reject-btn" onclick="adminDenyApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationDeny')}</button>` : '';
     const voteBtn = !isAdmin() && !isCommitteeFor(cid) && isParent()
       ? (voted
           ? `<span style="font-size:12px;font-weight:700;color:var(--gray-400)">${t('commApplicationVoted')}</span>`
