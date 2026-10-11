@@ -1680,7 +1680,7 @@ function renderMessageCenter() {
     n.type !== 'admin_message' &&
     (n.type !== 'shopping_done' || !isKid()) &&
     (n.type !== 'admin_reply'   || n.recipientUid === S.uid) &&
-    (!_REQUEST_NOTIF_TYPES.includes(n.type) || (n.recipientUid === S.uid && n.requestedByUid !== S.uid))
+    !_REQUEST_NOTIF_TYPES.includes(n.type)
   );
   el('mcCount').textContent = notifs.length ? `${notifs.length} הודעות` : '';
   el('mcDeleteAllBtn').style.display = notifs.length ? '' : 'none';
@@ -1691,15 +1691,11 @@ function renderMessageCenter() {
     return;
   }
   list.innerHTML = notifs.map(n => {
-    const isRequest = _REQUEST_NOTIF_TYPES.includes(n.type);
     const isGood = n.type?.includes('approved') || n.type === 'member_joined';
     const isDenied = n.type?.includes('denied') || n.type?.includes('rejected');
-    const icon   = n.type === 'shopping_done' ? '🛒' : n.type === 'member_joined' ? '👋' : n.type === 'admin_reply' ? '↩️' : isRequest ? '📋' : isGood ? '✅' : isDenied ? '❌' : '🔔';
+    const icon   = n.type === 'shopping_done' ? '🛒' : n.type === 'member_joined' ? '👋' : n.type === 'admin_reply' ? '↩️' : isGood ? '✅' : isDenied ? '❌' : '🔔';
     const dt     = n.createdAt?.toDate ? n.createdAt.toDate().toLocaleString('he-IL', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) : '';
     const dimmed = n.dismissed ? 'opacity:0.55;' : '';
-    const action = (isRequest && !n.dismissed)
-      ? `<button onclick="closeMessageCenter();openPendingPanel()" style="font-size:11px;border:none;background:var(--primary-50,#eff6ff);color:var(--primary-600);cursor:pointer;font-family:inherit;font-weight:700;padding:4px 10px;border-radius:var(--r-pill);white-space:nowrap">📋 פתח בקשות</button>`
-      : '';
     return `<div class="mc-item" id="mcItem_${n.id}" style="${dimmed}">
       <input type="checkbox" class="mc-checkbox" id="mcChk_${n.id}" onchange="mcOnCheck()">
       <span class="mc-item-icon">${icon}</span>
@@ -1707,7 +1703,6 @@ function renderMessageCenter() {
         <div class="mc-item-msg">${esc(n.message)}</div>
         <div class="mc-item-date">${dt}</div>
       </div>
-      ${action}
     </div>`;
   }).join('');
 }
@@ -6463,7 +6458,7 @@ function renderHome() {
     const key = classMemberId(S.uid, kidName);
     (_commCache[cid].homework || [])
       .filter(h => !(h.doneBy && h.doneBy[key]))
-      .forEach(h => classHw.push({...h, _kid: kidName}));
+      .forEach(h => classHw.push({...h, _kid: kidName, _cid: cid}));
   });
   if (_classHwNeedsLoad.length) {
     loadCommunityData(_classHwNeedsLoad).then(() => { if (S.tab === 'home') renderHome(); });
@@ -8241,10 +8236,10 @@ async function toggleWebtopDone(doneKey) {
 
 // Class homework lives in schoolClasses/{cid}/homework (shared cross-family), keyed by
 // familyUid__kidName so each family's own kid(s) track done-state independently.
-async function toggleClassHW(cid, id){
+async function toggleClassHW(cid, id, kidName){
   const h = _commCache[cid]?.homework?.find(x => x.id === id);
   if(!h) return;
-  const child = S.child;
+  const child = kidName || S.child;
   if(!child || (!isParent() && child !== S.user)) return;
   const key = classMemberId(S.uid, child);
   const isDone = !!(h.doneBy && h.doneBy[key]);
