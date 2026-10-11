@@ -3688,7 +3688,7 @@ function renderPostCard(ev, cid) {
       ${(ev.location || ev.date || ev.time) ? `<div class="post-card-info-panel">
         ${ev.location ? `<div class="post-card-info-item">
           <span class="post-card-info-icon">${_ico.pin}</span>
-          <div class="post-card-info-text"><div>${esc(ev.location)}</div><a class="post-card-info-link" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.location)}" target="_blank" rel="noopener noreferrer">${t('commNavigate')}</a></div>
+          <div class="post-card-info-text"><div>${esc(ev.location)}</div><a class="post-card-info-link" href="https://waze.com/ul?q=${encodeURIComponent(ev.location)}&navigate=yes" target="_blank" rel="noopener noreferrer">${t('commNavigate')}</a></div>
         </div>` : ''}
         ${ev.date ? `<div class="post-card-info-item"><span class="post-card-info-icon">📅</span><div class="post-card-info-text">${fmtEventDate(ev.date)}</div></div>` : ''}
         ${ev.time ? `<div class="post-card-info-item"><span class="post-card-info-icon">🕐</span><div class="post-card-info-text">${esc(ev.time)}</div></div>` : ''}
