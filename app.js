@@ -2426,6 +2426,7 @@ const _ico = {
   cart: `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px;display:block"><path d="M1 1.5h2l1.8 7.5h7l1.7-5.5H4.5"/><circle cx="6.5" cy="13" r="1" fill="currentColor" stroke="none"/><circle cx="11" cy="13" r="1" fill="currentColor" stroke="none"/></svg>`,
   clock:`<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-bottom:1px"><circle cx="7" cy="7" r="5.5"/><polyline points="7,4 7,7 9,8.5"/></svg>`,
   pin:  `<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-bottom:1px"><path d="M7 1a3.5 3.5 0 0 1 3.5 3.5C10.5 7.5 7 13 7 13S3.5 7.5 3.5 4.5A3.5 3.5 0 0 1 7 1z"/><circle cx="7" cy="4.5" r="1.2" fill="currentColor" stroke="none"/></svg>`,
+  calendar:`<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;display:inline-block;vertical-align:middle;margin-bottom:1px"><rect x="1.5" y="2.5" width="11" height="10" rx="1.5"/><line x1="1.5" y1="5.5" x2="12.5" y2="5.5"/><line x1="4" y1="1" x2="4" y2="3.5"/><line x1="10" y1="1" x2="10" y2="3.5"/></svg>`,
   pencil:`<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;display:block"><path d="M9.5 2a1.5 1.5 0 0 1 2 2L4 11H2V9L9.5 2z"/></svg>`,
   fam:   `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:18px;height:18px;display:inline-block;vertical-align:middle;color:#a0aec0"><circle cx="13" cy="7" r="2.5"/><path d="M18 17c0-2.8-2.7-5-6-5"/><circle cx="7" cy="7" r="2.5"/><path d="M1 17c0-2.8 2.7-5 6-5s6 2.2 6 5"/></svg>`,
 };
@@ -3697,11 +3698,11 @@ function renderPostCard(ev, cid) {
       </div>
       ${(ev.location || ev.date || ev.time) ? `<div class="post-card-info-panel">
         ${ev.location ? `<div class="post-card-info-item">
-          <span class="post-card-info-icon">${_ico.pin}</span>
+          <span class="post-card-info-badge post-card-info-badge-pin">${_ico.pin}</span>
           <div class="post-card-info-text"><div>${esc(ev.location)}</div><a class="post-card-info-link" href="https://waze.com/ul?q=${encodeURIComponent(ev.location)}&navigate=yes" target="_blank" rel="noopener noreferrer">${t('commNavigate')}</a></div>
         </div>` : ''}
-        ${ev.date ? `<div class="post-card-info-item"><span class="post-card-info-icon">📅</span><div class="post-card-info-text">${fmtEventDate(ev.date)}</div></div>` : ''}
-        ${ev.time ? `<div class="post-card-info-item"><span class="post-card-info-icon">🕐</span><div class="post-card-info-text">${esc(ev.time)}</div></div>` : ''}
+        ${ev.date ? `<div class="post-card-info-item"><span class="post-card-info-badge post-card-info-badge-date">${_ico.calendar}</span><div class="post-card-info-text">${fmtEventDate(ev.date)}</div></div>` : ''}
+        ${ev.time ? `<div class="post-card-info-item"><span class="post-card-info-badge post-card-info-badge-clock">${_ico.clock}</span><div class="post-card-info-text">${esc(ev.time)}</div></div>` : ''}
       </div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
