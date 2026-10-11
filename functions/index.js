@@ -290,10 +290,18 @@ exports.onApplicationUpdated = functions.firestore
     const memberName = after.applicantMemberName || null;
     const cfg = await getNotificationConfig();
 
+    const logEntry = (action) => db.collection('adminLog').add({
+      type: 'application', action, decisionReason: after.decisionReason || '',
+      classId: after.classId || '', applicantName: after.applicantName || '',
+      actionBy: after.decisionReason === 'admin' ? { familyUid: ADMIN_UID } : null,
+      actionAt: admin.firestore.FieldValue.serverTimestamp(),
+    }).catch(e => console.error('adminLog write (' + action + '):', e));
+
     if (after.status === 'approved') {
       // Grant committee role for the specific class, to the specific applicant
       await grantCommitteeClass(applicantUid, memberName, after.classId)
         .catch(e => console.error('grant committeeClasses:', e));
+      await logEntry('approved');
 
       // Notify applicant only — scoped to their own device(s) when known
       if (cfg.committeeApplications.notifyOnDecision) {
@@ -308,6 +316,8 @@ exports.onApplicationUpdated = functions.firestore
         );
       }
     } else if (after.status === 'denied') {
+      await logEntry('denied');
+
       // Notify applicant only — scoped to their own device(s) when known
       if (cfg.committeeApplications.notifyOnDecision) {
         const reason = after.decisionReason === 'expired'
