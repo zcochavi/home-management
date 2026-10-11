@@ -120,6 +120,7 @@ const STRINGS = {
     commEventNote:'הערה (אופציונלי)',
     commEventPaybox:'קישור Paybox (אופציונלי)',
     commPayNow:'💳 שלם עכשיו',
+    commPayboxGift:'🎁 לתשלום ב-Paybox',
     commWhosCelebrating:'🎂 מי חוגגים?',
     commWhosAttending:'מי מגיע?',
     commAttendHint:'לחצו לסמן הגעה (רק מי שמגיע)',
@@ -234,6 +235,7 @@ const STRINGS = {
     commEventNote:'Note (optional)',
     commEventPaybox:'Paybox link (optional)',
     commPayNow:'💳 Pay now',
+    commPayboxGift:'🎁 Pay via Paybox',
     commWhosCelebrating:'🎂 Who\'s celebrating?',
     commWhosAttending:'Who\'s coming?',
     commAttendHint:'Tap to mark you\'re coming (only if you\'re actually going)',
@@ -3611,15 +3613,15 @@ function _attendSectionHtml(ev, scope, scopeId, cid) {
   return `<div class="post-card-attend">
     <div class="post-card-section-label">${t('commWhosAttending')}</div>
     <div class="post-card-attend-hint">${t('commAttendHint')}</div>
-    <div class="post-card-attend-row">
-      <div class="post-card-attend-avatars">
-        ${shown.map(html => `<span class="post-card-attend-avatar">${html}</span>`).join('')}
-        ${attendees.length ? `<span class="post-card-attend-count">${attendees.length}</span>` : ''}
-      </div>
+    <div class="post-card-info-panel post-card-attend-row">
       <button class="post-card-attend-btn${iAttend ? ' post-card-attend-active' : ''}${readOnly ? ' post-attend-readonly' : ''}"
         ${readOnly ? '' : `onclick="toggleAttendance('${scope}','${scopeId}','${ev.id}')"`}>
         ${iAttend ? '✓' : '🙋'} ${t('commImAttending')}
       </button>
+      <div class="post-card-attend-avatars">
+        ${shown.map(html => `<span class="post-card-attend-avatar">${html}</span>`).join('')}
+        ${attendees.length ? `<span class="post-card-attend-count">${attendees.length}</span>` : ''}
+      </div>
     </div>
   </div>`;
 }
@@ -3629,11 +3631,11 @@ function _celebrantsHtml(ev) {
   return `<div class="post-card-celebrants">
     <div class="post-card-section-label">${t('commWhosCelebrating')}</div>
     <div class="post-card-celebrants-grid">
-      ${ev.celebrants.map(c => `
+      ${ev.celebrants.slice(0, 3).map(c => `
         <div class="post-card-celebrant">
           <span class="post-card-celebrant-avatar">${_authorAvatar(c.kidName)}</span>
           <span class="post-card-celebrant-name">${esc(c.kidName)}</span>
-          ${c.paybox ? `<a class="paybox-btn" href="${esc(c.paybox)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
+          ${c.paybox ? `<a class="post-card-celebrant-paybox" href="${esc(c.paybox)}" target="_blank" rel="noopener noreferrer">${t('commPayboxGift')}</a>` : ''}
         </div>`).join('')}
     </div>
   </div>`;
@@ -3665,17 +3667,21 @@ function renderPostCard(ev, cid) {
       ${canDel ? `<button class="post-card-del" onclick="deleteClassEvent('${scope}','${sid}','${ev.id}')">×</button>` : ''}
     </div>
     <div class="post-card-body">
-      <span class="post-card-type-badge">${eventTypeIcon(ev.type)} ${esc(eventTypeName(ev.type))}</span>
-      <div class="post-card-title">${esc(ev.title)}</div>
-      <div class="post-card-illustration"><img src="${eventTypeIllustration(ev.type)}" alt="" loading="lazy"></div>
-      ${ev.note ? `<div class="post-card-note">${esc(ev.note)}</div>` : ''}
+      <div class="post-card-top-row">
+        <div class="post-card-top-text">
+          <span class="post-card-type-badge">${eventTypeIcon(ev.type)} ${esc(eventTypeName(ev.type))}</span>
+          <div class="post-card-title">${esc(ev.title)}</div>
+          ${ev.note ? `<div class="post-card-note">${esc(ev.note)}</div>` : ''}
+        </div>
+        <div class="post-card-illustration"><img src="${eventTypeIllustration(ev.type)}" alt="" loading="lazy"></div>
+      </div>
       ${(ev.location || ev.date || ev.time) ? `<div class="post-card-info-panel">
         ${ev.location ? `<div class="post-card-info-item">
           <span class="post-card-info-icon">${_ico.pin}</span>
           <div><div>${esc(ev.location)}</div><a class="post-card-info-link" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(ev.location)}" target="_blank" rel="noopener noreferrer">${t('commNavigate')}</a></div>
         </div>` : ''}
-        ${ev.time ? `<div class="post-card-info-item"><span class="post-card-info-icon">🕐</span><div>${esc(ev.time)}</div></div>` : ''}
         ${ev.date ? `<div class="post-card-info-item"><span class="post-card-info-icon">📅</span><div>${fmtEventDate(ev.date)}</div></div>` : ''}
+        ${ev.time ? `<div class="post-card-info-item"><span class="post-card-info-icon">🕐</span><div>${esc(ev.time)}</div></div>` : ''}
       </div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
     </div>
@@ -4375,6 +4381,12 @@ function onCelebCheckToggle(cid, i) {
     paybox.style.display = checked ? '' : 'none';
     if (!checked) paybox.value = ''; // unchecking always clears — no orphaned paybox state
   }
+  // Cap at 3 celebrants (the card only has room to show 3) — disable the rest once reached
+  const checkedCount = [...(rows||[])].filter(r => r.querySelector('.comm-celeb-check')?.checked).length;
+  rows?.forEach(r => {
+    const chk = r.querySelector('.comm-celeb-check');
+    if (chk && !chk.checked) chk.disabled = checkedCount >= 3;
+  });
 }
 
 function matchesGenderFilter(ev, kidName) {
@@ -4491,7 +4503,7 @@ async function submitClassEvent(cid) {
   if (time) docData.time = time;
   if (location) docData.location = location;
   if (payboxUrl) docData.payboxUrl = payboxUrl;
-  if (celebrants.length) docData.celebrants = celebrants;
+  if (celebrants.length) docData.celebrants = celebrants.slice(0, 3);
 
   // Resolve target collection and document ID
   const kid = _myKidInClass(cid);
