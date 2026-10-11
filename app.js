@@ -1421,7 +1421,7 @@ async function quickApproveReq(notifId, type, reqId, btn) {
       await fbFunctions.httpsCallable('approveEvent')({ cid: parts[0], pendingId: parts[1] });
     } else if (type === 'application_pending') {
       const parts = reqId.split('|');
-      await fbFunctions.httpsCallable('adminApproveApplication')({ applicationId: parts[0], classId: parts[1] });
+      await fbFunctions.httpsCallable('adminApproveApplication')({ appId: parts[0] });
     }
     await _dismissNotifById(notifId);
   } catch(e) { console.error('quickApproveReq:', e); showToast('שגיאה: ' + e.message, 'error'); }
@@ -1443,7 +1443,7 @@ async function quickDenyReq(notifId, type, reqId, btn) {
       await fbFunctions.httpsCallable('rejectEvent')({ cid: parts[0], pendingId: parts[1] });
     } else if (type === 'application_pending') {
       const parts = reqId.split('|');
-      await fbFunctions.httpsCallable('adminDenyApplication')({ applicationId: parts[0], classId: parts[1] });
+      await fbFunctions.httpsCallable('adminDenyApplication')({ appId: parts[0] });
     }
     await _dismissNotifById(notifId);
   } catch(e) { console.error('quickDenyReq:', e); showToast('שגיאה: ' + e.message, 'error'); }
@@ -4187,8 +4187,9 @@ function renderCommCard(kid) {
     const voted = (app.votes||[]).includes(S.uid);
     const pct = Math.min(100, Math.round((app.voteCount||0)/15*100));
     const exp = app.expiresAt?.toDate ? fmtDate(app.expiresAt.toDate().toISOString().slice(0,10)) : '';
-    const approveBtn = (isAdmin() && !isKid()) ? `<button class="pending-approve-btn" onclick="adminApproveApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationApprove')}</button><button class="pending-reject-btn" onclick="adminDenyApplication('${app.id}','${cid}')" style="font-size:11px">${t('commApplicationDeny')}</button>` : '';
-    const voteBtn = !isAdmin() && !isCommitteeFor(cid) && isParent()
+    // Admins vote the same as any other parent here — direct approve/reject only
+    // happens from the Pending Requests panel, never from the class card.
+    const voteBtn = isParent() && (!isCommitteeFor(cid) || isAdmin())
       ? (voted
           ? `<span style="font-size:12px;font-weight:700;color:var(--gray-400)">${t('commApplicationVoted')}</span>`
           : `<button class="pending-approve-btn" onclick="voteForApplication('${app.id}','${cid}')">${t('commApplicationVote')}</button>`)
@@ -4199,7 +4200,7 @@ function renderCommCard(kid) {
         <div class="application-meta">${app.voteCount||0}/15 תמיכות${exp ? ' · ' + t('commApplicationExpires',exp) : ''}</div>
         <div class="application-progress"><div class="application-progress-fill" style="width:${pct}%"></div></div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">${approveBtn}${voteBtn}</div>
+      <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">${voteBtn}</div>
     </div>`;
   });
   if (canApply) {
@@ -5400,6 +5401,7 @@ async function applyForCommittee(cid) {
     await fbDb.collection('committeeApplications').add({
       applicantUid: S.uid,
       applicantName: myFullName(),
+      applicantMemberName: S.user,
       classId: cid,
       appliedAt: firebase.firestore.FieldValue.serverTimestamp(),
       status: 'pending',

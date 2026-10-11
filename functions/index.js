@@ -5,13 +5,14 @@ const db = admin.firestore();
 
 // ── Helpers ───────────────────────────────────────────────
 
-async function getTokens(familyUid, ownerOnly = false) {
+async function getTokens(familyUid, ownerOnly = false, memberName = null) {
   const col = db.collection('families').doc(familyUid).collection('fcmTokens');
-  const snap = ownerOnly
-    ? await col.where('isOwner', '==', true).get()
-    : await col.get();
+  let query = col;
+  if (ownerOnly) query = query.where('isOwner', '==', true);
+  if (memberName) query = query.where('memberName', '==', memberName);
+  const snap = await query.get();
   const tokens = snap.docs.map(d => d.data().token).filter(Boolean);
-  console.log(`getTokens(${familyUid}, ownerOnly=${ownerOnly}): found ${tokens.length} token(s)`);
+  console.log(`getTokens(${familyUid}, ownerOnly=${ownerOnly}, memberName=${memberName}): found ${tokens.length} token(s)`);
   return tokens;
 }
 
@@ -256,6 +257,29 @@ exports.onApplicationCreated = functions.firestore
     await snap.ref.update({ expiresAt: admin.firestore.Timestamp.fromDate(expiresAt) });
   });
 
+// Grants committee status for `classId` on the specific member named `memberName`
+// (mirroring the client's setCommitteeRole), falling back to a family-level-only
+// grant when the applicant's member name isn't known (e.g. older applications).
+async function grantCommitteeClass(familyUid, memberName, classId) {
+  const famRef = db.collection('families').doc(familyUid);
+  const famDoc = await famRef.get();
+  if (!famDoc.exists) return;
+  const fd = famDoc.data();
+  const members = fd.members || [];
+  const updatedMembers = memberName
+    ? members.map(m => {
+        if (m.name !== memberName || m.role !== 'parent') return m;
+        const current = m.committeeClasses ?? (fd.role === 'committee' ? ['*'] : (fd.committeeClasses || []));
+        return { ...m, committeeClasses: [...new Set([...current, classId])] };
+      })
+    : members;
+  const familyCommitteeClasses = [...new Set([
+    ...(fd.committeeClasses || []), classId,
+    ...updatedMembers.flatMap(m => m.committeeClasses || []),
+  ])];
+  await famRef.update({ members: updatedMembers, committeeClasses: familyCommitteeClasses });
+}
+
 exports.onApplicationUpdated = functions.firestore
   .document('committeeApplications/{appId}')
   .onUpdate(async (change, ctx) => {
@@ -263,21 +287,20 @@ exports.onApplicationUpdated = functions.firestore
     const after  = change.after.data();
     if (before.status === after.status) return; // no status change
     const applicantUid = after.applicantUid;
+    const memberName = after.applicantMemberName || null;
     const cfg = await getNotificationConfig();
 
     if (after.status === 'approved') {
-      // Grant committee role for the specific class
-      const classId = after.classId;
-      await db.collection('families').doc(applicantUid)
-        .update({ committeeClasses: admin.firestore.FieldValue.arrayUnion(classId) })
+      // Grant committee role for the specific class, to the specific applicant
+      await grantCommitteeClass(applicantUid, memberName, after.classId)
         .catch(e => console.error('grant committeeClasses:', e));
 
-      // Notify applicant
+      // Notify applicant only — scoped to their own device(s) when known
       if (cfg.committeeApplications.notifyOnDecision) {
         const reason = after.decisionReason === 'admin'
           ? 'אושרת על ידי מנהל המערכת'
           : 'אושרת על ידי הצבעת 15 הורים';
-        const tokens = await getTokens(applicantUid);
+        const tokens = await getTokens(applicantUid, false, memberName);
         await sendToTokens(tokens,
           '🎉 המועמדות שלך לוועד ההורים אושרה!',
           reason,
@@ -285,14 +308,14 @@ exports.onApplicationUpdated = functions.firestore
         );
       }
     } else if (after.status === 'denied') {
-      // Notify applicant
+      // Notify applicant only — scoped to their own device(s) when known
       if (cfg.committeeApplications.notifyOnDecision) {
         const reason = after.decisionReason === 'expired'
           ? 'לא הגעת לרוב הנדרש של 15 תמיכות תוך 5 ימים'
           : after.decisionReason === 'admin'
             ? 'נדחתה על ידי מנהל המערכת'
             : 'נדחתה';
-        const tokens = await getTokens(applicantUid);
+        const tokens = await getTokens(applicantUid, false, memberName);
         await sendToTokens(tokens,
           '❌ המועמדות שלך לוועד ההורים נדחתה',
           reason,
