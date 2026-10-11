@@ -6509,7 +6509,7 @@ function renderHome() {
   }
 
   el('hwSummary').innerHTML = combined.length
-    ? combined.slice(0,3).map(h => {
+    ? combined.slice(0,5).map(h => {
         if (h._type === 'wt') {
           const parts = [];
           if (isParent() && S.filter === 'All') {
@@ -6545,7 +6545,7 @@ function renderHome() {
           <div class="check-box readonly"></div>
           <div class="task-body">
             <div class="task-text">${esc(h.desc)}</div>
-            <div class="task-sub">${(()=>{const parts=[];if(isParent())parts.push(esc(h.child));if(h.subject)parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);if(h.due)parts.push(fmtDate(h.due));return parts.join(' · ');})()}</div>
+            <div class="task-sub">${(()=>{const parts=[];if(isParent()&&h.child)parts.push(esc(h.child));if(h.subject)parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);if(h.due)parts.push(fmtDate(h.due));return parts.join(' · ');})()}</div>
           </div>
           <div class="home-type-icon home-type-hw">📚</div>
         </div>`;
