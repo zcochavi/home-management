@@ -3616,6 +3616,19 @@ function _familyAvatarForUid(uid, cid) {
   return { html: _authorAvatar(label), label, tooltip: _chipTooltipName(mate?.kidName || label, mate?.familyName) };
 }
 
+// Tap-to-show-tooltip for touch devices (hover doesn't fire reliably there). Tapping a chip
+// opens its tooltip; any next tap anywhere — the same chip, a different one, or elsewhere —
+// closes whatever is open, via the document-level listener below.
+function _attendChipTap(e, chipEl) {
+  e.stopPropagation();
+  const open = document.querySelector('.post-card-attend-chip.tt-open');
+  if (open) open.classList.remove('tt-open');
+  if (open !== chipEl) chipEl.classList.add('tt-open');
+}
+document.addEventListener('click', () => {
+  document.querySelectorAll('.post-card-attend-chip.tt-open').forEach(el => el.classList.remove('tt-open'));
+});
+
 function _attendSectionHtml(ev, scope, scopeId, cid) {
   if (!ev.date) return ''; // doesn't apply to date-less announcement/other posts
   const attendees = ev.attendees || [];
@@ -3637,7 +3650,7 @@ function _attendSectionHtml(ev, scope, scopeId, cid) {
         ${iAttend ? '✓' : '🙋'} ${t('commImAttending')}
       </button>
       <div class="post-card-attend-avatars">
-        ${shown.map(a => `<span class="post-card-attend-chip" onclick="event.stopPropagation();this.classList.toggle('tt-open')">
+        ${shown.map(a => `<span class="post-card-attend-chip" onclick="_attendChipTap(event, this)">
           <span class="post-card-attend-avatar">${a.html}</span>
           ${a.tooltip ? `<span class="post-card-attend-tooltip">${esc(a.tooltip)}</span>` : ''}
         </span>`).join('')}
