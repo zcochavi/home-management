@@ -5192,9 +5192,11 @@ async function setCommitteeRole(familyUid, memberName, grant, cid) {
     // Update per-member committeeClasses
     const updatedMembers = (fd.members||[]).map(m => {
       if (m.name !== memberName || m.role !== 'parent') return m;
-      // Seed from legacy family-level if member has no per-member data yet
+      // Seed from legacy family-level if member has no per-member data yet. Must carry over
+      // the FULL existing set, not just `cid` — otherwise toggling one class (grant or leave)
+      // silently drops every other class this member was already committee for.
       const current = m.committeeClasses ?? (
-        (fd.committeeClasses||[]).includes(cid) || fd.role === 'committee' ? [cid] : []
+        fd.role === 'committee' ? ['*'] : (fd.committeeClasses || [])
       );
       const newClasses = grant
         ? [...new Set([...current, cid])]
