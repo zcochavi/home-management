@@ -11351,6 +11351,8 @@ function _wizStep2(c) {
   `, event:`
     <input class="add-input" id="wizEventDate" type="date" value="${m.eventDate || ''}">
     <input class="add-input" id="wizEventLocation" type="text" placeholder="מקום (אופציונלי)" style="margin-top:8px" value="${esc(m.location || '')}">
+    <div class="wizard-hint" style="margin-top:14px">📋 הדבקת טקסט (למשל מוואטסאפ) – כל שורה תהפוך למשימה</div>
+    <textarea class="add-input" id="wizEventPaste" rows="6" placeholder="הדבק כאן טקסט מועתק..." style="resize:vertical">${esc(_wizData.paste || '')}</textarea>
   ` }[_wizType] || '';
   const backBtn = _wizCloneFrom
     ? `<button class="btn-ghost" onclick="closeListWizard()">ביטול</button>`
@@ -11381,6 +11383,7 @@ function _wizGoStep3() {
   } else if (_wizType === 'event') {
     _wizData.meta.eventDate = el('wizEventDate')?.value    || '';
     _wizData.meta.location  = el('wizEventLocation')?.value || '';
+    _wizData.paste          = el('wizEventPaste')?.value    || '';
   }
   if (_wizCloneFrom) { _wizCreate(); return; }
   _wizStep = 3; _renderWizard();
@@ -11412,6 +11415,24 @@ function _wizStep3(c) {
       <button class="btn" onclick="_wizCreate()">צור רשימה ✓</button>
     </div>
   </div>`;
+}
+
+// Convert pasted text (e.g. copied from a WhatsApp group) into to-do items, one per line
+function _parsePastedTasks(text) {
+  const seen = new Set();
+  const out = [];
+  String(text || '').split(/\r?\n/).forEach(raw => {
+    let line = raw.replace(/[\u200e\u200f\u202a-\u202e]/g, '').trim();
+    // WhatsApp prefixes: "[12:30, 1/1/2025] Name: " or "1/1/25, 12:30 - Name: "
+    line = line.replace(/^\[[^\]]{3,30}\]\s*[^:]{1,40}:\s*/, '')
+               .replace(/^\d{1,2}[./]\d{1,2}[./]\d{2,4},?\s+\d{1,2}:\d{2}(:\d{2})?\s*(AM|PM)?\s*[-–]\s*[^:]{1,40}:\s*/i, '');
+    // bullets / numbering / checkbox marks
+    line = line.replace(/^(?:[-*•·▪◦✅☑☐✔️✓]+|\d{1,3}[.)])\s*/u, '').trim();
+    if (!line || seen.has(line)) return;
+    seen.add(line);
+    out.push(line);
+  });
+  return out;
 }
 
 function _wizShareToggle(inp) {
@@ -11453,13 +11474,18 @@ async function _wizCreate() {
     createdBy: S.user,
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-    items: srcList ? (srcList.items || []).map(i => ({ ...i, done: false })) : [],
+    items: [
+      ...(srcList ? (srcList.items || []).map(i => ({ ...i, done: false })) : []),
+      ...(_wizType === 'event' ? _parsePastedTasks(_wizData.paste).map((name, i) => ({ id: Date.now() + i, name, done: false })) : []),
+    ],
     ...(_wizType === 'recipe' ? { steps: srcList ? (srcList.steps || []).map(s => ({ ...s, done: false })) : [] } : {}),
   };
   try {
     const ref = await fbDb.collection('families').doc(S.uid).collection('lists').add(doc);
+    const hadPaste = doc.items.length > 0 && !srcList && _wizType === 'event';
     closeListWizard();
     openListDetail(ref.id);
+    if (hadPaste) listToggleEditMode(); // open straight in edit mode so tasks can be tweaked
   } catch(e) {
     console.error('[lists] create failed:', e);
     _showSnackbar('שגיאה ביצירת הרשימה');
