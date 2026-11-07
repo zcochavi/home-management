@@ -11094,6 +11094,7 @@ async function listRename(listId) {
   if (!newName || newName === list.name) return;
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ name: newName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .then(() => { const l = (S.lists || []).find(x => x.id === listId); if (l) { l.name = newName; _syncAllItemsToShares(l); } })
     .catch(e => console.error('[lists] rename failed:', e));
 }
 
@@ -11998,18 +11999,26 @@ async function listToggleItem(listId, itemId, arrayKey = 'items') {
   _syncToggleToShares(list, itemId, item.done, item.checkedBy);
 }
 
+// Push the owner's current list content (name, meta, items, steps) to every share link,
+// whatever its mode. On shared-marking links the guests' checks are kept.
 function _syncAllItemsToShares(list) {
-  const editShares = (list.publicShares || []).filter(s => s.mode === 'edit');
-  for (const share of editShares) {
+  for (const share of (list.publicShares || [])) {
     const docRef = fbDb.collection('publicShares').doc(share.token);
     docRef.get().then(snap => {
       if (!snap.exists) return;
       const shareItems = snap.data().items || [];
-      const merged = (list.items || []).map(i => {
-        const existing = shareItems.find(s => String(s.id) === String(i.id));
-        return existing ? { ...i, done: existing.done, checkedBy: existing.checkedBy || null } : { ...i };
+      const clone = o => JSON.parse(JSON.stringify(o));
+      const items = (list.items || []).map(i => {
+        if (share.mode === 'edit') {
+          const ex = shareItems.find(s => String(s.id) === String(i.id));
+          return ex ? { ...clone(i), done: !!ex.done, checkedBy: ex.checkedBy || null } : clone(i);
+        }
+        if (share.mode === 'readonly') { const { done, checkedBy, ...rest } = clone(i); return rest; }
+        return clone(i);
       });
-      docRef.update({ items: merged, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      const upd = { name: list.name, meta: clone(list.meta || {}), items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+      if (list.type === 'recipe') upd.steps = clone(list.steps || []);
+      return docRef.update(upd);
     }).catch(e => console.warn('[share-sync] full sync failed:', e));
   }
 }
@@ -12087,6 +12096,7 @@ async function listAddStep(listId) {
   inp?.focus();
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ steps: list.steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  _syncAllItemsToShares(list);
 }
 
 async function listToggleStep(listId, idx) {
@@ -12145,9 +12155,7 @@ async function listSaveStepEdit(listId, idx) {
   _renderListDetail();
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ steps: list.steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-  (list.publicShares || []).forEach(sh => fbDb.collection('publicShares').doc(sh.token)
-    .update({ steps: JSON.parse(JSON.stringify(list.steps)), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    .catch(e => console.warn('[share-sync] steps sync failed:', e)));
+  _syncAllItemsToShares(list);
 }
 
 async function listDeleteStep(listId, idx) {
@@ -12157,6 +12165,7 @@ async function listDeleteStep(listId, idx) {
   _renderListDetail();
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ steps: list.steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  _syncAllItemsToShares(list);
 }
 
 async function listClearDone(listId) {
@@ -12166,6 +12175,7 @@ async function listClearDone(listId) {
   _renderListDetail();
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ items: list.items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  _syncAllItemsToShares(list);
 }
 
 async function listDelete(listId) {
