@@ -37,6 +37,12 @@ service cloud.firestore {
       }
     }
 
+    // Google Calendar refresh tokens — server-side only (Cloud Functions via the Admin SDK).
+    // Clients must never read these, so no rule grants access (and the catch-all excludes it).
+    match /gcalTokens/{doc} {
+      allow read, write: if false;
+    }
+
     // Public list shares (guest links). The document id is the secret token in the link.
     //  - get:    any signed-in user (guests are signed in anonymously) who knows the token.
     //            No `list`, so tokens can't be enumerated.
@@ -74,7 +80,7 @@ service cloud.firestore {
     // must be explicitly excluded here — otherwise this catch-all would re-open them anyway.
     match /{collection}/{rest=**} {
       allow read, write: if request.auth != null
-        && !(collection in ['families', 'uidToFamily', 'webtopClasses', 'publicShares']);
+        && !(collection in ['families', 'uidToFamily', 'webtopClasses', 'publicShares', 'gcalTokens']);
     }
 
     // Collection-group queries (e.g. collectionGroup('pendingEvents') in the admin Pending
