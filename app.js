@@ -3327,6 +3327,14 @@ function _classHwExpired(h) {
   if (!d || isNaN(d.getTime())) return false;
   return Date.now() > _schoolYearEnd(d).getTime();
 }
+// A class schedule is valid for one school year: once the first June 30 on/after its last
+// update has passed, treat it as not entered (hidden, not deleted) so parents enter a new one.
+function _liveSchedule(sch) {
+  if (!sch) return null;
+  const d = sch.updatedAt?.toDate ? sch.updatedAt.toDate() : null;
+  if (d && !isNaN(d.getTime()) && Date.now() > _schoolYearEnd(d).getTime()) return null;
+  return sch;
+}
 function _classChanged(oldSchool, newSchool) {
   const oldId = classIdFor(oldSchool);
   return !!oldId && oldId !== classIdFor(newSchool);
@@ -3577,7 +3585,7 @@ function subscribeToCommClass(cid) {
     fbDb.collection('schoolClasses').doc(cid)
       .onSnapshot(snap => {
         if (!_commCache[cid]) return;
-        _commCache[cid].schedule = snap.data()?.schedule || null;
+        _commCache[cid].schedule = _liveSchedule(snap.data()?.schedule);
         rerender();
       }, e => console.warn('[community] schedule:', e.code))
   );
@@ -3734,7 +3742,7 @@ async function loadCommunityData(kidsWithSchool) {
         pendingEvents: prevCache.pendingEvents  || [],
         applications:  prevCache.applications  || [],
         homework:      prevCache.homework      || [],
-        schedule:      classDocSnap?.data()?.schedule || null,
+        schedule:      _liveSchedule(classDocSnap?.data()?.schedule),
         loadedAt:      Date.now(),
       };
       // Start live listeners for events / pending events / applications
