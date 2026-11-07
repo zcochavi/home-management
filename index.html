@@ -101,6 +101,12 @@
           <button class="mb-role-btn"        id="mbRoleKid"    onclick="setMbRole('kid')">ילד</button>
         </div>
       </div>
+      <div id="mbParentExtras" style="margin-bottom:8px">
+        <div class="mb-role-toggle">
+          <button class="mb-role-btn" id="mbPGenderFemale" onclick="setMbPGender('female')">👩 אישה</button>
+          <button class="mb-role-btn" id="mbPGenderMale"   onclick="setMbPGender('male')">👨 גבר</button>
+        </div>
+      </div>
       <div id="mbKidExtras" style="display:none;margin-bottom:8px">
         <div class="mb-role-toggle" style="margin-bottom:8px">
           <button class="mb-role-btn" id="mbGenderBoy"  onclick="setMbGender('boy')">👦 בן</button>
@@ -313,6 +319,13 @@
           <div class="mb-role-toggle" style="margin-bottom:12px;width:fit-content">
             <button class="mb-role-btn active" id="mgmtNewRoleParent" onclick="setMgmtNewRole('parent')">הורה</button>
             <button class="mb-role-btn"        id="mgmtNewRoleKid"    onclick="setMgmtNewRole('kid')">ילד</button>
+          </div>
+          <div id="mgmtNewParentSection">
+            <span class="mgmt-edit-label">מין</span>
+            <div class="mb-role-toggle" style="margin-bottom:12px">
+              <button class="mb-role-btn" id="mgmtNewPGenderFemale" onclick="setMgmtNewPGender('female')">👩 אישה</button>
+              <button class="mb-role-btn" id="mgmtNewPGenderMale"   onclick="setMgmtNewPGender('male')">👨 גבר</button>
+            </div>
           </div>
           <div id="mgmtNewKidSection" style="display:none">
             <span class="mgmt-edit-label">מין <span style="color:#e53e3e">*</span></span>
