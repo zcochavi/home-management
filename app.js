@@ -10395,7 +10395,6 @@ function _renderGuestShare(token, share) {
     const items = share.items || [], steps = share.steps || [];
     h += `<div class="card list-items-card"><div class="list-section-hdr">🧂 מצרכים</div>
       ${items.length ? items.map(it => `<div class="list-item">
-        <div style="width:28px;flex-shrink:0"></div>
         <span class="list-item-name">${esc(it.name)}</span>
         ${it.amount ? `<span class="list-item-qty">${esc(it.amount)}${it.unit?' '+esc(it.unit):''}</span>` : ''}
       </div>`).join('') : `<div class="list-empty-hint">אין מצרכים</div>`}
@@ -11644,7 +11643,7 @@ function _listSwipeItemHtml(listId, it, canEdit, opts = {}) {
   const checkBtn = canEdit
     ? `<span class="list-drag-handle" title="גרור לשינוי סדר" ontouchstart="event.stopPropagation()" onpointerdown="listItemDragDown(event,'${listId}','${it.id}','${arrayKey}')">⠿</span>`
     : !checkable
-    ? `<div style="width:28px;flex-shrink:0"></div>`
+    ? ''
     : `<button class="list-check-btn${it.done ? ' checked' : ''}" onclick="listToggleItem('${listId}','${it.id}','${arrayKey}')">${it.done ? _listCheckSvg : ''}</button>`;
   const inner = `<div class="list-item${it.done ? ' list-item-done' : ''}">
     ${checkBtn}
