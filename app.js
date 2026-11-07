@@ -3747,6 +3747,7 @@ document.addEventListener('click', () => {
 
 function _attendSectionHtml(ev, scope, scopeId, cid) {
   if (!ev.date) return ''; // doesn't apply to date-less announcement/other posts
+  if (ev.rsvp === false) return ''; // creator opted out of attendance confirmations
   const attendees = ev.attendees || [];
   const readOnly  = isKid() && _isOwner();
   const iAttend   = attendees.includes(S.uid);
@@ -4421,6 +4422,7 @@ function renderCommCard(kid) {
           ${getEventTypes().map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
         </select>
       </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="commEvRsvp_${cid}" checked> ✋ אישורי הגעה</label>
       <div id="commEvGenderWrap_${cid}" style="margin-bottom:6px;display:${(getEventTypes()[0]?.hasGenderFilter) ? '' : 'none'}">
         <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">מי מוזמן?</div>
         <div style="display:flex;gap:8px">
@@ -4693,6 +4695,7 @@ async function submitClassEvent(cid) {
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     genderFilter,
   };
+  if (el('commEvRsvp_' + cid) && !el('commEvRsvp_' + cid).checked) docData.rsvp = false;
   if (time) docData.time = time;
   if (location) docData.location = location;
   if (payboxUrl) docData.payboxUrl = payboxUrl;
