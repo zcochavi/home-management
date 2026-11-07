@@ -10216,9 +10216,14 @@ function _nameHue(name) {
   for (let i = 0; i < (name || '').length; i++) h = (h * 31 + name.charCodeAt(i)) & 0xffff;
   return h % 360;
 }
-function _checkerBadge(name) {
+// Share modes where guests write back to the share doc ('edit' = shared marking, 'claim' = who brings what)
+const _isJointMode = m => m === 'edit' || m === 'claim';
+const _hasClaimShare = list => (list.publicShares || []).some(s => s.mode === 'claim');
+
+function _checkerBadge(name, id) {
   if (!name) return '';
-  const hue = _nameHue(name);
+  // A guest's claims carry a private id, so two guests with the same name still get different colors
+  const hue = _nameHue(id ? name + '#' + id : name);
   return `<span class="list-item-checker" style="background:hsl(${hue},60%,88%);color:hsl(${hue},50%,28%)">${esc(name)}</span>`;
 }
 
@@ -10239,7 +10244,7 @@ function listOpenShareMenu(listId) {
       <div class="share-section-label">קישורים פעילים</div>
       ${shares.map((s, i) => {
         const url = `${baseUrl}?share=${s.token}`;
-        const modeLabel = s.mode === 'edit' ? '🤝 משותף' : s.mode === 'self' ? '✅ אישי' : '👁 צפייה';
+        const modeLabel = s.mode === 'edit' ? '🤝 משותף' : s.mode === 'claim' ? '🙋 מי מביא מה' : s.mode === 'self' ? '✅ אישי' : '👁 צפייה';
         return `<div style="margin-bottom:10px">
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
             <span class="share-link-badge">${modeLabel}</span>
@@ -10270,6 +10275,9 @@ function listOpenShareMenu(listId) {
       ${list.type !== 'recipe' && !list.archived ? `
       <label class="share-mode-opt"><input type="radio" name="shareMode" value="edit">
         <div><div class="share-mode-title">🤝 סימון משותף</div><div class="share-mode-desc">הסימונים גלויים לכל מי שיש לו את הקישור</div></div>
+      </label>
+      <label class="share-mode-opt"><input type="radio" name="shareMode" value="claim">
+        <div><div class="share-mode-title">🙋 מי מביא מה</div><div class="share-mode-desc">כל אחד בוחר פריטים שהוא מביא — פריט שנבחר נעול לאחרים</div></div>
       </label>` : ''}
     </div>
     <div class="cmodal-btns">
@@ -10288,7 +10296,7 @@ async function listCreateShare(listId) {
   const token = _genShareToken();
   const rawItems = JSON.parse(JSON.stringify(list.items || []));
   const shareItems = mode === 'readonly'
-    ? rawItems.map(({ done, checkedBy, ...rest }) => rest)
+    ? rawItems.map(({ done, checkedBy, checkedById, ...rest }) => rest)
     : rawItems;
   const shareDoc = {
     familyUid: S.uid, listId, mode,
@@ -10385,23 +10393,24 @@ function _renderGuestShare(token, share) {
   const typeEmoji = { packing:'🎒', recipe:'👨‍🍳', event:'🎉' }[share.type] || '📋';
   if (nameEl) nameEl.innerHTML = `${typeEmoji} ${esc(share.name)}`;
   if (modeEl) {
-    const modeInfo = { edit:'🤝 משותף', self:'✅ סימון אישי', readonly:'👁 צפייה בלבד' };
+    const modeInfo = { edit:'🤝 משותף', claim:'🙋 מי מביא מה', self:'✅ סימון אישי', readonly:'👁 צפייה בלבד' };
     modeEl.textContent = modeInfo[share.mode] || modeInfo.readonly;
-    modeEl.className = `guest-mode-badge${share.mode === 'edit' ? ' guest-mode-edit' : share.mode === 'self' ? ' guest-mode-self' : ''}`;
+    modeEl.className = `guest-mode-badge${_isJointMode(share.mode) ? ' guest-mode-edit' : share.mode === 'self' ? ' guest-mode-self' : ''}`;
   }
   const cont = el('guestContent');
   if (!cont) return;
 
   const isSelf = share.mode === 'self';
-  const isEdit = share.mode === 'edit';
-  const canCheck = isSelf || isEdit;
+  const isClaim = share.mode === 'claim';
+  const isEdit = share.mode === 'edit' || isClaim;
+  const canCheck = (isSelf || isEdit) && !isClaim;
 
   // Joint mode: require a name before allowing any interaction
   if (isEdit && !_guestGetName(token)) {
     cont.innerHTML = `<div class="guest-name-gate">
       <div class="guest-name-gate-icon">🤝</div>
-      <div class="guest-name-gate-title">רשימה משותפת</div>
-      <div class="guest-name-gate-sub">הזן את שמך — הוא יופיע ליד הפריטים שתסמן</div>
+      <div class="guest-name-gate-title">${isClaim ? 'מי מביא מה' : 'רשימה משותפת'}</div>
+      <div class="guest-name-gate-sub">${isClaim ? 'הזן את שמך — הוא יופיע ליד הפריטים שתבחר להביא' : 'הזן את שמך — הוא יופיע ליד הפריטים שתסמן'}</div>
       <input class="guest-name-input" id="guestNameInput" type="text" placeholder="השם שלך..." maxlength="30" dir="rtl"
         onkeydown="if(event.key==='Enter')_guestSubmitName('${token}')">
       <button class="guest-name-btn" onclick="_guestSubmitName('${token}')">המשך ›</button>
@@ -10455,7 +10464,8 @@ function _renderGuestShare(token, share) {
       </div>`).join('')}
     </div>`;
   } else {
-    const items = share.items || [];
+    if (isClaim) h += _guestClaimHtml(token, share);
+    const items = isClaim ? [] : (share.items || []);
     const undone = items.filter(it => !itemDone(it));
     const done   = items.filter(it =>  itemDone(it));
     const checkBtn = (it, isDone) => canCheck
@@ -10463,7 +10473,7 @@ function _renderGuestShare(token, share) {
       : `<div style="width:28px;flex-shrink:0"></div>`;
     // Only show the "empty" hint when there are no items at all; if everything is
     // checked off, the completed section below is all that's needed.
-    if (undone.length || !done.length) h += `<div class="card list-items-card">
+    if (!isClaim && (undone.length || !done.length)) h += `<div class="card list-items-card">
       ${undone.length ? undone.map(it => `<div class="list-item">
         ${checkBtn(it, false)}
         <span class="list-item-name">${esc(it.name)}</span>
@@ -10517,7 +10527,7 @@ async function guestSaveRecipe(token) {
   if (btn) btn.disabled = true;
   const familyUid = localStorage.getItem('familyhub_family_uid_' + u.uid) || u.uid;
   const member = localStorage.getItem('familyhub_member_' + familyUid) || null;
-  const clean = arr => (arr || []).map(({ done, checkedBy, ...rest }) => ({ ...rest, done: false }));
+  const clean = arr => (arr || []).map(({ done, checkedBy, checkedById, ...rest }) => ({ ...rest, done: false }));
   try {
     await fbDb.collection('families').doc(familyUid).collection('lists').add({
       type: 'recipe',
@@ -10537,11 +10547,76 @@ async function guestSaveRecipe(token) {
   }
 }
 
+// Private per-browser id for a guest on a share link (tells apart guests who type the same name)
+function _guestId(token) {
+  const key = `familyhub_guest_id_${token}`;
+  try {
+    let id = localStorage.getItem(key);
+    if (!id) { id = Math.random().toString(36).slice(2, 8); localStorage.setItem(key, id); }
+    return id;
+  } catch (_) { return ''; }
+}
+
+let _guestFilter = 'all';
+function _setGuestFilter(v) { _guestFilter = v; if (_guestShare) _renderGuestShare(_guestShare.id, _guestShare); }
+
+// "Who brings what" guest view: free items get an "I'll bring it" button; taken items show the taker
+function _guestClaimHtml(token, share) {
+  const me = _guestGetName(token);
+  const items = share.items || [];
+  const free = items.filter(i => !i.done);
+  const taken = items.filter(i => i.done);
+  const myId = _guestId(token);
+  const isMineItem = i => i.checkedById ? i.checkedById === myId : i.checkedBy === me;
+  const mine = taken.filter(isMineItem);
+  const f = _guestFilter;
+  const chip = (v, label, n) => `<button class="claim-chip${f === v ? ' active' : ''}" onclick="_setGuestFilter('${v}')">${label} <b>${n}</b></button>`;
+  let h = `<div class="claim-summary">${taken.length} מתוך ${items.length} נבחרו</div>
+    <div class="claim-chips">${chip('all', 'הכל', items.length)}${chip('free', 'פנוי', free.length)}${chip('mine', 'שלי', mine.length)}</div>`;
+  const shown = f === 'free' ? free : f === 'mine' ? mine : [...free, ...taken];
+  const row = it => {
+    const qty = it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : '';
+    if (!it.done) return `<div class="list-item"><span class="list-item-name">${esc(it.name)}</span>${qty}
+      <button class="claim-btn" onclick="guestToggleItem('${token}','${it.id}')">🙋 אני מביא/ה</button></div>`;
+    const isMine = isMineItem(it);
+    return `<div class="list-item list-item-done"><span class="list-item-name">${esc(it.name)}</span>${qty}
+      ${_checkerBadge(isMine ? it.checkedBy + ' (אני)' : it.checkedBy, it.checkedById)}
+      ${isMine ? `<button class="claim-btn claim-btn-cancel" onclick="guestToggleItem('${token}','${it.id}')">ביטול</button>` : ''}</div>`;
+  };
+  h += `<div class="card list-items-card">${shown.length ? shown.map(row).join('')
+    : `<div class="list-empty-hint">${f === 'mine' ? 'עוד לא בחרת פריטים' : f === 'free' ? 'הכל כבר נבחר 🎉' : 'הרשימה ריקה'}</div>`}</div>`;
+  return h;
+}
+
 async function guestToggleItem(token, itemId) {
   if (!_guestShare) return;
   if (_guestShare.mode === 'self') {
     _guestSelfToggle(token, itemId);
     _renderGuestShare(token, _guestShare);
+    return;
+  }
+  if (_guestShare.mode === 'claim') {
+    const me = _guestGetName(token);
+    if (!me) return;
+    const myId = _guestId(token);
+    const ref = fbDb.collection('publicShares').doc(token);
+    try {
+      // Transaction: two guests tapping the same item at once can't both get it
+      const res = await fbDb.runTransaction(async tx => {
+        const snap = await tx.get(ref);
+        const items = (snap.data()?.items || []).map(i => ({ ...i }));
+        const it = items.find(i => String(i.id) === String(itemId));
+        if (!it) return null;
+        const mineNow = it.checkedById ? it.checkedById === myId : it.checkedBy === me;
+        if (it.done && !mineNow) return { taken: it.checkedBy };
+        it.done = !it.done;
+        it.checkedBy = it.done ? me : null;
+        it.checkedById = it.done ? myId : null;
+        tx.update(ref, { items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+        return null;
+      });
+      if (res?.taken) showToast(`הפריט כבר נבחר על ידי ${res.taken}`, 'info');
+    } catch(e) { console.error('[guest] claim failed:', e); }
     return;
   }
   if (_guestShare.mode !== 'edit') return;
@@ -10810,7 +10885,7 @@ function unsubscribeLists() {
 function _subscribeActiveShares(lists) {
   const wantedTokens = new Set();
   for (const list of lists) {
-    for (const share of (list.publicShares || []).filter(s => s.mode === 'edit')) {
+    for (const share of (list.publicShares || []).filter(s => _isJointMode(s.mode))) {
       wantedTokens.add(share.token);
     }
   }
@@ -10820,7 +10895,7 @@ function _subscribeActiveShares(lists) {
   }
   // Subscribe only to tokens not yet subscribed
   for (const list of lists) {
-    for (const share of (list.publicShares || []).filter(s => s.mode === 'edit')) {
+    for (const share of (list.publicShares || []).filter(s => _isJointMode(s.mode))) {
       if (_shareListUnsubs[share.token]) continue;
       const listId = list.id;
       _shareListUnsubs[share.token] = fbDb.collection('publicShares').doc(share.token).onSnapshot(snap => {
@@ -10833,10 +10908,10 @@ function _subscribeActiveShares(lists) {
         targetList.items = (targetList.items || []).map(it => {
           const si = shareMap[String(it.id)];
           if (!si) return it;
-          const d = !!si.done, cb = si.checkedBy || null;
-          if (d !== !!it.done || cb !== (it.checkedBy || null)) {
+          const d = !!si.done, cb = si.checkedBy || null, cid = si.checkedById || null;
+          if (d !== !!it.done || cb !== (it.checkedBy || null) || cid !== (it.checkedById || null)) {
             changed = true;
-            return { ...it, done: d, checkedBy: cb };
+            return { ...it, done: d, checkedBy: cb, checkedById: cid };
           }
           return it;
         });
@@ -11303,7 +11378,7 @@ function _renderListTile(l, matchInfo = null) {
   const dateStr = l.meta?.tripDate || l.meta?.eventDate || '';
   const matchHint = matchInfo && !matchInfo.byName && matchInfo.firstInside
     ? `<div class="list-tile-match">🔍 ${esc(matchInfo.firstInside)}</div>` : '';
-  const hasJoint = (l.publicShares || []).some(s => s.mode === 'edit');
+  const hasJoint = (l.publicShares || []).some(s => _isJointMode(s.mode));
   if (photoUrl) {
     return `<div class="list-tile list-tile-has-photo${l.archived ? ' list-tile-archived' : ''}" data-list-id="${l.id}">
       <div class="list-tile-photo-wrap">
@@ -11544,11 +11619,26 @@ async function _wizCreate() {
 
 // ── List Detail ────────────────────────
 let _listDetailId = null, _listCookMode = false, _listEditMode = false;
+let _claimFilter = 'all'; // owner view of a "who brings what" list: 'all' | '__free' | <person name>
+
+function _claimNames(list) { return [...new Set((list.items || []).filter(i => i.done && i.checkedBy).map(i => i.checkedBy))]; }
+function _claimFilterItems(list, arr) {
+  if (!_hasClaimShare(list) || _claimFilter === 'all') return arr;
+  if (_claimFilter === '__free') return arr.filter(i => !i.done);
+  return arr.filter(i => i.done && i.checkedBy === _claimFilter);
+}
+function _claimFilterHtml(list) {
+  if (!_hasClaimShare(list)) return '';
+  const chip = (v, label) => `<button class="claim-chip${_claimFilter === v ? ' active' : ''}" data-v="${esc(v)}" onclick="_setClaimFilter(this.dataset.v)">${esc(label)}</button>`;
+  return `<div class="claim-chips">${chip('all', 'הכל')}${chip('__free', 'פנוי')}${_claimNames(list).map(n => chip(n, n)).join('')}</div>`;
+}
+function _setClaimFilter(v) { _claimFilter = v; _renderListDetail(); }
 
 function openListDetail(listId) {
   _listDetailId = listId;
   _listCookMode = false;
   _listEditMode = false;
+  _claimFilter = 'all';
   el('listDetailPanel').classList.remove('hidden');
   _renderListDetail();
 }
@@ -11667,14 +11757,15 @@ function _renderListDetail() {
 // Packing detail
 function _renderPackingDetail(cont, list, canEdit) {
   const items = list.items || [];
-  const done  = items.filter(i => i.done);
-  const undone = items.filter(i => !i.done);
+  const done  = _claimFilterItems(list, items.filter(i => i.done));
+  const undone = _claimFilterItems(list, items.filter(i => !i.done));
   let h = '';
   if (canEdit) h += _listMetaEditHtml(list);
   else {
     if (list.meta?.destination) h += `<div class="list-meta-chip">✈️ ${esc(list.meta.destination)}</div>`;
     if (list.meta?.tripDate)    h += `<div class="list-meta-chip">📅 ${fmtDate(list.meta.tripDate)}</div>`;
   }
+  h += _claimFilterHtml(list);
   if (canEdit) h += _addItemFormHtml(list.id, 'packing', '+ הוסף פריט...');
   if (undone.length) {
     h += `<div class="card list-items-card">${undone.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showQty:true})).join('')}</div>`;
@@ -11700,7 +11791,7 @@ function _listSwipeItemHtml(listId, it, canEdit, opts = {}) {
     <span class="list-item-name"${canEdit ? ` style="cursor:text" onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')"` : ''}>${esc(it.name)}</span>
     ${showQty && it.qty ? `<span class="list-item-qty"${canEdit ? ` onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')"` : ''}>${esc(it.qty)}</span>` : ''}
     ${showAmount && it.amount ? `<span class="list-item-qty"${canEdit ? ` onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')"` : ''}>${esc(it.amount)}${it.unit ? ' ' + esc(it.unit) : ''}</span>` : ''}
-    ${it.done ? _checkerBadge(it.checkedBy) : ''}
+    ${it.done ? _checkerBadge(it.checkedBy, it.checkedById) : ''}
     ${canEdit ? `<button class="list-item-del" onclick="listDeleteItem('${listId}','${it.id}','${arrayKey}')">×</button>` : ''}
   </div>`;
   if (!canEdit) return inner;
@@ -11739,7 +11830,7 @@ function _doneSectionHtml(listId, done, canEdit, label) {
         </button>` : `<div style="width:28px;flex-shrink:0"></div>`}
         <span class="list-item-name">${esc(it.name)}</span>
         ${it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
-        ${_checkerBadge(it.checkedBy)}
+        ${_checkerBadge(it.checkedBy, it.checkedById)}
         ${canEdit ? `<button class="list-item-del" onclick="listDeleteItem('${listId}','${it.id}')">×</button>` : ''}
       </div>`).join('')}
       ${canEdit ? `<button class="btn-ghost" style="width:100%;margin-top:8px;font-size:13px" onclick="listClearDone('${listId}')">נקה מסומנים</button>` : ''}
@@ -12021,13 +12112,16 @@ function _renderEventDetail(cont, list, canEdit) {
     </div>`;
   }
 
+  h += _claimFilterHtml(list);
   if (canEdit) h += _addItemFormHtml(list.id, 'event', '+ הוסף משימה...');
 
-  if (undone.length) {
-    h += `<div class="card list-items-card">${undone.map(it => _listSwipeItemHtml(list.id, it, canEdit)).join('')}</div>`;
+  const shownUndone = _claimFilterItems(list, undone);
+  const shownDone   = _claimFilterItems(list, done);
+  if (shownUndone.length) {
+    h += `<div class="card list-items-card">${shownUndone.map(it => _listSwipeItemHtml(list.id, it, canEdit)).join('')}</div>`;
   }
 
-  if (done.length) h += _doneSectionHtml(list.id, done, canEdit, 'משימות שהושלמו');
+  if (shownDone.length) h += _doneSectionHtml(list.id, shownDone, canEdit, _hasClaimShare(list) ? 'פריטים שנבחרו' : 'משימות שהושלמו');
 
   cont.innerHTML = h;
 }
@@ -12039,8 +12133,21 @@ async function listToggleItem(listId, itemId, arrayKey = 'items') {
   const arr  = list[arrayKey] || [];
   const item = arr.find(i => String(i.id) === String(itemId));
   if (!item) return;
-  item.done = !item.done;
-  item.checkedBy = item.done ? (S.user || null) : null;
+  if (arrayKey === 'items' && _hasClaimShare(list)) {
+    // "Who brings what" list: the owner assigns an item to someone, or releases it
+    if (item.done) {
+      if (!await _confirm(`להסיר את השיוך של "${item.name}" מ-${item.checkedBy || 'מישהו'}?`)) return;
+      item.done = false; item.checkedBy = null; item.checkedById = null;
+    } else {
+      const who = await _promptText(`מי מביא "${item.name}"?`, S.user || '');
+      if (!who) return;
+      item.done = true; item.checkedBy = who; item.checkedById = null;
+    }
+  } else {
+    item.done = !item.done;
+    item.checkedBy = item.done ? (S.user || null) : null;
+    item.checkedById = null;
+  }
   if (_listDetailId === listId) _renderListDetail();
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ [arrayKey]: arr, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
@@ -12058,11 +12165,11 @@ function _syncAllItemsToShares(list) {
       const shareItems = snap.data().items || [];
       const clone = o => JSON.parse(JSON.stringify(o));
       const items = (list.items || []).map(i => {
-        if (share.mode === 'edit') {
+        if (_isJointMode(share.mode)) {
           const ex = shareItems.find(s => String(s.id) === String(i.id));
-          return ex ? { ...clone(i), done: !!ex.done, checkedBy: ex.checkedBy || null } : clone(i);
+          return ex ? { ...clone(i), done: !!ex.done, checkedBy: ex.checkedBy || null, checkedById: ex.checkedById || null } : clone(i);
         }
-        if (share.mode === 'readonly') { const { done, checkedBy, ...rest } = clone(i); return rest; }
+        if (share.mode === 'readonly') { const { done, checkedBy, checkedById, ...rest } = clone(i); return rest; }
         return clone(i);
       });
       const upd = { name: list.name, meta: clone(list.meta || {}), items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
@@ -12073,7 +12180,7 @@ function _syncAllItemsToShares(list) {
 }
 
 function _syncItemEditToShares(list, itemId, fields) {
-  const editShares = (list.publicShares || []).filter(s => s.mode === 'edit');
+  const editShares = (list.publicShares || []).filter(s => _isJointMode(s.mode));
   for (const share of editShares) {
     const docRef = fbDb.collection('publicShares').doc(share.token);
     docRef.get().then(snap => {
@@ -12087,13 +12194,13 @@ function _syncItemEditToShares(list, itemId, fields) {
 }
 
 function _syncToggleToShares(list, itemId, done, checkedBy) {
-  const editShares = (list.publicShares || []).filter(s => s.mode === 'edit');
+  const editShares = (list.publicShares || []).filter(s => _isJointMode(s.mode));
   for (const share of editShares) {
     const docRef = fbDb.collection('publicShares').doc(share.token);
     docRef.get().then(snap => {
       if (!snap.exists) return;
       const items = (snap.data().items || []).map(i =>
-        String(i.id) === String(itemId) ? { ...i, done, checkedBy: checkedBy || null } : i
+        String(i.id) === String(itemId) ? { ...i, done, checkedBy: checkedBy || null, checkedById: null } : i
       );
       docRef.update({ items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
     }).catch(e => console.warn('[share-sync] push failed:', e));
