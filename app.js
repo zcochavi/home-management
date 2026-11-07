@@ -11638,9 +11638,9 @@ function _listSwipeItemHtml(listId, it, canEdit, opts = {}) {
     : `<button class="list-check-btn${it.done ? ' checked' : ''}" onclick="listToggleItem('${listId}','${it.id}','${arrayKey}')">${it.done ? _listCheckSvg : ''}</button>`;
   const inner = `<div class="list-item${it.done ? ' list-item-done' : ''}">
     ${checkBtn}
-    <span class="list-item-name">${esc(it.name)}</span>
-    ${showQty && it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
-    ${showAmount && it.amount ? `<span class="list-item-qty">${esc(it.amount)}${it.unit ? ' ' + esc(it.unit) : ''}</span>` : ''}
+    <span class="list-item-name"${canEdit ? ` style="cursor:text" onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')"` : ''}>${esc(it.name)}</span>
+    ${showQty && it.qty ? `<span class="list-item-qty"${canEdit ? ` onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')"` : ''}>${esc(it.qty)}</span>` : ''}
+    ${showAmount && it.amount ? `<span class="list-item-qty"${canEdit ? ` onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')"` : ''}>${esc(it.amount)}${it.unit ? ' ' + esc(it.unit) : ''}</span>` : ''}
     ${it.done ? _checkerBadge(it.checkedBy) : ''}
     ${canEdit ? `<button class="list-item-del" onclick="listDeleteItem('${listId}','${it.id}','${arrayKey}')">×</button>` : ''}
   </div>`;
@@ -11832,7 +11832,7 @@ function _renderRecipeDetail(cont, list, canEdit) {
           style="${_listCookMode ? 'cursor:pointer' : ''}">
           ${isDone ? `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="2.5 8 6 11.5 13.5 4.5"/></svg>` : idx + 1}
         </div>
-        <span class="list-step-text">${esc(st.text)}</span>
+        <span class="list-step-text" id="listStepText_${idx}"${canEdit ? ` style="cursor:text" onclick="listStartStepEdit('${list.id}',${idx})"` : ''}>${esc(st.text)}</span>
         ${canEdit ? `<button class="list-item-del" onclick="listDeleteStep('${list.id}',${idx})">×</button>` : ''}
       </div>`;
     }).join('') : `<div class="list-empty-hint">הוסף שלבי הכנה...</div>`}
@@ -12035,6 +12035,34 @@ async function _promptFinishCooking(listId) {
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ cookLog, steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   _showSnackbar(`בישול מספר ${cookLog.length} נרשם 👨‍🍳`);
+}
+
+function listStartStepEdit(listId, idx) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  const st = list?.steps?.[idx];
+  const span = el(`listStepText_${idx}`);
+  if (!st || !span) return;
+  span.outerHTML = `<input class="list-edit-name" id="listStepEdit_${idx}" type="text" value="${esc(st.text)}" style="flex:1"
+    onkeydown="if(event.key==='Enter')listSaveStepEdit('${listId}',${idx});if(event.key==='Escape')_renderListDetail()"
+    onblur="listSaveStepEdit('${listId}',${idx})">`;
+  requestAnimationFrame(() => el(`listStepEdit_${idx}`)?.focus());
+}
+
+async function listSaveStepEdit(listId, idx) {
+  const inp = el(`listStepEdit_${idx}`);
+  if (!inp) return;
+  const text = inp.value.trim();
+  const list = (S.lists || []).find(l => l.id === listId);
+  const st = list?.steps?.[idx];
+  if (!st) return;
+  if (!text || text === st.text) { _renderListDetail(); return; }
+  st.text = text;
+  _renderListDetail();
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ steps: list.steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  (list.publicShares || []).forEach(sh => fbDb.collection('publicShares').doc(sh.token)
+    .update({ steps: JSON.parse(JSON.stringify(list.steps)), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .catch(e => console.warn('[share-sync] steps sync failed:', e)));
 }
 
 async function listDeleteStep(listId, idx) {
