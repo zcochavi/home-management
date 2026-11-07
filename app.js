@@ -3322,7 +3322,8 @@ function _schoolYearEnd(d) {
 }
 function _classHwExpired(h) {
   let d = h?.createdAt?.toDate ? h.createdAt.toDate()
-        : (h?.date || h?.due) ? new Date(h.date || h.due) : null;
+        : (h?.date || h?.due) ? new Date(h.date || h.due)
+        : (h?.scope === 'class' && h.id > 1e12) ? new Date(h.id) : null;
   if (!d || isNaN(d.getTime())) return false;
   return Date.now() > _schoolYearEnd(d).getTime();
 }
@@ -6882,7 +6883,7 @@ function renderHome() {
   renderStarChart();
 
 
-  let hw = S.homework.filter(h=>!h.done);
+  let hw = S.homework.filter(h=>!h.done && !(h.scope==='class' && _classHwExpired(h)));
   if (isKid()) hw = hw.filter(h=>h.child===S.user);
   else if (S.filter!=='All'&&getKids().includes(S.filter)) hw = hw.filter(h=>h.child===S.filter);
 
@@ -6992,8 +6993,9 @@ function renderHome() {
           <div class="check-box ${canToggleHw?'':'readonly'}" ${canToggleHw?`onclick="toggleHW(${h.id})"`:''}></div>
           <div class="task-body">
             <div class="task-text">${esc(h.desc)}</div>
-            <div class="task-sub">${(()=>{const parts=[];if(isParent()&&h.child&&S.filter!==h.child)parts.push(esc(h.child));if(h.subject)parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);if(h.due)parts.push(fmtDate(h.due));return parts.join(' · ');})()}</div>
+            <div class="task-sub">${(()=>{const parts=[];if(isParent()&&h.child&&S.filter!==h.child)parts.push(esc(h.child));if(isParent()&&!h.child)parts.push('<span style="color:#d97706;font-weight:700">'+(getLang()==='he'?'ללא שיוך':'Unassigned')+'</span>');if(h.subject)parts.push(`<span style="${subjectBadgeStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(subjectLabel(h.subject))}</span>`);if(h.due)parts.push(fmtDate(h.due));return parts.join(' · ');})()}</div>
           </div>
+          ${isParent()&&!h.child?`<button class="mgmt-add-btn" style="padding:4px 9px;font-size:13px;background:transparent;color:#9ca3af" title="${getLang()==='he'?'מחק':'Delete'}" onclick="deleteUnassignedHW(${h.id})">🗑</button>`:''}
           <div class="home-type-icon home-type-hw">📚</div>
         </div>`;
       }).join('')
@@ -8815,6 +8817,16 @@ function toggleHW(id){
   save();renderHomework();renderHome();
 }
 
+// Homework with no kid attached is invisible in the Homework tab (listed per kid), so the
+// home widget is the only place a parent can remove it.
+function deleteUnassignedHW(id){
+  if(!isParent()) return;
+  const h = S.homework.find(x=>x.id===id);
+  if(!h || h.child) return;
+  const he = getLang()==='he';
+  if(!confirm((he?'למחוק את שיעורי הבית הזה?\n\n':'Delete this homework?\n\n') + (h.desc||''))) return;
+  deleteHW(id);
+}
 function deleteHW(id){if(!isParent())return;S.homework=S.homework.filter(x=>x.id!==id);save();renderHomework();renderHome();}
 async function addHomework(){
   const descEl=el('hwDesc');
