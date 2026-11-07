@@ -2352,3 +2352,5 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .claim-chip.active { background: var(--primary-500); border-color: var(--primary-500); color: #fff; }
 .claim-btn { margin-inline-start: auto; flex-shrink: 0; border: none; background: var(--primary-500); color: #fff; font: inherit; font-size: 13px; font-weight: 700; padding: 6px 12px; border-radius: var(--r-pill); cursor: pointer; }
 .claim-btn.claim-btn-cancel { background: var(--gray-100); color: var(--gray-600); }
+.claim-x { border: none; background: none; color: var(--gray-400); font: inherit; font-size: 15px; line-height: 1; padding: 0 4px; cursor: pointer; }
+.claim-chip.claim-chip-person.active { box-shadow: 0 0 0 1px currentColor; }
