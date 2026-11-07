@@ -37,15 +37,44 @@ service cloud.firestore {
       }
     }
 
-    // All other collections (school community directory, pending requests, join codes, public
-    // list shares, etc.) — any authenticated user may read/write, same as before this file
+    // Public list shares (guest links). The document id is the secret token in the link.
+    //  - get:    any signed-in user (guests are signed in anonymously) who knows the token.
+    //            No `list`, so tokens can't be enumerated.
+    //  - create/update/delete: family members only (the owner syncing/revoking its shares).
+    //  - guest update: only on 'shared marking' (mode == 'edit') shares, and only the `items`
+    //            array (+ updatedAt) — same length, mode/name/meta/steps/owner untouched.
+    //            Rules can't iterate an array, so a guest could still alter an item's fields;
+    //            moving checks to a separate map field would close that gap.
+    function isFamilyMember(familyUid) {
+      return request.auth != null && (
+        request.auth.uid == familyUid ||
+        (exists(/databases/$(database)/documents/uidToFamily/$(request.auth.uid)) &&
+         familyOfUid(request.auth.uid) == familyUid)
+      );
+    }
+    match /publicShares/{token} {
+      allow get: if request.auth != null;
+      allow create: if isFamilyMember(request.resource.data.familyUid);
+      allow update: if
+        (isFamilyMember(resource.data.familyUid) &&
+         request.resource.data.familyUid == resource.data.familyUid)
+        ||
+        (request.auth != null &&
+         resource.data.mode == 'edit' &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['items', 'updatedAt']) &&
+         request.resource.data.items is list &&
+         request.resource.data.items.size() == resource.data.items.size());
+      allow delete: if isFamilyMember(resource.data.familyUid);
+    }
+
+    // All other collections (school community directory, pending requests, join codes, etc.) — any authenticated user may read/write, same as before this file
     // existed. These are intentionally cross-family (community features) or need pre-mapping
     // access (e.g. reading a join code before the uidToFamily mapping above can exist yet).
     // Firestore evaluates every matching rule as OR'd together, so "families" and "uidToFamily"
     // must be explicitly excluded here — otherwise this catch-all would re-open them anyway.
     match /{collection}/{rest=**} {
       allow read, write: if request.auth != null
-        && !(collection in ['families', 'uidToFamily', 'webtopClasses']);
+        && !(collection in ['families', 'uidToFamily', 'webtopClasses', 'publicShares']);
     }
 
     // Collection-group queries (e.g. collectionGroup('pendingEvents') in the admin Pending
