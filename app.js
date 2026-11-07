@@ -2950,14 +2950,14 @@ async function mgmtAdvanceSchoolYear() {
     oldCodes[m.name] = m.webtopClassCode;
     return { ...m, school: { ...m.school, grade: nextGrade(m.school.grade), classNum: '' } };
   });
-  // New class → erase each advancing kid's personal + Webtop homework (shared class homework
-  // is left alone and expires on June 30).
+  // New class → erase each advancing kid's Webtop homework for the old class (personal homework
+  // and shared class homework are left alone; class homework expires on June 30).
   let hwPurgeExtra = {};
   Object.keys(oldSchools).forEach(name => {
     Object.assign(hwPurgeExtra, purgeKidHomework(name, updated, oldCodes[name]));
   });
   if (familyData) familyData.members = updated;
-  await fbDb.collection('families').doc(S.uid).update({ members: updated, homework: S.homework, ...hwPurgeExtra });
+  await fbDb.collection('families').doc(S.uid).update({ members: updated, ...hwPurgeExtra });
   renderMgmtMembers();
   for (const m of updated) {
     if (!oldSchools[m.name]) continue;
@@ -3330,13 +3330,13 @@ function _classChanged(oldSchool, newSchool) {
   const oldId = classIdFor(oldSchool);
   return !!oldId && oldId !== classIdFor(newSchool);
 }
-// When a kid changes class: erase that kid's personal homework and their Webtop-imported homework.
-// Shared class homework is NOT deleted (other families depend on it) — it just stops showing for
-// this kid (their class id changed) and expires at the next June 30.
-// Mutates S.homework / `members` / _webtopHomework in memory; returns extra fields for the
-// families-doc update.
+// When a kid changes class: erase their Webtop-imported homework for the old class code and
+// clear the Webtop mapping. Personal homework (tasks the parents assigned) is NEVER touched —
+// it is only removed when a user deletes it. Shared class homework is NOT deleted either (other
+// families depend on it) — it just stops showing for this kid (their class id changed) and
+// expires at the next June 30.
+// Mutates `members` / _webtopHomework in memory; returns extra fields for the families-doc update.
 function purgeKidHomework(kidName, members, oldWebtopCode) {
-  S.homework = S.homework.filter(h => h.scope === 'class' || h.child !== kidName);
   const kid = members.find(m => m.name === kidName);
   if (kid) delete kid.webtopClassCode;
   const extra = {};
