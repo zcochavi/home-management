@@ -6384,6 +6384,7 @@ function renderHomeUpcoming() {
   // Personal calendar events
   const personal = (S.events || [])
     .filter(e => isEventUpcoming(e.date))
+    .filter(e => !_listEventHidden(e))
     .filter(e => filterKid ? _calEventVisibleToKid(e, filterKid) : (isParent() || _calEventVisibleToKid(e, S.user)))
     .map(e => ({ ...e, _src: 'personal' }));
 
@@ -6426,8 +6427,11 @@ function renderHomeUpcoming() {
   container.innerHTML = all.map(ev => {
     const isClass = ev._src === 'class';
     const kidArg = isClass && ev._kid ? esc(ev._kid).replace(/'/g,"\\'") : '';
-    return `<div class="home-event-row" onclick="navToCalendarDate('${ev.date}','${ev._src||''}','${kidArg}')">
-      <div class="home-event-icon">${eventTypeIcon(ev.type)}</div>
+    const rowClick = ev.listId
+      ? `switchTab('lists');openListDetail('${esc(ev.listId)}')`
+      : `navToCalendarDate('${ev.date}','${ev._src||''}','${kidArg}')`;
+    return `<div class="home-event-row" onclick="${rowClick}">
+      <div class="home-event-icon">${ev.icon || eventTypeIcon(ev.type)}</div>
       <div class="home-event-body">
         <div class="home-event-title">${esc(ev.title)}${isClass ? scopeBadge(ev.scope) : ''}</div>
         <div class="home-event-meta">${fmtDate(ev.date)}${ev.time ? ' · ' + ev.time : ''}${ev.location ? ' · ' + _ico.pin + ' ' + esc(ev.location) : ''}${isClass && ev._kid ? ' · ' + esc(ev._kid) : ''}</div>
@@ -8790,6 +8794,7 @@ function allCalEvents(){
   if(anyClassOn&&_calFilter==='class') return classEvs;
   const syncedIds=new Set(S.events.filter(e=>e.gcalId).map(e=>e.gcalId));
   let personalEvs=[...S.events.filter(e=>!e.gcalId),...S.events.filter(e=>e.gcalId),...gcal.events.filter(e=>!syncedIds.has(e.gcalId))];
+  personalEvs=personalEvs.filter(e=>!_listEventHidden(e));
   if(!isParent()) personalEvs=personalEvs.filter(e=>_calEventVisibleToKid(e,S.user));
   if(_calFilter==='family') return personalEvs;
   return [...personalEvs,...classEvs];
@@ -8934,7 +8939,7 @@ function renderDayPanel(events){
     const canDel=(isAll&&isParent()&&(!e.gcal||gcalConnected()))||(!isAll&&ps.includes(S.user));
     return `<div class="event-item ${e.gcal?'gcal-event':''}" style="border-inline-start-color:${color}">
       <div class="event-body">
-        <div class="event-title">${e.gcal?'<span class="g-badge">G</span>':''}${esc(e.title)}</div>
+        <div class="event-title">${e.gcal?'<span class="g-badge">G</span>':''}${e.icon?e.icon+' ':''}${esc(e.title)}</div>
         <div class="event-meta">${e.time?_ico.clock+' '+e.time:t('allDay')}${e.location?' · '+_ico.pin+' '+esc(e.location):''}${e.gcal?' '+t('gcalSource'):''}</div>
       </div>
       ${personLabel?`<span class="event-person-chip" style="background:${color}22;color:${color}">${personLabel}</span>`:''}
@@ -11220,7 +11225,7 @@ async function listRename(listId) {
   if (!newName || newName === list.name) return;
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ name: newName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-    .then(() => { const l = (S.lists || []).find(x => x.id === listId); if (l) { l.name = newName; _syncAllItemsToShares(l); } })
+    .then(() => { const l = (S.lists || []).find(x => x.id === listId); if (l) { l.name = newName; _syncAllItemsToShares(l); syncListCalendarEvent(l); } })
     .catch(e => console.error('[lists] rename failed:', e));
 }
 
@@ -11569,6 +11574,52 @@ function _wizShareToggle(inp) {
   if (editSection) editSection.style.display = inp.value === 'personal' ? 'none' : 'block';
 }
 
+// ── Calendar sync: a list with a trip/event date gets a calendar event, shown to the same people ──
+function _listCalDate(list) { return list?.meta?.tripDate || list?.meta?.eventDate || ''; }
+
+// Events that belong to a list the current user can't see stay hidden (even from parents)
+function _listEventHidden(ev) {
+  if (!ev.listId) return false;
+  const ps = eventPersons(ev);
+  return !ps.includes('All') && !ps.includes(S.user);
+}
+
+function syncListCalendarEvent(list) {
+  if (!list || !list.id || list.type === 'recipe') return;
+  if (!Array.isArray(S.events)) S.events = [];
+  const date = _listCalDate(list);
+  const idx = S.events.findIndex(e => e.listId === list.id);
+  const before = idx >= 0 ? JSON.stringify(S.events[idx]) : null;
+  if (!date) {
+    if (idx < 0) return;
+    S.events.splice(idx, 1);
+  } else {
+    const person = (!list.sharedWith || list.sharedWith === 'all') ? 'All' : [...new Set(list.sharedWith)];
+    const location = list.meta?.location || list.meta?.destination || '';
+    const fields = { title: list.name, date, person, icon: list.type === 'packing' ? '🧳' : '🎉', listId: list.id };
+    if (idx >= 0) {
+      const ev = { ...S.events[idx], ...fields };
+      if (location) ev.location = location; else delete ev.location;
+      if (JSON.stringify(ev) === before) return;
+      S.events[idx] = ev;
+    } else {
+      S.events.push({ id: Date.now(), time: '', ...fields, ...(location && { location }) });
+    }
+  }
+  save();
+  renderCalendar();
+  renderHomeUpcoming();
+}
+
+function removeListCalendarEvent(listId) {
+  const n = (S.events || []).length;
+  S.events = (S.events || []).filter(e => e.listId !== listId);
+  if (S.events.length === n) return;
+  save();
+  renderCalendar();
+  renderHomeUpcoming();
+}
+
 async function _wizCreate() {
   if (!S.uid) return;
   let sharedWith, canEdit;
@@ -11609,6 +11660,7 @@ async function _wizCreate() {
   };
   try {
     const ref = await fbDb.collection('families').doc(S.uid).collection('lists').add(doc);
+    syncListCalendarEvent({ ...doc, id: ref.id });
     const hadPaste = doc.items.length > 0 && !srcList && _wizType === 'event';
     closeListWizard();
     openListDetail(ref.id);
@@ -11691,6 +11743,7 @@ function listToggleEditMode() {
         if (list.archived && (!newMeta[f.date] || new Date(newMeta[f.date]) >= today)) upd.archived = false;
       }
     }
+    if (upd.name || upd.meta) syncListCalendarEvent({ ...list, ...upd });
     if (Object.keys(upd).length) {
       fbDb.collection('families').doc(S.uid).collection('lists').doc(list.id)
         .update({ ...upd, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
@@ -12348,4 +12401,5 @@ async function listDelete(listId) {
   if (!ok) return;
   if (_listDetailId === listId) closeListDetail();
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId).delete();
+  removeListCalendarEvent(listId);
 }
