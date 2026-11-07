@@ -10220,11 +10220,13 @@ function _nameHue(name) {
 const _isJointMode = m => m === 'edit' || m === 'claim';
 const _hasClaimShare = list => (list.publicShares || []).some(s => s.mode === 'claim');
 
-function _checkerBadge(name, id) {
+// A guest's claims carry a private id, so two guests with the same name still get different colors
+const _badgeHue = (name, id) => _nameHue(id ? name + '#' + id : name);
+
+function _checkerBadge(name, id, label) {
   if (!name) return '';
-  // A guest's claims carry a private id, so two guests with the same name still get different colors
-  const hue = _nameHue(id ? name + '#' + id : name);
-  return `<span class="list-item-checker" style="background:hsl(${hue},60%,88%);color:hsl(${hue},50%,28%)">${esc(name)}</span>`;
+  const hue = _badgeHue(name, id);
+  return `<span class="list-item-checker" style="background:hsl(${hue},60%,88%);color:hsl(${hue},50%,28%)">${esc(label || name)}</span>`;
 }
 
 function _genShareToken() {
@@ -10577,11 +10579,11 @@ function _guestClaimHtml(token, share) {
   const row = it => {
     const qty = it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : '';
     if (!it.done) return `<div class="list-item"><span class="list-item-name">${esc(it.name)}</span>${qty}
-      <button class="claim-btn" onclick="guestToggleItem('${token}','${it.id}')">🙋 אני מביא/ה</button></div>`;
+      <button class="claim-btn" onclick="guestToggleItem('${token}','${it.id}')">🙋 אני אביא</button></div>`;
     const isMine = isMineItem(it);
     return `<div class="list-item list-item-done"><span class="list-item-name">${esc(it.name)}</span>${qty}
-      ${_checkerBadge(isMine ? it.checkedBy + ' (אני)' : it.checkedBy, it.checkedById)}
-      ${isMine ? `<button class="claim-btn claim-btn-cancel" onclick="guestToggleItem('${token}','${it.id}')">ביטול</button>` : ''}</div>`;
+      ${_checkerBadge(it.checkedBy, it.checkedById, isMine ? it.checkedBy + ' (אני)' : null)}
+      ${isMine ? `<button class="claim-x" title="ביטול" onclick="guestToggleItem('${token}','${it.id}')">×</button>` : ''}</div>`;
   };
   h += `<div class="card list-items-card">${shown.length ? shown.map(row).join('')
     : `<div class="list-empty-hint">${f === 'mine' ? 'עוד לא בחרת פריטים' : f === 'free' ? 'הכל כבר נבחר 🎉' : 'הרשימה ריקה'}</div>`}</div>`;
@@ -11629,8 +11631,13 @@ function _claimFilterItems(list, arr) {
 }
 function _claimFilterHtml(list) {
   if (!_hasClaimShare(list)) return '';
-  const chip = (v, label) => `<button class="claim-chip${_claimFilter === v ? ' active' : ''}" data-v="${esc(v)}" onclick="_setClaimFilter(this.dataset.v)">${esc(label)}</button>`;
-  return `<div class="claim-chips">${chip('all', 'הכל')}${chip('__free', 'פנוי')}${_claimNames(list).map(n => chip(n, n)).join('')}</div>`;
+  const chip = (v, label, hue) => {
+    const style = hue == null ? '' : ` style="background:hsl(${hue},60%,88%);color:hsl(${hue},50%,28%);border-color:${_claimFilter === v ? `hsl(${hue},50%,28%)` : `hsl(${hue},60%,88%)`}"`;
+    return `<button class="claim-chip${_claimFilter === v ? ' active' : ''}${hue == null ? '' : ' claim-chip-person'}" data-v="${esc(v)}"${style} onclick="_setClaimFilter(this.dataset.v)">${esc(label)}</button>`;
+  };
+  // Same color as the person's badge on their items
+  const hueOf = n => { const it = (list.items || []).find(i => i.done && i.checkedBy === n); return _badgeHue(n, it?.checkedById); };
+  return `<div class="claim-chips">${chip('all', 'הכל')}${chip('__free', 'פנוי')}${_claimNames(list).map(n => chip(n, n, hueOf(n))).join('')}</div>`;
 }
 function _setClaimFilter(v) { _claimFilter = v; _renderListDetail(); }
 
