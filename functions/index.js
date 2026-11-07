@@ -2,6 +2,7 @@ const functions = require('firebase-functions');
 const admin     = require('firebase-admin');
 admin.initializeApp();
 const db = admin.firestore();
+const notify = require('./notify-helpers');
 
 // ── Helpers ───────────────────────────────────────────────
 
@@ -14,6 +15,11 @@ async function getTokens(familyUid, ownerOnly = false, memberName = null) {
   const tokens = snap.docs.map(d => d.data().token).filter(Boolean);
   console.log(`getTokens(${familyUid}, ownerOnly=${ownerOnly}, memberName=${memberName}): found ${tokens.length} token(s)`);
   return tokens;
+}
+
+async function getTokenDocs(familyUid) {
+  const snap = await db.collection('families').doc(familyUid).collection('fcmTokens').get();
+  return snap.docs.map(d => ({ token: d.data().token, memberName: d.data().memberName || '' }));
 }
 
 async function removeStaleToken(token) {
@@ -1833,3 +1839,40 @@ async function _fetchWebtopHomework(token, syncParams, fullCookie, weekOffset = 
   }
   return homework;
 }
+
+
+// ── Family notifications ──────────────────────────────────
+
+// A new list was shared with you
+exports.onListCreated = functions.firestore
+  .document('families/{familyUid}/lists/{listId}')
+  .onCreate(async (snap, ctx) => {
+    const list = snap.data();
+    const { familyUid, listId } = ctx.params;
+    const target = notify.listShareTarget(list);
+    if (!target) return; // private list — nobody else to tell
+    const tokens = notify.pickTokens(await getTokenDocs(familyUid), target);
+    const { title, body } = notify.listSharedMessage(list);
+    await sendToTokens(tokens, title, body, { type: 'list', listId, tag: `list-${listId}` });
+  });
+
+// Every evening at 18:00 (Israel): remind people of tomorrow's calendar events,
+// only those the event is visible to (this includes calendar events created from dated lists)
+exports.dailyEventReminders = functions.pubsub
+  .schedule('0 18 * * *')
+  .timeZone('Asia/Jerusalem')
+  .onRun(async () => {
+    const date = notify.tomorrowIn('Asia/Jerusalem');
+    const families = await db.collection('families').select('events').get();
+    for (const fam of families.docs) {
+      const due = notify.eventsDueOn(fam.data().events, date);
+      if (!due.length) continue;
+      const tokenDocs = await getTokenDocs(fam.id);
+      for (const ev of due) {
+        const tokens = notify.pickTokens(tokenDocs, notify.eventTarget(ev));
+        const { title, body } = notify.reminderMessage(ev);
+        await sendToTokens(tokens, title, body, { type: 'eventReminder', date, tag: `ev-${ev.id || ev.title}-${date}` });
+      }
+    }
+    console.log(`dailyEventReminders: done for ${date}`);
+  });
