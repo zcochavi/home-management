@@ -10395,7 +10395,6 @@ function _renderGuestShare(token, share) {
     const items = share.items || [], steps = share.steps || [];
     h += `<div class="card list-items-card"><div class="list-section-hdr">🧂 מצרכים</div>
       ${items.length ? items.map(it => `<div class="list-item">
-        <div style="width:28px;flex-shrink:0"></div>
         <span class="list-item-name">${esc(it.name)}</span>
         ${it.amount ? `<span class="list-item-qty">${esc(it.amount)}${it.unit?' '+esc(it.unit):''}</span>` : ''}
       </div>`).join('') : `<div class="list-empty-hint">אין מצרכים</div>`}
@@ -10804,7 +10803,7 @@ function _subscribeActiveShares(lists) {
 function _autoArchiveCheck(uid, lists) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const toArchive = lists.filter(l => {
-    if (l.archived) return false;
+    if (l.archived || l.keepActive) return false;
     const d = l.meta?.tripDate || l.meta?.eventDate;
     return d && new Date(d) < today;
   });
@@ -11100,7 +11099,8 @@ async function listRename(listId) {
 
 async function listSetArchived(listId, archive) {
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
-    .update({ archived: archive, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    // Restoring by hand = keep it active even if its date has passed (until the date is changed)
+    .update({ archived: archive, keepActive: !archive, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
     .catch(e => console.error('[lists] archive failed:', e));
 }
 
@@ -11530,10 +11530,31 @@ function listToggleEditMode() {
   } else {
     const inp = el('listTitleInput');
     const newName = (inp ? inp.value : '').trim();
-    if (newName && newName !== list.name) {
+    const upd = {};
+    if (newName && newName !== list.name) upd.name = newName;
+    const newMeta = _listReadMetaInputs(list);
+    if (newMeta) {
+      const oldMeta = list.meta || {};
+      if (Object.keys(newMeta).some(k => (newMeta[k] || '') !== (oldMeta[k] || ''))) upd.meta = { ...oldMeta, ...newMeta };
+      const f = _listMetaFields(list);
+      if (f && (newMeta[f.date] || '') !== (oldMeta[f.date] || '')) {
+        // Date changed: re-evaluate archiving from scratch
+        upd.keepActive = false;
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        if (list.archived && (!newMeta[f.date] || new Date(newMeta[f.date]) >= today)) upd.archived = false;
+      }
+    }
+    if (Object.keys(upd).length) {
       fbDb.collection('families').doc(S.uid).collection('lists').doc(list.id)
-        .update({ name: newName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-        .catch(e => console.error('[lists] rename failed:', e));
+        .update({ ...upd, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        .catch(e => console.error('[lists] update failed:', e));
+      (list.publicShares || []).forEach(sh => {
+        const sUpd = { updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+        if (upd.name) sUpd.name = upd.name;
+        if (upd.meta) sUpd.meta = upd.meta;
+        fbDb.collection('publicShares').doc(sh.token).update(sUpd)
+          .catch(e => console.warn('[share-sync] meta sync failed:', e));
+      });
     }
     _listEditMode = false;
     _renderListDetail();
@@ -11541,6 +11562,28 @@ function listToggleEditMode() {
     editBtn.style.color = 'var(--success)';
     setTimeout(() => { editBtn.textContent = '✏️'; editBtn.style.color = ''; }, 2000);
   }
+}
+
+// Place + date fields shown in edit mode (packing: destination/tripDate, event: location/eventDate)
+function _listMetaFields(list) {
+  if (list.type === 'packing') return { place: 'destination', date: 'tripDate', placeLabel: 'יעד', icon: '✈️' };
+  if (list.type === 'event')   return { place: 'location',    date: 'eventDate', placeLabel: 'מקום', icon: '📍' };
+  return null;
+}
+function _listMetaEditHtml(list) {
+  const f = _listMetaFields(list); if (!f) return '';
+  const m = list.meta || {};
+  const place = el('listMetaPlace')?.value ?? (m[f.place] || '');
+  const date  = el('listMetaDate')?.value  ?? (m[f.date]  || '');
+  return `<div class="card list-meta-edit">
+    <input class="add-input" id="listMetaPlace" type="text" placeholder="${f.icon} ${f.placeLabel} (אופציונלי)" value="${esc(place)}">
+    <input class="add-input" id="listMetaDate" type="date" style="margin-top:8px" value="${esc(date)}">
+  </div>`;
+}
+function _listReadMetaInputs(list) {
+  const f = _listMetaFields(list);
+  if (!f || !el('listMetaPlace')) return null;
+  return { [f.place]: el('listMetaPlace').value.trim(), [f.date]: el('listMetaDate')?.value || '' };
 }
 
 function _getOpenList() { return (S.lists || []).find(l => l.id === _listDetailId) || null; }
@@ -11577,8 +11620,11 @@ function _renderPackingDetail(cont, list, canEdit) {
   const done  = items.filter(i => i.done);
   const undone = items.filter(i => !i.done);
   let h = '';
-  if (list.meta?.destination) h += `<div class="list-meta-chip">✈️ ${esc(list.meta.destination)}</div>`;
-  if (list.meta?.tripDate)    h += `<div class="list-meta-chip">📅 ${fmtDate(list.meta.tripDate)}</div>`;
+  if (canEdit) h += _listMetaEditHtml(list);
+  else {
+    if (list.meta?.destination) h += `<div class="list-meta-chip">✈️ ${esc(list.meta.destination)}</div>`;
+    if (list.meta?.tripDate)    h += `<div class="list-meta-chip">📅 ${fmtDate(list.meta.tripDate)}</div>`;
+  }
   if (canEdit) h += _addItemFormHtml(list.id, 'packing', '+ הוסף פריט...');
   if (undone.length) {
     h += `<div class="card list-items-card">${undone.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showQty:true})).join('')}</div>`;
@@ -11594,14 +11640,16 @@ const _listCheckSvg = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor
 // Swipe reveals edit; × button always visible for delete
 function _listSwipeItemHtml(listId, it, canEdit, opts = {}) {
   const { showQty = false, showAmount = false, arrayKey = 'items', checkable = true } = opts;
-  const checkBtn = (canEdit || !checkable)
-    ? `<div style="width:28px;flex-shrink:0"></div>`
+  const checkBtn = canEdit
+    ? `<span class="list-drag-handle" title="גרור לשינוי סדר" ontouchstart="event.stopPropagation()" onpointerdown="listItemDragDown(event,'${listId}','${it.id}','${arrayKey}')">⠿</span>`
+    : !checkable
+    ? ''
     : `<button class="list-check-btn${it.done ? ' checked' : ''}" onclick="listToggleItem('${listId}','${it.id}','${arrayKey}')">${it.done ? _listCheckSvg : ''}</button>`;
   const inner = `<div class="list-item${it.done ? ' list-item-done' : ''}">
     ${checkBtn}
-    <span class="list-item-name">${esc(it.name)}</span>
-    ${showQty && it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
-    ${showAmount && it.amount ? `<span class="list-item-qty">${esc(it.amount)}${it.unit ? ' ' + esc(it.unit) : ''}</span>` : ''}
+    <span class="list-item-name"${canEdit ? ` style="cursor:text" onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')"` : ''}>${esc(it.name)}</span>
+    ${showQty && it.qty ? `<span class="list-item-qty"${canEdit ? ` onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')"` : ''}>${esc(it.qty)}</span>` : ''}
+    ${showAmount && it.amount ? `<span class="list-item-qty"${canEdit ? ` onclick="listStartItemEdit('${listId}','${it.id}','${arrayKey}')"` : ''}>${esc(it.amount)}${it.unit ? ' ' + esc(it.unit) : ''}</span>` : ''}
     ${it.done ? _checkerBadge(it.checkedBy) : ''}
     ${canEdit ? `<button class="list-item-del" onclick="listDeleteItem('${listId}','${it.id}','${arrayKey}')">×</button>` : ''}
   </div>`;
@@ -11692,6 +11740,82 @@ function _initListItemSwipes() {
       if (isOpen) { slide.style.transition = 'transform 0.22s ease'; slide.style.transform = 'translateX(0)'; isOpen = false; }
     });
   });
+}
+
+// ── Long-press drag to reorder items (edit mode) ──
+const _ldrag = { on:false, timer:null, id:null, startIdx:-1, hoverIdx:-1, y0:0, rowH:48, rows:[], handle:null, listId:null, arrayKey:'items' };
+
+function listItemDragDown(e, listId, itemId, arrayKey) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  e.stopPropagation();
+  const handle = e.currentTarget;
+  const row = handle.closest('.list-item-row');
+  const rows = row ? [...row.parentElement.querySelectorAll(':scope > .list-item-row')] : [];
+  const idx = rows.indexOf(row);
+  if (idx < 0) return;
+  handle.setPointerCapture(e.pointerId);
+  Object.assign(_ldrag, { handle, rows, listId, arrayKey, id: itemId, startIdx: idx, hoverIdx: idx, y0: e.clientY, on: false });
+  handle.addEventListener('pointermove', listItemDragMove);
+  handle.addEventListener('pointerup', listItemDragUp);
+  handle.addEventListener('pointercancel', listItemDragUp);
+  _ldrag.timer = setTimeout(() => {
+    _ldrag.timer = null;
+    _ldrag.on = true;
+    _ldrag.rowH = rows[idx].offsetHeight || 48;
+    rows[idx].classList.add('list-item-dragging');
+    if (navigator.vibrate) navigator.vibrate(40);
+  }, 350);
+}
+
+function listItemDragMove(e) {
+  if (_ldrag.timer && Math.abs(e.clientY - _ldrag.y0) > 15) { clearTimeout(_ldrag.timer); _ldrag.timer = null; }
+  if (!_ldrag.on) return;
+  e.preventDefault();
+  const { rows, startIdx, rowH } = _ldrag;
+  const dy = e.clientY - _ldrag.y0;
+  rows[startIdx].style.transform = `translateY(${dy}px)`;
+  const hover = Math.max(0, Math.min(rows.length - 1, Math.round(startIdx + dy / rowH)));
+  _ldrag.hoverIdx = hover;
+  rows.forEach((r, i) => {
+    if (i === startIdx) return;
+    let shift = 0;
+    if (hover > startIdx && i > startIdx && i <= hover) shift = -rowH;
+    if (hover < startIdx && i >= hover && i < startIdx) shift = rowH;
+    r.style.transition = 'transform 0.15s ease';
+    r.style.transform = shift ? `translateY(${shift}px)` : '';
+  });
+}
+
+async function listItemDragUp() {
+  if (_ldrag.timer) { clearTimeout(_ldrag.timer); _ldrag.timer = null; }
+  const h = _ldrag.handle;
+  if (h) {
+    h.removeEventListener('pointermove', listItemDragMove);
+    h.removeEventListener('pointerup', listItemDragUp);
+    h.removeEventListener('pointercancel', listItemDragUp);
+    _ldrag.handle = null;
+  }
+  if (!_ldrag.on) return;
+  _ldrag.on = false;
+  const { rows, startIdx, hoverIdx, listId, arrayKey } = _ldrag;
+  rows.forEach(r => { r.style.transform = r.style.transition = ''; r.classList.remove('list-item-dragging'); });
+  if (hoverIdx === startIdx) return;
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return;
+  const arr = list[arrayKey] || [];
+  // Reordered group = the not-done items shown in this card; done items keep their slots
+  const slots = [], group = [];
+  arr.forEach((it, i) => { if (!it.done) { slots.push(i); group.push(it); } });
+  if (group.length !== rows.length) return;
+  const [moved] = group.splice(startIdx, 1);
+  group.splice(hoverIdx, 0, moved);
+  slots.forEach((slot, k) => { arr[slot] = group[k]; });
+  _renderListDetail();
+  try {
+    await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+      .update({ [arrayKey]: arr, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    if (arrayKey === 'items') _syncAllItemsToShares(list);
+  } catch (err) { console.error('[lists] reorder failed:', err); }
 }
 
 function listStartItemEdit(listId, itemId, arrayKey = 'items') {
@@ -11793,7 +11917,7 @@ function _renderRecipeDetail(cont, list, canEdit) {
           style="${_listCookMode ? 'cursor:pointer' : ''}">
           ${isDone ? `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="2.5 8 6 11.5 13.5 4.5"/></svg>` : idx + 1}
         </div>
-        <span class="list-step-text">${esc(st.text)}</span>
+        <span class="list-step-text" id="listStepText_${idx}"${canEdit ? ` style="cursor:text" onclick="listStartStepEdit('${list.id}',${idx})"` : ''}>${esc(st.text)}</span>
         ${canEdit ? `<button class="list-item-del" onclick="listDeleteStep('${list.id}',${idx})">×</button>` : ''}
       </div>`;
     }).join('') : `<div class="list-empty-hint">הוסף שלבי הכנה...</div>`}
@@ -11834,7 +11958,8 @@ function _renderEventDetail(cont, list, canEdit) {
   const metaParts = [];
   if (list.meta?.eventDate) metaParts.push(`📅 ${fmtDate(list.meta.eventDate)}`);
   if (list.meta?.location)  metaParts.push(`📍 ${esc(list.meta.location)}`);
-  if (metaParts.length) h += `<div class="list-meta-chip">${metaParts.join('  ·  ')}</div>`;
+  if (canEdit) h += _listMetaEditHtml(list);
+  else if (metaParts.length) h += `<div class="list-meta-chip">${metaParts.join('  ·  ')}</div>`;
 
   if (items.length) {
     const pct = Math.round(done.length / items.length * 100);
@@ -11995,6 +12120,34 @@ async function _promptFinishCooking(listId) {
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ cookLog, steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   _showSnackbar(`בישול מספר ${cookLog.length} נרשם 👨‍🍳`);
+}
+
+function listStartStepEdit(listId, idx) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  const st = list?.steps?.[idx];
+  const span = el(`listStepText_${idx}`);
+  if (!st || !span) return;
+  span.outerHTML = `<input class="list-edit-name" id="listStepEdit_${idx}" type="text" value="${esc(st.text)}" style="flex:1"
+    onkeydown="if(event.key==='Enter')listSaveStepEdit('${listId}',${idx});if(event.key==='Escape')_renderListDetail()"
+    onblur="listSaveStepEdit('${listId}',${idx})">`;
+  requestAnimationFrame(() => el(`listStepEdit_${idx}`)?.focus());
+}
+
+async function listSaveStepEdit(listId, idx) {
+  const inp = el(`listStepEdit_${idx}`);
+  if (!inp) return;
+  const text = inp.value.trim();
+  const list = (S.lists || []).find(l => l.id === listId);
+  const st = list?.steps?.[idx];
+  if (!st) return;
+  if (!text || text === st.text) { _renderListDetail(); return; }
+  st.text = text;
+  _renderListDetail();
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ steps: list.steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  (list.publicShares || []).forEach(sh => fbDb.collection('publicShares').doc(sh.token)
+    .update({ steps: JSON.parse(JSON.stringify(list.steps)), updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .catch(e => console.warn('[share-sync] steps sync failed:', e)));
 }
 
 async function listDeleteStep(listId, idx) {

@@ -1709,6 +1709,10 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
   cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 .list-add-card { margin-top: 8px; }
+.list-drag-handle { width: 28px; flex-shrink: 0; text-align: center; font-size: 18px; line-height: 1; color: var(--gray-300); cursor: grab; user-select: none; -webkit-user-select: none; touch-action: none; }
+.list-drag-handle:active { cursor: grabbing; color: var(--primary-500); }
+.list-item-row.list-item-dragging { background: var(--surface); box-shadow: var(--shadow-hover); z-index: 10; transition: none !important; }
+.list-meta-edit { padding: 12px; margin-bottom: 8px; }
 .list-title-input {
   font-size: 16px; font-weight: 700; color: var(--gray-900);
   border: none; border-bottom: 2px solid var(--primary-500);
