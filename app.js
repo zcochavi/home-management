@@ -10804,7 +10804,7 @@ function _subscribeActiveShares(lists) {
 function _autoArchiveCheck(uid, lists) {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const toArchive = lists.filter(l => {
-    if (l.archived) return false;
+    if (l.archived || l.keepActive) return false;
     const d = l.meta?.tripDate || l.meta?.eventDate;
     return d && new Date(d) < today;
   });
@@ -11100,7 +11100,8 @@ async function listRename(listId) {
 
 async function listSetArchived(listId, archive) {
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
-    .update({ archived: archive, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    // Restoring by hand = keep it active even if its date has passed (until the date is changed)
+    .update({ archived: archive, keepActive: !archive, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
     .catch(e => console.error('[lists] archive failed:', e));
 }
 
@@ -11536,6 +11537,13 @@ function listToggleEditMode() {
     if (newMeta) {
       const oldMeta = list.meta || {};
       if (Object.keys(newMeta).some(k => (newMeta[k] || '') !== (oldMeta[k] || ''))) upd.meta = { ...oldMeta, ...newMeta };
+      const f = _listMetaFields(list);
+      if (f && (newMeta[f.date] || '') !== (oldMeta[f.date] || '')) {
+        // Date changed: re-evaluate archiving from scratch
+        upd.keepActive = false;
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        if (list.archived && (!newMeta[f.date] || new Date(newMeta[f.date]) >= today)) upd.archived = false;
+      }
     }
     if (Object.keys(upd).length) {
       fbDb.collection('families').doc(S.uid).collection('lists').doc(list.id)
