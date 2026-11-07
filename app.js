@@ -4228,9 +4228,17 @@ function renderCommCard(kid) {
 
   const allEvs = [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])]
     .filter(e => matchesGenderFilter(e, kid.name));
-  // Past events drop off the feed once their day is over (undated posts stay)
-  const upcoming = allEvs.filter(e => isEventUpcoming(e.date))
-    .sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  const _cutoff = new Date(); _cutoff.setDate(_cutoff.getDate() - 14);
+  const _today  = new Date().toISOString().slice(0,10);
+  const upcoming = allEvs.filter(e => {
+    if (!e.date) return true;
+    const [ey,em,ed] = e.date.split('-').map(Number);
+    return new Date(ey, em-1, ed) >= _cutoff;
+  }).sort((a,b) => {
+    const af = !a.date || a.date >= _today, bf = !b.date || b.date >= _today;
+    if (af !== bf) return af ? -1 : 1;        // upcoming before past
+    return (a.date||'').localeCompare(b.date||'');  // both asc
+  });
 
   return `<div class="card" id="commCard_${cid}">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
