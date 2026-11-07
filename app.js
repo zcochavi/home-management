@@ -2943,16 +2943,21 @@ async function mgmtAdvanceSchoolYear() {
     : `Advance all kids one grade?\n\n${lines}\n\nClass numbers will be cleared (re-enter them), and kids moving to a new school will need the school updated.`;
   if (!confirm(msg)) return;
 
-  const oldSchools = {};
+  const oldSchools = {}, oldCodes = {};
   const updated = members.map(m => {
     if (m.role !== 'kid' || !m.school?.grade) return m;
     oldSchools[m.name] = m.school;
-    const next = { ...m, school: { ...m.school, grade: nextGrade(m.school.grade), classNum: '' } };
-    delete next.webtopClassCode;
-    return next;
+    oldCodes[m.name] = m.webtopClassCode;
+    return { ...m, school: { ...m.school, grade: nextGrade(m.school.grade), classNum: '' } };
+  });
+  // New class → erase each advancing kid's Webtop homework for the old class (personal homework
+  // and shared class homework are left alone; class homework expires on June 30).
+  let hwPurgeExtra = {};
+  Object.keys(oldSchools).forEach(name => {
+    Object.assign(hwPurgeExtra, purgeKidHomework(name, updated, oldCodes[name]));
   });
   if (familyData) familyData.members = updated;
-  await fbDb.collection('families').doc(S.uid).update({ members: updated });
+  await fbDb.collection('families').doc(S.uid).update({ members: updated, ...hwPurgeExtra });
   renderMgmtMembers();
   for (const m of updated) {
     if (!oldSchools[m.name]) continue;
@@ -3008,11 +3013,16 @@ async function saveMgmtEdit(i, originalName) {
     if (S.child  === originalName) S.child  = newName;
     localStorage.setItem('familyhub_member_' + S.uid, S.user);
   }
+  let hwPurgeExtra = {};
+  if (newRole === 'kid' && _classChanged(oldSchool, school)) {
+    hwPurgeExtra = purgeKidHomework(newName, members, oldMember?.webtopClassCode);
+  }
   if (familyData) familyData.members = members;
   await fbDb.collection('families').doc(S.uid).update({
-    members, chores:S.chores, homework:S.homework, stars:S.stars,
+    members, chores:S.chores, homework:S.homework, stars:S.stars, ...hwPurgeExtra,
   });
   panel.classList.remove('open');
+  if (Object.keys(hwPurgeExtra).length || (newRole === 'kid' && _classChanged(oldSchool, school))) { renderHomework(); renderHome(); }
   // Generate kid code if role changed to kid and no code yet
   const savedMember = members.find(m => m.name === newName);
   if (newRole === 'kid' && !savedMember?.joinCode) {
@@ -3300,6 +3310,45 @@ function schoolIdFor(school) {
 }
 function classMemberId(familyUid, kidName) {
   return familyUid + '__' + kidName.replace(/[^a-z0-9א-תA-Z\u0590-\u05FF]/gi,'_');
+}
+
+// ── Homework lifecycle on class change ──────────────────────
+// Class-level homework (shared schoolClasses/*/homework and Webtop class items) lives until the
+// first June 30 on/after it was created (end of the school year); after that it is hidden.
+function _schoolYearEnd(d) {
+  let e = new Date(d.getFullYear(), 5, 30, 23, 59, 59, 999);
+  if (d.getTime() > e.getTime()) e = new Date(d.getFullYear() + 1, 5, 30, 23, 59, 59, 999);
+  return e;
+}
+function _classHwExpired(h) {
+  let d = h?.createdAt?.toDate ? h.createdAt.toDate()
+        : (h?.date || h?.due) ? new Date(h.date || h.due) : null;
+  if (!d || isNaN(d.getTime())) return false;
+  return Date.now() > _schoolYearEnd(d).getTime();
+}
+function _classChanged(oldSchool, newSchool) {
+  const oldId = classIdFor(oldSchool);
+  return !!oldId && oldId !== classIdFor(newSchool);
+}
+// When a kid changes class: erase their Webtop-imported homework for the old class code and
+// clear the Webtop mapping. Personal homework (tasks the parents assigned) is NEVER touched —
+// it is only removed when a user deletes it. Shared class homework is NOT deleted either (other
+// families depend on it) — it just stops showing for this kid (their class id changed) and
+// expires at the next June 30.
+// Mutates `members` / _webtopHomework in memory; returns extra fields for the families-doc update.
+function purgeKidHomework(kidName, members, oldWebtopCode) {
+  const kid = members.find(m => m.name === kidName);
+  if (kid) delete kid.webtopClassCode;
+  const extra = {};
+  if (oldWebtopCode && !members.some(m => m.name !== kidName && m.webtopClassCode === oldWebtopCode)) {
+    _webtopHomework = _webtopHomework.filter(h => h.classCode !== oldWebtopCode);
+    extra.webtopHomework = _webtopHomework;
+    const done = { ...(familyData?.webtopHomeworkDone || {}) };
+    Object.keys(done).forEach(k => { if (k.startsWith(oldWebtopCode + '|')) delete done[k]; });
+    if (familyData) familyData.webtopHomeworkDone = done;
+    extra.webtopHomeworkDone = done;
+  }
+  return extra;
 }
 
 async function registerInClass(kidName, school) {
@@ -6851,7 +6900,7 @@ function renderHome() {
     if (!_commCache[cid]) { _classHwNeedsLoad.push(member); return; }
     const key = classMemberId(S.uid, kidName);
     (_commCache[cid].homework || [])
-      .filter(h => !(h.doneBy && h.doneBy[key]))
+      .filter(h => !(h.doneBy && h.doneBy[key]) && !_classHwExpired(h))
       .forEach(h => classHw.push({...h, _kid: kidName, _cid: cid}));
   });
   if (_classHwNeedsLoad.length) {
@@ -6862,7 +6911,7 @@ function renderHome() {
   const _wtDoneMap = familyData?.webtopHomeworkDone || {};
   let wtHomeHw = featureOn('webtopConnection') ? _webtopHomework.filter(h => {
     const key = `${h.classCode}|${h.date}|${h.subject}`;
-    return !_wtDoneMap[key];
+    return !_wtDoneMap[key] && !_classHwExpired(h);
   }) : [];
   if (isKid()) {
     const myCode = getMembers().find(m => m.name === S.user)?.webtopClassCode;
@@ -8395,7 +8444,8 @@ function renderHomework(){
   if (classCid && !_commCache[classCid]) {
     loadCommunityData([childMember]).then(() => { if (S.tab === 'homework') renderHomework(); });
   }
-  let classHw = classCid ? (_commCache[classCid]?.homework || []) : [];
+  let classHw = classCid ? (_commCache[classCid]?.homework || []).filter(h => !_classHwExpired(h)) : [];
+  const _wtLive = _webtopHomework.filter(h => !_classHwExpired(h));
   const allPending=S.child
     ? S.homework.filter(h=>(!h.scope||h.scope==='personal')&&h.child===S.child&&!h.done)
     : [];
@@ -8407,13 +8457,13 @@ function renderHomework(){
   // filtered: homework for this child's classCode — fall back to ALL if code
   // doesn't match anything (e.g. stale safeKey mismatch from older syncs)
   const filtered = childClassCode
-    ? _webtopHomework.filter(h => h.classCode === childClassCode)
+    ? _wtLive.filter(h => h.classCode === childClassCode)
     : [];
   const allWtHw = !S.child
-    ? _webtopHomework                                      // parent all-kids view
+    ? _wtLive                                              // parent all-kids view
     : childClassCode
-      ? (filtered.length ? filtered : _webtopHomework)    // mapped: filtered, fallback to all if empty
-      : (!anyMapped ? _webtopHomework : []);               // unmapped kid: all only if nobody is mapped yet
+      ? (filtered.length ? filtered : _wtLive)            // mapped: filtered, fallback to all if empty
+      : (!anyMapped ? _wtLive : []);               // unmapped kid: all only if nobody is mapped yet
 
   // Subject filter chips — union of subjects across active AND history (all three sections)
   const subjChipsEl=el('hwSubjectChips');
