@@ -6427,6 +6427,14 @@ function renderHomeUpcoming() {
   container.innerHTML = all.map(ev => {
     const isClass = ev._src === 'class';
     const kidArg = isClass && ev._kid ? esc(ev._kid).replace(/'/g,"\\'") : '';
+    // Parents viewing "everyone" or themselves: say whose event it is (class events already show the child)
+    let whoChip = '';
+    if (isParent() && !filterKid && !isClass) {
+      const ps = eventPersons(ev), isAll = ps.includes('All');
+      const col = getPersonColor(isAll ? 'All' : ps[0]);
+      const label = isAll ? `👨‍👩‍👧‍👧 ${t('everyone')}` : ps.map(n => getEmoji(n) + ' ' + esc(n)).join(' · ');
+      whoChip = `<span class="event-person-chip" style="background:${col}22;color:${col};margin-inline-start:6px">${label}</span>`;
+    }
     const rowClick = ev.listId
       ? `switchTab('lists');openListDetail('${esc(ev.listId)}')`
       : `navToCalendarDate('${ev.date}','${ev._src||''}','${kidArg}')`;
@@ -6434,7 +6442,7 @@ function renderHomeUpcoming() {
       <div class="home-event-icon">${ev.icon || eventTypeIcon(ev.type)}</div>
       <div class="home-event-body">
         <div class="home-event-title">${esc(ev.title)}${isClass ? scopeBadge(ev.scope) : ''}</div>
-        <div class="home-event-meta">${fmtDate(ev.date)}${ev.time ? ' · ' + ev.time : ''}${ev.location ? ' · ' + _ico.pin + ' ' + esc(ev.location) : ''}${isClass && ev._kid ? ' · ' + esc(ev._kid) : ''}</div>
+        <div class="home-event-meta">${fmtDate(ev.date)}${ev.time ? ' · ' + ev.time : ''}${ev.location ? ' · ' + _ico.pin + ' ' + esc(ev.location) : ''}${isClass && ev._kid ? ' · ' + esc(ev._kid) : ''}${whoChip}</div>
       </div>
       <span class="home-chevron">›</span>
     </div>`;
