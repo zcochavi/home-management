@@ -1709,6 +1709,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
   cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 .list-add-card { margin-top: 8px; }
+.list-meta-edit { padding: 12px; margin-bottom: 8px; }
 .list-title-input {
   font-size: 16px; font-weight: 700; color: var(--gray-900);
   border: none; border-bottom: 2px solid var(--primary-500);

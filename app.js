@@ -11530,10 +11530,24 @@ function listToggleEditMode() {
   } else {
     const inp = el('listTitleInput');
     const newName = (inp ? inp.value : '').trim();
-    if (newName && newName !== list.name) {
+    const upd = {};
+    if (newName && newName !== list.name) upd.name = newName;
+    const newMeta = _listReadMetaInputs(list);
+    if (newMeta) {
+      const oldMeta = list.meta || {};
+      if (Object.keys(newMeta).some(k => (newMeta[k] || '') !== (oldMeta[k] || ''))) upd.meta = { ...oldMeta, ...newMeta };
+    }
+    if (Object.keys(upd).length) {
       fbDb.collection('families').doc(S.uid).collection('lists').doc(list.id)
-        .update({ name: newName, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-        .catch(e => console.error('[lists] rename failed:', e));
+        .update({ ...upd, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        .catch(e => console.error('[lists] update failed:', e));
+      (list.publicShares || []).forEach(sh => {
+        const sUpd = { updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+        if (upd.name) sUpd.name = upd.name;
+        if (upd.meta) sUpd.meta = upd.meta;
+        fbDb.collection('publicShares').doc(sh.token).update(sUpd)
+          .catch(e => console.warn('[share-sync] meta sync failed:', e));
+      });
     }
     _listEditMode = false;
     _renderListDetail();
@@ -11541,6 +11555,28 @@ function listToggleEditMode() {
     editBtn.style.color = 'var(--success)';
     setTimeout(() => { editBtn.textContent = '✏️'; editBtn.style.color = ''; }, 2000);
   }
+}
+
+// Place + date fields shown in edit mode (packing: destination/tripDate, event: location/eventDate)
+function _listMetaFields(list) {
+  if (list.type === 'packing') return { place: 'destination', date: 'tripDate', placeLabel: 'יעד', icon: '✈️' };
+  if (list.type === 'event')   return { place: 'location',    date: 'eventDate', placeLabel: 'מקום', icon: '📍' };
+  return null;
+}
+function _listMetaEditHtml(list) {
+  const f = _listMetaFields(list); if (!f) return '';
+  const m = list.meta || {};
+  const place = el('listMetaPlace')?.value ?? (m[f.place] || '');
+  const date  = el('listMetaDate')?.value  ?? (m[f.date]  || '');
+  return `<div class="card list-meta-edit">
+    <input class="add-input" id="listMetaPlace" type="text" placeholder="${f.icon} ${f.placeLabel} (אופציונלי)" value="${esc(place)}">
+    <input class="add-input" id="listMetaDate" type="date" style="margin-top:8px" value="${esc(date)}">
+  </div>`;
+}
+function _listReadMetaInputs(list) {
+  const f = _listMetaFields(list);
+  if (!f || !el('listMetaPlace')) return null;
+  return { [f.place]: el('listMetaPlace').value.trim(), [f.date]: el('listMetaDate')?.value || '' };
 }
 
 function _getOpenList() { return (S.lists || []).find(l => l.id === _listDetailId) || null; }
@@ -11577,8 +11613,11 @@ function _renderPackingDetail(cont, list, canEdit) {
   const done  = items.filter(i => i.done);
   const undone = items.filter(i => !i.done);
   let h = '';
-  if (list.meta?.destination) h += `<div class="list-meta-chip">✈️ ${esc(list.meta.destination)}</div>`;
-  if (list.meta?.tripDate)    h += `<div class="list-meta-chip">📅 ${fmtDate(list.meta.tripDate)}</div>`;
+  if (canEdit) h += _listMetaEditHtml(list);
+  else {
+    if (list.meta?.destination) h += `<div class="list-meta-chip">✈️ ${esc(list.meta.destination)}</div>`;
+    if (list.meta?.tripDate)    h += `<div class="list-meta-chip">📅 ${fmtDate(list.meta.tripDate)}</div>`;
+  }
   if (canEdit) h += _addItemFormHtml(list.id, 'packing', '+ הוסף פריט...');
   if (undone.length) {
     h += `<div class="card list-items-card">${undone.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showQty:true})).join('')}</div>`;
@@ -11834,7 +11873,8 @@ function _renderEventDetail(cont, list, canEdit) {
   const metaParts = [];
   if (list.meta?.eventDate) metaParts.push(`📅 ${fmtDate(list.meta.eventDate)}`);
   if (list.meta?.location)  metaParts.push(`📍 ${esc(list.meta.location)}`);
-  if (metaParts.length) h += `<div class="list-meta-chip">${metaParts.join('  ·  ')}</div>`;
+  if (canEdit) h += _listMetaEditHtml(list);
+  else if (metaParts.length) h += `<div class="list-meta-chip">${metaParts.join('  ·  ')}</div>`;
 
   if (items.length) {
     const pct = Math.round(done.length / items.length * 100);
