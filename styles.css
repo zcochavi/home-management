@@ -1114,6 +1114,14 @@ body {
 .hist-item { display: inline-flex; direction: rtl; align-items: baseline; vertical-align: baseline; gap: 2px; }
 .hist-missed-text { font-size: 12px; color: #c53030; margin-top: 2px; }
 .hist-missed-label { font-weight: 700; }
+.hist-receipt { font-size: 12px; font-weight: 600; color: var(--gray-500); margin-top: 3px; word-break: break-all; }
+.hist-receipt a { color: var(--primary-500); }
+.hist-receipt-btn { margin-top: 4px; background: none; border: 1px dashed var(--gray-300); color: var(--gray-500); border-radius: 8px; padding: 3px 10px; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.hist-receipt-btn:hover { border-color: var(--primary-500); color: var(--primary-500); }
+.rcp-hint { font-size: 13px; color: var(--gray-500); margin-bottom: 10px; }
+.rcp-video-wrap { position: relative; border-radius: 14px; overflow: hidden; background: #000; aspect-ratio: 4/3; }
+.rcp-video-wrap video { width: 100%; height: 100%; object-fit: cover; }
+.rcp-frame { position: absolute; inset: 22% 10%; border: 2px solid rgba(255,255,255,0.85); border-radius: 12px; pointer-events: none; }
 mark { background: #fef08a; color: inherit; border-radius: 2px; padding: 0 1px; }
 
 /* ═══════════════════════════════════════════

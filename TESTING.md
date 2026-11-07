@@ -83,3 +83,13 @@ Run through this before any significant deploy (major refactor, new feature, Clo
 - [ ] **Page loads** — no 404 errors in Network tab for CSS/JS files
 - [ ] **No console errors** — browser console is clean on load
 - [ ] **All tabs render** — click through every tab; verify no blank/broken sections
+
+---
+
+## Shopping — Receipt Scan
+
+- [ ] **Scan after shopping** — tap "סיימתי לקנות" and confirm; scanner sheet opens; scanning the receipt barcode/QR saves it and shows 🧾 on the history entry
+- [ ] **Skip** — "דלג" closes the sheet without saving; history entry shows "🧾 סרוק קבלה" (parents only)
+- [ ] **Manual entry** — type a number and save; it appears on the history entry
+- [ ] **QR with URL** — a receipt QR containing http(s) link shows as "פתח קבלה" link
+- [ ] **No camera support / denied** — sheet falls back to manual entry only (Safari/Firefox, or permission denied)

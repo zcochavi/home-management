@@ -66,6 +66,11 @@ const STRINGS = {
     doneShopping:'✓ סיימתי לקנות',
     shoppingHistoryTitle:'📋 היסטוריה', shoppingHistoryEmpty:'אין היסטוריית קניות עדיין',
     historyBought:'קנה', historyMissed:'לא הביא',
+    receiptScanTitle:'🧾 סריקת קבלה', receiptScanHint:'כוונו את המצלמה לברקוד או ל-QR שבקבלה',
+    receiptScanSkip:'דלג', receiptManualPlaceholder:'או הקלידו את מספר הקבלה...', receiptSave:'שמור',
+    receiptNoCamera:'הסריקה במצלמה לא נתמכת בדפדפן הזה — אפשר להקליד את המספר ידנית',
+    receiptCamDenied:'אין גישה למצלמה — אפשר להקליד את המספר ידנית',
+    receiptSaved:'🧾 הקבלה נשמרה', receiptAttach:'🧾 סרוק קבלה', receiptOpen:'פתח קבלה',
     addToList:'+ רשימה', inList:'✓ ברשימה',
     toCart:'לעגלה ←', returnToList:'↩ חזור',
     stillNeed:'עוד לקחת', inCartLabel:'בעגלה',
@@ -185,6 +190,11 @@ const STRINGS = {
     doneShopping:'✓ Done Shopping',
     shoppingHistoryTitle:'📋 History', shoppingHistoryEmpty:'No shopping history yet',
     historyBought:'Bought', historyMissed:'Missed',
+    receiptScanTitle:'🧾 Scan receipt', receiptScanHint:'Point the camera at the barcode or QR on the receipt',
+    receiptScanSkip:'Skip', receiptManualPlaceholder:'Or type the receipt number…', receiptSave:'Save',
+    receiptNoCamera:'Camera scanning isn\'t supported in this browser — you can type the number instead',
+    receiptCamDenied:'Camera access denied — you can type the number instead',
+    receiptSaved:'🧾 Receipt saved', receiptAttach:'🧾 Scan receipt', receiptOpen:'Open receipt',
     addToList:'+ List', inList:'✓ In List',
     toCart:'→ Cart', returnToList:'↩ Return',
     stillNeed:'Still need', inCartLabel:'In cart',
@@ -8112,6 +8122,108 @@ async function doneShopping() {
   saveGrocery();
   saveShoppingHistory();
   switchGrocerySection('shopping');
+  openReceiptScanner(entry.id);
+}
+
+// ── Receipt barcode / QR scanning ─────────────────────
+// Attaches the receipt's barcode value to a shopping-history entry.
+// Uses the native BarcodeDetector + camera when available; manual entry is always offered.
+let _rcpStream = null, _rcpRaf = 0, _rcpEntryId = null;
+
+function _rcpCleanup() {
+  cancelAnimationFrame(_rcpRaf);
+  if (_rcpStream) { _rcpStream.getTracks().forEach(tr => tr.stop()); _rcpStream = null; }
+  const ov = document.getElementById('_rcpOverlay');
+  if (ov) ov.remove();
+  _rcpEntryId = null;
+}
+
+async function openReceiptScanner(entryId) {
+  _rcpCleanup();
+  _rcpEntryId = entryId;
+  const ov = document.createElement('div');
+  ov.id = '_rcpOverlay';
+  ov.className = 'cmodal-overlay cmodal-visible';
+  ov.innerHTML = `<div class="cmodal-box rcp-box" onclick="event.stopPropagation()">
+    <div class="cmodal-msg" style="margin-bottom:8px">${t('receiptScanTitle')}</div>
+    <div class="rcp-hint" id="_rcpHint">${t('receiptScanHint')}</div>
+    <div class="rcp-video-wrap" id="_rcpVideoWrap"><video id="_rcpVideo" playsinline muted></video><div class="rcp-frame"></div></div>
+    <input id="_rcpInput" class="add-input" type="text" inputmode="numeric" dir="ltr" placeholder="${esc(t('receiptManualPlaceholder'))}"
+      style="margin:10px 0 4px;font-size:15px;width:100%;box-sizing:border-box"
+      onkeydown="if(event.key==='Enter')saveReceiptManual()">
+    <div class="cmodal-btns" style="margin-top:10px">
+      <button class="cmodal-btn cmodal-ok" onclick="saveReceiptManual()">${t('receiptSave')}</button>
+      <button class="cmodal-btn cmodal-cancel" onclick="_rcpCleanup()">${t('receiptScanSkip')}</button>
+    </div>
+  </div>`;
+  ov.addEventListener('click', _rcpCleanup);
+  document.body.appendChild(ov);
+
+  const hint = msg => { const h = document.getElementById('_rcpHint'); if (h) h.textContent = msg; };
+  const noVideo = () => { const w = document.getElementById('_rcpVideoWrap'); if (w) w.style.display = 'none'; };
+
+  if (!('BarcodeDetector' in window) || !navigator.mediaDevices?.getUserMedia) {
+    noVideo(); hint(t('receiptNoCamera')); return;
+  }
+  let detector;
+  try { detector = new BarcodeDetector(); } catch (e) { noVideo(); hint(t('receiptNoCamera')); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    if (_rcpEntryId !== entryId || !document.getElementById('_rcpOverlay')) { stream.getTracks().forEach(tr => tr.stop()); return; }
+    _rcpStream = stream;
+    const video = document.getElementById('_rcpVideo');
+    video.srcObject = stream;
+    await video.play();
+    let busy = false;
+    const tick = async () => {
+      if (!_rcpStream) return;
+      if (!busy && video.readyState >= 2) {
+        busy = true;
+        try {
+          const codes = await detector.detect(video);
+          if (codes.length && codes[0].rawValue) {
+            await _saveReceipt(entryId, codes[0].rawValue, codes[0].format);
+            return;
+          }
+        } catch (e) { /* keep scanning */ }
+        busy = false;
+      }
+      _rcpRaf = requestAnimationFrame(tick);
+    };
+    tick();
+  } catch (e) {
+    noVideo(); hint(t('receiptCamDenied'));
+  }
+}
+
+function saveReceiptManual() {
+  const v = (document.getElementById('_rcpInput')?.value || '').trim();
+  if (!v || _rcpEntryId == null) return;
+  _saveReceipt(_rcpEntryId, v, 'manual');
+}
+
+async function _saveReceipt(entryId, code, format) {
+  const entry = S.shoppingHistory.find(e => e.id === entryId);
+  _rcpCleanup();
+  if (!entry) return;
+  entry.receipt = { code: String(code).slice(0, 500), format: format || '', ts: Date.now() };
+  await saveShoppingHistory();
+  showToast(t('receiptSaved'), 'success');
+  if (typeof renderShoppingHistory === 'function') renderShoppingHistory();
+}
+
+function _receiptHtml(entry) {
+  const r = entry.receipt;
+  if (r?.code) {
+    const isUrl = /^https?:\/\//i.test(r.code);
+    const label = isUrl ? t('receiptOpen') : esc(r.code);
+    const body = isUrl
+      ? `<a href="${esc(r.code)}" target="_blank" rel="noopener noreferrer">${label}</a>`
+      : `<bdi dir="ltr">${label}</bdi>`;
+    return `<div class="hist-receipt">🧾 ${body}</div>`;
+  }
+  if (isParent()) return `<button class="hist-receipt-btn" onclick="openReceiptScanner(${entry.id})">${t('receiptAttach')}</button>`;
+  return '';
 }
 
 function _histEntryHtml(entry, searchTerm) {
@@ -8147,6 +8259,7 @@ function _histEntryHtml(entry, searchTerm) {
     </div>
     <div class="hist-items-text">${boughtHtml}</div>
     ${missedHtml}
+    ${_receiptHtml(entry)}
   </div>`;
 }
 
