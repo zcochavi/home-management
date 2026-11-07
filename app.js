@@ -2095,7 +2095,7 @@ function subscribeToFamily(uid) {
 function _gradeToNum(g) {
   if (!g) return null;
   const map = {א:1,ב:2,ג:3,ד:4,ה:5,ו:6,ז:7,ח:8,ט:9,י:10,יא:11,יב:12};
-  const s = String(g).trim().replace(/['\u05f3]/g,'');
+  const s = String(g).trim().replace(/['"\u05f3\u05f4]/g,'');
   if (map[s] !== undefined) return map[s];
   const n = parseInt(s, 10);
   return isNaN(n) ? null : n;
@@ -2653,6 +2653,11 @@ function renderMgmtMembers() {
   const isHe = getLang() === 'he';
   _mgmtEditEmoji = {};
   members.forEach((m, i) => { _mgmtEditEmoji[i] = m.emoji; });
+  const newYearBtn = el('mgmtNewYearBtn');
+  if (newYearBtn) {
+    newYearBtn.style.display = members.some(m => m.role === 'kid' && m.school?.grade) ? '' : 'none';
+    newYearBtn.textContent = isHe ? '🎓 שנת לימודים חדשה — העלאת כיתה לכולם' : '🎓 New school year — advance everyone a grade';
+  }
 
   el('mgmtMemberList').innerHTML = members.map((m, i) => {
     const canDel = members.length > 1 && m.name !== S.user &&
@@ -2867,6 +2872,49 @@ async function mgmtAddMember() {
   if (el('mgmtEditDob_new'))   el('mgmtEditDob_new').value = '';
   el('mgmtAddMemberForm').classList.remove('open');
   renderMgmtMembers();
+}
+
+// Advance every kid with a grade by one school year.
+// י"ב graduates (grade cleared). classNum is cleared (classes get reshuffled),
+// and the Webtop class mapping is reset so it re-matches on the new grade.
+async function mgmtAdvanceSchoolYear() {
+  const isHe = getLang() === 'he';
+  const members = getMembers();
+  const kids = members.filter(m => m.role === 'kid' && m.school?.grade);
+  if (!kids.length) return;
+  const nextGrade = g => {
+    const idx = GRADE_OPTIONS.indexOf(g);
+    if (idx < 1) return g;                       // unknown value: leave as is
+    return idx + 1 < GRADE_OPTIONS.length ? GRADE_OPTIONS[idx + 1] : '';
+  };
+  const lines = kids.map(k => {
+    const ng = nextGrade(k.school.grade);
+    return `• ${k.name}: ${k.school.grade} → ${ng || (isHe ? 'סיים/ה' : 'graduated')}`;
+  }).join('\n');
+  const msg = isHe
+    ? `להעלות את כל הילדים כיתה?\n\n${lines}\n\nמספר הכיתה יתאפס (יש להזין מחדש), וילדים שעוברים לחטיבה/תיכון ידרשו עדכון בית ספר.`
+    : `Advance all kids one grade?\n\n${lines}\n\nClass numbers will be cleared (re-enter them), and kids moving to a new school will need the school updated.`;
+  if (!confirm(msg)) return;
+
+  const oldSchools = {};
+  const updated = members.map(m => {
+    if (m.role !== 'kid' || !m.school?.grade) return m;
+    oldSchools[m.name] = m.school;
+    const next = { ...m, school: { ...m.school, grade: nextGrade(m.school.grade), classNum: '' } };
+    delete next.webtopClassCode;
+    return next;
+  });
+  if (familyData) familyData.members = updated;
+  await fbDb.collection('families').doc(S.uid).update({ members: updated });
+  renderMgmtMembers();
+  for (const m of updated) {
+    if (!oldSchools[m.name]) continue;
+    try { await syncKidClass(m.name, m.school, oldSchools[m.name], 'kid'); }
+    catch (e) { console.error('advance year sync:', m.name, e); }
+  }
+  renderMgmtCommunity();
+  if (typeof renderHomework === 'function') renderHomework();
+  if (typeof _applyWebtopAutoMatch === 'function') _applyWebtopAutoMatch();
 }
 
 async function saveMgmtEdit(i, originalName) {
