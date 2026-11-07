@@ -53,4 +53,14 @@ function listSharedMessage(list) {
   };
 }
 
-module.exports = { tomorrowIn, eventsDueOn, eventTarget, listShareTarget, pickTokens, reminderMessage, listSharedMessage };
+function homeworkMessage(hw, classLabelText) {
+  const desc = String(hw.desc || '').trim();
+  const short = desc.length > 80 ? desc.slice(0, 77) + '…' : desc;
+  const who = hw.createdBy?.name ? ` · ${hw.createdBy.name}` : '';
+  return {
+    title: `📚 שיעורי בית חדשים${hw.subject ? ': ' + hw.subject : ''}`,
+    body: `${short}${hw.due ? ' (להגשה ' + hw.due + ')' : ''}${who} · ${classLabelText}`,
+  };
+}
+
+module.exports = { homeworkMessage, tomorrowIn, eventsDueOn, eventTarget, listShareTarget, pickTokens, reminderMessage, listSharedMessage };

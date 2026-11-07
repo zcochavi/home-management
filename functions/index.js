@@ -1876,3 +1876,15 @@ exports.dailyEventReminders = functions.pubsub
     }
     console.log(`dailyEventReminders: done for ${date}`);
   });
+
+// A parent shared homework with the whole class
+exports.onClassHomeworkCreated = functions.firestore
+  .document('schoolClasses/{classId}/homework/{hwId}')
+  .onCreate(async (snap, ctx) => {
+    const hw  = snap.data();
+    const cid = ctx.params.classId;
+    const uids = await getClassFamilyUids(cid);
+    const { title, body } = notify.homeworkMessage(hw, classLabel(cid));
+    await notifyFamilies(uids, hw.createdBy?.familyUid, title, body,
+      { type: 'classHomework', classId: cid, hwId: ctx.params.hwId, tag: `hw-${ctx.params.hwId}` });
+  });
