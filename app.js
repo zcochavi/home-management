@@ -3538,6 +3538,7 @@ function subscribeToCommClass(cid) {
       .onSnapshot(snap => {
         if (!_commCache[cid]) return;
         _commCache[cid].events = snap.docs.map(d => ({id:d.id,...d.data(),scope:'class',scopeId:cid}));
+        syncCommAutoEvents();
         rerender();
       }, e => console.warn('[community] events:', e.code))
   );
@@ -3687,6 +3688,7 @@ async function loadCommunityData(kidsWithSchool) {
         schedule:      classDocSnap?.data()?.schedule || null,
         loadedAt:      Date.now(),
       };
+      syncCommAutoEvents();
       // Start live listeners for events / pending events / applications
       subscribeToCommClass(cid);
     } catch(e) {
@@ -3960,6 +3962,48 @@ async function toggleReaction(scope, scopeId, evId, reactionKey) {
   } catch(e) { console.error('toggleReaction:', e); }
 }
 
+// ── Community event → personal calendar ──
+function _commSkipKey() { return 'familyhub_commcal_skip_' + S.uid + '_' + S.user; }
+function _commSkipGet() { try { return JSON.parse(localStorage.getItem(_commSkipKey()) || '[]'); } catch(e) { return []; } }
+function _commSkipAdd(id) { try { const a = _commSkipGet(); if (!a.includes(id)) { a.push(id); localStorage.setItem(_commSkipKey(), JSON.stringify(a.slice(-300))); } } catch(e) {} }
+
+function _commCalEventFields(ev) {
+  const f = { title: ev.title, date: ev.date, time: ev.time || '', person: [S.user], commEvId: ev.id };
+  if (ev.location) f.location = ev.location;
+  const et = (typeof getEventTypes === 'function' ? getEventTypes() : []).find(x => x.id === ev.type);
+  if (et?.icon) f.icon = et.icon;
+  return f;
+}
+
+// returns true if the calendar changed
+function _addCommEventToCalendar(ev) {
+  if (!ev?.date || !Array.isArray(S.events)) return false;
+  if (S.events.some(e => e.commEvId === ev.id && eventPersons(e).includes(S.user))) return false;
+  S.events.push({ id: Date.now() + Math.floor(Math.random() * 1000), ..._commCalEventFields(ev) });
+  return true;
+}
+
+function _removeCommEventFromCalendar(evId) {
+  const n = S.events.length;
+  S.events = S.events.filter(e => !(e.commEvId === evId && eventPersons(e).includes(S.user) && eventPersons(e).length === 1));
+  return S.events.length !== n;
+}
+
+// Events whose creator turned off אישורי הגעה have no button, so they go straight into the calendar
+function syncCommAutoEvents() {
+  if (!S.uid || !S.user || !familyData || !Array.isArray(S.events) || isKid()) return;
+  const skip = _commSkipGet();
+  let changed = false;
+  const all = Object.values(_commCache).flatMap(c => [...(c.events||[]),...(c.gradeEvents||[]),...(c.schoolEvents||[])]);
+  const seen = new Set();
+  all.forEach(ev => {
+    if (seen.has(ev.id)) return; seen.add(ev.id);
+    if (ev.rsvp !== false || !ev.date || !isEventUpcoming(ev.date) || skip.includes(ev.id)) return;
+    if (_addCommEventToCalendar(ev)) { changed = true; _commSkipAdd(ev.id); }
+  });
+  if (changed) { save(); renderCalendar(); renderHomeUpcoming(); }
+}
+
 async function toggleAttendance(scope, scopeId, evId) {
   if (isKid() && _isOwner()) return; // read-only in kid-impersonated view, mirrors toggleReaction
   const collName = scope === 'grade' ? 'schoolGrades' : scope === 'school' ? 'schools' : 'schoolClasses';
@@ -3982,6 +4026,11 @@ async function toggleAttendance(scope, scopeId, evId) {
     const section = cardEl.querySelector('.post-card-attend');
     if (section) section.outerHTML = _attendSectionHtml(ev, scope, scopeId, cid);
   }
+
+  // Mirror into my calendar (date / time / location) — remove again when un-marking
+  const calChanged = attending ? _removeCommEventFromCalendar(ev.id) : _addCommEventToCalendar(ev);
+  if (attending) _commSkipAdd(ev.id);
+  if (calChanged) { save(); renderCalendar(); renderHomeUpcoming(); }
 
   // Sync to Firestore in background
   try {
@@ -9026,6 +9075,7 @@ async function addEvent(){
 }
 async function deleteEvent(id,gcalId){
   const ev=typeof id==='number'?S.events.find(x=>x.id===id):null;
+  if(ev?.commEvId)_commSkipAdd(ev.commEvId);
   if(ev){
     const ps=eventPersons(ev);
     if(!ps.includes('All')){
