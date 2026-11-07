@@ -3596,6 +3596,7 @@ function subscribeToCommClass(cid) {
       .onSnapshot(snap => {
         if (!_commCache[cid]) return;
         _commCache[cid].events = snap.docs.map(d => ({id:d.id,...d.data(),scope:'class',scopeId:cid}));
+        syncCommAutoEvents();
         rerender();
       }, e => console.warn('[community] events:', e.code))
   );
@@ -3745,6 +3746,7 @@ async function loadCommunityData(kidsWithSchool) {
         schedule:      _liveSchedule(classDocSnap?.data()?.schedule),
         loadedAt:      Date.now(),
       };
+      syncCommAutoEvents();
       // Start live listeners for events / pending events / applications
       subscribeToCommClass(cid);
     } catch(e) {
@@ -3805,6 +3807,7 @@ document.addEventListener('click', () => {
 
 function _attendSectionHtml(ev, scope, scopeId, cid) {
   if (!ev.date) return ''; // doesn't apply to date-less announcement/other posts
+  if (ev.rsvp === false) return ''; // creator opted out of attendance confirmations
   const attendees = ev.attendees || [];
   const readOnly  = isKid() && _isOwner();
   const iAttend   = attendees.includes(S.uid);
@@ -4017,6 +4020,48 @@ async function toggleReaction(scope, scopeId, evId, reactionKey) {
   } catch(e) { console.error('toggleReaction:', e); }
 }
 
+// ── Community event → personal calendar ──
+function _commSkipKey() { return 'familyhub_commcal_skip_' + S.uid + '_' + S.user; }
+function _commSkipGet() { try { return JSON.parse(localStorage.getItem(_commSkipKey()) || '[]'); } catch(e) { return []; } }
+function _commSkipAdd(id) { try { const a = _commSkipGet(); if (!a.includes(id)) { a.push(id); localStorage.setItem(_commSkipKey(), JSON.stringify(a.slice(-300))); } } catch(e) {} }
+
+function _commCalEventFields(ev) {
+  const f = { title: ev.title, date: ev.date, time: ev.time || '', person: [S.user], commEvId: ev.id };
+  if (ev.location) f.location = ev.location;
+  const et = (typeof getEventTypes === 'function' ? getEventTypes() : []).find(x => x.id === ev.type);
+  if (et?.icon) f.icon = et.icon;
+  return f;
+}
+
+// returns true if the calendar changed
+function _addCommEventToCalendar(ev) {
+  if (!ev?.date || !Array.isArray(S.events)) return false;
+  if (S.events.some(e => e.commEvId === ev.id && eventPersons(e).includes(S.user))) return false;
+  S.events.push({ id: Date.now() + Math.floor(Math.random() * 1000), ..._commCalEventFields(ev) });
+  return true;
+}
+
+function _removeCommEventFromCalendar(evId) {
+  const n = S.events.length;
+  S.events = S.events.filter(e => !(e.commEvId === evId && eventPersons(e).includes(S.user) && eventPersons(e).length === 1));
+  return S.events.length !== n;
+}
+
+// Events whose creator turned off אישורי הגעה have no button, so they go straight into the calendar
+function syncCommAutoEvents() {
+  if (!S.uid || !S.user || !familyData || !Array.isArray(S.events) || isKid()) return;
+  const skip = _commSkipGet();
+  let changed = false;
+  const all = Object.values(_commCache).flatMap(c => [...(c.events||[]),...(c.gradeEvents||[]),...(c.schoolEvents||[])]);
+  const seen = new Set();
+  all.forEach(ev => {
+    if (seen.has(ev.id)) return; seen.add(ev.id);
+    if (ev.rsvp !== false || !ev.date || !isEventUpcoming(ev.date) || skip.includes(ev.id)) return;
+    if (_addCommEventToCalendar(ev)) { changed = true; _commSkipAdd(ev.id); }
+  });
+  if (changed) { save(); renderCalendar(); renderHomeUpcoming(); }
+}
+
 async function toggleAttendance(scope, scopeId, evId) {
   if (isKid() && _isOwner()) return; // read-only in kid-impersonated view, mirrors toggleReaction
   const collName = scope === 'grade' ? 'schoolGrades' : scope === 'school' ? 'schools' : 'schoolClasses';
@@ -4039,6 +4084,11 @@ async function toggleAttendance(scope, scopeId, evId) {
     const section = cardEl.querySelector('.post-card-attend');
     if (section) section.outerHTML = _attendSectionHtml(ev, scope, scopeId, cid);
   }
+
+  // Mirror into my calendar (date / time / location) — remove again when un-marking
+  const calChanged = attending ? _removeCommEventFromCalendar(ev.id) : _addCommEventToCalendar(ev);
+  if (attending) _commSkipAdd(ev.id);
+  if (calChanged) { save(); renderCalendar(); renderHomeUpcoming(); }
 
   // Sync to Firestore in background
   try {
@@ -4464,10 +4514,14 @@ function renderCommCard(kid) {
       <input class="auth-input" id="commEvTitle_${cid}" placeholder="${t('commEventTitle')}" style="margin-bottom:6px" oninput="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
       <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
         <div style="flex:1;min-width:0">
+          <label for="commEvDate_${cid}" style="display:block;font-size:12px;font-weight:700;color:#718096;margin-bottom:4px">📅 תאריך</label>
           <input type="date" class="auth-input" id="commEvDate_${cid}" style="margin-bottom:0;width:100%" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
           <div id="commEvDateHint_${cid}" style="display:none;font-size:11px;color:var(--gray-400);font-weight:600;margin-top:3px;padding-right:2px">תאריך אופציונלי לסוג זה</div>
         </div>
-        <input type="time" class="auth-input" id="commEvTime_${cid}" style="flex:0 0 110px;margin-bottom:0" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
+        <div style="flex:0 0 110px">
+          <label for="commEvTime_${cid}" style="display:block;font-size:12px;font-weight:700;color:#718096;margin-bottom:4px">🕐 שעה</label>
+          <input type="time" class="auth-input" id="commEvTime_${cid}" style="width:100%;margin-bottom:0" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
+        </div>
       </div>
       <div style="margin-bottom:6px">
         <div id="commEvTypeDd_${cid}" style="width:100%"></div>
@@ -4475,6 +4529,7 @@ function renderCommCard(kid) {
           ${getEventTypes().map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
         </select>
       </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="commEvRsvp_${cid}" checked> ✋ אישורי הגעה</label>
       <div id="commEvGenderWrap_${cid}" style="margin-bottom:6px;display:${(getEventTypes()[0]?.hasGenderFilter) ? '' : 'none'}">
         <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">מי מוזמן?</div>
         <div style="display:flex;gap:8px">
@@ -4747,6 +4802,7 @@ async function submitClassEvent(cid) {
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     genderFilter,
   };
+  if (el('commEvRsvp_' + cid) && !el('commEvRsvp_' + cid).checked) docData.rsvp = false;
   if (time) docData.time = time;
   if (location) docData.location = location;
   if (payboxUrl) docData.payboxUrl = payboxUrl;
@@ -9089,6 +9145,7 @@ async function addEvent(){
 }
 async function deleteEvent(id,gcalId){
   const ev=typeof id==='number'?S.events.find(x=>x.id===id):null;
+  if(ev?.commEvId)_commSkipAdd(ev.commEvId);
   if(ev){
     const ps=eventPersons(ev);
     if(!ps.includes('All')){
