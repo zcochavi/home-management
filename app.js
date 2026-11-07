@@ -2328,7 +2328,25 @@ function gcalWasConnected() {
   return !!(S.uid && S.user && localStorage.getItem('familyhub_gcal_' + S.uid + '_' + S.user) === '1');
 }
 let _gcalGestureListener = null;
+// Google access tokens last ~1h. Cache the token so a page refresh reuses it instead of asking again.
+function _gcalTokKey() { return 'familyhub_gcal_tok_' + S.uid + '_' + S.user; }
+function _gcalTokSave(token, expiresIn) {
+  try { localStorage.setItem(_gcalTokKey(), JSON.stringify({ t: token, exp: Date.now() + (Number(expiresIn)||3600) * 1000 })); } catch(e) {}
+}
+function _gcalTokClear() { try { localStorage.removeItem(_gcalTokKey()); } catch(e) {} }
+function _gcalTokRestore() {
+  if (!S.uid || !S.user || gcalConnected() || !gcal.gapiReady) return false;
+  try {
+    const c = JSON.parse(localStorage.getItem(_gcalTokKey()) || 'null');
+    if (!c?.t || c.exp - Date.now() < 60000) { _gcalTokClear(); return false; }
+    gcal.accessToken = c.t;
+    gapi.client.setToken({ access_token: c.t });
+    fetchGCalEvents();
+    return true;
+  } catch(e) { return false; }
+}
 function tryAutoConnectGCal() {
+  if (gcalWasConnected() && _gcalTokRestore()) return;
   if (gcalReady()) renderGCalBar();
   // Schedule a silent reconnect on the next user gesture (click/tap).
   // requestAccessToken() requires a user-gesture context to avoid popup blockers;
@@ -2348,6 +2366,7 @@ function tryAutoConnectGCal() {
 async function onGCalToken(resp) {
   if (resp.error) { renderGCalBar(); return; }
   gcal.accessToken=resp.access_token;
+  _gcalTokSave(resp.access_token, resp.expires_in);
   if (S.uid && S.user) localStorage.setItem('familyhub_gcal_' + S.uid + '_' + S.user, '1');
   await fetchGCalEvents(); renderGCalBar();
 }
@@ -2368,13 +2387,21 @@ async function fetchGCalEvents() {
       time:ev.start.dateTime?ev.start.dateTime.slice(11,16):'',
       person:'All', gcal:true,
     }));
-  } catch(e){console.error(e);}
+  } catch(e){
+    console.error(e);
+    // Cached/expired token rejected → drop it; the next tap reconnects silently
+    if (e?.status === 401 || e?.result?.error?.code === 401) {
+      gcal.accessToken = null; gcal.events = []; _gcalTokClear();
+      try { gapi.client.setToken(null); } catch(_) {}
+      gcal.syncing = false; renderGCalBar(); renderCalendar(); tryAutoConnectGCal(); return;
+    }
+  }
   gcal.syncing=false; renderGCalBar(); renderCalendar();
 }
 function connectGCal()    { if (gcalReady()&&gcal.tokenClient) gcal.tokenClient.requestAccessToken({prompt:''}); }
 function disconnectGCal() {
   if (gcal.accessToken) google.accounts.oauth2.revoke(gcal.accessToken,()=>{});
-  gcal.accessToken=null; gcal.events=[];
+  gcal.accessToken=null; gcal.events=[]; _gcalTokClear();
   if (S.uid && S.user) localStorage.removeItem('familyhub_gcal_' + S.uid + '_' + S.user);
   if (_gcalGestureListener) {
     document.removeEventListener('click',      _gcalGestureListener);
