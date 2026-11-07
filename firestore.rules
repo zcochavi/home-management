@@ -41,7 +41,7 @@ service cloud.firestore {
     //  - get:    any signed-in user (guests are signed in anonymously) who knows the token.
     //            No `list`, so tokens can't be enumerated.
     //  - create/update/delete: family members only (the owner syncing/revoking its shares).
-    //  - guest update: only on 'shared marking' (mode == 'edit') shares, and only the `items`
+    //  - guest update: only on joint shares (mode 'edit' = shared marking, 'claim' = who brings what), and only the `items`
     //            array (+ updatedAt) — same length, mode/name/meta/steps/owner untouched.
     //            Rules can't iterate an array, so a guest could still alter an item's fields;
     //            moving checks to a separate map field would close that gap.
@@ -60,7 +60,7 @@ service cloud.firestore {
          request.resource.data.familyUid == resource.data.familyUid)
         ||
         (request.auth != null &&
-         resource.data.mode == 'edit' &&
+         resource.data.mode in ['edit', 'claim'] &&
          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['items', 'updatedAt']) &&
          request.resource.data.items is list &&
          request.resource.data.items.size() == resource.data.items.size());
