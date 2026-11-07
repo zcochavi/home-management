@@ -304,6 +304,11 @@ function t(key, ...args) {
 // ════════════════════════════════════════
 let familyData = null;
 
+// "Start cooking" button text, gendered by the current member (female → feminine, else masculine)
+function _cookBtnLabel() {
+  const m = getMembers().find(x => x.name === S.user);
+  return (m?.gender === 'female' || m?.gender === 'girl') ? 'התחילי להכין' : 'התחל להכין';
+}
 function getMembers()        { return familyData?.members || []; }
 function getKids()           { return getMembers().filter(m => m.role === 'kid').map(m => m.name); }
 function getParents()        { return getMembers().filter(m => m.role === 'parent').map(m => m.name); }
@@ -726,6 +731,7 @@ let _draftSelfAdded = false;
 let _mbRole   = 'parent';
 let _mbEmoji  = EMOJI_OPTIONS[0];
 let _mbGender = null;
+let _mbPGender = null; // parent gender: 'female' | 'male'
 let _mbDob    = '';
 
 function _enterSu2SelfMode() {
@@ -794,7 +800,14 @@ function setMbRole(role) {
   el('mbRoleKid').classList.toggle('active',    role==='kid');
   const extras = el('mbKidExtras');
   if (extras) extras.style.display = role === 'kid' ? '' : 'none';
-  if (role !== 'kid') { _mbGender = null; _mbDob = ''; }
+  const pExtras = el('mbParentExtras');
+  if (pExtras) pExtras.style.display = role === 'kid' ? 'none' : '';
+  if (role !== 'kid') { _mbGender = null; _mbDob = ''; } else { _mbPGender = null; }
+}
+function setMbPGender(g) {
+  _mbPGender = g;
+  el('mbPGenderFemale')?.classList.toggle('active', g === 'female');
+  el('mbPGenderMale')  ?.classList.toggle('active', g === 'male');
 }
 function setMbGender(g) {
   _mbGender = g;
@@ -811,12 +824,17 @@ function addDraftMember() {
     if (_mbGender) entry.gender = _mbGender;
     const dob = el('mbDob')?.value;
     if (dob) entry.dob = dob;
+  } else if (_mbPGender) {
+    entry.gender = _mbPGender;
   }
   _draftMembers.push(entry);
   el('mbName').value = '';
   if (el('mbDob')) el('mbDob').value = '';
   _mbGender = null;
+  _mbPGender = null;
   _mbRole = 'parent';
+  el('mbPGenderFemale')?.classList.remove('active');
+  el('mbPGenderMale')  ?.classList.remove('active');
   el('mbGenderBoy') ?.classList.remove('active');
   el('mbGenderGirl')?.classList.remove('active');
   el('mbRoleParent')?.classList.add('active');
@@ -878,6 +896,9 @@ function signupNext() {
   _draftSelfAdded = false;
   _mbRole   = 'parent';
   _mbGender = null;
+  _mbPGender = null;
+  el('mbPGenderFemale')?.classList.remove('active');
+  el('mbPGenderMale')  ?.classList.remove('active');
   renderMemberPreview();
   initEmojiRow();
   _enterSu2SelfMode();
@@ -1004,6 +1025,8 @@ async function doSignUp() {
     if (m.role === 'kid') {
       if (m.gender) entry.gender = m.gender;
       if (m.dob)    entry.dob    = m.dob;
+    } else if (m.gender) {
+      entry.gender = m.gender;
     }
     return entry;
   });
@@ -2577,6 +2600,7 @@ function renderAll() {
 let _mgmtNewRole   = 'parent';
 let _mgmtNewEmoji  = EMOJI_OPTIONS[0];
 let _mgmtNewGender = '';
+let _mgmtNewPGender = ''; // parent gender: 'female' | 'male'
 let _mgmtEditEmoji = {}; // keyed by memberIndex
 
 function openMgmt() { renderMgmt(); el('mgmtScreen').classList.remove('hidden'); loadCities(); }
@@ -2686,7 +2710,7 @@ function renderMgmtMembers() {
       <button class="mgmt-icon-btn purple" onclick="toggleMgmtEdit(${i})" title="ערוך">✏️</button>
       ${canDel ? `<button class="mgmt-icon-btn red" onclick="mgmtRemoveMember('${esc(m.name)}')" title="הסר">🗑</button>` : '<span style="width:26px"></span>'}
     </div>
-    <div class="mgmt-edit-panel" id="mgmtEditPanel_${i}" data-role="${m.role}" data-emoji="${m.emoji}" data-gender="${m.gender||''}">
+    <div class="mgmt-edit-panel" id="mgmtEditPanel_${i}" data-role="${m.role}" data-emoji="${m.emoji}" data-gender="${m.gender||''}" data-pgender="${['female','male'].includes(m.gender) ? m.gender : ''}">
       <span class="mgmt-edit-label">אימוג'י</span>
       <div class="emoji-row" id="mgmtEditEmojiRow_${i}"></div>
       <span class="mgmt-edit-label">שם</span>
@@ -2694,6 +2718,13 @@ function renderMgmtMembers() {
       <div class="mb-role-toggle" style="margin-bottom:12px;width:fit-content">
         <button class="mb-role-btn ${m.role==='parent'?'active':''}" id="mgmtEditRoleParent_${i}" onclick="setMgmtEditRole(${i},'parent')">הורה</button>
         <button class="mb-role-btn ${m.role==='kid'?'active':''}"    id="mgmtEditRoleKid_${i}"    onclick="setMgmtEditRole(${i},'kid')">ילד</button>
+      </div>
+      <div id="mgmtParentSection_${i}" style="display:${m.role==='kid'?'none':'block'}">
+        <span class="mgmt-edit-label">מין</span>
+        <div class="mb-role-toggle" style="margin-bottom:12px">
+          <button class="mb-role-btn ${m.gender==='female'?'active':''}" id="mgmtPGenderFemale_${i}" onclick="setMgmtPGender(${i},'female')">👩 אישה</button>
+          <button class="mb-role-btn ${m.gender==='male'?'active':''}"   id="mgmtPGenderMale_${i}"   onclick="setMgmtPGender(${i},'male')">👨 גבר</button>
+        </div>
       </div>
       <div id="mgmtKidSection_${i}" style="display:${m.role==='kid'?'block':'none'}">
         <span class="mgmt-edit-label">מין</span>
@@ -2775,6 +2806,8 @@ function setMgmtNewRole(role) {
   _mgmtNewRole = role;
   el('mgmtNewRoleParent').classList.toggle('active', role==='parent');
   el('mgmtNewRoleKid').classList.toggle('active',    role==='kid');
+  const pSection = el('mgmtNewParentSection');
+  if (pSection) pSection.style.display = role === 'kid' ? 'none' : '';
   const section = el('mgmtNewKidSection');
   if (section) {
     section.style.display = role === 'kid' ? 'block' : 'none';
@@ -2782,6 +2815,11 @@ function setMgmtNewRole(role) {
     if (gradeEl && !gradeEl.options.length)
       gradeEl.innerHTML = GRADE_OPTIONS.map(g => `<option value="${g}">${g ? 'כיתה ' + g : 'כיתה...'}</option>`).join('');
   }
+}
+function setMgmtNewPGender(g) {
+  _mgmtNewPGender = g;
+  el('mgmtNewPGenderFemale')?.classList.toggle('active', g === 'female');
+  el('mgmtNewPGenderMale')  ?.classList.toggle('active', g === 'male');
 }
 function setMgmtNewGender(g) {
   _mgmtNewGender = g;
@@ -2796,6 +2834,12 @@ function setMgmtEditRole(i, role) {
   const show = role === 'kid' ? 'block' : 'none';
   const sec = el(`mgmtSchoolSection_${i}`); if (sec) sec.style.display = show;
   const kid = el(`mgmtKidSection_${i}`);   if (kid) kid.style.display  = show;
+  const par = el(`mgmtParentSection_${i}`); if (par) par.style.display = role === 'kid' ? 'none' : 'block';
+}
+function setMgmtPGender(i, g) {
+  el(`mgmtEditPanel_${i}`).dataset.pgender = g;
+  el(`mgmtPGenderFemale_${i}`)?.classList.toggle('active', g === 'female');
+  el(`mgmtPGenderMale_${i}`)  ?.classList.toggle('active', g === 'male');
 }
 function setMgmtGender(i, g) {
   el(`mgmtEditPanel_${i}`).dataset.gender = g;
@@ -2818,6 +2862,7 @@ async function mgmtAddMember() {
   if (!name) { _markError('mgmtNewMemberName'); return; }
   if (getMembers().find(m => m.name === name)) { el('mgmtNewMemberName').select(); return; }
   const newMember = { name, emoji: _mgmtNewEmoji, role: _mgmtNewRole };
+  if (_mgmtNewRole !== 'kid' && _mgmtNewPGender) newMember.gender = _mgmtNewPGender;
   if (_mgmtNewRole === 'kid') {
     const city     = el('mgmtEditCity_new')?.value.trim()       || '';
     const school   = el('mgmtEditSchoolName_new')?.value.trim() || '';
@@ -2861,7 +2906,9 @@ async function mgmtAddMember() {
   if (el('mgmtEditSchoolName_new')) el('mgmtEditSchoolName_new').value = '';
   if (el('mgmtEditGrade_new'))      el('mgmtEditGrade_new').value = '';
   if (el('mgmtEditClassNum_new'))   el('mgmtEditClassNum_new').value = '';
-  _mgmtNewEmoji = EMOJI_OPTIONS[0]; _mgmtNewRole = 'parent'; _mgmtNewGender = '';
+  _mgmtNewEmoji = EMOJI_OPTIONS[0]; _mgmtNewRole = 'parent'; _mgmtNewGender = ''; _mgmtNewPGender = '';
+  el('mgmtNewPGenderFemale')?.classList.remove('active');
+  el('mgmtNewPGenderMale')  ?.classList.remove('active');
   if (el('mgmtNewGenderBoy'))  el('mgmtNewGenderBoy').classList.remove('active');
   if (el('mgmtNewGenderGirl')) el('mgmtNewGenderGirl').classList.remove('active');
   if (el('mgmtEditDob_new'))   el('mgmtEditDob_new').value = '';
@@ -2883,7 +2930,9 @@ async function saveMgmtEdit(i, originalName) {
     grade:    (el(`mgmtEditGrade_${i}`)?.value             || ''),
     classNum: (el(`mgmtEditClassNum_${i}`)?.value.trim()   || ''),
   } : undefined;
-  const newGender = newRole === 'kid' ? (panel.dataset.gender || null) : undefined;
+  const newGender = newRole === 'kid'
+    ? (['boy','girl'].includes(panel.dataset.gender) ? panel.dataset.gender : null)
+    : (panel.dataset.pgender || null);
   const newDob    = newRole === 'kid' ? (el(`mgmtEditDob_${i}`)?.value || '') : undefined;
   let members = getMembers().map(m => {
     if (m.name !== originalName) return m;
@@ -11128,7 +11177,7 @@ function listShowStats(listId) {
       <tbody>${rows}</tbody>
     </table></div>`;
   } else {
-    summaryHtml = `<div class="stats-empty">עדיין לא בושל 🍽️<br><span style="font-size:12px;color:var(--gray-400)">לחץ "התחל בישול" כדי להתחיל לעקוב</span></div>`;
+    summaryHtml = `<div class="stats-empty">עדיין לא בושל 🍽️<br><span style="font-size:12px;color:var(--gray-400)">לחץ "${_cookBtnLabel()}" כדי להתחיל לעקוב</span></div>`;
   }
 
   const ov = _cmodalEl();
@@ -11878,7 +11927,7 @@ function _renderRecipeDetail(cont, list, canEdit) {
     : '';
   h += cookBadge;
   if (!canEdit && (items.length || steps.length)) h += `<button class="btn${_listCookMode ? '' : ' btn-outline'} recipe-cook-btn" onclick="_toggleCookMode('${list.id}')">
-    ${_listCookMode ? '🍳 מצב בישול פעיל — לחץ לסיום' : '🍳 התחל בישול'}
+    ${_listCookMode ? '🍳 מצב בישול פעיל — לחץ לסיום' : '🍳 ' + _cookBtnLabel()}
   </button>`;
 
   // Ingredients
