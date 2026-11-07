@@ -4406,10 +4406,14 @@ function renderCommCard(kid) {
       <input class="auth-input" id="commEvTitle_${cid}" placeholder="${t('commEventTitle')}" style="margin-bottom:6px" oninput="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
       <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
         <div style="flex:1;min-width:0">
+          <label for="commEvDate_${cid}" style="display:block;font-size:12px;font-weight:700;color:#718096;margin-bottom:4px">📅 תאריך</label>
           <input type="date" class="auth-input" id="commEvDate_${cid}" style="margin-bottom:0;width:100%" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
           <div id="commEvDateHint_${cid}" style="display:none;font-size:11px;color:var(--gray-400);font-weight:600;margin-top:3px;padding-right:2px">תאריך אופציונלי לסוג זה</div>
         </div>
-        <input type="time" class="auth-input" id="commEvTime_${cid}" style="flex:0 0 110px;margin-bottom:0" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
+        <div style="flex:0 0 110px">
+          <label for="commEvTime_${cid}" style="display:block;font-size:12px;font-weight:700;color:#718096;margin-bottom:4px">🕐 שעה</label>
+          <input type="time" class="auth-input" id="commEvTime_${cid}" style="width:100%;margin-bottom:0" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
+        </div>
       </div>
       <div style="margin-bottom:6px">
         <div id="commEvTypeDd_${cid}" style="width:100%"></div>
