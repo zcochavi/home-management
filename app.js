@@ -11730,7 +11730,7 @@ function _doneSectionHtml(listId, done, canEdit, label) {
   return `<div class="card list-items-card list-done-section">
     <div class="list-done-hdr" onclick="_toggleDoneSection(this)">
       <span>✓ ${done.length} ${label}</span>
-      <span class="list-done-chevron">›</span>
+      <span class="list-done-chevron" style="transform:rotate(90deg)">›</span>
     </div>
     <div class="list-done-body">
       ${done.map(it => `<div class="list-item list-item-done">
@@ -11752,7 +11752,7 @@ function _toggleDoneSection(hdr) {
   const chevron = hdr.querySelector('.list-done-chevron');
   const open = body.style.display !== 'none';
   body.style.display = open ? 'none' : 'block';
-  if (chevron) chevron.style.transform = open ? '' : 'rotate(90deg)';
+  if (chevron) chevron.style.transform = open ? 'rotate(0deg)' : 'rotate(90deg)';
 }
 
 // ── List item swipe reveal ─────────────────
