@@ -1888,3 +1888,85 @@ exports.onClassHomeworkCreated = functions.firestore
     await notifyFamilies(uids, hw.createdBy?.familyUid, title, body,
       { type: 'classHomework', classId: cid, hwId: ctx.params.hwId, tag: `hw-${ctx.params.hwId}` });
   });
+
+// ── Google Calendar: persistent connection (OAuth authorization-code flow) ──────────
+// The browser gets a one-time auth code from Google, we exchange it here for a refresh
+// token (needs the OAuth client secret) and keep it server-side in `gcalTokens`, which
+// no client can read. The browser then asks for short-lived access tokens whenever it
+// needs one, so the user stays connected without re-consenting.
+//
+// One-time setup:  firebase functions:secrets:set GOOGLE_OAUTH_CLIENT_SECRET
+const GCAL_CLIENT_ID = '34982320669-4sg8h4qmppd7v9jdtflqmoqretjsnffa.apps.googleusercontent.com';
+const gcalCallable = functions.runWith({ secrets: ['GOOGLE_OAUTH_CLIENT_SECRET'] }).https.onCall;
+
+function gcalDocRef(context, member) {
+  if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Sign in first');
+  const m = String(member || '').trim();
+  if (!m || m.length > 100) throw new functions.https.HttpsError('invalid-argument', 'Missing member');
+  return db.collection('gcalTokens').doc(`${context.auth.uid}__${encodeURIComponent(m)}`);
+}
+
+async function googleTokenRequest(params) {
+  const res = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: GCAL_CLIENT_ID,
+      client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+      ...params,
+    }).toString(),
+  });
+  const json = await res.json().catch(() => ({}));
+  return { ok: res.ok, json };
+}
+
+exports.gcalExchangeCode = gcalCallable(async (data, context) => {
+  const ref = gcalDocRef(context, data?.member);
+  if (!data?.code || typeof data.code !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing code');
+  }
+  const { ok, json } = await googleTokenRequest({
+    code: data.code, grant_type: 'authorization_code', redirect_uri: 'postmessage',
+  });
+  if (!ok || !json.access_token) {
+    console.error('gcalExchangeCode failed:', json.error, json.error_description);
+    throw new functions.https.HttpsError('failed-precondition', 'Google rejected the code');
+  }
+  // Google only returns a refresh token on the first grant; keep the old one otherwise.
+  if (json.refresh_token) {
+    await ref.set({ refreshToken: json.refresh_token, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+  }
+  const stored = json.refresh_token ? true : (await ref.get()).exists;
+  return { accessToken: json.access_token, expiresIn: json.expires_in || 3600, persistent: stored };
+});
+
+exports.gcalRefreshToken = gcalCallable(async (data, context) => {
+  const ref = gcalDocRef(context, data?.member);
+  const snap = await ref.get();
+  if (!snap.exists) throw new functions.https.HttpsError('failed-precondition', 'not-connected');
+  const { ok, json } = await googleTokenRequest({
+    refresh_token: snap.data().refreshToken, grant_type: 'refresh_token',
+  });
+  if (!ok || !json.access_token) {
+    console.error('gcalRefreshToken failed:', json.error, json.error_description);
+    if (json.error === 'invalid_grant') await ref.delete(); // revoked / expired — user must reconnect
+    throw new functions.https.HttpsError('failed-precondition', 'not-connected');
+  }
+  return { accessToken: json.access_token, expiresIn: json.expires_in || 3600 };
+});
+
+exports.gcalDisconnect = gcalCallable(async (data, context) => {
+  const ref = gcalDocRef(context, data?.member);
+  const snap = await ref.get();
+  if (snap.exists) {
+    try {
+      await fetch('https://oauth2.googleapis.com/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token: snap.data().refreshToken }).toString(),
+      });
+    } catch (e) { console.warn('gcalDisconnect revoke failed:', e.message); }
+    await ref.delete();
+  }
+  return { ok: true };
+});
