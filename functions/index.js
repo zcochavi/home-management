@@ -1935,9 +1935,22 @@ exports.gcalExchangeCode = gcalCallable(async (data, context) => {
   // Google only returns a refresh token on the first grant; keep the old one otherwise.
   if (json.refresh_token) {
     await ref.set({ refreshToken: json.refresh_token, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+    return { accessToken: json.access_token, expiresIn: json.expires_in || 3600, persistent: true };
   }
-  const stored = json.refresh_token ? true : (await ref.get()).exists;
-  return { accessToken: json.access_token, expiresIn: json.expires_in || 3600, persistent: stored };
+  if ((await ref.get()).exists) {
+    return { accessToken: json.access_token, expiresIn: json.expires_in || 3600, persistent: true };
+  }
+  // Legacy grant: Google issued no refresh token. Revoke it so the next Connect shows a fresh
+  // consent screen, which does return one.
+  console.warn('gcalExchangeCode: no refresh token issued; revoking grant to force re-consent');
+  try {
+    await fetch('https://oauth2.googleapis.com/revoke', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ token: json.access_token }).toString(),
+    });
+  } catch (e) { console.warn('revoke failed:', e.message); }
+  throw new functions.https.HttpsError('failed-precondition', 'reconsent');
 });
 
 exports.gcalRefreshToken = gcalCallable(async (data, context) => {

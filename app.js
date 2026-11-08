@@ -2351,7 +2351,8 @@ function _gcalTokRestore() {
 }
 // Ask the server for a fresh access token using the stored refresh token (no popup, no tap needed)
 async function _gcalServerRefresh() {
-  if (gcal.serverBusy || gcal.serverFailed || !fbFunctions || !S.uid || !S.user) return false;
+  if (!fbFunctions) gcal.serverFailed = true;
+  if (gcal.serverBusy || gcal.serverFailed || !S.uid || !S.user) return false;
   gcal.serverBusy = true;
   try {
     const r = await fbFunctions.httpsCallable('gcalRefreshToken')({ member: S.user });
@@ -2376,8 +2377,16 @@ async function onGCalCode(resp) {
     gcal.serverFailed = false;
     await _gcalApplyToken(r.data.accessToken, r.data.expiresIn);
   } catch(e) {
-    // Server flow unavailable → fall back to the browser-only token flow on the next tap
     console.error('gcalExchangeCode:', e);
+    if (e?.message === 'reconsent') {
+      // Old grant had no refresh token; server revoked it — one more Connect gives a fresh consent
+      _alert(getLang()==='he' ? 'החיבור ל-Google Calendar אופס כדי לשמור אותו לצמיתות. לחצו שוב על "התחבר" ואשרו.' : 'Google Calendar was reset so it can stay connected. Tap Connect again and approve.');
+      gcal.accessToken = null; _gcalTokClear();
+      if (S.uid && S.user) localStorage.removeItem('familyhub_gcal_' + S.uid + '_' + S.user);
+      renderGCalBar();
+      return;
+    }
+    // Server flow unavailable → fall back to the browser-only token flow on the next tap
     gcal.codeBroken = true; gcal.serverFailed = true;
     if (S.uid && S.user) localStorage.setItem('familyhub_gcal_' + S.uid + '_' + S.user, '1');
     tryAutoConnectGCal();
