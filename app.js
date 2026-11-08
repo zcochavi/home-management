@@ -2321,6 +2321,10 @@ function gisLoaded() {
     gcal.tokenClient = google.accounts.oauth2.initTokenClient({
       client_id:GOOGLE_CLIENT_ID, scope:GCAL_SCOPE, callback:onGCalToken,
     });
+    // Authorization-code flow: the server keeps a refresh token so the user stays connected
+    gcal.codeClient = google.accounts.oauth2.initCodeClient({
+      client_id:GOOGLE_CLIENT_ID, scope:GCAL_SCOPE, ux_mode:'popup', callback:onGCalCode,
+    });
   }
   gcal.gisReady=true; renderGCalBar(); tryAutoConnectGCal();
 }
@@ -2328,7 +2332,63 @@ function gcalWasConnected() {
   return !!(S.uid && S.user && localStorage.getItem('familyhub_gcal_' + S.uid + '_' + S.user) === '1');
 }
 let _gcalGestureListener = null;
+// Google access tokens last ~1h. Cache the token so a page refresh reuses it instead of asking again.
+function _gcalTokKey() { return 'familyhub_gcal_tok_' + S.uid + '_' + S.user; }
+function _gcalTokSave(token, expiresIn) {
+  try { localStorage.setItem(_gcalTokKey(), JSON.stringify({ t: token, exp: Date.now() + (Number(expiresIn)||3600) * 1000 })); } catch(e) {}
+}
+function _gcalTokClear() { try { localStorage.removeItem(_gcalTokKey()); } catch(e) {} }
+function _gcalTokRestore() {
+  if (!S.uid || !S.user || gcalConnected() || !gcal.gapiReady) return false;
+  try {
+    const c = JSON.parse(localStorage.getItem(_gcalTokKey()) || 'null');
+    if (!c?.t || c.exp - Date.now() < 60000) { _gcalTokClear(); return false; }
+    gcal.accessToken = c.t;
+    gapi.client.setToken({ access_token: c.t });
+    fetchGCalEvents();
+    return true;
+  } catch(e) { return false; }
+}
+// Ask the server for a fresh access token using the stored refresh token (no popup, no tap needed)
+async function _gcalServerRefresh() {
+  if (gcal.serverBusy || gcal.serverFailed || !fbFunctions || !S.uid || !S.user) return false;
+  gcal.serverBusy = true;
+  try {
+    const r = await fbFunctions.httpsCallable('gcalRefreshToken')({ member: S.user });
+    await _gcalApplyToken(r.data.accessToken, r.data.expiresIn);
+    return true;
+  } catch(e) {
+    gcal.serverFailed = true; // not connected server-side (or function unavailable) → tap-to-reconnect fallback
+    return false;
+  } finally { gcal.serverBusy = false; }
+}
+async function _gcalApplyToken(accessToken, expiresIn) {
+  gcal.accessToken = accessToken;
+  try { gapi.client.setToken({ access_token: accessToken }); } catch(e) {}
+  _gcalTokSave(accessToken, expiresIn);
+  if (S.uid && S.user) localStorage.setItem('familyhub_gcal_' + S.uid + '_' + S.user, '1');
+  await fetchGCalEvents(); renderGCalBar();
+}
+async function onGCalCode(resp) {
+  if (resp.error || !resp.code) { renderGCalBar(); return; }
+  try {
+    const r = await fbFunctions.httpsCallable('gcalExchangeCode')({ code: resp.code, member: S.user });
+    gcal.serverFailed = false;
+    await _gcalApplyToken(r.data.accessToken, r.data.expiresIn);
+  } catch(e) {
+    // Server flow unavailable → fall back to the browser-only token flow on the next tap
+    console.error('gcalExchangeCode:', e);
+    gcal.codeBroken = true; gcal.serverFailed = true;
+    if (S.uid && S.user) localStorage.setItem('familyhub_gcal_' + S.uid + '_' + S.user, '1');
+    tryAutoConnectGCal();
+  }
+}
 function tryAutoConnectGCal() {
+  if (gcalWasConnected() && _gcalTokRestore()) return;
+  if (gcalWasConnected() && gcalReady() && !gcalConnected() && !gcal.serverFailed) {
+    _gcalServerRefresh().then(ok => { if (!ok) tryAutoConnectGCal(); });
+    return;
+  }
   if (gcalReady()) renderGCalBar();
   // Schedule a silent reconnect on the next user gesture (click/tap).
   // requestAccessToken() requires a user-gesture context to avoid popup blockers;
@@ -2348,6 +2408,7 @@ function tryAutoConnectGCal() {
 async function onGCalToken(resp) {
   if (resp.error) { renderGCalBar(); return; }
   gcal.accessToken=resp.access_token;
+  _gcalTokSave(resp.access_token, resp.expires_in);
   if (S.uid && S.user) localStorage.setItem('familyhub_gcal_' + S.uid + '_' + S.user, '1');
   await fetchGCalEvents(); renderGCalBar();
 }
@@ -2368,13 +2429,27 @@ async function fetchGCalEvents() {
       time:ev.start.dateTime?ev.start.dateTime.slice(11,16):'',
       person:'All', gcal:true,
     }));
-  } catch(e){console.error(e);}
+  } catch(e){
+    console.error(e);
+    // Cached/expired token rejected → drop it; the next tap reconnects silently
+    if (e?.status === 401 || e?.result?.error?.code === 401) {
+      gcal.accessToken = null; gcal.events = []; _gcalTokClear();
+      try { gapi.client.setToken(null); } catch(_) {}
+      gcal.syncing = false; renderGCalBar(); renderCalendar(); tryAutoConnectGCal(); return;
+    }
+  }
   gcal.syncing=false; renderGCalBar(); renderCalendar();
 }
-function connectGCal()    { if (gcalReady()&&gcal.tokenClient) gcal.tokenClient.requestAccessToken({prompt:''}); }
+function connectGCal() {
+  if (!gcalReady()) return;
+  if (gcal.codeClient && !gcal.codeBroken) gcal.codeClient.requestCode();
+  else if (gcal.tokenClient) gcal.tokenClient.requestAccessToken({prompt:''});
+}
 function disconnectGCal() {
+  if (fbFunctions && S.uid && S.user) fbFunctions.httpsCallable('gcalDisconnect')({ member: S.user }).catch(()=>{});
   if (gcal.accessToken) google.accounts.oauth2.revoke(gcal.accessToken,()=>{});
-  gcal.accessToken=null; gcal.events=[];
+  gcal.serverFailed = false;
+  gcal.accessToken=null; gcal.events=[]; _gcalTokClear();
   if (S.uid && S.user) localStorage.removeItem('familyhub_gcal_' + S.uid + '_' + S.user);
   if (_gcalGestureListener) {
     document.removeEventListener('click',      _gcalGestureListener);
