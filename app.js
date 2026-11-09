@@ -4724,12 +4724,10 @@ async function renderCommunity() {
     ? `<div id="commPendingBanner"></div>`
     : '';
   const fabHtml = isParent() ? `
-    <div class="comm-fab-wrap" id="commFabWrap">
+    <div class="chore-fab-wrap" id="commFabWrap">
       <div class="comm-fab-picker" id="commFabPicker"></div>
-      <button class="comm-fab${Object.values(_commAddOpen).some(v=>v)?' comm-fab-open':''}" id="commFab" onclick="commFabClick()" title="${t('commAddEvent')}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
+      <button class="chore-fab${Object.values(_commAddOpen).some(v=>v)?' chore-fab-open':''}" id="commFab" onclick="commFabClick()" title="${t('commAddEvent')}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
       </button>
     </div>` : '';
   container.innerHTML = adminBtn + kidsWithSchool.map(kid => renderCommCard(kid)).join('') + fabHtml;
@@ -4797,7 +4795,7 @@ function toggleCommAddForm(cid) {
   }
   // Sync FAB icon
   const fab = el('commFab');
-  if (fab) fab.classList.toggle('comm-fab-open', Object.values(_commAddOpen).some(v => v));
+  if (fab) fab.classList.toggle('chore-fab-open', Object.values(_commAddOpen).some(v => v));
 }
 
 function commFabClick() {
@@ -4821,7 +4819,7 @@ function commFabClick() {
     </button>`
   ).join('');
   picker.classList.add('open');
-  el('commFab')?.classList.add('comm-fab-open');
+  el('commFab')?.classList.add('chore-fab-open');
   setTimeout(() => {
     document.addEventListener('click', function _h(e) {
       if (!el('commFabWrap')?.contains(e.target)) { _commHidePicker(); document.removeEventListener('click', _h); }
@@ -4838,7 +4836,7 @@ function _commHidePicker() {
   const picker = el('commFabPicker');
   if (picker) picker.classList.remove('open');
   if (!_commVisibleCids.some(c => _commAddOpen[c]))
-    el('commFab')?.classList.remove('comm-fab-open');
+    el('commFab')?.classList.remove('chore-fab-open');
 }
 
 async function submitClassEvent(cid) {
