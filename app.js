@@ -4724,12 +4724,10 @@ async function renderCommunity() {
     ? `<div id="commPendingBanner"></div>`
     : '';
   const fabHtml = isParent() ? `
-    <div class="comm-fab-wrap" id="commFabWrap">
+    <div class="chore-fab-wrap" id="commFabWrap">
       <div class="comm-fab-picker" id="commFabPicker"></div>
-      <button class="comm-fab${Object.values(_commAddOpen).some(v=>v)?' comm-fab-open':''}" id="commFab" onclick="commFabClick()" title="${t('commAddEvent')}">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
+      <button class="chore-fab${Object.values(_commAddOpen).some(v=>v)?' chore-fab-open':''}" id="commFab" onclick="commFabClick()" title="${t('commAddEvent')}">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
       </button>
     </div>` : '';
   container.innerHTML = adminBtn + kidsWithSchool.map(kid => renderCommCard(kid)).join('') + fabHtml;
@@ -4797,7 +4795,7 @@ function toggleCommAddForm(cid) {
   }
   // Sync FAB icon
   const fab = el('commFab');
-  if (fab) fab.classList.toggle('comm-fab-open', Object.values(_commAddOpen).some(v => v));
+  if (fab) fab.classList.toggle('chore-fab-open', Object.values(_commAddOpen).some(v => v));
 }
 
 function commFabClick() {
@@ -4821,7 +4819,7 @@ function commFabClick() {
     </button>`
   ).join('');
   picker.classList.add('open');
-  el('commFab')?.classList.add('comm-fab-open');
+  el('commFab')?.classList.add('chore-fab-open');
   setTimeout(() => {
     document.addEventListener('click', function _h(e) {
       if (!el('commFabWrap')?.contains(e.target)) { _commHidePicker(); document.removeEventListener('click', _h); }
@@ -4838,7 +4836,7 @@ function _commHidePicker() {
   const picker = el('commFabPicker');
   if (picker) picker.classList.remove('open');
   if (!_commVisibleCids.some(c => _commAddOpen[c]))
-    el('commFab')?.classList.remove('comm-fab-open');
+    el('commFab')?.classList.remove('chore-fab-open');
 }
 
 async function submitClassEvent(cid) {
@@ -9435,7 +9433,7 @@ function switchTab(tab) {
   if (tab === 'community') renderCommunity();
   if (tab === 'analytics') renderAnalytics();
   if (tab === 'lists') renderLists();
-  const _lf = el('listsFab'); if (_lf) _lf.style.display = tab === 'lists' ? '' : 'none';
+  const _lf = el('listsFabWrap'); if (_lf) _lf.style.display = tab === 'lists' ? '' : 'none'; if (tab !== 'lists') _listsHidePicker();
   if (tab !== 'homework') { const _hfw = el('hwFabWrap'); if (_hfw) _hfw.style.display = 'none'; _hwHidePicker(); }
   if (tab === 'homework' && getKids().includes(S.filter)) S.child = S.filter;
   if (tab === 'homework') renderHomework();
@@ -11249,7 +11247,7 @@ function _closeListsSearchOnBlur() {
 function renderLists() {
   const cont = el('listsContent');
   if (!cont) return;
-  const fab = el('listsFab'); if (fab) fab.style.display = S.tab === 'lists' ? '' : 'none';
+  const fab = el('listsFabWrap'); if (fab) fab.style.display = S.tab === 'lists' ? '' : 'none';
   const lists = S.lists || [];
 
   if (!lists.length) {
@@ -11682,10 +11680,43 @@ function _renderListTile(l, matchInfo = null) {
 }
 
 // ── List Wizard ────────────────────────
-let _wizStep = 1, _wizType = null, _wizData = {}, _wizCloneFrom = null;
+let _wizStep = 1, _wizType = null, _wizData = {}, _wizCloneFrom = null, _wizFromFab = false;
+
+const _LIST_TYPES = [
+  { id:'packing', emoji:'🎒', label:'רשימת אריזה', desc:'לטיול, נסיעה או יציאה' },
+  { id:'recipe',  emoji:'👨‍🍳', label:'מתכון',       desc:'מצרכים ושלבי הכנה' },
+  { id:'event',   emoji:'🎉', label:'תכנון אירוע', desc:'מטלות ומשימות לאירוע' },
+];
+
+function listsFabClick() {
+  const picker = el('listsFabPicker');
+  if (!picker) return;
+  if (picker.classList.contains('open')) { _listsHidePicker(); return; }
+  picker.innerHTML = _LIST_TYPES.map(t =>
+    `<button class="comm-fab-pick-item" onclick="_listsFabPick('${t.id}')">${t.emoji} ${t.label}</button>`).join('');
+  picker.classList.add('open');
+  el('listsFab')?.classList.add('chore-fab-open');
+  setTimeout(() => {
+    document.addEventListener('click', function _h(e) {
+      if (!el('listsFabWrap')?.contains(e.target)) { _listsHidePicker(); document.removeEventListener('click', _h); }
+    });
+  }, 0);
+}
+
+function _listsHidePicker() {
+  el('listsFabPicker')?.classList.remove('open');
+  el('listsFab')?.classList.remove('chore-fab-open');
+}
+
+function _listsFabPick(type) {
+  _listsHidePicker();
+  _wizStep = 2; _wizType = type; _wizData = {}; _wizCloneFrom = null; _wizFromFab = true;
+  el('listWizardPanel').classList.remove('hidden');
+  _renderWizard();
+}
 
 function openListWizard() {
-  _wizStep = 1; _wizType = null; _wizData = {}; _wizCloneFrom = null;
+  _wizStep = 1; _wizType = null; _wizData = {}; _wizCloneFrom = null; _wizFromFab = false;
   el('listWizardPanel').classList.remove('hidden');
   _renderWizard();
 }
@@ -11695,7 +11726,7 @@ function closeListWizard() { el('listWizardPanel').classList.add('hidden'); }
 function listOpenClone(listId) {
   const list = (S.lists || []).find(l => l.id === listId);
   if (!list) return;
-  _wizCloneFrom = listId;
+  _wizCloneFrom = listId; _wizFromFab = false;
   _wizType = list.type;
   _wizStep = 2;
   _wizData = { name: 'עותק של ' + list.name, meta: { ...(list.meta || {}) } };
@@ -11713,11 +11744,7 @@ function _renderWizard() {
 }
 
 function _wizStep1(c) {
-  const types = [
-    { id:'packing', emoji:'🎒', label:'רשימת אריזה', desc:'לטיול, נסיעה או יציאה' },
-    { id:'recipe',  emoji:'👨‍🍳', label:'מתכון',       desc:'מצרכים ושלבי הכנה' },
-    { id:'event',   emoji:'🎉', label:'תכנון אירוע', desc:'מטלות ומשימות לאירוע' },
-  ];
+  const types = _LIST_TYPES;
   c.innerHTML = `<div class="wizard-step">
     <div class="wizard-hint">מה תרצה לארגן?</div>
     <div class="wizard-type-grid">
@@ -11753,7 +11780,7 @@ function _wizStep2(c) {
     <div class="wizard-hint" style="margin-top:14px">📋 הדבקת טקסט (למשל מוואטסאפ) – כל שורה תהפוך למשימה</div>
     <textarea class="add-input" id="wizEventPaste" rows="6" placeholder="הדבק כאן טקסט מועתק..." style="resize:vertical">${esc(_wizData.paste || '')}</textarea>
   ` }[_wizType] || '';
-  const backBtn = _wizCloneFrom
+  const backBtn = (_wizCloneFrom || _wizFromFab)
     ? `<button class="btn-ghost" onclick="closeListWizard()">ביטול</button>`
     : `<button class="btn-ghost" onclick="_wizStep=1;_renderWizard()">‹ חזור</button>`;
   c.innerHTML = `<div class="wizard-step">
