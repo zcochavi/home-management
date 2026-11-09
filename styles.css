@@ -1478,12 +1478,6 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 
 /* ── Lists Tab ──────────────────────────────── */
 #tab-lists { padding-bottom: 80px; }
-#listsFab {
-  position: fixed;
-  bottom: calc(var(--tab-bar-h) + env(safe-area-inset-bottom, 0px) + 20px);
-  right: max(20px, calc((100vw - 520px) / 2 + 20px));
-  z-index: 90;
-}
 
 .lists-topbar { height: 36px; overflow: visible; position: relative; z-index: 5; }
 .lists-topbar .pool-search-toggle { position: absolute; top: 4px; inset-inline-end: 0; }
