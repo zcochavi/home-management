@@ -5500,8 +5500,7 @@ function renderScheduleCutoffSettings() {
     <div style="padding:8px 0">
       <div style="font-size:13px;color:#4a5568;margin-bottom:8px">החל איזו שעה ביום להציג בדף הבית את מערכת השעות של היום הבא במקום היום הנוכחי</div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:nowrap">
-        <input type="time" value="${esc(time)}" id="adminScheduleCutoffInput" dir="ltr"
-          style="text-align:center;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 10px;font-size:14px;font-family:inherit">
+        <input type="time" value="${esc(time)}" id="adminScheduleCutoffInput" dir="ltr" data-required="1">
         <button class="admin-btn" onclick="adminSaveScheduleCutoff()" style="padding:6px 14px;font-size:13px;line-height:1;margin-bottom:0">שמור</button>
         <span id="adminScheduleCutoffMsg" style="font-size:12px;color:#38a169;min-width:40px"></span>
       </div>
@@ -7589,7 +7588,7 @@ function startEditChore(id) {
   const chore = S.chores.find(x => x.id === id);
   if (!chore) return;
   card.classList.add('editing');
-  body.innerHTML = `<input class="chore-edit-input" id="choreEditInput_${id}" value="${esc(chore.text)}" onkeydown="if(event.key==='Enter')saveEditChore(${id});if(event.key==='Escape')cancelEditChore(${id})"><div class="chore-edit-date-row"><label class="chore-edit-date-label">📅 תאריך יעד:</label><input type="date" class="chore-qa-date chore-edit-date" id="choreEditDate_${id}" value="${chore.due||''}"><button class="chore-edit-date-clear" onclick="el('choreEditDate_${id}').value=''" title="נקה תאריך">✕</button></div><div class="chore-edit-actions"><button class="chore-edit-save" onclick="saveEditChore(${id});event.stopPropagation()">שמור</button><button class="chore-edit-cancel" onclick="cancelEditChore(${id});event.stopPropagation()">ביטול</button></div>`;
+  body.innerHTML = `<input class="chore-edit-input" id="choreEditInput_${id}" value="${esc(chore.text)}" onkeydown="if(event.key==='Enter')saveEditChore(${id});if(event.key==='Escape')cancelEditChore(${id})"><div class="chore-edit-date-row"><label class="chore-edit-date-label">📅 תאריך יעד:</label><input type="date" class="chore-qa-date chore-edit-date" id="choreEditDate_${id}" value="${chore.due||''}"></div><div class="chore-edit-actions"><button class="chore-edit-save" onclick="saveEditChore(${id});event.stopPropagation()">שמור</button><button class="chore-edit-cancel" onclick="cancelEditChore(${id});event.stopPropagation()">ביטול</button></div>`;
   const inp = el('choreEditInput_' + id);
   if (inp) { inp.focus(); inp.select(); }
 }
@@ -12701,8 +12700,8 @@ async function listDelete(listId) {
 }
 
 // ── Unified date inputs ────────────────────────────────
-// Every <input type="date"> gets a 📅 icon (opens the picker) and, unless it is
-// marked data-required, a ✕ button that clears an already-picked date.
+// Every <input type="date"|"time"> gets a 📅/🕐 icon (opens the picker) and, unless it is
+// marked data-required, a ✕ button that clears an already-picked value.
 function _syncDateInput(inp) {
   const wrap = inp.parentElement;
   const clr = wrap && wrap.querySelector(':scope > .date-clear');
@@ -12723,12 +12722,12 @@ function _enhanceDateInput(inp) {
   }
   const icon = document.createElement('span');
   icon.className = 'date-icon';
-  icon.textContent = '📅';
+  icon.textContent = inp.type === 'time' ? '🕐' : '📅';
   icon.onclick = () => { try { inp.showPicker(); } catch (e) { inp.focus(); } };
   const clr = document.createElement('button');
   clr.type = 'button';
   clr.className = 'date-clear';
-  clr.setAttribute('aria-label', 'נקה תאריך');
+  clr.setAttribute('aria-label', inp.type === 'time' ? 'נקה שעה' : 'נקה תאריך');
   clr.textContent = '✕';
   clr.style.display = 'none';
   clr.onclick = e => {
@@ -12747,14 +12746,14 @@ function _enhanceDateInput(inp) {
   const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
   Object.defineProperty(HTMLInputElement.prototype, 'value', {
     get: d.get, configurable: true,
-    set(v) { d.set.call(this, v); if (this.type === 'date' && this.dataset.dateEnhanced) _syncDateInput(this); }
+    set(v) { d.set.call(this, v); if ((this.type === 'date' || this.type === 'time') && this.dataset.dateEnhanced) _syncDateInput(this); }
   });
-  const scan = root => (root.querySelectorAll ? root.querySelectorAll('input[type="date"]') : []).forEach(_enhanceDateInput);
+  const scan = root => (root.querySelectorAll ? root.querySelectorAll('input[type="date"],input[type="time"]') : []).forEach(_enhanceDateInput);
   const start = () => {
     scan(document);
     new MutationObserver(muts => muts.forEach(m => m.addedNodes.forEach(n => {
       if (n.nodeType !== 1) return;
-      if (n.matches && n.matches('input[type="date"]')) _enhanceDateInput(n); else scan(n);
+      if (n.matches && n.matches('input[type="date"],input[type="time"]')) _enhanceDateInput(n); else scan(n);
     }))).observe(document.body, { childList: true, subtree: true });
   };
   if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
