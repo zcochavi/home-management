@@ -2352,7 +2352,8 @@ function _gcalTokRestore() {
 // Ask the server for a fresh access token using the stored refresh token (no popup, no tap needed)
 async function _gcalServerRefresh() {
   if (!fbFunctions) gcal.serverFailed = true;
-  if (gcal.serverBusy || gcal.serverFailed || !S.uid || !S.user) return false;
+  if (gcal.serverBusy) return null; // a refresh is already running — not a failure, caller must not retry
+  if (gcal.serverFailed || !S.uid || !S.user) return false;
   gcal.serverBusy = true;
   try {
     const r = await fbFunctions.httpsCallable('gcalRefreshToken')({ member: S.user });
@@ -2395,7 +2396,7 @@ async function onGCalCode(resp) {
 function tryAutoConnectGCal() {
   if (gcalWasConnected() && _gcalTokRestore()) return;
   if (gcalWasConnected() && gcalReady() && !gcalConnected() && !gcal.serverFailed) {
-    _gcalServerRefresh().then(ok => { if (!ok) tryAutoConnectGCal(); });
+    _gcalServerRefresh().then(ok => { if (ok === false && gcal.serverFailed) tryAutoConnectGCal(); });
     return;
   }
   if (gcalReady()) renderGCalBar();
