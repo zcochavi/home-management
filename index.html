@@ -335,7 +335,7 @@
               <button class="mb-role-btn" id="mgmtNewGenderGirl" onclick="setMgmtNewGender('girl')">👧 בת</button>
             </div>
             <span class="mgmt-edit-label">תאריך לידה <span style="color:#e53e3e">*</span></span>
-            <input class="auth-input" id="mgmtEditDob_new" type="date" data-required="1" style="margin-bottom:12px">
+            <input class="auth-input" id="mgmtEditDob_new" type="date" style="margin-bottom:12px">
             <span class="mgmt-edit-label" style="display:block;margin-bottom:6px">🏫 בית ספר <span style="color:#e53e3e">*</span></span>
             <input class="auth-input" id="mgmtEditCity_new" placeholder="עיר" style="margin-bottom:6px"
               oninput="onCityAc(this,'new')" onfocus="onCityAc(this,'new')" onblur="scheduleHideAc()">
@@ -743,7 +743,7 @@
           <div class="form-row">
             <div id="ddHwSubject" style="flex:1;min-width:0"></div>
             <select id="hwSubject" style="display:none"></select>
-            <div class="date-icon-wrap" style="flex:1"><input type="date" id="hwDue"></div>
+            <div class="date-icon-wrap" style="flex:1"><input type="date" id="hwDue"><span class="date-icon" onclick="document.getElementById('hwDue').showPicker()">📅</span></div>
             <button class="btn-sm" id="addHwBtn" onclick="addHomework()"></button>
           </div>
         </div>
@@ -804,7 +804,7 @@
           <div class="form-row" style="align-items:flex-start">
             <div style="flex:1;min-width:0">
               <label for="newEventDate" style="display:block;font-size:12px;font-weight:700;color:#718096;margin-bottom:4px">📅 תאריך</label>
-              <input type="date" id="newEventDate" data-required="1" style="width:100%">
+              <input type="date" id="newEventDate" style="width:100%">
             </div>
             <div style="flex:0 0 100px">
               <label for="newEventTime" style="display:block;font-size:12px;font-weight:700;color:#718096;margin-bottom:4px">🕐 שעה</label>
