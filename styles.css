@@ -1192,6 +1192,8 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 .date-icon-wrap { position: relative; display: flex; align-items: center; min-width: 0; flex: 1 1 auto; }
 .date-icon-wrap input[type="date"],
 .date-icon-wrap input[type="time"] {
+  /* appearance:none drops Android Chrome's native ▾ arrow — the 📅/🕐 icon replaces it */
+  -webkit-appearance: none; -moz-appearance: none; appearance: none;
   width: 100%; box-sizing: border-box; margin: 0; padding: 10px 30px; min-height: 42px;
   border: 1.5px solid var(--gray-200); border-radius: var(--r-input); background: var(--surface);
   color: var(--gray-900); font-family: inherit; font-size: 14px; font-weight: 600; outline: none; cursor: pointer;
