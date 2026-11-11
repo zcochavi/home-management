@@ -2823,7 +2823,7 @@ function renderMgmtMembers() {
           <button class="mb-role-btn ${m.gender==='girl'?'active':''}" id="mgmtGenderGirl_${i}" onclick="setMgmtGender(${i},'girl')">👧 בת</button>
         </div>
         <span class="mgmt-edit-label">תאריך לידה</span>
-        <input class="auth-input" id="mgmtEditDob_${i}" type="date" value="${m.dob||''}" style="margin-bottom:12px">
+        <input class="auth-input" id="mgmtEditDob_${i}" type="date" data-required="1" value="${m.dob||''}" style="margin-bottom:12px">
       </div>
       <div id="mgmtSchoolSection_${i}" style="display:${m.role==='kid'?'block':'none'}">
         <span class="mgmt-edit-label" style="display:block;margin-bottom:6px">🏫 בית ספר</span>
@@ -4600,7 +4600,7 @@ function renderCommCard(kid) {
       <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
         <div style="flex:1;min-width:0">
           <label for="commEvDate_${cid}" style="display:block;font-size:12px;font-weight:700;color:#718096;margin-bottom:4px">📅 תאריך</label>
-          <input type="date" class="auth-input" id="commEvDate_${cid}" style="margin-bottom:0;width:100%" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
+          <input type="date" class="auth-input" id="commEvDate_${cid}" data-required="1" style="margin-bottom:0;width:100%" onchange="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
           <div id="commEvDateHint_${cid}" style="display:none;font-size:11px;color:var(--gray-400);font-weight:600;margin-top:3px;padding-right:2px">תאריך אופציונלי לסוג זה</div>
         </div>
         <div style="flex:0 0 110px">
@@ -4747,6 +4747,8 @@ function onCommEvTypeChange(cid) {
   if (genderWrap) genderWrap.style.display = typeCfg.hasGenderFilter ? '' : 'none';
   const dateHint = el('commEvDateHint_' + cid);
   if (dateHint) dateHint.style.display = typeCfg.mDate ? 'none' : '';
+  const dateEl = el('commEvDate_' + cid);
+  if (dateEl) { if (typeCfg.mDate) dateEl.dataset.required = '1'; else delete dateEl.dataset.required; _syncDateInput(dateEl); }
   const celebWrap = el('commEvCelebWrap_' + cid);
   if (celebWrap) celebWrap.style.display = type === 'birthday' ? '' : 'none';
 }
@@ -5499,8 +5501,7 @@ function renderScheduleCutoffSettings() {
     <div style="padding:8px 0">
       <div style="font-size:13px;color:#4a5568;margin-bottom:8px">החל איזו שעה ביום להציג בדף הבית את מערכת השעות של היום הבא במקום היום הנוכחי</div>
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:nowrap">
-        <input type="time" value="${esc(time)}" id="adminScheduleCutoffInput" dir="ltr"
-          style="text-align:center;border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 10px;font-size:14px;font-family:inherit">
+        <input type="time" value="${esc(time)}" id="adminScheduleCutoffInput" dir="ltr" data-required="1">
         <button class="admin-btn" onclick="adminSaveScheduleCutoff()" style="padding:6px 14px;font-size:13px;line-height:1;margin-bottom:0">שמור</button>
         <span id="adminScheduleCutoffMsg" style="font-size:12px;color:#38a169;min-width:40px"></span>
       </div>
@@ -7588,7 +7589,7 @@ function startEditChore(id) {
   const chore = S.chores.find(x => x.id === id);
   if (!chore) return;
   card.classList.add('editing');
-  body.innerHTML = `<input class="chore-edit-input" id="choreEditInput_${id}" value="${esc(chore.text)}" onkeydown="if(event.key==='Enter')saveEditChore(${id});if(event.key==='Escape')cancelEditChore(${id})"><div class="chore-edit-date-row"><label class="chore-edit-date-label">📅 תאריך יעד:</label><input type="date" class="chore-qa-date chore-edit-date" id="choreEditDate_${id}" value="${chore.due||''}"><button class="chore-edit-date-clear" onclick="el('choreEditDate_${id}').value=''" title="נקה תאריך">✕</button></div><div class="chore-edit-actions"><button class="chore-edit-save" onclick="saveEditChore(${id});event.stopPropagation()">שמור</button><button class="chore-edit-cancel" onclick="cancelEditChore(${id});event.stopPropagation()">ביטול</button></div>`;
+  body.innerHTML = `<input class="chore-edit-input" id="choreEditInput_${id}" value="${esc(chore.text)}" onkeydown="if(event.key==='Enter')saveEditChore(${id});if(event.key==='Escape')cancelEditChore(${id})"><div class="chore-edit-date-row"><label class="chore-edit-date-label">📅 תאריך יעד:</label><input type="date" class="chore-qa-date chore-edit-date" id="choreEditDate_${id}" value="${chore.due||''}"></div><div class="chore-edit-actions"><button class="chore-edit-save" onclick="saveEditChore(${id});event.stopPropagation()">שמור</button><button class="chore-edit-cancel" onclick="cancelEditChore(${id});event.stopPropagation()">ביטול</button></div>`;
   const inp = el('choreEditInput_' + id);
   if (inp) { inp.focus(); inp.select(); }
 }
@@ -12698,3 +12699,63 @@ async function listDelete(listId) {
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId).delete();
   removeListCalendarEvent(listId);
 }
+
+// ── Unified date inputs ────────────────────────────────
+// Every <input type="date"|"time"> gets a 📅/🕐 icon (opens the picker) and, unless it is
+// marked data-required, a ✕ button that clears an already-picked value.
+function _syncDateInput(inp) {
+  const wrap = inp.parentElement;
+  const clr = wrap && wrap.querySelector(':scope > .date-clear');
+  if (!clr) return;
+  clr.style.display = (inp.value && !inp.dataset.required && !inp.disabled) ? '' : 'none';
+}
+function _enhanceDateInput(inp) {
+  if (inp.dataset.dateEnhanced) return;
+  inp.dataset.dateEnhanced = '1';
+  let wrap = inp.parentElement;
+  if (!wrap || !wrap.classList.contains('date-icon-wrap')) {
+    const cs = getComputedStyle(inp);
+    wrap = document.createElement('div');
+    wrap.className = 'date-icon-wrap';
+    wrap.style.margin = cs.margin;
+    inp.parentNode.insertBefore(wrap, inp);
+    wrap.appendChild(inp);
+  }
+  const icon = document.createElement('span');
+  icon.className = 'date-icon';
+  icon.textContent = inp.type === 'time' ? '🕐' : '📅';
+  icon.onclick = () => { try { inp.showPicker(); } catch (e) { inp.focus(); } };
+  const clr = document.createElement('button');
+  clr.type = 'button';
+  clr.className = 'date-clear';
+  clr.setAttribute('aria-label', inp.type === 'time' ? 'נקה שעה' : 'נקה תאריך');
+  clr.textContent = '✕';
+  clr.style.display = 'none';
+  clr.onclick = e => {
+    e.preventDefault(); e.stopPropagation();
+    inp.value = '';
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  wrap.append(icon, clr);
+  inp.addEventListener('click', () => { try { inp.showPicker(); } catch (e) {} });
+  inp.addEventListener('input', () => _syncDateInput(inp));
+  inp.addEventListener('change', () => _syncDateInput(inp));
+  _syncDateInput(inp);
+}
+(function _initDateInputs() {
+  const d = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+  Object.defineProperty(HTMLInputElement.prototype, 'value', {
+    get: d.get, configurable: true,
+    set(v) { d.set.call(this, v); if ((this.type === 'date' || this.type === 'time') && this.dataset.dateEnhanced) _syncDateInput(this); }
+  });
+  const scan = root => (root.querySelectorAll ? root.querySelectorAll('input[type="date"],input[type="time"]') : []).forEach(_enhanceDateInput);
+  const start = () => {
+    scan(document);
+    new MutationObserver(muts => muts.forEach(m => m.addedNodes.forEach(n => {
+      if (n.nodeType !== 1) return;
+      if (n.matches && n.matches('input[type="date"],input[type="time"]')) _enhanceDateInput(n); else scan(n);
+    }))).observe(document.body, { childList: true, subtree: true });
+  };
+  if (document.body) start(); else document.addEventListener('DOMContentLoaded', start);
+})();
