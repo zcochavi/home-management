@@ -1497,27 +1497,17 @@ exports.onAdminMessageCreated = functions.firestore
     }
   });
 
-exports.adminDeleteFamily = functions.https.onCall(async (data, context) => {
-  if (context.auth?.uid !== ADMIN_UID)
-    throw new functions.https.HttpsError('permission-denied', 'Admins only');
-  const { familyUid } = data;
-  if (!familyUid) throw new functions.https.HttpsError('invalid-argument', 'Missing familyUid');
-  if (familyUid === ADMIN_UID) throw new functions.https.HttpsError('invalid-argument', 'Cannot delete admin family');
-
+// Deletes a family and everything that hangs off it. Shared by adminDeleteFamily and
+// deleteOwnFamily. Returns the family name, or null when the family doesn't exist.
+async function deleteFamilyData(familyUid, { deleteOwnerAuth }) {
   const famRef  = db.collection('families').doc(familyUid);
   const famSnap = await famRef.get();
-  if (!famSnap.exists) throw new functions.https.HttpsError('not-found', 'Family not found');
+  if (!famSnap.exists) return null;
   const famData = famSnap.data();
   const familyName = famData.familyName || familyUid;
   const members = famData.members || [];
 
-  // 1. Delete subcollections (fcmTokens, notifications)
-  for (const subCol of ['fcmTokens', 'notifications']) {
-    const snap = await famRef.collection(subCol).get();
-    await Promise.all(snap.docs.map(d => d.ref.delete()));
-  }
-
-  // 2. Remove kid class memberships using direct paths (avoids collectionGroup index)
+  // 1. Remove kid class memberships using direct paths (avoids collectionGroup index)
   const kids = members.filter(m => m.role === 'kid' && m.school?.city && m.school?.grade);
   await Promise.all(kids.map(async kid => {
     const classId = classIdFor(kid.school);
@@ -1527,35 +1517,66 @@ exports.adminDeleteFamily = functions.https.onCall(async (data, context) => {
       .collection('members').doc(memberDocId).delete().catch(() => {});
   }));
 
-  // 3. Delete presence docs (keyed as familyUid_memberName)
+  // 2. Delete presence docs (keyed as familyUid_memberName)
   await Promise.all(members.map(m =>
     db.collection('presence').doc(familyUid + '_' + m.name).delete().catch(() => {})
   ));
 
-  // 4. Delete family invite joinCode
-  if (famData.familyCode) {
-    await db.collection('joinCodes').doc(famData.familyCode).delete().catch(() => {});
-  }
-
-  // 5. Delete kid joinCodes + their Auth accounts
-  const kidCodes = members.filter(m => m.role === 'kid' && m.joinCode).map(m => m.joinCode);
-  await Promise.all(kidCodes.map(async code => {
+  // 3. Delete join codes (family code + members' personal codes) and their invite Auth accounts
+  const codes = [famData.familyCode, ...members.map(m => m.joinCode)].filter(Boolean);
+  await Promise.all(codes.map(async code => {
     await db.collection('joinCodes').doc(code).delete().catch(() => {});
     try {
-      const kidUser = await admin.auth().getUserByEmail(code + '@fh.familyhub').catch(() => null);
-      if (kidUser) await admin.auth().deleteUser(kidUser.uid);
-    } catch(e) { console.warn('deleteKidAuth:', code, e.message); }
+      const inviteUser = await admin.auth().getUserByEmail((code + '@fh.familyhub').toLowerCase()).catch(() => null);
+      if (inviteUser) {
+        await db.collection('uidToFamily').doc(inviteUser.uid).delete().catch(() => {});
+        await admin.auth().deleteUser(inviteUser.uid);
+      }
+    } catch(e) { console.warn('deleteInviteAuth:', code, e.message); }
   }));
 
-  // 6. Delete family Firestore doc
-  await famRef.delete();
+  // 4. Unmap every account that joined this family, and drop its public list shares
+  for (const col of ['uidToFamily', 'publicShares']) {
+    const snap = await db.collection(col).where('familyUid', '==', familyUid).get();
+    await Promise.all(snap.docs.map(d => d.ref.delete().catch(() => {})));
+  }
 
-  // 7. Delete family owner Auth account
-  await admin.auth().deleteUser(familyUid).catch(e =>
-    console.warn('deleteOwnerAuth:', familyUid, e.message)
-  );
+  // 5. Delete the family doc and all its subcollections (lists, fcmTokens, notifications, ...)
+  await db.recursiveDelete(famRef);
+
+  // 6. Delete family owner Auth account
+  if (deleteOwnerAuth) {
+    await admin.auth().deleteUser(familyUid).catch(e =>
+      console.warn('deleteOwnerAuth:', familyUid, e.message)
+    );
+  }
+  return familyName;
+}
+
+exports.adminDeleteFamily = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const { familyUid } = data;
+  if (!familyUid) throw new functions.https.HttpsError('invalid-argument', 'Missing familyUid');
+  if (familyUid === ADMIN_UID) throw new functions.https.HttpsError('invalid-argument', 'Cannot delete admin family');
+
+  const familyName = await deleteFamilyData(familyUid, { deleteOwnerAuth: true });
+  if (familyName === null) throw new functions.https.HttpsError('not-found', 'Family not found');
 
   console.log(`adminDeleteFamily: deleted ${familyUid} (${familyName})`);
+  return { ok: true, familyName };
+});
+
+// A family owner deletes their own family so their account can join another family instead
+// (an account either owns a family or is a member of one, never both). The owner's Auth
+// account is kept — they go on signing in with it as a member of the family they join.
+exports.deleteOwnFamily = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError('unauthenticated', 'Sign in first');
+  if (uid === ADMIN_UID) throw new functions.https.HttpsError('invalid-argument', 'Cannot delete admin family');
+
+  const familyName = await deleteFamilyData(uid, { deleteOwnerAuth: false });
+  if (familyName !== null) console.log(`deleteOwnFamily: deleted ${uid} (${familyName})`);
   return { ok: true, familyName };
 });
 
