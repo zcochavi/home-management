@@ -13,7 +13,9 @@ Run through this before any significant deploy (major refactor, new feature, Clo
 - [ ] **Join via family code** — on a second device/browser, join with the family code; verify login screen shows all members
 - [ ] **Join via kid code** — join with a kid's personal code; verify auto-login as that kid with no member switcher shown
 - [ ] **Join with Google (spouse)** — generate a personal code for a parent in the management screen; on a second browser enter it in "הצטרף" and tap "הצטרף עם חשבון Google"; verify auto-login as that parent. Sign out, then "המשך עם Google" on the sign-in tab (no code) lands in the same family as the same member
-- [ ] **Join with Google (owner account)** — with a Google account that already owns a family, verify it's refused with an error and stays on the join tab
+- [ ] **Join with Google (account that owns a family)** — with a Google account that already owns a family, verify a danger prompt names that family and its member count. Cancel → nothing deleted, back on the join tab signed out. Confirm → the old family doc, its subcollections and join codes are gone, and the account lands in the joined family
+- [ ] **Connect Google later** — join with a personal parent code only (no Google); open the hamburger menu → "חבר חשבון Google"; verify the page reloads into the same family as the same member, and that after sign-out "המשך עם Google" returns there. The menu item is hidden for the owner, for kids, and once connected
+- [ ] **Admin delete family** — (shares code with the above) delete a test family from the admin panel; verify doc, lists, join codes and owner Auth account are removed
 - [ ] **Refresh after join** — refresh the page after joining; verify it loads correctly (no infinite spinner, no blank page)
 - [ ] **Sign out** — sign out; verify auth screen appears
 

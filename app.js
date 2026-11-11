@@ -1208,6 +1208,69 @@ async function _resolveJoinCode(code) {
   return null;
 }
 
+// Maps a signed-in Google user to a family as a joined member. `app` is the Firebase app
+// instance that user is signed in on. An account either owns a family or is a member of one,
+// never both — so if this account owns a family, the user must confirm deleting it first.
+// Returns false if the user backed out.
+async function _linkGoogleUserToFamily(app, user, familyUid, memberName) {
+  const db = app.firestore();
+  const own = await db.collection('families').doc(user.uid).get();
+  if (own.exists) {
+    const d = own.data() || {};
+    const count = (d.members || []).length;
+    const ok = await _confirm(
+      `<b>⚠️ לחשבון ${esc(user.email || 'Google')} כבר יש משפחה משלו: "${esc(d.familyName || '')}"</b><br><br>` +
+      `אי אפשר גם לנהל משפחה וגם להצטרף למשפחה אחרת. כדי להצטרף, המשפחה הקיימת <b>תימחק לצמיתות</b> — ` +
+      `${count} בני המשפחה שבה, וכל המטלות, הרשימות, האירועים והנתונים שלה. קודי ההצטרפות שלה יפסיקו לעבוד.<br><br>` +
+      `לא ניתן לשחזר את המחיקה. להמשיך?`,
+      { danger: true, okLabel: 'מחק והצטרף' }
+    );
+    if (!ok) return false;
+    await app.functions().httpsCallable('deleteOwnFamily')();
+  }
+  await db.collection('uidToFamily').doc(user.uid).set({ familyUid, memberName: memberName || null });
+  return true;
+}
+
+// True when this device is signed in with a join code's shared invite account (not a personal one)
+const _isInviteSession = () => (fbAuth?.currentUser?.email || '').toLowerCase().endsWith('@' + JOIN_DOMAIN);
+
+// A member who joined with a code only can connect their Google account at any later time.
+// The Google sign-in happens on a secondary app instance so the current session is untouched
+// unless everything succeeds; then this device switches over to the Google account.
+async function connectGoogleAccount() {
+  if (!FB_CONFIGURED || !_isInviteSession() || !S.uid) return;
+  const familyUid = S.uid, memberName = S.lockedMember || null;
+  const app2 = firebase.initializeApp(FIREBASE_CONFIG, 'link_' + Date.now());
+  let linked = false;
+  try {
+    const cred = await app2.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    const user = cred.user;
+    if (user.uid === familyUid) { await _alert('זהו החשבון של מנהל/ת המשפחה — היכנס/י איתו ישירות במסך הכניסה.'); return; }
+    if (!await _linkGoogleUserToFamily(app2, user, familyUid, memberName)) return;
+    linked = true;
+    localStorage.setItem('familyhub_family_uid_' + user.uid, familyUid);
+    if (memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, memberName);
+    // Switch this device to the Google account, then reload into the same family
+    _googleFlow = true;
+    await fbAuth.signInWithCredential(cred.credential);
+    location.reload();
+  } catch(e) {
+    _googleFlow = false;
+    if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
+    if (linked) {
+      await _alert('✓ חשבון Google חובר. כדי להשתמש בו, צא/י מהחשבון והיכנס/י עם "המשך עם Google".');
+    } else {
+      await _alert(e.code === 'auth/popup-blocked'
+        ? 'הדפדפן חסם את חלון ההתחברות — אפשר חלונות קופצים ונסה שוב'
+        : 'חיבור חשבון Google נכשל [' + esc(e.code || e.message) + ']');
+    }
+  } finally {
+    await app2.auth().signOut().catch(() => {});
+    await app2.delete().catch(() => {});
+  }
+}
+
 // Join a family with a join code, but as the user's own Google account instead of the code's
 // shared invite account. The Google uid is mapped to the family (uidToFamily), so from then on
 // "המשך עם Google" on any device lands in this family without the code.
@@ -1250,17 +1313,8 @@ async function doJoinWithGoogle() {
       return;
     }
     if (target.ownerUid !== user.uid) {
-      // A Google account that already owns a family can't also be a member of another one —
-      // sign-in would always resolve to its own family.
-      const own = await fbDb.collection('families').doc(user.uid).get();
-      if (own.exists) {
-        await _fail('חשבון Google זה כבר מנהל משפחה משלו, ולכן לא ניתן לצרף אותו למשפחה אחרת.');
-        return;
-      }
-      await fbDb.collection('uidToFamily').doc(user.uid).set({
-        familyUid: target.ownerUid,
-        memberName: target.memberName || null,
-      });
+      const linked = await _linkGoogleUserToFamily(firebase.app(), user, target.ownerUid, target.memberName);
+      if (!linked) { await _fail(''); return; }
       localStorage.setItem('familyhub_family_uid_' + user.uid, target.ownerUid);
       if (target.memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, target.memberName);
       else localStorage.removeItem('familyhub_locked_member_' + user.uid);
@@ -6403,6 +6457,7 @@ let _installPrompt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _installPrompt = e; });
 // SVG icons for the drawer menu
 const DRAWER_ICONS = {
+  google:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>`,
   mgmt:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>`,
   photos:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21,15 16,10 5,21"/></svg>`,
   tabs:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
@@ -6441,6 +6496,7 @@ function openMenu() {
     isParent() ? _drawerItem('mgmt',    isHe ? 'הגדרות' : 'Settings',           `closeMenu();openMgmt()`)          : '',
     isParent() ? _drawerItem('home_ed', isHe ? 'התאמת דף הבית' : 'Customize home', `closeMenu();openHomeEditor()`)   : '',
     isParent() ? _drawerItem('tabs',    isHe ? 'התאמת לשוניות' : 'Customize tabs', `closeMenu();openTabEditor()`)    : '',
+    (isParent() && _isInviteSession()) ? _drawerItem('google', isHe ? 'חבר חשבון Google' : 'Connect Google account', `closeMenu();connectGoogleAccount()`) : '',
     (gcalConnected() || gcalWasConnected()) ? _drawerItem('gcal', isHe ? 'נתק Google Calendar' : 'Disconnect GCal', `closeMenu();disconnectGCal()`) : '',
   ].filter(Boolean).join('');
 
