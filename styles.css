@@ -1189,12 +1189,33 @@ input[type="date"], input[type="time"] {
   transition: border-color var(--t-fast);
 }
 input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary-500); }
-.date-icon-wrap { position: relative; display: flex; align-items: center; min-width: 0; }
-.date-icon-wrap input[type="date"] { width: 100%; padding-right: 28px; }
-.date-icon-wrap input[type="date"]::-webkit-calendar-picker-indicator { display: none !important; width: 0; height: 0; padding: 0; margin: 0; }
+.date-icon-wrap { position: relative; display: flex; align-items: center; min-width: 0; flex: 1 1 auto; }
+.date-icon-wrap input[type="date"],
+.date-icon-wrap input[type="time"] {
+  width: 100%; box-sizing: border-box; margin: 0; padding: 10px 30px; min-height: 42px;
+  border: 1.5px solid var(--gray-200); border-radius: var(--r-input); background: var(--surface);
+  color: var(--gray-900); font-family: inherit; font-size: 14px; font-weight: 600; outline: none; cursor: pointer;
+  transition: border-color var(--t-fast);
+}
+.date-icon-wrap input[type="date"]:focus,
+.date-icon-wrap input[type="time"]:focus { border-color: var(--primary-500); background: var(--primary-50); }
+.date-icon-wrap input[type="date"].input-error,
+.date-icon-wrap input[type="time"].input-error { border-color: var(--error) !important; }
+.date-icon-wrap input[type="date"]::-webkit-calendar-picker-indicator,
+.date-icon-wrap input[type="time"]::-webkit-calendar-picker-indicator { display: none !important; width: 0; height: 0; padding: 0; margin: 0; }
 .date-icon-wrap input[type="date"]::-webkit-inner-spin-button,
+.date-icon-wrap input[type="time"]::-webkit-inner-spin-button,
+.date-icon-wrap input[type="time"]::-webkit-outer-spin-button,
 .date-icon-wrap input[type="date"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.date-icon { position: absolute; right: 8px; font-size: 14px; cursor: pointer; line-height: 1; }
+.date-icon { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); font-size: 14px; cursor: pointer; line-height: 1; }
+.date-clear {
+  position: absolute; left: 6px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; padding: 0; border: none; border-radius: 50%;
+  background: var(--gray-200); color: var(--gray-600); font-size: 10px; line-height: 20px; text-align: center; cursor: pointer;
+}
+.date-clear:hover { background: var(--gray-300, #cbd5e0); }
+.chore-qa-controls-row .date-icon-wrap { min-width: 130px; }
+.date-icon-wrap:has(#adminScheduleCutoffInput) { flex: 0 0 150px; }
 
 /* ═══════════════════════════════════════════
    CALENDAR
