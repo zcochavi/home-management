@@ -2349,6 +2349,8 @@ function _gcalTokRestore() {
     return true;
   } catch(e) { return false; }
 }
+// Why the persistent (server-side) connection failed — shown on the calendar bar so it isn't silent
+function _gcalErrText(e) { return String(e?.details?.googleError || e?.message || e?.code || 'unknown').slice(0, 60); }
 // Ask the server for a fresh access token using the stored refresh token (no popup, no tap needed)
 async function _gcalServerRefresh() {
   if (!fbFunctions) gcal.serverFailed = true;
@@ -2361,6 +2363,7 @@ async function _gcalServerRefresh() {
     return true;
   } catch(e) {
     gcal.serverFailed = true; // not connected server-side (or function unavailable) → tap-to-reconnect fallback
+    gcal.lastErr = 'refresh: ' + _gcalErrText(e);
     return false;
   } finally { gcal.serverBusy = false; }
 }
@@ -2375,7 +2378,7 @@ async function onGCalCode(resp) {
   if (resp.error || !resp.code) { renderGCalBar(); return; }
   try {
     const r = await fbFunctions.httpsCallable('gcalExchangeCode')({ code: resp.code, member: S.user });
-    gcal.serverFailed = false;
+    gcal.serverFailed = false; gcal.lastErr = '';
     await _gcalApplyToken(r.data.accessToken, r.data.expiresIn);
   } catch(e) {
     console.error('gcalExchangeCode:', e);
@@ -2389,6 +2392,7 @@ async function onGCalCode(resp) {
     }
     // Server flow unavailable → fall back to the browser-only token flow on the next tap
     gcal.codeBroken = true; gcal.serverFailed = true;
+    gcal.lastErr = 'connect: ' + _gcalErrText(e);
     if (S.uid && S.user) localStorage.setItem('familyhub_gcal_' + S.uid + '_' + S.user, '1');
     tryAutoConnectGCal();
   }
@@ -2487,6 +2491,7 @@ function renderGCalBar() {
     st.textContent=t('gcalSync');
     bt.innerHTML=`<button class="gcal-btn gcal-btn-connect" onclick="connectGCal()">${t('gcalConnect')}</button>`;
   }
+  if (gcal.lastErr) st.insertAdjacentHTML('beforeend', `<div style="font-size:10px;color:#9ca3af">${esc(gcal.lastErr)}</div>`);
   // Show GCal sync toggle in add-event form only when connected and user is a parent
   const syncRow=el('gcalSyncRow');
   if(syncRow){
