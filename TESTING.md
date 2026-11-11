@@ -12,6 +12,8 @@ Run through this before any significant deploy (major refactor, new feature, Clo
 - [ ] **Google sign-in (new account)** — verify it goes to family setup with email locked and no password field; after creating, verify family doc exists and refresh works. Backing out returns to sign-in and signs out
 - [ ] **Join via family code** — on a second device/browser, join with the family code; verify login screen shows all members
 - [ ] **Join via kid code** — join with a kid's personal code; verify auto-login as that kid with no member switcher shown
+- [ ] **Join with Google (spouse)** — generate a personal code for a parent in the management screen; on a second browser enter it in "הצטרף" and tap "הצטרף עם חשבון Google"; verify auto-login as that parent. Sign out, then "המשך עם Google" on the sign-in tab (no code) lands in the same family as the same member
+- [ ] **Join with Google (owner account)** — with a Google account that already owns a family, verify it's refused with an error and stays on the join tab
 - [ ] **Refresh after join** — refresh the page after joining; verify it loads correctly (no infinite spinner, no blank page)
 - [ ] **Sign out** — sign out; verify auth screen appears
 

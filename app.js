@@ -955,6 +955,13 @@ async function doGoogleSignIn() {
       fbDb.collection('uidToFamily').doc(user.uid).get(),
     ]);
     if (own.exists || mapped.exists) {
+      // A member who joined with Google (doJoinWithGoogle): _enterApp resolves the family from
+      // localStorage, which is empty on a new device or after sign-out — restore it from the mapping.
+      if (!own.exists) {
+        const d = mapped.data() || {};
+        if (d.familyUid)  localStorage.setItem('familyhub_family_uid_' + user.uid, d.familyUid);
+        if (d.memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, d.memberName);
+      }
       _googleFlow = false;
       await _enterApp(user);
       return;
@@ -1175,6 +1182,95 @@ async function doJoin() {
       'auth/timeout':            'פסק זמן — בדוק חיבור לאינטרנט ונסה שוב.',
     };
     await _failJoin(msgs[e.code] || 'שגיאה [' + (e.code || e.message) + ']');
+  }
+}
+
+// Resolves a join code to the family (and member) it belongs to, without signing the main
+// auth instance in as the code's invite account.
+async function _resolveJoinCode(code) {
+  try {
+    const snap = await fbDb.collection('joinCodes').doc(code).get();
+    if (snap.exists && snap.data().ownerUid) {
+      return { ownerUid: snap.data().ownerUid, memberName: snap.data().memberName || null };
+    }
+  } catch (_) {}
+  // Fallback: ownerUid|memberName stored on the invite account's displayName
+  const app2 = firebase.initializeApp(FIREBASE_CONFIG, 'join_' + Date.now());
+  try {
+    const cred = await app2.auth().signInWithEmailAndPassword(code + '@' + JOIN_DOMAIN, code);
+    const profile = cred.user.displayName || '';
+    const pipeIdx = profile.indexOf('|');
+    if (pipeIdx > 0) return { ownerUid: profile.slice(0, pipeIdx), memberName: profile.slice(pipeIdx + 1) || null };
+  } catch (_) {
+  } finally {
+    await app2.delete().catch(() => {});
+  }
+  return null;
+}
+
+// Join a family with a join code, but as the user's own Google account instead of the code's
+// shared invite account. The Google uid is mapped to the family (uidToFamily), so from then on
+// "המשך עם Google" on any device lands in this family without the code.
+async function doJoinWithGoogle() {
+  if (!FB_CONFIGURED) return;
+  const code = el('joinCode').value.trim().toUpperCase();
+  el('joinError').textContent = '';
+  if (code.length < 4) { el('joinError').textContent = 'הזן קוד הצטרפות תקין'; return; }
+  _googleFlow = true;
+  setAuthLoading(true);
+
+  // Sign the Google user back out and show the error. _googleFlow stays set until the deferred
+  // onAuthStateChanged(null) has fired, so it doesn't switch panels and hide the message.
+  const _fail = async (msg) => {
+    await fbAuth.signOut().catch(() => {});
+    setAuthLoading(false);
+    el('joinError').textContent = msg;
+    setTimeout(() => { _googleFlow = false; }, 300);
+  };
+
+  let user;
+  try {
+    // Popup first — it must open directly from the click, before any other async work
+    user = (await fbAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider())).user;
+  } catch(e) {
+    _googleFlow = false;
+    setAuthLoading(false);
+    if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
+    el('joinError').textContent = e.code === 'auth/popup-blocked'
+      ? 'הדפדפן חסם את חלון ההתחברות — אפשר חלונות קופצים ונסה שוב'
+      : getAuthError(e.code);
+    return;
+  }
+
+  try {
+    el('joinError').textContent = '⏳ בודק קוד...';
+    const target = await _resolveJoinCode(code);
+    if (!target) {
+      await _fail('קוד לא נמצא או פג תוקפו. בקש קוד חדש ממי שהזמין אותך.');
+      return;
+    }
+    if (target.ownerUid !== user.uid) {
+      // A Google account that already owns a family can't also be a member of another one —
+      // sign-in would always resolve to its own family.
+      const own = await fbDb.collection('families').doc(user.uid).get();
+      if (own.exists) {
+        await _fail('חשבון Google זה כבר מנהל משפחה משלו, ולכן לא ניתן לצרף אותו למשפחה אחרת.');
+        return;
+      }
+      await fbDb.collection('uidToFamily').doc(user.uid).set({
+        familyUid: target.ownerUid,
+        memberName: target.memberName || null,
+      });
+      localStorage.setItem('familyhub_family_uid_' + user.uid, target.ownerUid);
+      if (target.memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, target.memberName);
+      else localStorage.removeItem('familyhub_locked_member_' + user.uid);
+    }
+    el('joinError').textContent = '';
+    setAuthLoading(false);
+    _googleFlow = false;
+    await _enterApp(user);
+  } catch(e) {
+    await _fail('ההצטרפות נכשלה [' + (e.code || e.message) + '] — נסה שוב.');
   }
 }
 
