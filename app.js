@@ -4699,6 +4699,14 @@ async function renderCommunity() {
     .map(name => getMembers().find(m => m.name === name))
     .filter(m => m?.school?.city && m?.school?.grade);
 
+  // The FAB lives outside the tab content (like the Lists/Homework FABs) and is shown
+  // right away — everything it needs is known before the class data finishes loading.
+  _commVisibleKids = kidsWithSchool
+    .map(k => ({ name: k.name, cid: classIdFor(k.school) }))
+    .filter(k => k.cid);
+  _commVisibleCids = _commVisibleKids.map(k => k.cid);
+  _syncCommFab();
+
   if (!kidsWithSchool.length) {
     container.innerHTML = `<div class="card"><div class="empty" style="padding:20px 0;text-align:center">
       <div style="font-size:40px;margin-bottom:10px">🏫</div>
@@ -4720,27 +4728,30 @@ async function renderCommunity() {
   await loadCommunityData(kidsWithSchool);
   renderHomeUpcoming();
   renderHomeSchedule();
-  _commVisibleCids = kidsWithSchool.map(k => classIdFor(k.school)).filter(Boolean);
-  _commVisibleKids = kidsWithSchool
-    .map(k => ({ name: k.name, cid: classIdFor(k.school) }))
-    .filter(k => k.cid);
   const adminBtn = (isCommittee() && !isKid())
     ? `<div id="commPendingBanner"></div>`
     : '';
-  const fabHtml = isParent() ? `
-    <div class="chore-fab-wrap" id="commFabWrap">
-      <div class="comm-fab-picker" id="commFabPicker"></div>
-      <button class="chore-fab${Object.values(_commAddOpen).some(v=>v)?' chore-fab-open':''}" id="commFab" onclick="commFabClick()" title="${t('commAddEvent')}">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
-      </button>
-    </div>` : '';
-  container.innerHTML = adminBtn + kidsWithSchool.map(kid => renderCommCard(kid)).join('') + fabHtml;
+  container.innerHTML = adminBtn + kidsWithSchool.map(kid => renderCommCard(kid)).join('');
   const bannerEl = el('commPendingBanner');
   if (bannerEl) _renderCommPendingBanner(bannerEl);
   kidsWithSchool.forEach(kid => {
     const cid = classIdFor(kid.school);
     if (cid) _buildSoftDd('commEvTypeDd_' + cid, 'commEvType_' + cid);
   });
+}
+
+function _syncCommFab() {
+  const wrap = el('commFabWrap');
+  if (!wrap) return;
+  const show = S.tab === 'community' && isParent() && _commVisibleCids.length > 0;
+  wrap.style.display = show ? '' : 'none';
+  const fab = el('commFab');
+  if (fab) {
+    fab.title = t('commAddEvent');
+    fab.setAttribute('aria-label', t('commAddEvent'));
+    const pickerOpen = el('commFabPicker')?.classList.contains('open');
+    fab.classList.toggle('chore-fab-open', show && (pickerOpen || _commVisibleCids.some(c => _commAddOpen[c])));
+  }
 }
 
 function onCommEvTypeChange(cid) {
@@ -9352,6 +9363,7 @@ function renderTabBar() {
     S.tab = active[0];
     document.querySelectorAll('.tab-content').forEach(e => e.classList.remove('active'));
     el('tab-' + S.tab)?.classList.add('active');
+    _syncCommFab();
   }
 
   const tabsHtml = active.map(id => {
@@ -9440,6 +9452,7 @@ function switchTab(tab) {
   if (tab === 'lists') renderLists();
   const _lf = el('listsFabWrap'); if (_lf) _lf.style.display = tab === 'lists' ? '' : 'none'; if (tab !== 'lists') _listsHidePicker();
   if (tab !== 'homework') { const _hfw = el('hwFabWrap'); if (_hfw) _hfw.style.display = 'none'; _hwHidePicker(); }
+  if (tab !== 'community') { _commHidePicker(); el('commFabWrap')?.style.setProperty('display', 'none'); }
   if (tab === 'homework' && getKids().includes(S.filter)) S.child = S.filter;
   if (tab === 'homework') renderHomework();
   if (_tutDefs()[tab]) setTimeout(() => _tutMaybeTrigger(tab), 700);
