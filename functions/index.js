@@ -1912,7 +1912,8 @@ async function googleTokenRequest(params) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       client_id: GCAL_CLIENT_ID,
-      client_secret: process.env.GOOGLE_OAUTH_CLIENT_SECRET,
+      // trim: a secret set through a pipe often carries a trailing newline → invalid_client
+      client_secret: (process.env.GOOGLE_OAUTH_CLIENT_SECRET || '').trim(),
       ...params,
     }).toString(),
   });
@@ -1930,7 +1931,7 @@ exports.gcalExchangeCode = gcalCallable(async (data, context) => {
   });
   if (!ok || !json.access_token) {
     console.error('gcalExchangeCode failed:', json.error, json.error_description);
-    throw new functions.https.HttpsError('failed-precondition', 'Google rejected the code');
+    throw new functions.https.HttpsError('failed-precondition', 'Google rejected the code', { googleError: String(json.error || 'unknown') });
   }
   // Google only returns a refresh token on the first grant; keep the old one otherwise.
   if (json.refresh_token) {
@@ -1956,14 +1957,14 @@ exports.gcalExchangeCode = gcalCallable(async (data, context) => {
 exports.gcalRefreshToken = gcalCallable(async (data, context) => {
   const ref = gcalDocRef(context, data?.member);
   const snap = await ref.get();
-  if (!snap.exists) throw new functions.https.HttpsError('failed-precondition', 'not-connected');
+  if (!snap.exists) throw new functions.https.HttpsError('failed-precondition', 'not-connected', { googleError: 'no_saved_token' });
   const { ok, json } = await googleTokenRequest({
     refresh_token: snap.data().refreshToken, grant_type: 'refresh_token',
   });
   if (!ok || !json.access_token) {
     console.error('gcalRefreshToken failed:', json.error, json.error_description);
     if (json.error === 'invalid_grant') await ref.delete(); // revoked / expired — user must reconnect
-    throw new functions.https.HttpsError('failed-precondition', 'not-connected');
+    throw new functions.https.HttpsError('failed-precondition', 'not-connected', { googleError: String(json.error || 'unknown') });
   }
   return { accessToken: json.access_token, expiresIn: json.expires_in || 3600 };
 });
