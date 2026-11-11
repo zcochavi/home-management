@@ -7168,15 +7168,8 @@ function _wxSceneHTML(type) {
 }
 
 async function _getWeatherCoords() {
-  // 1. Browser geolocation
-  if (navigator.geolocation) {
-    try {
-      const pos = await new Promise((res, rej) =>
-        navigator.geolocation.getCurrentPosition(res, rej, {timeout:5000}));
-      return {lat: pos.coords.latitude, lon: pos.coords.longitude, city: null};
-    } catch(_) {}
-  }
-  // 2. Kid's school city → geocode
+  // No browser geolocation — avoids a location permission prompt on load.
+  // 1. Kid's school city → geocode
   const kid = getMembers().find(m => m.role==='kid' && m.school?.city);
   if (kid) {
     try {
@@ -7185,7 +7178,7 @@ async function _getWeatherCoords() {
       if (j.results?.[0]) return {lat: j.results[0].latitude, lon: j.results[0].longitude, city: kid.school.city};
     } catch(_) {}
   }
-  // 3. IP-based fallback (no key required)
+  // 2. IP-based fallback (no key required)
   try {
     const r = await fetch('https://ipapi.co/json/');
     const j = await r.json();
