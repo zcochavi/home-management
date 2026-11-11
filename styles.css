@@ -2209,7 +2209,8 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 }
 .chore-fab:hover { background: var(--primary-600); box-shadow: 0 6px 24px rgba(108,140,255,0.55); }
 .chore-fab:active { transform: scale(0.94); }
-.chore-fab svg { width: 22px; height: 22px; }
+.chore-fab svg { width: 22px; height: 22px; transition: transform 0.25s cubic-bezier(.4,0,.2,1); }
+.chore-fab-open svg { transform: rotate(45deg); }
 .chore-fab-open { background: var(--gray-700) !important; box-shadow: 0 4px 16px rgba(0,0,0,0.2) !important; }
 .chore-qa-assignee-label { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; color: var(--primary-600); padding: 2px 0; }
 .chore-qa-av { width: 20px; height: 20px; border-radius: 50%; overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
