@@ -1,6 +1,7 @@
 name: Bump asset version on deploy
 
 on:
+  workflow_dispatch:
   push:
     branches: [gh-pages]
     paths:
@@ -13,6 +14,8 @@ permissions:
 jobs:
   bump-version:
     name: Update cache-busting version in index.html
+    # Manual runs are only allowed from the deploy branch
+    if: github.ref == 'refs/heads/gh-pages'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

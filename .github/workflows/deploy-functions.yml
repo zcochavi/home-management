@@ -1,6 +1,7 @@
 name: Deploy Firebase Functions & Rules
 
 on:
+  workflow_dispatch:
   push:
     branches: [gh-pages]
     paths:
@@ -10,6 +11,8 @@ on:
 jobs:
   deploy-functions:
     name: Deploy Cloud Functions & Firestore Rules
+    # Manual runs are only allowed from the deploy branch
+    if: github.ref == 'refs/heads/gh-pages'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
