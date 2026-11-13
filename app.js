@@ -12221,10 +12221,9 @@ async function _wizCreate() {
   try {
     const ref = await fbDb.collection('families').doc(S.uid).collection('lists').add(doc);
     syncListCalendarEvent({ ...doc, id: ref.id });
-    const hadPaste = doc.items.length > 0 && !srcList && _wizType === 'event';
     closeListWizard();
     openListDetail(ref.id);
-    if (hadPaste) listToggleEditMode(); // open straight in edit mode so tasks can be tweaked
+    listToggleEditMode(); // a new list opens straight in edit mode so items can be added right away
   } catch(e) {
     console.error('[lists] create failed:', e);
     _showSnackbar('שגיאה ביצירת הרשימה');
