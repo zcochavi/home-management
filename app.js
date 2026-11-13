@@ -639,7 +639,9 @@ const _isOwner       = () => fbAuth.currentUser?.uid === S.uid;
 // UID, distinct from the family document's id. Firestore rules can't see localStorage, so they
 // need a server-side record of "this auth UID belongs to this family" to grant access — this
 // lazily (self-)writes that mapping on every login, which also backfills it for members who
-// joined before this mapping existed, the first time they log in again.
+// joined before this mapping existed, the first time they log in again. Firestore rules accept
+// it only for the family this account already belongs to, or (for a join code's invite
+// account) the family that code was issued by.
 async function _ensureUidFamilyMapping(familyUid) {
   const authUid = fbAuth.currentUser?.uid;
   if (!authUid || authUid === familyUid || !fbDb) return;
@@ -1191,7 +1193,7 @@ async function _resolveJoinCode(code) {
   try {
     const snap = await fbDb.collection('joinCodes').doc(code).get();
     if (snap.exists && snap.data().ownerUid) {
-      return { ownerUid: snap.data().ownerUid, memberName: snap.data().memberName || null };
+      return { code, ownerUid: snap.data().ownerUid, memberName: snap.data().memberName || null };
     }
   } catch (_) {}
   // Fallback: ownerUid|memberName stored on the invite account's displayName
@@ -1200,10 +1202,10 @@ async function _resolveJoinCode(code) {
     const cred = await app2.auth().signInWithEmailAndPassword(code + '@' + JOIN_DOMAIN, code);
     const profile = cred.user.displayName || '';
     const pipeIdx = profile.indexOf('|');
-    if (pipeIdx > 0) return { ownerUid: profile.slice(0, pipeIdx), memberName: profile.slice(pipeIdx + 1) || null };
+    if (pipeIdx > 0) return { code, ownerUid: profile.slice(0, pipeIdx), memberName: profile.slice(pipeIdx + 1) || null };
     const snap = await app2.firestore().collection('joinCodes').doc(code).get();
     if (snap.exists && snap.data().ownerUid) {
-      return { ownerUid: snap.data().ownerUid, memberName: snap.data().memberName || null };
+      return { code, ownerUid: snap.data().ownerUid, memberName: snap.data().memberName || null };
     }
   } catch (_) {
   } finally {
@@ -1216,9 +1218,16 @@ async function _resolveJoinCode(code) {
 // Maps a signed-in personal account (Google or email/password) to a family as a joined member.
 // `app` is the Firebase app instance that user is signed in on. An account either owns a family or is a member of one,
 // never both — so if this account owns a family, the user must confirm deleting it first.
-// Returns false if the user backed out.
-async function _linkAccountToFamily(app, user, familyUid, memberName) {
+// The join code is the proof of invitation: Firestore rules only accept the mapping when it
+// matches the code's own record (family and member), so that record — not anything the client
+// worked out earlier — decides what is written. Read before anything is deleted.
+// Returns { familyUid, memberName }, or false if the user backed out.
+async function _linkAccountToFamily(app, user, code) {
   const db = app.firestore();
+  const codeSnap = await db.collection('joinCodes').doc(code).get();
+  const familyUid = codeSnap.exists ? codeSnap.data().ownerUid : null;
+  if (!familyUid) throw new Error('join code not found');
+  const memberName = codeSnap.data().memberName || null;
   const own = await db.collection('families').doc(user.uid).get();
   if (own.exists) {
     const d = own.data() || {};
@@ -1233,8 +1242,8 @@ async function _linkAccountToFamily(app, user, familyUid, memberName) {
     if (!ok) return false;
     await app.functions().httpsCallable('deleteOwnFamily')();
   }
-  await db.collection('uidToFamily').doc(user.uid).set({ familyUid, memberName: memberName || null });
-  return true;
+  await db.collection('uidToFamily').doc(user.uid).set({ familyUid, memberName, joinCode: code });
+  return { familyUid, memberName };
 }
 
 // True when this device is signed in with a join code's shared invite account (not a personal one)
@@ -1245,17 +1254,19 @@ const _isInviteSession = () => (fbAuth?.currentUser?.email || '').toLowerCase().
 // unless everything succeeds; then this device switches over to the Google account.
 async function connectGoogleAccount() {
   if (!FB_CONFIGURED || !_isInviteSession() || !S.uid) return;
-  const familyUid = S.uid, memberName = S.lockedMember || null;
+  // This session is signed in as a join code's invite account — the code is in its email
+  const code = fbAuth.currentUser.email.split('@')[0].toUpperCase();
   const app2 = firebase.initializeApp(FIREBASE_CONFIG, 'link_' + Date.now());
   let linked = false;
   try {
     const cred = await app2.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());
     const user = cred.user;
-    if (user.uid === familyUid) { await _alert('זהו החשבון של מנהל/ת המשפחה — היכנס/י איתו ישירות במסך הכניסה.'); return; }
-    if (!await _linkAccountToFamily(app2, user, familyUid, memberName)) return;
+    if (user.uid === S.uid) { await _alert('זהו החשבון של מנהל/ת המשפחה — היכנס/י איתו ישירות במסך הכניסה.'); return; }
+    const link = await _linkAccountToFamily(app2, user, code);
+    if (!link) return;
     linked = true;
-    localStorage.setItem('familyhub_family_uid_' + user.uid, familyUid);
-    if (memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, memberName);
+    localStorage.setItem('familyhub_family_uid_' + user.uid, link.familyUid);
+    if (link.memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, link.memberName);
     // Switch this device to the Google account, then reload into the same family
     _googleFlow = true;
     await fbAuth.signInWithCredential(cred.credential);
@@ -1280,9 +1291,10 @@ async function connectGoogleAccount() {
 // device. Returns false if the user backed out of deleting the family they own.
 async function _joinFamilyAs(user, target) {
   if (target.ownerUid === user.uid) return true; // the owner used their own family's code
-  if (!await _linkAccountToFamily(firebase.app(), user, target.ownerUid, target.memberName)) return false;
-  localStorage.setItem('familyhub_family_uid_' + user.uid, target.ownerUid);
-  if (target.memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, target.memberName);
+  const link = await _linkAccountToFamily(firebase.app(), user, target.code);
+  if (!link) return false;
+  localStorage.setItem('familyhub_family_uid_' + user.uid, link.familyUid);
+  if (link.memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, link.memberName);
   else localStorage.removeItem('familyhub_locked_member_' + user.uid);
   return true;
 }
@@ -2705,6 +2717,7 @@ function disconnectGCal() {
   renderGCalBar(); renderCalendar();
 }
 function renderGCalBar() {
+  _cappsRefresh(); // the Connected apps screen shows the same connection state
   const st=el('gcalStatus'); const bt=el('gcalBtns');
   if (!st) return;
   if (GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID')) {
@@ -2832,6 +2845,7 @@ function login(name) {
   }
   el('loginScreen').classList.add('hidden');
   el('app').classList.add('visible');
+  _checkConnectRequest();
   loadSyncedClassEvents();
   applyDir(); renderAll(); tryAutoConnectGCal();
   loadWeather(); setInterval(loadWeather, 30*60*1000);
@@ -6560,6 +6574,7 @@ const DRAWER_ICONS = {
   install: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
   admin:   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`,
   gcal:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`,
+  apps:    `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 007.07 0l3-3a5 5 0 00-7.07-7.07l-1.5 1.5"/><path d="M14 11a5 5 0 00-7.07 0l-3 3a5 5 0 007.07 7.07l1.5-1.5"/></svg>`,
   signout:  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16,17 21,12 16,7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>`,
   tour:     `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`,
   feedback: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>`,
@@ -6590,7 +6605,7 @@ function openMenu() {
     isParent() ? _drawerItem('home_ed', isHe ? 'התאמת דף הבית' : 'Customize home', `closeMenu();openHomeEditor()`)   : '',
     isParent() ? _drawerItem('tabs',    isHe ? 'התאמת לשוניות' : 'Customize tabs', `closeMenu();openTabEditor()`)    : '',
     (isParent() && _isInviteSession()) ? _drawerItem('google', isHe ? 'חבר חשבון Google' : 'Connect Google account', `closeMenu();connectGoogleAccount()`) : '',
-    (gcalConnected() || gcalWasConnected()) ? _drawerItem('gcal', isHe ? 'נתק Google Calendar' : 'Disconnect GCal', `closeMenu();disconnectGCal()`) : '',
+    _drawerItem('apps', isHe ? 'אפליקציות מחוברות' : 'Connected apps', `closeMenu();openConnectedApps()`),
   ].filter(Boolean).join('');
 
   const secondaryItems = [
@@ -6639,6 +6654,221 @@ function closeMenu() {
   dd.classList.remove('open');
   el('menuOverlay').classList.remove('open');
   setTimeout(() => { if (!_menuOpen) dd.style.display = 'none'; }, 280);
+}
+
+// ════════════════════════════════════════
+//  CONNECTED APPS (Google Calendar, Claude)
+// ════════════════════════════════════════
+// Claude connects through the server in functions/mcp.js. When someone adds the connector in
+// Claude, their browser is sent here with ?connect=<request id>; the signed-in parent approves
+// (or declines) the request on this screen and is sent back to Claude.
+const CONNECTOR_BASE = 'https://familyhub-7fdd5.firebaseapp.com';
+const _CONNECT_REQ_KEY = 'familyhub_connect_request';
+// Keep the request id for this tab (it survives signing in) and take it out of the address bar
+(function _captureConnectRequest() {
+  try {
+    const params = new URLSearchParams(location.search);
+    const id = params.get('connect');
+    if (!id) return;
+    sessionStorage.setItem(_CONNECT_REQ_KEY, id);
+    params.delete('connect');
+    const qs = params.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+  } catch (_) {}
+})();
+
+// request: null | { id, loading } | { id, app, returnsTo } | { error }
+let _capps = { request: null, connections: null, url: CONNECTOR_BASE + '/mcp', listError: false, busy: false };
+
+async function _connectorCall(path, data = {}) {
+  const idToken = await fbAuth.currentUser.getIdToken();
+  const r = await fetch(CONNECTOR_BASE + '/authorize/' + path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken, ...data }),
+  });
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(body.error || 'server_error'), { code: body.error || 'server_error' });
+  return body;
+}
+
+function openConnectedApps() {
+  el('connectedAppsPanel').classList.remove('hidden');
+  _renderConnectedApps();
+  if (isParent()) _loadConnections();
+}
+function closeConnectedApps() { el('connectedAppsPanel').classList.add('hidden'); }
+function _cappsRefresh() {
+  const p = el('connectedAppsPanel');
+  if (p && !p.classList.contains('hidden')) _renderConnectedApps();
+}
+
+// Called once a member is logged in: is there a connection request from Claude waiting?
+function _checkConnectRequest() {
+  let id = null;
+  try { id = sessionStorage.getItem(_CONNECT_REQ_KEY); } catch (_) {}
+  if (!id) return;
+  if (!isParent()) {
+    _alert(getLang() === 'he' ? 'רק הורה יכול לאשר חיבור של Claude למשפחה. החליפו משתמש להורה כדי להמשיך.'
+                              : 'Only a parent can approve connecting Claude. Switch to a parent to continue.');
+    return;
+  }
+  _capps.request = { id, loading: true };
+  openConnectedApps();
+  _connectorCall('request', { requestId: id })
+    .then(info => { _capps.request = { id, ...info }; })
+    .catch(e => { _capps.request = { error: e.code }; _clearConnectRequest(); })
+    .finally(_cappsRefresh);
+}
+function _clearConnectRequest() { try { sessionStorage.removeItem(_CONNECT_REQ_KEY); } catch (_) {} }
+
+async function _loadConnections() {
+  try {
+    const r = await _connectorCall('connections');
+    _capps.connections = r.connections || [];
+    if (r.url) _capps.url = r.url;
+    _capps.listError = false;
+  } catch (e) {
+    console.warn('[connected apps] list failed:', e.message);
+    _capps.listError = true;
+  }
+  _cappsRefresh();
+}
+
+async function cappsDecide(approve) {
+  const req = _capps.request;
+  if (!req?.id || _capps.busy) return;
+  _capps.busy = true; _cappsRefresh();
+  try {
+    const r = approve
+      ? await _connectorCall('approve', { requestId: req.id, memberName: S.user })
+      : await _connectorCall('deny', { requestId: req.id });
+    _clearConnectRequest();
+    location.href = r.redirect; // back to Claude, which finishes (or cancels) the connection
+  } catch (e) {
+    _capps.busy = false;
+    _clearConnectRequest();
+    _capps.request = { error: e.code };
+    _cappsRefresh();
+  }
+}
+
+async function cappsDisconnect(grantId) {
+  const isHe = getLang() === 'he';
+  const ok = await _confirm(
+    isHe ? 'לנתק את Claude? הוא לא יוכל עוד להוסיף מתכונים או אירועים עד שתחברו אותו מחדש.'
+         : 'Disconnect Claude? It will no longer be able to add recipes or events until you connect it again.',
+    { danger: true, okLabel: isHe ? 'נתק' : 'Disconnect', cancelLabel: isHe ? 'ביטול' : 'Cancel' });
+  if (!ok) return;
+  try {
+    await _connectorCall('disconnect', { grantId });
+    showToast(isHe ? 'Claude נותק ✓' : 'Claude disconnected ✓', 'success');
+  } catch (e) {
+    showToast(isHe ? 'הניתוק נכשל — נסו שוב' : 'Could not disconnect — try again', 'error');
+  }
+  _loadConnections();
+}
+
+function cappsCopyUrl() {
+  const isHe = getLang() === 'he';
+  const done = () => showToast(isHe ? 'הכתובת הועתקה ✓' : 'Address copied ✓', 'success');
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(_capps.url).then(done).catch(() => {});
+  else { const i = el('cappsUrl'); if (i) { i.select(); document.execCommand('copy'); done(); } }
+}
+
+function _renderConnectedApps() {
+  const body = el('connectedAppsBody');
+  if (!body) return;
+  const isHe = getLang() === 'he';
+  const T = (he, en) => (isHe ? he : en);
+  el('connectedAppsTitle').textContent = '🔗 ' + T('אפליקציות מחוברות', 'Connected apps');
+  let h = '';
+
+  // ── A connection request from Claude, waiting for this parent's decision ──
+  const req = _capps.request;
+  if (req?.loading) {
+    h += `<div class="card capps-request"><div class="capps-loading">${fhSpinnerHTML()}</div></div>`;
+  } else if (req?.error) {
+    const msg = req.error === 'request_expired'
+      ? T('פג תוקף בקשת החיבור. חזרו ל‑Claude ונסו לחבר שוב.', 'This connection request has expired. Go back to Claude and try connecting again.')
+      : req.error === 'parents_only' ? T('רק הורה יכול לחבר את Claude למשפחה.', 'Only a parent can connect Claude to the family.')
+      : T('לא ניתן היה להשלים את החיבור. חזרו ל‑Claude ונסו שוב.', 'The connection could not be completed. Go back to Claude and try again.');
+    h += `<div class="card capps-request"><div class="capps-error" role="alert">${msg}</div></div>`;
+  } else if (req?.id) {
+    const app = `<bdi>${esc(req.app || 'Claude')}</bdi>`;
+    h += `<div class="card capps-request">
+      <div class="card-title">${T(`${app} מבקש להתחבר למשפחה`, `${app} wants to connect to your family`)}</div>
+      <ul class="capps-perms">
+        <li>${T('להוסיף מתכונים לרשימות של המשפחה', "Add recipes to the family's lists")}</li>
+        <li>${T('לפרסם בשמך אירועים בקהילת הכיתה (ללא חברות בוועד — באישור הוועד)', 'Post class community events in your name (non-committee parents: after committee approval)')}</li>
+        <li>${T('לראות את שמות בני המשפחה והכיתות של הילדים', "See family members' names and the kids' classes")}</li>
+      </ul>
+      <div class="capps-note">${T(`הפעולות יירשמו על שם <b>${esc(S.user)}</b>. ${app} לא יוכל לערוך או למחוק תוכן קיים.`,
+                                  `Actions will be recorded under <b>${esc(S.user)}</b>. ${app} cannot edit or delete existing content.`)}</div>
+      <div class="capps-note">${T('אשרו רק אם התחלתם את החיבור בעצמכם ב‑Claude ממש עכשיו.', 'Approve only if you started this connection yourself in Claude just now.')}</div>
+      <div class="capps-actions">
+        <button class="btn" onclick="cappsDecide(true)" ${_capps.busy ? 'disabled' : ''}>${T('אישור וחיבור', 'Approve and connect')}</button>
+        <button class="btn btn-outline" onclick="cappsDecide(false)" ${_capps.busy ? 'disabled' : ''}>${T('דחייה', 'Decline')}</button>
+      </div>
+      <div class="capps-foot">${T('לאחר ההחלטה תחזרו אל', 'Afterwards you return to')} <bdi dir="ltr">${esc(req.returnsTo || 'claude.ai')}</bdi></div>
+    </div>`;
+  }
+
+  // ── Google Calendar ──
+  let gStatus, gBtns = '';
+  const gBtn = (label, fn, cls = '') => `<button class="btn ${cls}" onclick="${fn}">${label}</button>`;
+  if (GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID') || !gcalReady()) {
+    gStatus = `<span class="capps-status">${T('טוען…', 'Loading…')}</span>`;
+  } else if (gcalConnected()) {
+    gStatus = `<span class="capps-status on">${T('מחובר', 'Connected')}</span>`;
+    gBtns = gBtn(T('נתק', 'Disconnect'), 'disconnectGCal()', 'btn-outline capps-danger');
+  } else if (gcalWasConnected()) {
+    gStatus = `<span class="capps-status warn">${T('נדרש חיבור מחדש', 'Needs reconnecting')}</span>`;
+    gBtns = gBtn(T('התחבר מחדש', 'Reconnect'), 'connectGCal()') + gBtn(T('נתק', 'Disconnect'), 'disconnectGCal()', 'btn-outline capps-danger');
+  } else {
+    gStatus = `<span class="capps-status">${T('לא מחובר', 'Not connected')}</span>`;
+    gBtns = gBtn(T('חיבור', 'Connect'), 'connectGCal()');
+  }
+  h += `<div class="card">
+    <div class="capps-head"><span class="capps-icon">📅</span><div class="capps-name">Google Calendar</div>${gStatus}</div>
+    <div class="capps-desc">${T('האירועים מהיומן שלך ב‑Google מוצגים בלוח השנה, ואירועים חדשים יכולים להישמר גם שם.',
+                                'Events from your Google calendar appear in the calendar, and new events can be saved there too.')}</div>
+    ${gBtns ? `<div class="capps-actions">${gBtns}</div>` : ''}
+  </div>`;
+
+  // ── Claude (parents only) ──
+  if (isParent()) {
+    const conns = _capps.connections;
+    const fmt = ms => new Date(ms).toLocaleDateString(isHe ? 'he-IL' : 'en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    let list;
+    if (_capps.listError) list = `<div class="capps-error" role="alert">${T('לא ניתן לטעון את החיבורים כרגע.', "Couldn't load connections right now.")}</div>`;
+    else if (conns === null) list = `<div class="capps-loading">${fhSpinnerHTML()}</div>`;
+    else list = conns.map(c => `<div class="capps-conn">
+        <div class="capps-conn-info">
+          <div class="capps-conn-title">${T('על שם', 'As')} ${esc(c.memberName)}</div>
+          <div class="capps-conn-sub">${T('חובר ב‑', 'Connected ')}${fmt(c.connectedAt)}</div>
+        </div>
+        <button class="btn btn-outline capps-danger" onclick="cappsDisconnect('${esc(c.id)}')">${T('נתק', 'Disconnect')}</button>
+      </div>`).join('');
+    const connected = !!conns?.length;
+    const status = conns === null || _capps.listError ? '' : connected
+      ? `<span class="capps-status on">${T('מחובר', 'Connected')}</span>`
+      : `<span class="capps-status">${T('לא מחובר', 'Not connected')}</span>`;
+    const steps = `<ol class="capps-steps">
+        <li>${T('ב‑Claude פתחו <b>Settings ← Connectors</b> ובחרו <b>Add custom connector</b>.', 'In Claude open <b>Settings → Connectors</b> and choose <b>Add custom connector</b>.')}</li>
+        <li>${T('הדביקו את הכתובת הזו:', 'Paste this address:')}
+          <div class="capps-url"><input id="cappsUrl" type="text" readonly dir="ltr" value="${esc(_capps.url)}" onclick="this.select()" aria-label="${T('כתובת החיבור', 'Connector address')}">
+          <button class="btn" onclick="cappsCopyUrl()">${T('העתק', 'Copy')}</button></div></li>
+        <li>${T('לחצו <b>Connect</b>. תועברו לכאן כדי לאשר את החיבור.', 'Press <b>Connect</b>. You will be brought back here to approve it.')}</li>
+      </ol>`;
+    h += `<div class="card">
+      <div class="capps-head"><span class="capps-icon">✨</span><div class="capps-name">Claude</div>${status}</div>
+      <div class="capps-desc">${T('שתפו עם Claude מתכון מפייסבוק או הודעה מהמורה, והוא יוסיף אותם למתכונים או לאירועי הקהילה.',
+                                  "Share a recipe from Facebook or a teacher's message with Claude, and it adds it to your recipes or community events.")}</div>
+      ${list}
+      ${connected ? `<details class="capps-how"><summary>${T('חיבור נוסף', 'Add another connection')}</summary>${steps}</details>`
+                  : `<div class="capps-how-title">${T('איך מחברים', 'How to connect')}</div>${steps}`}
+    </div>`;
+  }
+  body.innerHTML = h;
 }
 
 async function installApp() {
@@ -12664,6 +12894,8 @@ function _renderRecipeDetail(cont, list, canEdit) {
   const steps = list.steps || [];
   let h = '';
   if (list.meta?.servings) h += `<div class="list-meta-chip">👥 ${list.meta.servings} מנות</div>`;
+  // Recipes added through the Claude connector keep a link to the post they came from
+  if (/^https?:\/\//i.test(list.meta?.sourceUrl || '')) h += `<a class="list-meta-chip" href="${esc(list.meta.sourceUrl)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">🔗 למתכון המקורי</a>`;
 
   const cookLog = list.cookLog || [];
   const cookBadge = cookLog.length

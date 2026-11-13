@@ -20,6 +20,7 @@ Run through this before any significant deploy (major refactor, new feature, Clo
 - [ ] **Sign-in on a fresh device as a joined account** — clear site data, sign in with a joined email or Google account; verify it lands in the joined family (not signed out)
 - [ ] **Connect Google later** — join with a personal parent code only (no Google); open the hamburger menu → "חבר חשבון Google"; verify the page reloads into the same family as the same member, and that after sign-out "המשך עם Google" returns there. The menu item is hidden for the owner, for kids, and once connected
 - [ ] **Admin delete family** — (shares code with the above) delete a test family from the admin panel; verify doc, lists, join codes and owner Auth account are removed
+- [ ] **Membership can't be forged** — automated: `cd rules-tests && npm install && npm test` (needs Java). By hand: signed in with an unrelated account, `firebase.firestore().collection('uidToFamily').doc(firebase.auth().currentUser.uid).set({familyUid:'<another family uid>'})` in the console is denied, and so is listing `joinCodes`
 - [ ] **Refresh after join** — refresh the page after joining; verify it loads correctly (no infinite spinner, no blank page)
 - [ ] **Sign out** — sign out; verify auth screen appears
 
@@ -42,6 +43,24 @@ Run through this before any significant deploy (major refactor, new feature, Clo
 - [ ] **Reject event** — committee member rejects; event disappears from pending
 - [ ] **Admin panel** — opens from hamburger menu (admin only); shows pending events, applications, schools, log, settings
 - [ ] **Publish directly as committee** — committee member publishes event; appears immediately without pending
+
+---
+
+## Claude Connector (MCP)
+
+Automated: `cd functions && npm test` (sign-in flow, tokens, both tools). Manual, after a deploy:
+
+- [ ] **Discovery** — `https://familyhub-7fdd5.firebaseapp.com/.well-known/oauth-authorization-server` returns JSON; a plain GET of `/mcp` returns 401
+- [ ] **Connected apps screen** — hamburger menu → "אפליקציות מחוברות" shows Google Calendar (connect / reconnect / disconnect work, and match the bar on the calendar tab) and, for parents, Claude with the connector address and a working copy button; a kid sees only Google Calendar
+- [ ] **Connect** — in Claude: Settings → Connectors → add custom connector with `https://familyhub-7fdd5.firebaseapp.com/mcp`; the browser opens FamilyHub on the Connected apps screen with the request card (no separate sign-in when already signed in); approve; Claude shows the connector as connected with 3 tools, recorded under the member who approved
+- [ ] **Connect while signed out** — the normal sign-in appears first, then the request card after picking a member
+- [ ] **Decline / expiry** — declining returns to Claude without connecting; a request older than 15 minutes shows "פג תוקף"
+- [ ] **Refused accounts** — logged in as a kid, the request is not offered for approval; a kid's personal code cannot approve
+- [ ] **Disconnect** — "נתק" on the Claude card ends the connection; Claude's next tool call asks to reconnect
+- [ ] **Create recipe** — ask Claude to save a recipe; it appears in Lists → recipes with ingredients, amounts, steps and a "למתכון המקורי" link when a source link was given
+- [ ] **Create event as regular parent** — goes to pending; committee is notified
+- [ ] **Create event as committee** — published immediately; class parents are notified
+- [ ] **Locked collections** — from the browser console of a signed-in app session, reading `mcpTokens`, `mcpAuthCodes` or `mcpClients` is denied
 
 ---
 

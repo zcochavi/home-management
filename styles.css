@@ -1485,7 +1485,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 /* ═══════════════════════════════════════════
    MANAGEMENT SCREENS
 ═══════════════════════════════════════════ */
-#mgmtScreen, #tabEditorScreen, #adminPanel, #homeEditorScreen, #feedbackPanel,
+#mgmtScreen, #tabEditorScreen, #adminPanel, #homeEditorScreen, #feedbackPanel, #connectedAppsPanel,
 #grocerySettingsPanel, #homeworkSettingsPanel, #listWizardPanel, #listDetailPanel,
 #termsScreen, #privacyScreen {
   position: fixed; inset: 0; background: var(--bg-primary); z-index: 900; overflow-y: auto;
@@ -1494,6 +1494,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 /* Must outrank #authScreen (z-index 999) since these open from the auth screen too */
 #termsScreen, #privacyScreen { z-index: 1000; }
 #mgmtScreen.hidden, #tabEditorScreen.hidden, #adminPanel.hidden, #homeEditorScreen.hidden, #feedbackPanel.hidden,
+#connectedAppsPanel.hidden,
 #grocerySettingsPanel.hidden, #homeworkSettingsPanel.hidden,
 #listWizardPanel.hidden, #listDetailPanel.hidden,
 #termsScreen.hidden, #privacyScreen.hidden { display: none; }
@@ -2365,3 +2366,41 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
   font-size: 14px; line-height: 1; padding: 0; cursor: pointer;
 }
 .list-edit-badge.active { background: var(--success); border-color: var(--success); color: #fff; font-weight: 800; }
+
+/* ═══════════════════════════════════════════
+   CONNECTED APPS SCREEN
+═══════════════════════════════════════════ */
+.capps-head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.capps-icon { font-size: 22px; line-height: 1; }
+.capps-name { font-size: 16px; font-weight: 800; color: var(--gray-900); flex: 1; min-width: 0; }
+.capps-status { font-size: 12px; font-weight: 700; color: var(--gray-600); background: var(--gray-100); padding: 3px 10px; border-radius: var(--r-pill); white-space: nowrap; }
+.capps-status.on { color: #1F7A55; background: var(--success-bg); }
+.capps-status.warn { color: #8A5A00; background: #FFF4D6; }
+.capps-desc { font-size: 14px; color: var(--gray-600); line-height: 1.5; }
+.capps-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.capps-actions .btn { min-height: 44px; }
+.capps-actions .btn:disabled { opacity: .55; cursor: default; }
+.btn.capps-danger { color: var(--error); border-color: var(--error); box-shadow: none; }
+.btn.capps-danger:hover { background: var(--error-bg); }
+.capps-request { border: 2px solid var(--primary-500); }
+.capps-perms { margin: 0 0 12px; padding: 0; list-style: none; }
+.capps-perms li { position: relative; padding-inline-start: 24px; margin-bottom: 8px; font-size: 15px; line-height: 1.45; }
+.capps-perms li::before { content: '✓'; position: absolute; inset-inline-start: 2px; color: var(--primary-500); font-weight: 800; }
+.capps-note { font-size: 14px; color: var(--gray-600); line-height: 1.5; margin-bottom: 8px; }
+.capps-foot { font-size: 13px; color: var(--gray-500); margin-top: 12px; }
+.capps-error { background: var(--error-bg); color: var(--error); border-radius: var(--r-input); padding: 10px 12px; font-size: 14px; font-weight: 600; }
+.capps-desc + .capps-error, .capps-desc + .capps-loading { margin-top: 12px; }
+.capps-loading { display: flex; justify-content: center; padding: 12px 0; }
+.capps-conn { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-top: 1px solid var(--gray-100); margin-top: 12px; }
+.capps-conn + .capps-conn { margin-top: 0; }
+.capps-conn-info { flex: 1; min-width: 0; }
+.capps-conn-title { font-size: 14px; font-weight: 700; color: var(--gray-900); }
+.capps-conn-sub { font-size: 12px; color: var(--gray-500); }
+.capps-conn .btn { padding: 7px 14px; font-size: 13px; min-height: 36px; }
+.capps-how-title, .capps-how summary { font-size: 14px; font-weight: 800; color: var(--gray-900); margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--gray-100); }
+.capps-how summary { cursor: pointer; }
+.capps-steps { margin: 10px 0 0; padding-inline-start: 20px; font-size: 14px; color: var(--gray-700); line-height: 1.55; }
+.capps-steps li { margin-bottom: 8px; }
+.capps-url { display: flex; gap: 8px; margin-top: 6px; }
+.capps-url input { flex: 1; min-width: 0; border: 1.5px solid var(--gray-300); border-radius: var(--r-input); padding: 9px 10px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--gray-900); background: var(--gray-50); text-align: left; }
+.capps-url .btn { padding: 9px 14px; font-size: 13px; }
