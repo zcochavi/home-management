@@ -6,17 +6,20 @@
 //   /.well-known/oauth-protected-resource     RFC 9728 metadata
 //   /.well-known/oauth-authorization-server   RFC 8414 metadata
 //   /register                                 RFC 7591 dynamic client registration
-//   /authorize                                sign-in + consent page (Firebase Auth in the browser)
-//   /authorize/identity, /authorize/approve   called by that page with a Firebase ID token
+//   /authorize                                parks the request and sends the browser to the app
+//   /authorize/request|approve|deny           called by the app's "Connected apps" screen, which
+//   /authorize/connections|disconnect         shows the request, and lists / ends connections
 //   /token                                    code exchange + refresh (PKCE S256, public clients)
 //   /revoke                                   RFC 7009
 //
-// Everything a tool writes is attributed to one parent in one family — the person who signed
-// in on the consent page — and follows the same rules the app applies to that person.
+// There is no separate sign-in: the person approves the connection inside the app, in the
+// session they are already signed in to, and the app proves who they are with its Firebase ID
+// token. Everything a tool writes is attributed to that parent, in their family, and follows
+// the same rules the app applies to them.
 'use strict';
 
 const crypto = require('crypto');
-const { renderLoginPage, renderErrorPage } = require('./mcp-login-page');
+const { renderErrorPage } = require('./mcp-error-page');
 
 const DEFAULT_BASE  = 'https://familyhub-7fdd5.firebaseapp.com';
 const ALLOWED_HOSTS = ['familyhub-7fdd5.firebaseapp.com', 'familyhub-7fdd5.web.app'];
@@ -38,7 +41,7 @@ const REFRESH_TTL_MS   = 60 * 24 * 3600 * 1000;
 const REFRESH_GRACE_MS = 60 * 1000;            // a rotated refresh token still works this long (client retries)
 const CLIENT_IDLE_MS   = REFRESH_TTL_MS + 7 * 24 * 3600 * 1000;
 const NEW_CLIENT_MS    = 24 * 3600 * 1000;     // a registration nobody finishes signing in with
-const FRESH_LOGIN_MS   = 15 * 60 * 1000;       // consent needs a sign-in this recent
+const REQUEST_TTL_MS   = 15 * 60 * 1000;       // time to approve a connection request in the app
 
 const PROTOCOL_VERSIONS = ['2025-11-25', '2025-06-18', '2025-03-26', '2024-11-05'];
 
@@ -230,13 +233,12 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
 
   const parentsOf = fam => (fam.members || []).filter(m => m.role === 'parent').map(m => m.name);
 
-  async function verifyFreshLogin(idToken) {
+  async function verifyLogin(idToken) {
     if (typeof idToken !== 'string' || !idToken) throw new HttpError(401, 'login_required');
     let decoded;
     try { decoded = await auth.verifyIdToken(idToken); }
     catch (_) { throw new HttpError(401, 'login_required'); }
     if (decoded.firebase?.sign_in_provider === 'anonymous') throw new HttpError(401, 'login_required');
-    if (!decoded.auth_time || decoded.auth_time * 1000 < now() - FRESH_LOGIN_MS) throw new HttpError(401, 'login_required');
     return decoded;
   }
 
@@ -296,13 +298,15 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
 
   // ── OAuth: authorize ────────────────────────────────────
 
-  async function handleAuthorizePage(req, res) {
+  // Claude sends the browser here. The request is checked, parked under a one-time id, and the
+  // browser goes on to the app, which shows it on the "Connected apps" screen.
+  async function handleAuthorize(req, res) {
     const q = req.query || {};
     const client = await getClient(q.client_id);
     const redirectUri = typeof q.redirect_uri === 'string' ? q.redirect_uri : '';
     // Without a known client and redirect there is nowhere safe to send an error — show it here.
     if (!client || !client.redirectUris.some(r => redirectMatches(r, redirectUri))) {
-      return html(res, 400, renderErrorPage('הקישור לחיבור אינו תקין או שפג תוקפו. נסו לחבר שוב מתוך Claude.'));
+      return html(res, 400, renderErrorPage('הקישור לחיבור אינו תקין או שפג תוקפו. נסו לחבר שוב מתוך Claude.', APP_URL));
     }
     const state = typeof q.state === 'string' ? q.state.slice(0, 2000) : '';
     const fail = (error, description) => {
@@ -316,46 +320,99 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
     if (q.code_challenge_method !== 'S256' || !/^[A-Za-z0-9_-]{43,128}$/.test(String(q.code_challenge || ''))) {
       return fail('invalid_request', 'PKCE with code_challenge_method=S256 is required.');
     }
-    html(res, 200, renderLoginPage({
-      clientName: client.clientName,
-      redirectHost: new URL(redirectUri).host,
-      params: { client_id: client.id, redirect_uri: redirectUri, state, code_challenge: q.code_challenge },
-    }));
+    const requestId = randomToken(24);
+    await codes.doc(requestKey(requestId)).set({
+      kind: 'request', clientId: client.id, clientName: client.clientName, redirectUri, state,
+      codeChallenge: q.code_challenge, issuer: baseUrlOf(req),
+      createdAt: now(), expiresAt: now() + REQUEST_TTL_MS,
+    });
+    res.redirect(302, APP_URL + '?connect=' + requestId);
   }
 
-  async function handleIdentity(req, res) {
-    const decoded = await verifyFreshLogin(req.body?.idToken);
-    const { acct, parents } = await describeAccount(decoded);
-    json(res, 200, {
-      email: String(decoded.email || '').endsWith('@' + JOIN_DOMAIN) ? '' : (decoded.email || ''),
-      familyName: acct.family.familyName || '',
-      memberName: acct.lockedMember,
-      parents: acct.lockedMember ? [] : parents,
-    });
+  const requestKey = id => 'r_' + sha256hex(String(id));
+  async function loadRequest(requestId) {
+    if (typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{20,64}$/.test(requestId)) throw new HttpError(404, 'request_expired');
+    const ref = codes.doc(requestKey(requestId));
+    const snap = await ref.get();
+    if (!snap.exists || snap.data().kind !== 'request' || snap.data().expiresAt < now()) throw new HttpError(404, 'request_expired');
+    return { ref, data: snap.data() };
+  }
+
+  // What the app shows before the person decides.
+  async function handleRequestInfo(req, res) {
+    const decoded = await verifyLogin(req.body?.idToken);
+    await describeAccount(decoded);
+    const { data } = await loadRequest(req.body?.requestId);
+    json(res, 200, { app: data.clientName, returnsTo: new URL(data.redirectUri).host });
   }
 
   async function handleApprove(req, res) {
     const b = req.body || {};
-    const client = await getClient(b.client_id);
-    if (!client || !client.redirectUris.some(r => redirectMatches(r, b.redirect_uri))) throw new HttpError(400, 'invalid_client');
-    if (!/^[A-Za-z0-9_-]{43,128}$/.test(String(b.code_challenge || ''))) throw new HttpError(400, 'invalid_request');
-
-    const decoded = await verifyFreshLogin(b.idToken);
+    const decoded = await verifyLogin(b.idToken);
     const { acct, parents } = await describeAccount(decoded);
     const memberName = acct.lockedMember || b.memberName;
-    if (!parents.includes(memberName)) throw new HttpError(400, 'pick_member');
+    if (!parents.includes(memberName)) throw new HttpError(403, 'parents_only');
+
+    // One decision per request: it is removed in the same transaction that reads it.
+    const { ref } = await loadRequest(b.requestId);
+    const r = await db.runTransaction(async tx => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return null;
+      tx.delete(ref);
+      return snap.data();
+    });
+    if (!r || r.expiresAt < now()) throw new HttpError(404, 'request_expired');
 
     const code = randomToken(32);
     await codes.doc(sha256hex(code)).set({
-      clientId: client.id, redirectUri: b.redirect_uri, codeChallenge: b.code_challenge,
+      kind: 'code', clientId: r.clientId, clientName: r.clientName, redirectUri: r.redirectUri, codeChallenge: r.codeChallenge,
       uid: decoded.uid, familyUid: acct.familyUid, isOwner: acct.isOwner, memberName,
       createdAt: now(), expiresAt: now() + CODE_TTL_MS,
     });
-    const u = new URL(b.redirect_uri);
+    const u = new URL(r.redirectUri);
     u.searchParams.set('code', code);
-    if (typeof b.state === 'string' && b.state) u.searchParams.set('state', b.state);
-    u.searchParams.set('iss', baseUrlOf(req));
+    if (r.state) u.searchParams.set('state', r.state);
+    u.searchParams.set('iss', r.issuer);
     json(res, 200, { redirect: u.toString() });
+  }
+
+  async function handleDeny(req, res) {
+    const { ref, data } = await loadRequest(req.body?.requestId);
+    await ref.delete();
+    const u = new URL(data.redirectUri);
+    u.searchParams.set('error', 'access_denied');
+    u.searchParams.set('error_description', 'The user declined the connection.');
+    if (data.state) u.searchParams.set('state', data.state);
+    json(res, 200, { redirect: u.toString() });
+  }
+
+  // ── Connections (the app's "Connected apps" screen) ─────
+  // A connection is one approved grant; its live refresh token stands for it.
+
+  async function liveGrants(uid) {
+    const snap = await tokens.where('uid', '==', uid).get();
+    return snap.docs.map(d => d.data())
+      .filter(t => t.kind === 'refresh' && t.expiresAt > now() + REFRESH_GRACE_MS);
+  }
+
+  async function handleConnections(req, res) {
+    const decoded = await verifyLogin(req.body?.idToken);
+    const grants = await liveGrants(decoded.uid);
+    json(res, 200, {
+      url: baseUrlOf(req) + '/mcp',
+      connections: grants
+        .map(g => ({ id: g.grantId, app: g.clientName || 'Claude', memberName: g.memberName, connectedAt: g.connectedAt || g.createdAt }))
+        .sort((a, b) => b.connectedAt - a.connectedAt),
+    });
+  }
+
+  async function handleDisconnect(req, res) {
+    const decoded = await verifyLogin(req.body?.idToken);
+    const grantId = req.body?.grantId;
+    if (typeof grantId !== 'string' || !grantId) throw new HttpError(400, 'invalid_request');
+    const all = await tokens.where('grantId', '==', grantId).get();
+    await Promise.all(all.docs.filter(d => d.data().uid === decoded.uid).map(d => d.ref.delete()));
+    json(res, 200, {});
   }
 
   // ── OAuth: tokens ───────────────────────────────────────
@@ -364,7 +421,8 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
     const access = randomToken(32), refresh = randomToken(32);
     const base = {
       clientId: grant.clientId, uid: grant.uid, familyUid: grant.familyUid, isOwner: !!grant.isOwner,
-      memberName: grant.memberName, grantId: grant.grantId, createdAt: now(),
+      memberName: grant.memberName, grantId: grant.grantId, clientName: grant.clientName || '',
+      connectedAt: grant.connectedAt, createdAt: now(),
     };
     await Promise.all([
       tokens.doc(sha256hex(access)).set({ ...base, kind: 'access', expiresAt: now() + ACCESS_TTL_MS }),
@@ -394,11 +452,11 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
         return snap.data();
       });
       const challenge = crypto.createHash('sha256').update(b.code_verifier).digest('base64url');
-      if (!data || data.expiresAt < now() || data.clientId !== client.id ||
+      if (!data || data.kind !== 'code' || data.expiresAt < now() || data.clientId !== client.id ||
           data.redirectUri !== b.redirect_uri || data.codeChallenge !== challenge) {
         return oauthErr('invalid_grant', 'The authorization code is invalid or expired.');
       }
-      const out = await issueTokens({ ...data, grantId: randomToken(12) });
+      const out = await issueTokens({ ...data, grantId: randomToken(12), connectedAt: now() });
       await cleanupExpired();
       return json(res, 200, out);
     }
@@ -747,9 +805,12 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
             authorization_response_iss_parameter_supported: true,
           });
         case 'POST /register':           return await handleRegister(req, res);
-        case 'GET /authorize':           return await handleAuthorizePage(req, res);
-        case 'POST /authorize/identity': return await handleIdentity(req, res);
-        case 'POST /authorize/approve':  return await handleApprove(req, res);
+        case 'GET /authorize':              return await handleAuthorize(req, res);
+        case 'POST /authorize/request':     return await handleRequestInfo(req, res);
+        case 'POST /authorize/approve':     return await handleApprove(req, res);
+        case 'POST /authorize/deny':        return await handleDeny(req, res);
+        case 'POST /authorize/connections': return await handleConnections(req, res);
+        case 'POST /authorize/disconnect':  return await handleDisconnect(req, res);
         case 'POST /token':              return await handleToken(req, res);
         case 'POST /revoke':             return await handleRevoke(req, res);
         default:                         return json(res, 404, { error: 'not_found' });

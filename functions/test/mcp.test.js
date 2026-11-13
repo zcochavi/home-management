@@ -36,16 +36,24 @@ async function setup({ family } = {}) {
   const post = (path, body, headers = {}) => fetch(srv.url + path, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
   const form = (path, body) => fetch(srv.url + path, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) });
 
-  // Full OAuth dance; returns the token response.
-  async function connect({ idToken = 'owner-token', memberName = 'דנה', redirect = CLAUDE_CB } = {}) {
+  // What Claude does first: registers, then sends the browser to /authorize, which parks the
+  // request and forwards to the app with its id.
+  async function startConnect({ redirect = CLAUDE_CB, state = 'st8' } = {}) {
     const reg = await (await post('/register', { client_name: 'Claude', redirect_uris: [redirect] })).json();
     const verifier = crypto.randomBytes(32).toString('base64url');
     const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
-    const approve = await post('/authorize/approve', { idToken, memberName, client_id: reg.client_id, redirect_uri: redirect, state: 'st8', code_challenge: challenge });
+    const r = await fetch(srv.url + '/authorize?' + new URLSearchParams({ client_id: reg.client_id, redirect_uri: redirect, response_type: 'code', code_challenge: challenge, code_challenge_method: 'S256', state }), { redirect: 'manual' });
+    const toApp = new URL(r.headers.get('location'));
+    return { client_id: reg.client_id, verifier, redirect, toApp, requestId: toApp.searchParams.get('connect') };
+  }
+  // Full flow, with the app approving as `memberName`; returns the token response.
+  async function connect({ idToken = 'owner-token', memberName = 'דנה', redirect = CLAUDE_CB } = {}) {
+    const c = await startConnect({ redirect });
+    const approve = await post('/authorize/approve', { idToken, memberName, requestId: c.requestId });
     if (!approve.ok) return { approve, status: approve.status, error: (await approve.json()).error };
     const back = new URL((await approve.json()).redirect);
-    const tok = await form('/token', { grant_type: 'authorization_code', code: back.searchParams.get('code'), code_verifier: verifier, client_id: reg.client_id, redirect_uri: redirect });
-    return { ...(await tok.json()), client_id: reg.client_id, back, verifier, code: back.searchParams.get('code') };
+    const tok = await form('/token', { grant_type: 'authorization_code', code: back.searchParams.get('code'), code_verifier: c.verifier, client_id: c.client_id, redirect_uri: redirect });
+    return { ...(await tok.json()), ...c, back, code: back.searchParams.get('code') };
   }
   let rpcId = 0;
   async function rpc(token, method, params) {
@@ -57,7 +65,7 @@ async function setup({ family } = {}) {
     const result = r.body.result;
     return { isError: !!result.isError, text: result.content[0].text, data: result.isError ? null : JSON.parse(result.content[0].text) };
   }
-  return { db, clock, srv, login, post, form, connect, rpc, call };
+  return { db, clock, srv, login, post, form, connect, startConnect, rpc, call };
 }
 
 test('redirect allowlist: only Claude callbacks and loopback', () => {
@@ -108,14 +116,15 @@ test('register refuses foreign redirect URIs', async (t) => {
   assert.equal((await ok.json()).token_endpoint_auth_method, 'none');
 });
 
-test('authorize page: validates client, redirect and PKCE before rendering', async (t) => {
+test('authorize: validates client, redirect and PKCE, then hands the request to the app', async (t) => {
   const s = await setup(); t.after(s.srv.close);
-  const reg = await (await s.post('/register', { client_name: '<b>Claude</b>', redirect_uris: [CLAUDE_CB] })).json();
+  const reg = await (await s.post('/register', { client_name: 'Claude', redirect_uris: [CLAUDE_CB] })).json();
   const q = (o) => s.srv.url + '/authorize?' + new URLSearchParams(o);
-  const good = { client_id: reg.client_id, redirect_uri: CLAUDE_CB, response_type: 'code', code_challenge: 'a'.repeat(43), code_challenge_method: 'S256', state: '</script><script>alert(1)</script>' };
+  const good = { client_id: reg.client_id, redirect_uri: CLAUDE_CB, response_type: 'code', code_challenge: 'a'.repeat(43), code_challenge_method: 'S256', state: 'xyz' };
 
   const unknown = await fetch(q({ ...good, client_id: 'c_doesnotexist123' }), { redirect: 'manual' });
   assert.equal(unknown.status, 400);
+  assert.equal(unknown.headers.get('x-frame-options'), 'DENY');
   const wrongRedirect = await fetch(q({ ...good, redirect_uri: 'https://evil.example/cb' }), { redirect: 'manual' });
   assert.equal(wrongRedirect.status, 400, 'never redirects to an unregistered URI');
   assert.equal(wrongRedirect.headers.get('location'), null);
@@ -124,68 +133,125 @@ test('authorize page: validates client, redirect and PKCE before rendering', asy
   assert.equal(noPkce.status, 302);
   assert.equal(new URL(noPkce.headers.get('location')).searchParams.get('error'), 'invalid_request');
 
-  const page = await fetch(q(good));
-  assert.equal(page.status, 200);
-  assert.equal(page.headers.get('x-frame-options'), 'DENY');
-  const htmlText = await page.text();
-  assert.ok(!htmlText.includes('<script>alert(1)'), 'state is escaped inside the script block');
-  assert.ok(!htmlText.includes('<b>Claude</b>'), 'client name is escaped');
-  assert.ok(htmlText.includes('claude.ai'));
+  const ok = await fetch(q(good), { redirect: 'manual' });
+  assert.equal(ok.status, 302);
+  const toApp = new URL(ok.headers.get('location'));
+  assert.equal(toApp.origin + toApp.pathname, 'https://zcochavi.github.io/home-management/');
+  assert.deepEqual([...toApp.searchParams.keys()], ['connect'], 'only an opaque id reaches the app URL');
+  const info = await (await s.post('/authorize/request', { idToken: 'owner-token', requestId: toApp.searchParams.get('connect') })).json();
+  assert.deepEqual(info, { app: 'Claude', returnsTo: 'claude.ai' });
 });
 
-test('identity: owner picks a parent; joined member is fixed; kids and strangers are refused', async (t) => {
+test('approval in the app: one decision per request, deny, expiry', async (t) => {
   const s = await setup(); t.after(s.srv.close);
-  const owner = await (await s.post('/authorize/identity', { idToken: 'owner-token' })).json();
-  assert.deepEqual(owner, { email: 'dana@example.com', familyName: 'כהן', memberName: null, parents: ['דנה', 'יוסי'] });
+  // No sign-in freshness is needed: the app's existing session approves.
+  s.login('old-session', { uid: 'fam1', email: 'dana@example.com', auth_time: 1 });
+  assert.ok((await s.connect({ idToken: 'old-session' })).access_token);
+
+  const c = await s.startConnect();
+  assert.equal((await s.post('/authorize/request', { idToken: 'forged', requestId: c.requestId })).status, 401);
+  assert.equal((await s.post('/authorize/approve', { idToken: 'forged', memberName: 'דנה', requestId: c.requestId })).status, 401);
+  const first = await s.post('/authorize/approve', { idToken: 'owner-token', memberName: 'דנה', requestId: c.requestId });
+  assert.equal(first.status, 200);
+  const again = await s.post('/authorize/approve', { idToken: 'owner-token', memberName: 'דנה', requestId: c.requestId });
+  assert.equal((await again.json()).error, 'request_expired');
+  assert.equal((await s.post('/authorize/approve', { idToken: 'owner-token', memberName: 'דנה', requestId: 'made-up-request-id-000000' })).status, 404);
+
+  const d = await s.startConnect({ state: 'deny-me' });
+  const denied = new URL((await (await s.post('/authorize/deny', { requestId: d.requestId })).json()).redirect);
+  assert.equal(denied.origin + denied.pathname, CLAUDE_CB);
+  assert.equal(denied.searchParams.get('error'), 'access_denied');
+  assert.equal(denied.searchParams.get('state'), 'deny-me');
+  assert.equal((await s.post('/authorize/approve', { idToken: 'owner-token', memberName: 'דנה', requestId: d.requestId })).status, 404);
+
+  const e = await s.startConnect();
+  s.clock.t += 16 * 60 * 1000;
+  assert.equal((await s.post('/authorize/request', { idToken: 'owner-token', requestId: e.requestId })).status, 404);
+  assert.equal((await s.post('/authorize/approve', { idToken: 'owner-token', memberName: 'דנה', requestId: e.requestId })).status, 404);
+
+  // A request id is not an authorization code
+  const f = await s.startConnect();
+  const asCode = await s.form('/token', { grant_type: 'authorization_code', code: f.requestId, code_verifier: f.verifier, client_id: f.client_id, redirect_uri: CLAUDE_CB });
+  assert.equal((await asCode.json()).error, 'invalid_grant');
+});
+
+test('connections: listed for the account that made them, and can be disconnected', async (t) => {
+  const s = await setup(); t.after(s.srv.close);
+  const list = async (idToken = 'owner-token') => (await (await s.post('/authorize/connections', { idToken })).json());
+  assert.deepEqual((await list()).connections, []);
+  assert.equal((await list()).url, 'https://familyhub-7fdd5.firebaseapp.com/mcp');
+  assert.equal((await s.post('/authorize/connections', { idToken: 'forged' })).status, 401);
+
+  const a = await s.connect({ memberName: 'דנה' });
+  s.clock.t += 1000;
+  const b = await s.connect({ memberName: 'יוסי' });
+  let conns = (await list()).connections;
+  assert.deepEqual(conns.map(c => [c.app, c.memberName]), [['Claude', 'יוסי'], ['Claude', 'דנה']]);
+  assert.ok(conns.every(c => c.id && c.connectedAt));
+
+  // Refreshing keeps it one connection with the same id and date
+  s.clock.t += 5 * 60 * 1000;
+  const a2 = await (await s.form('/token', { grant_type: 'refresh_token', refresh_token: a.refresh_token, client_id: a.client_id })).json();
+  s.clock.t += 5 * 60 * 1000;
+  assert.deepEqual((await list()).connections, conns);
+
+  // Another account sees none of them and can't end them
+  await s.db.collection('uidToFamily').doc('u-yossi').set({ familyUid: 'fam1', memberName: 'יוסי' });
+  s.login('yossi-token', { uid: 'u-yossi', email: 'yossi@example.com' });
+  assert.deepEqual((await list('yossi-token')).connections, []);
+  await s.post('/authorize/disconnect', { idToken: 'yossi-token', grantId: conns[1].id });
+  assert.equal((await s.rpc(a2.access_token, 'ping')).status, 200);
+
+  await s.post('/authorize/disconnect', { idToken: 'owner-token', grantId: conns[1].id });
+  assert.equal((await s.rpc(a2.access_token, 'ping')).status, 401);
+  const dead = await s.form('/token', { grant_type: 'refresh_token', refresh_token: a2.refresh_token, client_id: a.client_id });
+  assert.equal((await dead.json()).error, 'invalid_grant');
+  assert.equal((await s.rpc(b.access_token, 'ping')).status, 200, 'the other connection is untouched');
+  assert.deepEqual((await list()).connections.map(c => c.memberName), ['יוסי']);
+});
+
+test('who may approve: parents only; a joined member is always themselves', async (t) => {
+  const s = await setup(); t.after(s.srv.close);
+  const info = async (idToken) => { const c = await s.startConnect(); const r = await s.post('/authorize/request', { idToken, requestId: c.requestId }); return { status: r.status, ...(await r.json()) }; };
 
   await s.db.collection('uidToFamily').doc('u-yossi').set({ familyUid: 'fam1', memberName: 'יוסי' });
   s.login('yossi-token', { uid: 'u-yossi', email: 'yossi@example.com' });
-  const joined = await (await s.post('/authorize/identity', { idToken: 'yossi-token' })).json();
-  assert.equal(joined.memberName, 'יוסי');
-  assert.deepEqual(joined.parents, []);
   // A fixed member can't approve as someone else.
   const t2 = await s.connect({ idToken: 'yossi-token', memberName: 'דנה' });
-  const ctx = await s.call(t2.access_token, 'get_family_context', {});
-  assert.equal(ctx.data.connected_as, 'יוסי');
+  assert.equal((await s.call(t2.access_token, 'get_family_context', {})).data.connected_as, 'יוסי');
 
   // A kid's personal join code: the member comes from the code's record, whatever the
   // account's profile or mapping claim.
   await s.db.collection('joinCodes').doc('ABC234').set({ ownerUid: 'fam1', memberName: 'נועה' });
   await s.db.collection('uidToFamily').doc('u-kid').set({ familyUid: 'fam1', memberName: 'דנה' });
   s.login('kid-token', { uid: 'u-kid', email: 'abc234@fh.familyhub', name: 'fam1|דנה', firebase: { sign_in_provider: 'password' } });
-  const kid = await s.post('/authorize/identity', { idToken: 'kid-token' });
+  const kid = await info('kid-token');
   assert.equal(kid.status, 403);
-  assert.equal((await kid.json()).error, 'parents_only');
+  assert.equal(kid.error, 'parents_only');
   assert.equal((await s.connect({ idToken: 'kid-token', memberName: 'דנה' })).error, 'parents_only');
 
   // A family code's shared account may act as any parent, like in the app.
   await s.db.collection('joinCodes').doc('FAM234').set({ ownerUid: 'fam1' });
   await s.db.collection('uidToFamily').doc('u-fam').set({ familyUid: 'fam1' });
   s.login('fam-token', { uid: 'u-fam', email: 'fam234@fh.familyhub' });
-  assert.deepEqual((await (await s.post('/authorize/identity', { idToken: 'fam-token' })).json()).parents, ['דנה', 'יוסי']);
+  assert.equal((await info('fam-token')).status, 200);
+  assert.ok((await s.connect({ idToken: 'fam-token', memberName: 'יוסי' })).access_token);
 
   // An invite account whose code is unknown, or belongs to another family, gets nothing.
   await s.db.collection('uidToFamily').doc('u-x').set({ familyUid: 'fam1' });
   s.login('x-token', { uid: 'u-x', email: 'zzz999@fh.familyhub', name: 'fam1|דנה' });
-  assert.equal((await (await s.post('/authorize/identity', { idToken: 'x-token' })).json()).error, 'no_family');
+  assert.equal((await info('x-token')).error, 'no_family');
   await s.db.collection('joinCodes').doc('ZZZ999').set({ ownerUid: 'otherFamily' });
-  assert.equal((await (await s.post('/authorize/identity', { idToken: 'x-token' })).json()).error, 'no_family');
+  assert.equal((await info('x-token')).error, 'no_family');
 
   s.login('stranger-token', { uid: 'nobody', email: 'x@example.com' });
-  const stranger = await s.post('/authorize/identity', { idToken: 'stranger-token' });
-  assert.equal((await stranger.json()).error, 'no_family');
-
+  assert.equal((await info('stranger-token')).error, 'no_family');
   s.login('anon-token', { uid: 'fam1', firebase: { sign_in_provider: 'anonymous' } });
-  assert.equal((await s.post('/authorize/identity', { idToken: 'anon-token' })).status, 401);
-  assert.equal((await s.post('/authorize/identity', { idToken: 'forged' })).status, 401);
-});
+  assert.equal((await info('anon-token')).status, 401);
 
-test('approve: needs a fresh sign-in and a real parent', async (t) => {
-  const s = await setup(); t.after(s.srv.close);
-  assert.equal((await s.connect({ memberName: 'נועה' })).error, 'pick_member');
-  assert.equal((await s.connect({ memberName: null })).error, 'pick_member');
-  s.clock.t += 16 * 60 * 1000;
-  assert.equal((await s.connect()).error, 'login_required');
+  // The member named by the app must be a parent of the family
+  assert.equal((await s.connect({ memberName: 'נועה' })).error, 'parents_only');
+  assert.equal((await s.connect({ memberName: null })).error, 'parents_only');
 });
 
 test('token: PKCE, single-use codes, expiry, refresh rotation, revoke', async (t) => {
@@ -203,17 +269,19 @@ test('token: PKCE, single-use codes, expiry, refresh rotation, revoke', async (t
   assert.equal(replay.status, 400);
   assert.equal((await replay.json()).error, 'invalid_grant');
 
-  // Wrong verifier
-  const reg = await (await s.post('/register', { redirect_uris: [CLAUDE_CB] })).json();
-  const challenge = crypto.createHash('sha256').update('right-verifier-right-verifier-right-verifier').digest('base64url');
-  const ap = await (await s.post('/authorize/approve', { idToken: 'owner-token', memberName: 'דנה', client_id: reg.client_id, redirect_uri: CLAUDE_CB, code_challenge: challenge })).json();
-  const code = new URL(ap.redirect).searchParams.get('code');
-  const wrong = await s.form('/token', { grant_type: 'authorization_code', code, code_verifier: 'wrong-verifier', client_id: reg.client_id, redirect_uri: CLAUDE_CB });
+  // Wrong verifier burns the code
+  const w = await s.startConnect();
+  const ap = await (await s.post('/authorize/approve', { idToken: 'owner-token', memberName: 'דנה', requestId: w.requestId })).json();
+  const wcode = new URL(ap.redirect).searchParams.get('code');
+  const wrong = await s.form('/token', { grant_type: 'authorization_code', code: wcode, code_verifier: 'wrong-verifier', client_id: w.client_id, redirect_uri: CLAUDE_CB });
   assert.equal((await wrong.json()).error, 'invalid_grant');
+  const burnt = await s.form('/token', { grant_type: 'authorization_code', code: wcode, code_verifier: w.verifier, client_id: w.client_id, redirect_uri: CLAUDE_CB });
+  assert.equal((await burnt.json()).error, 'invalid_grant');
 
   // A code issued to one client can't be redeemed by another
-  const ap2 = await (await s.post('/authorize/approve', { idToken: 'owner-token', memberName: 'דנה', client_id: reg.client_id, redirect_uri: CLAUDE_CB, code_challenge: challenge })).json();
-  const other = await s.form('/token', { grant_type: 'authorization_code', code: new URL(ap2.redirect).searchParams.get('code'), code_verifier: 'right-verifier-right-verifier-right-verifier', client_id: tok.client_id, redirect_uri: CLAUDE_CB });
+  const o = await s.startConnect();
+  const ap2 = await (await s.post('/authorize/approve', { idToken: 'owner-token', memberName: 'דנה', requestId: o.requestId })).json();
+  const other = await s.form('/token', { grant_type: 'authorization_code', code: new URL(ap2.redirect).searchParams.get('code'), code_verifier: o.verifier, client_id: tok.client_id, redirect_uri: CLAUDE_CB });
   assert.equal((await other.json()).error, 'invalid_grant');
 
   // Refresh rotates; the access token can't be used as a refresh token
