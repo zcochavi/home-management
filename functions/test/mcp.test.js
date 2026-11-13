@@ -148,19 +148,28 @@ test('identity: owner picks a parent; joined member is fixed; kids and strangers
   const ctx = await s.call(t2.access_token, 'get_family_context', {});
   assert.equal(ctx.data.connected_as, 'יוסי');
 
-  // Kid's personal join code: member named on the invite account profile.
-  await s.db.collection('uidToFamily').doc('u-kid').set({ familyUid: 'fam1' });
-  s.login('kid-token', { uid: 'u-kid', email: 'abc234@fh.familyhub', name: 'fam1|נועה', firebase: { sign_in_provider: 'password' } });
+  // A kid's personal join code: the member comes from the code's record, whatever the
+  // account's profile or mapping claim.
+  await s.db.collection('joinCodes').doc('ABC234').set({ ownerUid: 'fam1', memberName: 'נועה' });
+  await s.db.collection('uidToFamily').doc('u-kid').set({ familyUid: 'fam1', memberName: 'דנה' });
+  s.login('kid-token', { uid: 'u-kid', email: 'abc234@fh.familyhub', name: 'fam1|דנה', firebase: { sign_in_provider: 'password' } });
   const kid = await s.post('/authorize/identity', { idToken: 'kid-token' });
   assert.equal(kid.status, 403);
   assert.equal((await kid.json()).error, 'parents_only');
   assert.equal((await s.connect({ idToken: 'kid-token', memberName: 'דנה' })).error, 'parents_only');
 
-  // Same, resolved through the joinCodes collection.
-  await s.db.collection('uidToFamily').doc('u-kid2').set({ familyUid: 'fam1' });
-  await s.db.collection('joinCodes').doc('XYZ789').set({ ownerUid: 'fam1', memberName: 'איתי' });
-  s.login('kid2-token', { uid: 'u-kid2', email: 'xyz789@fh.familyhub' });
-  assert.equal((await s.post('/authorize/identity', { idToken: 'kid2-token' })).status, 403);
+  // A family code's shared account may act as any parent, like in the app.
+  await s.db.collection('joinCodes').doc('FAM234').set({ ownerUid: 'fam1' });
+  await s.db.collection('uidToFamily').doc('u-fam').set({ familyUid: 'fam1' });
+  s.login('fam-token', { uid: 'u-fam', email: 'fam234@fh.familyhub' });
+  assert.deepEqual((await (await s.post('/authorize/identity', { idToken: 'fam-token' })).json()).parents, ['דנה', 'יוסי']);
+
+  // An invite account whose code is unknown, or belongs to another family, gets nothing.
+  await s.db.collection('uidToFamily').doc('u-x').set({ familyUid: 'fam1' });
+  s.login('x-token', { uid: 'u-x', email: 'zzz999@fh.familyhub', name: 'fam1|דנה' });
+  assert.equal((await (await s.post('/authorize/identity', { idToken: 'x-token' })).json()).error, 'no_family');
+  await s.db.collection('joinCodes').doc('ZZZ999').set({ ownerUid: 'otherFamily' });
+  assert.equal((await (await s.post('/authorize/identity', { idToken: 'x-token' })).json()).error, 'no_family');
 
   s.login('stranger-token', { uid: 'nobody', email: 'x@example.com' });
   const stranger = await s.post('/authorize/identity', { idToken: 'stranger-token' });

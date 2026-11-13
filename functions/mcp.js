@@ -217,16 +217,13 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
 
     let lockedMember = mapped.data().memberName || null;
     const email = String(decoded.email || '');
-    if (!lockedMember && email.endsWith('@' + JOIN_DOMAIN)) {
-      // A join code's shared account: a personal code names its member on the account profile.
-      const profile = String(decoded.name || '');
-      const pipe = profile.indexOf('|');
-      if (pipe > 0) lockedMember = profile.slice(pipe + 1) || null;
-      if (!lockedMember) {
-        const code = email.slice(0, -JOIN_DOMAIN.length - 1).toUpperCase();
-        const jc = await db.collection('joinCodes').doc(code).get();
-        if (jc.exists) lockedMember = jc.data().memberName || null;
-      }
+    if (email.endsWith('@' + JOIN_DOMAIN)) {
+      // A join code's shared account. Which member it stands for comes only from the code's own
+      // record — the account's profile and mapping can be edited by whoever holds the code.
+      const code = email.slice(0, -JOIN_DOMAIN.length - 1).toUpperCase();
+      const jc = await db.collection('joinCodes').doc(code).get();
+      if (!jc.exists || jc.data().ownerUid !== familyUid) return null;
+      lockedMember = jc.data().memberName || null;
     }
     return { familyUid, isOwner: false, family: fam.data(), lockedMember };
   }

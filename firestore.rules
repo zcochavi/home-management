@@ -8,15 +8,61 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Maps a joined member's own Firebase Auth uid (family-code or kid-code account) to the
-    // family they belong to. A user may only ever write their own mapping; read is open since
-    // the mapping itself (uid -> uid) isn't sensitive on its own.
+    // Maps a joined member's own Firebase Auth uid (family-code or kid-code account, or a personal
+    // Google/email account) to the family they belong to. This mapping is what grants access to
+    // a family's data below, so a user can only write their own, and only towards a family they
+    // hold a join code for:
+    //  (a) re-writing the mapping they already have (the app does this on every login);
+    //  (b) a join code's invite account (CODE@fh.familyhub) -> the family that issued that code;
+    //  (c) a personal account -> the family of the join code it presents in `joinCode`, as the
+    //      member that code was issued for (so a kid's code can't be turned into a parent).
     function familyOfUid(uid) {
       return get(/databases/$(database)/documents/uidToFamily/$(uid)).data.familyUid;
     }
+    function joinCodeData(code) {
+      return get(/databases/$(database)/documents/joinCodes/$(code)).data;
+    }
+    function isInviteAccount() {
+      return request.auth.token.email is string && request.auth.token.email.matches('^[a-z0-9]+@fh[.]familyhub$');
+    }
+    function inviteCode() {
+      return request.auth.token.email.split('@')[0].upper();
+    }
     match /uidToFamily/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['familyUid', 'memberName', 'joinCode'])
+        && request.resource.data.familyUid is string
+        && (
+          (resource != null
+            && request.resource.data.familyUid == resource.data.familyUid
+            && request.resource.data.get('memberName', null) == resource.data.get('memberName', null))
+          ||
+          (isInviteAccount()
+            && joinCodeData(inviteCode()).ownerUid == request.resource.data.familyUid
+            && (request.resource.data.get('memberName', null) == null
+                || request.resource.data.memberName == joinCodeData(inviteCode()).get('memberName', null)))
+          ||
+          (!isInviteAccount()
+            && request.resource.data.get('joinCode', null) is string
+            && request.resource.data.joinCode.matches('^[A-Z0-9]{4,12}$')
+            && joinCodeData(request.resource.data.joinCode).ownerUid == request.resource.data.familyUid
+            && request.resource.data.get('memberName', null) == joinCodeData(request.resource.data.joinCode).get('memberName', null))
+        );
+      allow delete: if false;
+    }
+
+    // Join codes: the document id is the code, and says which family (and optionally which
+    // member) it invites to. Knowing a code lets you read it; codes can't be listed. Only
+    // members of a family can issue, change or remove that family's codes, and a code can never
+    // be re-pointed at another family.
+    match /joinCodes/{code} {
+      allow get: if request.auth != null;
+      allow list: if false;
+      allow create: if isFamilyMember(request.resource.data.ownerUid);
+      allow update: if isFamilyMember(resource.data.ownerUid)
+        && request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if isFamilyMember(resource.data.ownerUid);
     }
 
     // A family's private data: chores, grocery, homework, members (incl. kids' name/dob/gender/
@@ -80,14 +126,13 @@ service cloud.firestore {
       allow delete: if isFamilyMember(resource.data.familyUid);
     }
 
-    // All other collections (school community directory, pending requests, join codes, etc.) — any authenticated user may read/write, same as before this file
-    // existed. These are intentionally cross-family (community features) or need pre-mapping
-    // access (e.g. reading a join code before the uidToFamily mapping above can exist yet).
+    // All other collections (school community directory, pending requests, etc.) — any authenticated user may read/write, same as before this file
+    // existed. These are intentionally cross-family (community features).
     // Firestore evaluates every matching rule as OR'd together, so "families" and "uidToFamily"
     // must be explicitly excluded here — otherwise this catch-all would re-open them anyway.
     match /{collection}/{rest=**} {
       allow read, write: if request.auth != null
-        && !(collection in ['families', 'uidToFamily', 'webtopClasses', 'publicShares', 'gcalTokens',
+        && !(collection in ['families', 'uidToFamily', 'joinCodes', 'webtopClasses', 'publicShares', 'gcalTokens',
                             'mcpClients', 'mcpAuthCodes', 'mcpTokens']);
     }
 

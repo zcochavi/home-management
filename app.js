@@ -639,7 +639,9 @@ const _isOwner       = () => fbAuth.currentUser?.uid === S.uid;
 // UID, distinct from the family document's id. Firestore rules can't see localStorage, so they
 // need a server-side record of "this auth UID belongs to this family" to grant access — this
 // lazily (self-)writes that mapping on every login, which also backfills it for members who
-// joined before this mapping existed, the first time they log in again.
+// joined before this mapping existed, the first time they log in again. Firestore rules accept
+// it only for the family this account already belongs to, or (for a join code's invite
+// account) the family that code was issued by.
 async function _ensureUidFamilyMapping(familyUid) {
   const authUid = fbAuth.currentUser?.uid;
   if (!authUid || authUid === familyUid || !fbDb) return;
@@ -1191,7 +1193,7 @@ async function _resolveJoinCode(code) {
   try {
     const snap = await fbDb.collection('joinCodes').doc(code).get();
     if (snap.exists && snap.data().ownerUid) {
-      return { ownerUid: snap.data().ownerUid, memberName: snap.data().memberName || null };
+      return { code, ownerUid: snap.data().ownerUid, memberName: snap.data().memberName || null };
     }
   } catch (_) {}
   // Fallback: ownerUid|memberName stored on the invite account's displayName
@@ -1200,10 +1202,10 @@ async function _resolveJoinCode(code) {
     const cred = await app2.auth().signInWithEmailAndPassword(code + '@' + JOIN_DOMAIN, code);
     const profile = cred.user.displayName || '';
     const pipeIdx = profile.indexOf('|');
-    if (pipeIdx > 0) return { ownerUid: profile.slice(0, pipeIdx), memberName: profile.slice(pipeIdx + 1) || null };
+    if (pipeIdx > 0) return { code, ownerUid: profile.slice(0, pipeIdx), memberName: profile.slice(pipeIdx + 1) || null };
     const snap = await app2.firestore().collection('joinCodes').doc(code).get();
     if (snap.exists && snap.data().ownerUid) {
-      return { ownerUid: snap.data().ownerUid, memberName: snap.data().memberName || null };
+      return { code, ownerUid: snap.data().ownerUid, memberName: snap.data().memberName || null };
     }
   } catch (_) {
   } finally {
@@ -1216,9 +1218,16 @@ async function _resolveJoinCode(code) {
 // Maps a signed-in personal account (Google or email/password) to a family as a joined member.
 // `app` is the Firebase app instance that user is signed in on. An account either owns a family or is a member of one,
 // never both — so if this account owns a family, the user must confirm deleting it first.
-// Returns false if the user backed out.
-async function _linkAccountToFamily(app, user, familyUid, memberName) {
+// The join code is the proof of invitation: Firestore rules only accept the mapping when it
+// matches the code's own record (family and member), so that record — not anything the client
+// worked out earlier — decides what is written. Read before anything is deleted.
+// Returns { familyUid, memberName }, or false if the user backed out.
+async function _linkAccountToFamily(app, user, code) {
   const db = app.firestore();
+  const codeSnap = await db.collection('joinCodes').doc(code).get();
+  const familyUid = codeSnap.exists ? codeSnap.data().ownerUid : null;
+  if (!familyUid) throw new Error('join code not found');
+  const memberName = codeSnap.data().memberName || null;
   const own = await db.collection('families').doc(user.uid).get();
   if (own.exists) {
     const d = own.data() || {};
@@ -1233,8 +1242,8 @@ async function _linkAccountToFamily(app, user, familyUid, memberName) {
     if (!ok) return false;
     await app.functions().httpsCallable('deleteOwnFamily')();
   }
-  await db.collection('uidToFamily').doc(user.uid).set({ familyUid, memberName: memberName || null });
-  return true;
+  await db.collection('uidToFamily').doc(user.uid).set({ familyUid, memberName, joinCode: code });
+  return { familyUid, memberName };
 }
 
 // True when this device is signed in with a join code's shared invite account (not a personal one)
@@ -1245,17 +1254,19 @@ const _isInviteSession = () => (fbAuth?.currentUser?.email || '').toLowerCase().
 // unless everything succeeds; then this device switches over to the Google account.
 async function connectGoogleAccount() {
   if (!FB_CONFIGURED || !_isInviteSession() || !S.uid) return;
-  const familyUid = S.uid, memberName = S.lockedMember || null;
+  // This session is signed in as a join code's invite account — the code is in its email
+  const code = fbAuth.currentUser.email.split('@')[0].toUpperCase();
   const app2 = firebase.initializeApp(FIREBASE_CONFIG, 'link_' + Date.now());
   let linked = false;
   try {
     const cred = await app2.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());
     const user = cred.user;
-    if (user.uid === familyUid) { await _alert('זהו החשבון של מנהל/ת המשפחה — היכנס/י איתו ישירות במסך הכניסה.'); return; }
-    if (!await _linkAccountToFamily(app2, user, familyUid, memberName)) return;
+    if (user.uid === S.uid) { await _alert('זהו החשבון של מנהל/ת המשפחה — היכנס/י איתו ישירות במסך הכניסה.'); return; }
+    const link = await _linkAccountToFamily(app2, user, code);
+    if (!link) return;
     linked = true;
-    localStorage.setItem('familyhub_family_uid_' + user.uid, familyUid);
-    if (memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, memberName);
+    localStorage.setItem('familyhub_family_uid_' + user.uid, link.familyUid);
+    if (link.memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, link.memberName);
     // Switch this device to the Google account, then reload into the same family
     _googleFlow = true;
     await fbAuth.signInWithCredential(cred.credential);
@@ -1280,9 +1291,10 @@ async function connectGoogleAccount() {
 // device. Returns false if the user backed out of deleting the family they own.
 async function _joinFamilyAs(user, target) {
   if (target.ownerUid === user.uid) return true; // the owner used their own family's code
-  if (!await _linkAccountToFamily(firebase.app(), user, target.ownerUid, target.memberName)) return false;
-  localStorage.setItem('familyhub_family_uid_' + user.uid, target.ownerUid);
-  if (target.memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, target.memberName);
+  const link = await _linkAccountToFamily(firebase.app(), user, target.code);
+  if (!link) return false;
+  localStorage.setItem('familyhub_family_uid_' + user.uid, link.familyUid);
+  if (link.memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, link.memberName);
   else localStorage.removeItem('familyhub_locked_member_' + user.uid);
   return true;
 }

@@ -20,6 +20,7 @@ Run through this before any significant deploy (major refactor, new feature, Clo
 - [ ] **Sign-in on a fresh device as a joined account** — clear site data, sign in with a joined email or Google account; verify it lands in the joined family (not signed out)
 - [ ] **Connect Google later** — join with a personal parent code only (no Google); open the hamburger menu → "חבר חשבון Google"; verify the page reloads into the same family as the same member, and that after sign-out "המשך עם Google" returns there. The menu item is hidden for the owner, for kids, and once connected
 - [ ] **Admin delete family** — (shares code with the above) delete a test family from the admin panel; verify doc, lists, join codes and owner Auth account are removed
+- [ ] **Membership can't be forged** — automated: `cd rules-tests && npm install && npm test` (needs Java). By hand: signed in with an unrelated account, `firebase.firestore().collection('uidToFamily').doc(firebase.auth().currentUser.uid).set({familyUid:'<another family uid>'})` in the console is denied, and so is listing `joinCodes`
 - [ ] **Refresh after join** — refresh the page after joining; verify it loads correctly (no infinite spinner, no blank page)
 - [ ] **Sign out** — sign out; verify auth screen appears
 
