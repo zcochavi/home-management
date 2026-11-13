@@ -3,10 +3,63 @@
     {
       "source": "functions",
       "codebase": "default",
-      "ignore": ["node_modules", ".git"]
+      "ignore": [
+        "node_modules",
+        ".git"
+      ]
     }
   ],
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "hosting": {
+    "public": "hosting",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/mcp",
+        "function": "mcp"
+      },
+      {
+        "source": "/authorize",
+        "function": "mcp"
+      },
+      {
+        "source": "/authorize/**",
+        "function": "mcp"
+      },
+      {
+        "source": "/token",
+        "function": "mcp"
+      },
+      {
+        "source": "/register",
+        "function": "mcp"
+      },
+      {
+        "source": "/revoke",
+        "function": "mcp"
+      },
+      {
+        "source": "/.well-known/oauth-protected-resource",
+        "function": "mcp"
+      },
+      {
+        "source": "/.well-known/oauth-protected-resource/**",
+        "function": "mcp"
+      },
+      {
+        "source": "/.well-known/oauth-authorization-server",
+        "function": "mcp"
+      },
+      {
+        "source": "/.well-known/openid-configuration",
+        "function": "mcp"
+      }
+    ]
   }
 }

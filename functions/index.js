@@ -2005,3 +2005,12 @@ exports.gcalDisconnect = gcalCallable(async (data, context) => {
   }
   return { ok: true };
 });
+
+// ── Claude connector (MCP server + its OAuth sign-in) ─────
+// Reached through the Hosting rewrites in firebase.json; see functions/mcp.js.
+exports.mcp = functions.https.onRequest(require('./mcp').createHandler({
+  db,
+  auth: admin.auth(),
+  FieldValue: admin.firestore.FieldValue,
+  adminUid: ADMIN_UID,
+}));
