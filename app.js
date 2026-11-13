@@ -11691,6 +11691,9 @@ function _listTileMenu(listId, btn, pt) {
   left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
   menu.style.cssText = `top:${top}px;left:${left}px;min-width:${menuW}px`;
   setTimeout(() => document.addEventListener('click', _closeTileMenu, { once: true }), 10);
+  // The menu is fixed to the screen, so scrolling the lists would leave it hanging in place:
+  // close it as soon as anything scrolls (capture, since scroll events don't bubble)
+  setTimeout(() => document.addEventListener('scroll', _closeTileMenu, { capture: true, passive: true }), 150);
 }
 
 // ── Custom list cover photo ──────────────
@@ -11747,7 +11750,10 @@ function _resizeImageToDataUrl(file, maxSide) {
   });
 }
 
-function _closeTileMenu() { document.querySelector('.list-tile-popup')?.remove(); }
+function _closeTileMenu() {
+  document.querySelector('.list-tile-popup')?.remove();
+  document.removeEventListener('scroll', _closeTileMenu, true);
+}
 
 async function listRename(listId) {
   const list = (S.lists || []).find(l => l.id === listId);
