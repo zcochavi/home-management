@@ -11691,6 +11691,9 @@ function _listTileMenu(listId, btn, pt) {
   left = Math.max(8, Math.min(left, window.innerWidth - menuW - 8));
   menu.style.cssText = `top:${top}px;left:${left}px;min-width:${menuW}px`;
   setTimeout(() => document.addEventListener('click', _closeTileMenu, { once: true }), 10);
+  // The menu is fixed to the screen, so scrolling the lists would leave it hanging in place:
+  // close it as soon as anything scrolls (capture, since scroll events don't bubble)
+  setTimeout(() => document.addEventListener('scroll', _closeTileMenu, { capture: true, passive: true }), 150);
 }
 
 // ── Custom list cover photo ──────────────
@@ -11747,7 +11750,10 @@ function _resizeImageToDataUrl(file, maxSide) {
   });
 }
 
-function _closeTileMenu() { document.querySelector('.list-tile-popup')?.remove(); }
+function _closeTileMenu() {
+  document.querySelector('.list-tile-popup')?.remove();
+  document.removeEventListener('scroll', _closeTileMenu, true);
+}
 
 async function listRename(listId) {
   const list = (S.lists || []).find(l => l.id === listId);
@@ -12221,10 +12227,9 @@ async function _wizCreate() {
   try {
     const ref = await fbDb.collection('families').doc(S.uid).collection('lists').add(doc);
     syncListCalendarEvent({ ...doc, id: ref.id });
-    const hadPaste = doc.items.length > 0 && !srcList && _wizType === 'event';
     closeListWizard();
     openListDetail(ref.id);
-    if (hadPaste) listToggleEditMode(); // open straight in edit mode so tasks can be tweaked
+    itemsToggleEditMode(); // a new list opens straight in items edit mode so items can be added right away
   } catch(e) {
     console.error('[lists] create failed:', e);
     _showSnackbar('שגיאה ביצירת הרשימה');
@@ -12232,7 +12237,8 @@ async function _wizCreate() {
 }
 
 // ── List Detail ────────────────────────
-let _listDetailId = null, _listCookMode = false, _listEditMode = false;
+let _listDetailId = null, _listCookMode = false, _listEditMode = false; // _listEditMode = list details (title/place/date)
+let _itemsEditMode = false; // items card: add / reorder / rename / delete
 let _claimFilter = 'all'; // owner view of a "who brings what" list: 'all' | '__free' | <person name>
 
 function _claimNames(list) { return [...new Set((list.items || []).filter(i => i.done && i.checkedBy).map(i => i.checkedBy))]; }
@@ -12257,6 +12263,7 @@ function openListDetail(listId) {
   _listDetailId = listId;
   _listCookMode = false;
   _listEditMode = false;
+  _itemsEditMode = false;
   _claimFilter = 'all';
   el('listDetailPanel').classList.remove('hidden');
   _renderListDetail();
@@ -12266,14 +12273,33 @@ function closeListDetail() {
   el('listDetailPanel').classList.add('hidden');
   _listDetailId = null;
   _listEditMode = false;
+  _itemsEditMode = false;
 }
 
 function listDetailBack() {
-  if (_listEditMode) {
+  if (_itemsEditMode) {
+    itemsToggleEditMode();
+  } else if (_listEditMode) {
     listToggleEditMode(); // exits edit mode (saves title, shows green ✓)
   } else {
     closeListDetail();
   }
+}
+
+// Pencil badge on the items card: edit only the items (add, drag to reorder, rename, delete)
+function itemsToggleEditMode() {
+  if (!_getOpenList()) return;
+  _itemsEditMode = !_itemsEditMode;
+  _renderListDetail();
+  if (_itemsEditMode) setTimeout(() => el('listNewItem')?.focus(), 50);
+}
+function _itemsEditBadgeHtml(list) {
+  if (!(list.canEdit === 'all' || isParent())) return '';
+  return `<button class="list-edit-badge${_itemsEditMode ? ' active' : ''}" onclick="itemsToggleEditMode()" title="${_itemsEditMode ? 'סיום עריכה' : 'עריכת פריטים'}">${_itemsEditMode ? '✓' : '✏️'}</button>`;
+}
+// Wrapper (not the card itself, which clips overflow) so the badge can sit half outside the card
+function _itemsCardWrap(list, cardHtml) {
+  return `<div class="list-items-wrap">${_itemsEditBadgeHtml(list)}${cardHtml}</div>`;
 }
 
 function listToggleEditMode() {
@@ -12360,11 +12386,14 @@ function _renderListDetail() {
       titleEl.textContent = list.name;
     }
   }
-  const canEdit = _listEditMode;
+  const _ae = document.activeElement;
+  const _keep = _ae && ['listNewItem', 'listNewItemQty', 'listNewStep'].includes(_ae.id)
+    ? { id: _ae.id, v: _ae.value, s: _ae.selectionStart, e: _ae.selectionEnd } : null;
+  const canEdit = _itemsEditMode;
   const showEditBtn = list.canEdit === 'all' || isParent();
   const editBtn = el('listEditBtn'); if (editBtn) editBtn.style.display = showEditBtn ? '' : 'none';
-  const cloneBtn = el('listCloneBtn'); if (cloneBtn) cloneBtn.style.display = (showEditBtn && !_listEditMode) ? '' : 'none';
-  const canDelete = isParent() && !_listEditMode && list.createdBy === S.user;
+  const cloneBtn = el('listCloneBtn'); if (cloneBtn) cloneBtn.style.display = (showEditBtn && !_listEditMode && !_itemsEditMode) ? '' : 'none';
+  const canDelete = isParent() && !_listEditMode && !_itemsEditMode && list.createdBy === S.user;
   const deleteBtn = el('listDeleteBtn'); if (deleteBtn) deleteBtn.style.display = canDelete ? '' : 'none';
   const cont = el('listDetailContent');
   if (!cont) return;
@@ -12372,6 +12401,10 @@ function _renderListDetail() {
   else if (list.type === 'recipe') _renderRecipeDetail(cont, list, canEdit);
   else if (list.type === 'event')  _renderEventDetail(cont, list, canEdit);
   _initListItemSwipes();
+  if (_keep) { // restore the add-item field the user is typing in (focus keeps the mobile keyboard open)
+    const n = el(_keep.id);
+    if (n) { n.value = _keep.v; n.focus(); try { n.setSelectionRange(_keep.s, _keep.e); } catch (_) {} }
+  }
 }
 
 // Packing detail
@@ -12380,16 +12413,16 @@ function _renderPackingDetail(cont, list, canEdit) {
   const done  = _claimFilterItems(list, items.filter(i => i.done));
   const undone = _claimFilterItems(list, items.filter(i => !i.done));
   let h = '';
-  if (canEdit) h += _listMetaEditHtml(list);
+  if (_listEditMode) h += _listMetaEditHtml(list);
   else {
     if (list.meta?.destination) h += `<div class="list-meta-chip">✈️ ${esc(list.meta.destination)}</div>`;
     if (list.meta?.tripDate)    h += `<div class="list-meta-chip">📅 ${fmtDate(list.meta.tripDate)}</div>`;
   }
   h += _claimFilterHtml(list);
   if (canEdit) h += _addItemFormHtml(list.id, 'packing', '+ הוסף פריט...');
-  if (undone.length) {
-    h += `<div class="card list-items-card">${undone.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showQty:true})).join('')}</div>`;
-  }
+  h += _itemsCardWrap(list, `<div class="card list-items-card">${undone.length
+    ? undone.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showQty:true})).join('')
+    : `<div class="list-empty-hint">${items.length ? 'אין פריטים פתוחים' : 'הרשימה ריקה — לחץ על ✏️ להוספת פריטים'}</div>`}</div>`);
   if (done.length) h += _doneSectionHtml(list.id, done, canEdit, 'פריטים שסומנו');
   cont.innerHTML = h;
 }
@@ -12642,7 +12675,7 @@ function _renderRecipeDetail(cont, list, canEdit) {
   </button>`;
 
   // Ingredients
-  h += `<div class="card list-items-card">
+  h += _itemsCardWrap(list, `<div class="card list-items-card">
     <div class="list-section-hdr">🧂 מצרכים</div>
     ${canEdit ? `<div class="mgmt-add-form">
       <input class="mgmt-input" id="listNewItem" type="text" placeholder="מצרך"
@@ -12652,7 +12685,7 @@ function _renderRecipeDetail(cont, list, canEdit) {
       <button class="mgmt-add-btn" onclick="listAddItem('${list.id}','ingredient')">+</button>
     </div>` : ''}
     ${items.length ? items.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showAmount:true, checkable: _listCookMode})).join('') : `<div class="list-empty-hint">הוסף מצרכים...</div>`}
-  </div>`;
+  </div>`);
 
   // Steps
   const doneSteps = steps.filter(s => s.done && _listCookMode).length;
@@ -12719,7 +12752,7 @@ function _renderEventDetail(cont, list, canEdit) {
   const metaParts = [];
   if (list.meta?.eventDate) metaParts.push(`📅 ${fmtDate(list.meta.eventDate)}`);
   if (list.meta?.location)  metaParts.push(`📍 ${esc(list.meta.location)}`);
-  if (canEdit) h += _listMetaEditHtml(list);
+  if (_listEditMode) h += _listMetaEditHtml(list);
   else if (metaParts.length) h += `<div class="list-meta-chip">${metaParts.join('  ·  ')}</div>`;
 
   if (items.length) {
@@ -12737,9 +12770,9 @@ function _renderEventDetail(cont, list, canEdit) {
 
   const shownUndone = _claimFilterItems(list, undone);
   const shownDone   = _claimFilterItems(list, done);
-  if (shownUndone.length) {
-    h += `<div class="card list-items-card">${shownUndone.map(it => _listSwipeItemHtml(list.id, it, canEdit)).join('')}</div>`;
-  }
+  h += _itemsCardWrap(list, `<div class="card list-items-card">${shownUndone.length
+    ? shownUndone.map(it => _listSwipeItemHtml(list.id, it, canEdit)).join('')
+    : `<div class="list-empty-hint">${items.length ? 'אין פריטים פתוחים' : 'הרשימה ריקה — לחץ על ✏️ להוספת פריטים'}</div>`}</div>`);
 
   if (shownDone.length) h += _doneSectionHtml(list.id, shownDone, canEdit, _hasClaimShare(list) ? 'פריטים שנבחרו' : 'משימות שהושלמו');
 
@@ -12854,7 +12887,7 @@ async function listAddItem(listId, type) {
   nameEl.value = '';
   if (el('listNewItemQty')) el('listNewItemQty').value = '1';
   _renderListDetail();
-  nameEl?.focus();
+  el('listNewItem')?.focus(); // the field was re-created by the render, so look it up again
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ items: list.items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   _syncAllItemsToShares(list);
@@ -12869,7 +12902,7 @@ async function listAddStep(listId) {
   list.steps = [...(list.steps || []), { id: Date.now(), text, done: false }];
   inp.value = '';
   _renderListDetail();
-  inp?.focus();
+  el('listNewStep')?.focus();
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ steps: list.steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   _syncAllItemsToShares(list);
