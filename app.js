@@ -12359,6 +12359,9 @@ function _renderListDetail() {
       titleEl.textContent = list.name;
     }
   }
+  const _ae = document.activeElement;
+  const _keep = _ae && ['listNewItem', 'listNewItemQty', 'listNewStep'].includes(_ae.id)
+    ? { id: _ae.id, v: _ae.value, s: _ae.selectionStart, e: _ae.selectionEnd } : null;
   const canEdit = _listEditMode;
   const showEditBtn = list.canEdit === 'all' || isParent();
   const editBtn = el('listEditBtn'); if (editBtn) editBtn.style.display = showEditBtn ? '' : 'none';
@@ -12371,6 +12374,10 @@ function _renderListDetail() {
   else if (list.type === 'recipe') _renderRecipeDetail(cont, list, canEdit);
   else if (list.type === 'event')  _renderEventDetail(cont, list, canEdit);
   _initListItemSwipes();
+  if (_keep) { // restore the add-item field the user is typing in (focus keeps the mobile keyboard open)
+    const n = el(_keep.id);
+    if (n) { n.value = _keep.v; n.focus(); try { n.setSelectionRange(_keep.s, _keep.e); } catch (_) {} }
+  }
 }
 
 // Packing detail
@@ -12853,7 +12860,7 @@ async function listAddItem(listId, type) {
   nameEl.value = '';
   if (el('listNewItemQty')) el('listNewItemQty').value = '1';
   _renderListDetail();
-  nameEl?.focus();
+  el('listNewItem')?.focus(); // the field was re-created by the render, so look it up again
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ items: list.items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   _syncAllItemsToShares(list);
@@ -12868,7 +12875,7 @@ async function listAddStep(listId) {
   list.steps = [...(list.steps || []), { id: Date.now(), text, done: false }];
   inp.value = '';
   _renderListDetail();
-  inp?.focus();
+  el('listNewStep')?.focus();
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ steps: list.steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   _syncAllItemsToShares(list);
