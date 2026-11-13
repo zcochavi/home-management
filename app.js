@@ -12422,7 +12422,7 @@ function _renderPackingDetail(cont, list, canEdit) {
   if (canEdit) h += _addItemFormHtml(list.id, 'packing', '+ הוסף פריט...');
   h += _itemsCardWrap(list, `<div class="card list-items-card">${undone.length
     ? undone.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showQty:true})).join('')
-    : `<div class="list-empty-hint">${items.length ? 'אין פריטים פתוחים' : 'הרשימה ריקה — לחץ על ✏️ להוספת פריטים'}</div>`}</div>`);
+    : `<div class="list-empty-hint">${items.length ? 'אין פריטים פתוחים' : (_itemsEditMode ? 'הוסף פריטים למעלה, ובסיום לחץ על ✓' : 'הרשימה ריקה — לחץ על ✏️ להוספת פריטים')}</div>`}</div>`);
   if (done.length) h += _doneSectionHtml(list.id, done, canEdit, 'פריטים שסומנו');
   cont.innerHTML = h;
 }
@@ -12772,7 +12772,7 @@ function _renderEventDetail(cont, list, canEdit) {
   const shownDone   = _claimFilterItems(list, done);
   h += _itemsCardWrap(list, `<div class="card list-items-card">${shownUndone.length
     ? shownUndone.map(it => _listSwipeItemHtml(list.id, it, canEdit)).join('')
-    : `<div class="list-empty-hint">${items.length ? 'אין פריטים פתוחים' : 'הרשימה ריקה — לחץ על ✏️ להוספת פריטים'}</div>`}</div>`);
+    : `<div class="list-empty-hint">${items.length ? 'אין פריטים פתוחים' : (_itemsEditMode ? 'הוסף פריטים למעלה, ובסיום לחץ על ✓' : 'הרשימה ריקה — לחץ על ✏️ להוספת פריטים')}</div>`}</div>`);
 
   if (shownDone.length) h += _doneSectionHtml(list.id, shownDone, canEdit, _hasClaimShare(list) ? 'פריטים שנבחרו' : 'משימות שהושלמו');
 
