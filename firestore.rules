@@ -43,6 +43,13 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Claude connector sign-in state (OAuth clients, one-time codes, access/refresh tokens) —
+    // server-side only (functions/mcp.js via the Admin SDK). A client that could write here could
+    // mint itself a token for any family, so these are also excluded from the catch-all below.
+    match /mcpClients/{doc}   { allow read, write: if false; }
+    match /mcpAuthCodes/{doc} { allow read, write: if false; }
+    match /mcpTokens/{doc}    { allow read, write: if false; }
+
     // Public list shares (guest links). The document id is the secret token in the link.
     //  - get:    any signed-in user (guests are signed in anonymously) who knows the token.
     //            No `list`, so tokens can't be enumerated.
@@ -80,7 +87,8 @@ service cloud.firestore {
     // must be explicitly excluded here — otherwise this catch-all would re-open them anyway.
     match /{collection}/{rest=**} {
       allow read, write: if request.auth != null
-        && !(collection in ['families', 'uidToFamily', 'webtopClasses', 'publicShares', 'gcalTokens']);
+        && !(collection in ['families', 'uidToFamily', 'webtopClasses', 'publicShares', 'gcalTokens',
+                            'mcpClients', 'mcpAuthCodes', 'mcpTokens']);
     }
 
     // Collection-group queries (e.g. collectionGroup('pendingEvents') in the admin Pending

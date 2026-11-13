@@ -1,4 +1,4 @@
-name: Deploy Firebase Functions & Rules
+name: Deploy Firebase Functions, Rules & Hosting
 
 on:
   workflow_dispatch:
@@ -7,10 +7,12 @@ on:
     paths:
       - 'functions/**'
       - 'firestore.rules'
+      - 'firebase.json'
+      - 'hosting/**'
 
 jobs:
   deploy-functions:
-    name: Deploy Cloud Functions & Firestore Rules
+    name: Deploy Cloud Functions, Firestore Rules & Hosting
     # Manual runs are only allowed from the deploy branch
     if: github.ref == 'refs/heads/gh-pages'
     runs-on: ubuntu-latest
@@ -32,6 +34,6 @@ jobs:
         run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/sa.json
 
       - name: Deploy to Firebase
-        run: npx firebase-tools@latest deploy --only functions,firestore:rules --project familyhub-7fdd5
+        run: npx firebase-tools@latest deploy --only functions,firestore:rules,hosting --project familyhub-7fdd5
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json

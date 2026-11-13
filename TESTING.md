@@ -45,6 +45,21 @@ Run through this before any significant deploy (major refactor, new feature, Clo
 
 ---
 
+## Claude Connector (MCP)
+
+Automated: `cd functions && npm test` (sign-in flow, tokens, both tools). Manual, after a deploy:
+
+- [ ] **Discovery** — `https://familyhub-7fdd5.firebaseapp.com/.well-known/oauth-authorization-server` returns JSON; a plain GET of `/mcp` returns 401
+- [ ] **Connect** — in Claude: Settings → Connectors → add custom connector with `https://familyhub-7fdd5.firebaseapp.com/mcp`; the FamilyHub sign-in page opens; sign in with Google and with email/password; approve; Claude shows the connector as connected with 3 tools
+- [ ] **Owner picks a member** — signing in as the family owner shows the parents to choose from; a member who joined with a personal code is fixed to their own name
+- [ ] **Refused accounts** — an account with no family, and a kid's personal code, both get a clear message and no connection
+- [ ] **Create recipe** — ask Claude to save a recipe; it appears in Lists → recipes with ingredients, amounts, steps and a "למתכון המקורי" link when a source link was given
+- [ ] **Create event as regular parent** — goes to pending; committee is notified
+- [ ] **Create event as committee** — published immediately; class parents are notified
+- [ ] **Locked collections** — from the browser console of a signed-in app session, reading `mcpTokens`, `mcpAuthCodes` or `mcpClients` is denied
+
+---
+
 ## School & City Approval
 
 - [ ] **New school request** — enter an unknown school name for a kid; verify pending badge appears and admin gets notification

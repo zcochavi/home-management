@@ -12664,6 +12664,8 @@ function _renderRecipeDetail(cont, list, canEdit) {
   const steps = list.steps || [];
   let h = '';
   if (list.meta?.servings) h += `<div class="list-meta-chip">👥 ${list.meta.servings} מנות</div>`;
+  // Recipes added through the Claude connector keep a link to the post they came from
+  if (/^https?:\/\//i.test(list.meta?.sourceUrl || '')) h += `<a class="list-meta-chip" href="${esc(list.meta.sourceUrl)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">🔗 למתכון המקורי</a>`;
 
   const cookLog = list.cookLog || [];
   const cookBadge = cookLog.length
