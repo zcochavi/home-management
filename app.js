@@ -11052,7 +11052,7 @@ async function listCreateShare(listId) {
     type: list.type, name: list.name,
     items: shareItems,
     meta:  JSON.parse(JSON.stringify(list.meta  || {})),
-    ...(list.type === 'recipe' && list.steps ? { steps: JSON.parse(JSON.stringify(list.steps)) } : {}),
+    ...(list.type === 'recipe' && list.steps ? { steps: JSON.parse(JSON.stringify(list.steps)).map(({ done, ...rest }) => rest) } : {}),
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
@@ -12492,7 +12492,7 @@ function _setClaimFilter(v) { _claimFilter = v; _renderListDetail(); }
 
 function openListDetail(listId) {
   _listDetailId = listId;
-  _listCookMode = false;
+  _listCookMode = !!_cookGet(listId); // resume if this device was mid-cooking
   _listEditMode = false;
   _itemsEditMode = false;
   _claimFilter = 'all';
@@ -12917,12 +12917,13 @@ function _renderRecipeDetail(cont, list, canEdit) {
         onkeydown="if(event.key==='Enter')listAddItem('${list.id}','ingredient')">
       <button class="mgmt-add-btn" onclick="listAddItem('${list.id}','ingredient')">+</button>
     </div>` : ''}
-    ${items.length ? items.map(it => _listSwipeItemHtml(list.id, it, canEdit, {showAmount:true, checkable: _listCookMode})).join('') : `<div class="list-empty-hint">הוסף מצרכים...</div>`}
+    ${items.length ? items.map(it => _listSwipeItemHtml(list.id, { ...it, done: _listCookMode && _cookHas(list.id, 'items', it.id), checkedBy: null, checkedById: null }, canEdit, {showAmount:true, checkable: _listCookMode})).join('') : `<div class="list-empty-hint">הוסף מצרכים...</div>`}
   </div>`);
 
   // Steps
-  const doneSteps = steps.filter(s => s.done && _listCookMode).length;
-  const currentIdx = _listCookMode ? steps.findIndex(s => !s.done) : -1;
+  const stepDone = (st, i) => _listCookMode && _cookHas(list.id, 'steps', _cookStepKey(st, i));
+  const doneSteps = steps.filter(stepDone).length;
+  const currentIdx = _listCookMode ? steps.findIndex((st, i) => !stepDone(st, i)) : -1;
   const stepProgress = _listCookMode && steps.length
     ? `<span class="list-cook-progress">${doneSteps === steps.length ? '✓ הושלם!' : `שלב ${doneSteps + 1} מתוך ${steps.length}`}</span>`
     : '';
@@ -12937,7 +12938,7 @@ function _renderRecipeDetail(cont, list, canEdit) {
     </div>` : ''}
     ${steps.length ? steps.map((st, idx) => {
       const isCurrent = _listCookMode && idx === currentIdx;
-      const isDone = st.done && _listCookMode;
+      const isDone = stepDone(st, idx);
       return `<div class="list-step${isDone ? ' list-step-done' : ''}${isCurrent ? ' list-step-current' : ''}">
         <div class="list-step-num${isDone ? ' done' : ''}"
           onclick="${_listCookMode ? `listToggleStep('${list.id}',${idx})` : ''}"
@@ -12953,24 +12954,53 @@ function _renderRecipeDetail(cont, list, canEdit) {
   cont.innerHTML = h;
 }
 
+// ── Cooking is personal ─────────────────────────────────────────
+// Marks made while cooking live only on this device (localStorage) — never in the shared list doc or
+// share links, so nobody else sees them and no name is attached. A record exists = cooking is active.
+const _cookKey = listId => 'fh_cook_' + listId;
+function _cookGet(listId) {
+  try {
+    const r = JSON.parse(localStorage.getItem(_cookKey(listId)) || 'null');
+    return r && typeof r === 'object' ? { items: r.items || [], steps: r.steps || [] } : null;
+  } catch (_) { return null; }
+}
+function _cookSet(listId, st) { try { localStorage.setItem(_cookKey(listId), JSON.stringify(st)); } catch (_) {} }
+function _cookClear(listId)   { try { localStorage.removeItem(_cookKey(listId)); } catch (_) {} }
+const _cookStepKey = (st, idx) => String(st.id ?? 'i' + idx);
+function _cookHas(listId, kind, key) { return !!_cookGet(listId)?.[kind].includes(String(key)); }
+function _cookToggle(listId, kind, key) {
+  const st = _cookGet(listId) || { items: [], steps: [] };
+  key = String(key);
+  st[kind] = st[kind].includes(key) ? st[kind].filter(k => k !== key) : [...st[kind], key];
+  _cookSet(listId, st);
+}
+// Older versions saved cooking marks (and who made them) in the shared list — wipe those once
+function _cookStripSharedMarks(list) {
+  const dirty = a => (a || []).some(x => x.done || x.checkedBy || x.checkedById);
+  if (!dirty(list.items) && !dirty(list.steps)) return;
+  const clean = a => (a || []).map(({ done, checkedBy, checkedById, ...rest }) => rest);
+  list.items = clean(list.items); list.steps = clean(list.steps);
+  fbDb.collection('families').doc(S.uid).collection('lists').doc(list.id)
+    .update({ items: list.items, steps: list.steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .then(() => _syncAllItemsToShares(list))
+    .catch(e => console.error('[lists] clear old cooking marks failed:', e));
+}
+
 function _toggleCookMode(listId) {
-  if (_listCookMode && listId) {
-    const list = (S.lists || []).find(l => l.id === listId);
-    if (list && (list.steps || []).length > 0 && (list.steps || []).every(s => s.done)) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (_listCookMode && list) {
+    const steps = list.steps || [];
+    if (steps.length > 0 && steps.every((st, i) => _cookHas(listId, 'steps', _cookStepKey(st, i)))) {
       _promptFinishCooking(listId);
       return;
     }
-  }
-  _listCookMode = !_listCookMode;
-  if (_listCookMode && listId) {
-    // Reset all steps to unchecked when starting
-    const list = (S.lists || []).find(l => l.id === listId);
-    if (list && (list.steps || []).some(s => s.done)) {
-      list.steps = list.steps.map(s => ({ ...s, done: false }));
-      fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
-        .update({ steps: list.steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-        .catch(e => console.error('[lists] reset steps failed:', e));
-    }
+    // Ending without finishing: just drop this device's marks
+    _cookClear(listId);
+    _listCookMode = false;
+  } else if (list) {
+    _cookSet(listId, { items: [], steps: [] }); // start fresh
+    _listCookMode = true;
+    _cookStripSharedMarks(list);
   }
   _renderListDetail();
   if (_listCookMode) setTimeout(() => document.querySelector('.list-step-current')?.scrollIntoView({ behavior:'smooth', block:'center' }), 120);
@@ -13016,6 +13046,12 @@ function _renderEventDetail(cont, list, canEdit) {
 async function listToggleItem(listId, itemId, arrayKey = 'items') {
   const list = (S.lists || []).find(l => l.id === listId);
   if (!list) return;
+  if (list.type === 'recipe' && arrayKey === 'items') { // cooking tick: private to this device
+    if (!_listCookMode) return;
+    _cookToggle(listId, 'items', itemId);
+    if (_listDetailId === listId) _renderListDetail();
+    return;
+  }
   const arr  = list[arrayKey] || [];
   const item = arr.find(i => String(i.id) === String(itemId));
   if (!item) return;
@@ -13059,7 +13095,7 @@ function _syncAllItemsToShares(list) {
         return clone(i);
       });
       const upd = { name: list.name, meta: clone(list.meta || {}), items, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
-      if (list.type === 'recipe') upd.steps = clone(list.steps || []);
+      if (list.type === 'recipe') upd.steps = clone(list.steps || []).map(({ done, ...rest }) => rest);
       return docRef.update(upd);
     }).catch(e => console.warn('[share-sync] full sync failed:', e));
   }
@@ -13141,19 +13177,15 @@ async function listAddStep(listId) {
   _syncAllItemsToShares(list);
 }
 
-async function listToggleStep(listId, idx) {
+function listToggleStep(listId, idx) {
   if (!_listCookMode) return;
   const list = (S.lists || []).find(l => l.id === listId);
-  if (!list) return;
-  const steps = list.steps || [];
+  const steps = list?.steps || [];
   if (!steps[idx]) return;
-  steps[idx].done = !steps[idx].done;
+  _cookToggle(listId, 'steps', _cookStepKey(steps[idx], idx)); // private to this device
   _renderListDetail();
   setTimeout(() => document.querySelector('.list-step-current')?.scrollIntoView({ behavior:'smooth', block:'center' }), 120);
-  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
-    .update({ steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-  // Check if all steps are now done
-  if (steps.length > 0 && steps.every(s => s.done)) {
+  if (steps.every((st, i) => _cookHas(listId, 'steps', _cookStepKey(st, i)))) {
     setTimeout(() => _promptFinishCooking(listId), 400);
   }
 }
@@ -13166,11 +13198,12 @@ async function _promptFinishCooking(listId) {
   const now = new Date();
   const entry = { date: now.toISOString().split('T')[0], by: S.user };
   const cookLog = [...(list.cookLog || []), entry];
-  // Reset steps and exit cook mode
-  const steps = (list.steps || []).map(s => ({ ...s, done: false }));
+  // Clear every cooking mark (ingredients and steps) and leave cooking mode
+  _cookClear(listId);
   _listCookMode = false;
+  _renderListDetail();
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
-    .update({ cookLog, steps, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    .update({ cookLog, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   _showSnackbar(`בישול מספר ${cookLog.length} נרשם 👨‍🍳`);
 }
 
