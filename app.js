@@ -6754,8 +6754,8 @@ async function cappsDecide(approve) {
 async function cappsDisconnect(grantId) {
   const isHe = getLang() === 'he';
   const ok = await _confirm(
-    isHe ? 'לנתק את Claude? הוא לא יוכל עוד להוסיף מתכונים או אירועים עד שתחברו אותו מחדש.'
-         : 'Disconnect Claude? It will no longer be able to add recipes or events until you connect it again.',
+    isHe ? 'לנתק את Claude? הוא לא יוכל עוד להוסיף מתכונים, שיעורי בית או אירועים עד שתחברו אותו מחדש.'
+         : 'Disconnect Claude? It will no longer be able to add recipes, homework or events until you connect it again.',
     { danger: true, okLabel: isHe ? 'נתק' : 'Disconnect', cancelLabel: isHe ? 'ביטול' : 'Cancel' });
   if (!ok) return;
   try {
@@ -6798,6 +6798,7 @@ function _renderConnectedApps() {
       <div class="card-title">${T(`${app} מבקש להתחבר למשפחה`, `${app} wants to connect to your family`)}</div>
       <ul class="capps-perms">
         <li>${T('להוסיף מתכונים לרשימות של המשפחה', "Add recipes to the family's lists")}</li>
+        <li>${T('להוסיף שיעורי בית לילדים', 'Add homework for the kids')}</li>
         <li>${T('לפרסם בשמך אירועים בקהילת הכיתה (ללא חברות בוועד — באישור הוועד)', 'Post class community events in your name (non-committee parents: after committee approval)')}</li>
         <li>${T('לראות את שמות בני המשפחה והכיתות של הילדים', "See family members' names and the kids' classes")}</li>
       </ul>
@@ -6861,8 +6862,8 @@ function _renderConnectedApps() {
       </ol>`;
     h += `<div class="card">
       <div class="capps-head"><span class="capps-icon">✨</span><div class="capps-name">Claude</div>${status}</div>
-      <div class="capps-desc">${T('שתפו עם Claude מתכון מפייסבוק או הודעה מהמורה, והוא יוסיף אותם למתכונים או לאירועי הקהילה.',
-                                  "Share a recipe from Facebook or a teacher's message with Claude, and it adds it to your recipes or community events.")}</div>
+      <div class="capps-desc">${T('שתפו עם Claude מתכון מפייסבוק או הודעה מהמורה, והוא יוסיף אותם למתכונים, לשיעורי הבית או לאירועי הקהילה.',
+                                  "Share a recipe from Facebook or a teacher's message with Claude, and it adds it to your recipes, homework or community events.")}</div>
       ${list}
       ${connected ? `<details class="capps-how"><summary>${T('חיבור נוסף', 'Add another connection')}</summary>${steps}</details>`
                   : `<div class="capps-how-title">${T('איך מחברים', 'How to connect')}</div>${steps}`}

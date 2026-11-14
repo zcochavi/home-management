@@ -319,7 +319,7 @@ test('mcp protocol: initialize, notifications, tools/list, unknown method, GET',
   const note = await s.post('/mcp', { jsonrpc: '2.0', method: 'notifications/initialized' }, { Authorization: 'Bearer ' + access_token });
   assert.equal(note.status, 202);
   const list = await s.rpc(access_token, 'tools/list');
-  assert.deepEqual(list.body.result.tools.map(x => x.name), ['get_family_context', 'create_recipe', 'create_community_event']);
+  assert.deepEqual(list.body.result.tools.map(x => x.name), ['get_family_context', 'create_recipe', 'create_community_event', 'create_homework']);
   assert.equal((await s.rpc(access_token, 'resources/list')).body.error.code, -32601);
   const get = await fetch(s.srv.url + '/mcp', { headers: { Authorization: 'Bearer ' + access_token } });
   assert.equal(get.status, 405);
@@ -404,6 +404,62 @@ test('create_community_event: regular parent goes to pending, committee publishe
   const before = s.db.store.size;
   await bad({ ...ev, date: 'soon' }, /real date/);
   assert.equal(s.db.store.size, before, 'a rejected call writes nothing');
+});
+
+test('create_homework: personal by default, class only when Webtop sync is off', async (t) => {
+  const s = await setup(); t.after(s.srv.close);
+  await s.db.collection('families').doc('fam1').update({
+    chores: [{ id: 1, text: 'כלים' }],
+    homework: [{ id: 5, scope: 'personal', child: 'נועה', subject: 'Art', desc: 'ישן', due: '', done: true }],
+  });
+  const { access_token } = await s.connect();
+  const ctx = (await s.call(access_token, 'get_family_context', {})).data;
+  assert.deepEqual(ctx.homework_subjects, ['מתמטיקה', 'אנגלית', 'מדעים', 'היסטוריה', 'אמנות']);
+  assert.match(ctx.class_homework, /Webtop/);
+
+  // Two kids in this family, so the kid must be named
+  assert.match((await s.call(access_token, 'create_homework', { description: 'x' })).text, /kid_name is required/);
+  const r = await s.call(access_token, 'create_homework', { kid_name: 'נועה', subject: 'מתמטיקה', description: ' עמוד 42 ', due: '2026-11-20' });
+  assert.equal(r.data.status, 'created');
+  assert.equal(r.data.subject, 'מתמטיקה');
+  let fam = s.db.store.get('families/fam1');
+  assert.equal(fam.homework.length, 2, 'existing homework is kept');
+  assert.deepEqual(fam.homework[1], { id: r.data.homework_id, scope: 'personal', child: 'נועה', subject: 'Maths', desc: 'עמוד 42', due: '2026-11-20', done: false });
+  assert.deepEqual(fam.chores, [{ id: 1, text: 'כלים' }], 'the rest of the family document is untouched');
+  assert.equal(fam.familyName, 'כהן');
+
+  // A kid with no class can still get personal homework; unknown subjects are kept as written; due is optional
+  const free = await s.call(access_token, 'create_homework', { kid_name: 'איתי', subject: 'תורה', description: 'לקרוא פרק א' });
+  fam = s.db.store.get('families/fam1');
+  assert.deepEqual([fam.homework[2].child, fam.homework[2].subject, fam.homework[2].due], ['איתי', 'תורה', '']);
+  assert.notEqual(free.data.homework_id, r.data.homework_id);
+
+  // A family's own subject list replaces the defaults
+  await s.db.collection('families').doc('fam1').update({ subjects: [{ name: 'חשבון' }, { name: 'Torah', nameHe: 'תורה' }] });
+  assert.deepEqual((await s.call(access_token, 'get_family_context', {})).data.homework_subjects, ['חשבון', 'תורה']);
+  await s.call(access_token, 'create_homework', { kid_name: 'נועה', subject: 'תורה', description: 'y' });
+  assert.equal(s.db.store.get('families/fam1').homework[3].subject, 'Torah');
+
+  const bad = async (args, re) => { const x = await s.call(access_token, 'create_homework', { kid_name: 'נועה', description: 'x', ...args }); assert.ok(x.isError, JSON.stringify(args)); assert.match(x.text, re); };
+  await bad({ description: '  ' }, /description is required/);
+  await bad({ kid_name: 'דנה' }, /No kid named/);
+  await bad({ due: '2026-13-01' }, /real date/);
+  await bad({ due: '2026-11-01' }, /past/);
+  await bad({ scope: 'school' }, /scope must be/);
+  await bad({ scope: 'class' }, /Webtop/);
+  assert.equal(s.db.store.get('families/fam1').homework.length, 4, 'rejected calls add nothing');
+
+  // Webtop sync switched off: parents add class homework by hand, as in the app
+  await s.db.collection('appConfig').doc('featureFlags').set({ webtopConnection: false });
+  assert.match((await s.call(access_token, 'get_family_context', {})).data.class_homework, /open/);
+  const cls = await s.call(access_token, 'create_homework', { kid_name: 'נועה', subject: 'חשבון', description: 'דף עבודה', due: '2026-11-20', scope: 'class' });
+  assert.equal(cls.data.scope, 'class');
+  assert.deepEqual(s.db.store.get(`schoolClasses/${CID}/homework/${cls.data.homework_id}`), {
+    subject: 'חשבון', desc: 'דף עבודה', due: '2026-11-20', createdBy: { familyUid: 'fam1', name: 'דנה' },
+    createdAt: 'SERVER_TS', doneBy: {}, doneAtBy: {}, createdVia: 'claude',
+  });
+  assert.equal(s.db.store.get('families/fam1').homework.length, 4, 'class homework is not copied into the family');
+  await bad({ kid_name: 'איתי', scope: 'class' }, /not registered in a school class/);
 });
 
 test('committee rules follow the app: admin, family-level role, legacy fallback', async (t) => {
