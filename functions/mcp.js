@@ -109,6 +109,13 @@ function isRealDate(s) {
 }
 const isHttpUrl = s => { try { return ['http:', 'https:'].includes(new URL(s).protocol); } catch (_) { return false; } };
 
+// Same defaults as the app (DEFAULT_SUBJECTS); a family can replace them in its settings.
+const DEFAULT_SUBJECTS = [
+  { name: 'Maths', nameHe: 'מתמטיקה' }, { name: 'English', nameHe: 'אנגלית' }, { name: 'Science', nameHe: 'מדעים' },
+  { name: 'History', nameHe: 'היסטוריה' }, { name: 'Art', nameHe: 'אמנות' },
+];
+const subjectsOf = family => (Array.isArray(family.subjects) && family.subjects.length ? family.subjects : DEFAULT_SUBJECTS);
+
 // A problem the person (or Claude) can fix — reported as a tool error, not a server fault.
 class ToolError extends Error {}
 
@@ -184,6 +191,30 @@ const TOOLS = [
         rsvp:          { type: 'boolean', description: 'Whether parents can answer attending or not. Default true.' },
       },
       required: ['title'],
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  },
+  {
+    name: 'create_homework',
+    title: 'Create homework',
+    description:
+      "Adds a homework assignment for one of the family's kids, for example from a message a teacher " +
+      'sent. One call per assignment: if a message lists homework in several subjects, call once for each. ' +
+      'By default the assignment is added to that kid only. With scope "class" it is shared with every ' +
+      "family in the kid's class and they are notified, so confirm with the user first; this is only " +
+      'available when get_family_context says class homework is open. Call get_family_context first for ' +
+      'kid names and subjects.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kid_name:    { type: 'string', description: 'The kid the homework is for. Required when the family has more than one kid.' },
+        description: { type: 'string', description: 'What to do, e.g. "עמודים 42-43, תרגילים 1-5". Keep the original language.' },
+        subject:     { type: 'string', description: 'Subject. Use one from get_family_context when one fits; otherwise a short free-text subject.' },
+        due:         { type: 'string', description: 'Due date, YYYY-MM-DD.' },
+        scope:       { type: 'string', enum: ['personal', 'class'], description: 'Default "personal" (this kid only). "class" shares it with the whole class.' },
+      },
+      required: ['description'],
       additionalProperties: false,
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
@@ -541,7 +572,7 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
           serverInfo: { name: 'familyhub', title: 'FamilyHub', version: '1.0.0' },
           instructions:
             'FamilyHub is a family management app. Use these tools to save a recipe the user shares into ' +
-            "their family's recipes, or to post a school community event from details the user gives " +
+            "their family's recipes, or to add homework or post a school community event from details the user gives " +
             '(for example a message from a teacher). Content is usually in Hebrew — keep the original language. ' +
             'Summarize what you are about to create and let the user confirm before calling a create tool.',
         });
@@ -613,6 +644,15 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
     return types.filter(t => t.enabled !== false);
   }
 
+  // The app only lets parents add class-wide homework by hand while the Webtop sync feature is
+  // switched off (appConfig/featureFlags.webtopConnection === false); otherwise Webtop supplies it.
+  async function webtopManagesClassHomework() {
+    try {
+      const snap = await db.collection('appConfig').doc('featureFlags').get();
+      return !(snap.exists && snap.data().webtopConnection === false);
+    } catch (e) { console.warn('mcp featureFlags: assuming Webtop is on,', e.message); return true; }
+  }
+
   const toolImpls = {
     async get_family_context(identity) {
       const { family, members, me } = await loadFamily(identity);
@@ -633,6 +673,10 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
             community_events: direct ? 'published immediately (committee member)' : 'sent for committee approval',
           };
         }),
+        homework_subjects: subjectsOf(family).map(x => x.nameHe || x.name).filter(Boolean),
+        class_homework: (await webtopManagesClassHomework())
+          ? 'managed by Webtop sync - only personal homework can be added'
+          : 'open - parents can add homework for the whole class (scope "class")',
         event_types: types.map(t => ({
           id: t.id,
           label: t.labelHe || t.labelEn || t.id,
@@ -688,6 +732,61 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
         visible_to: a.visibility === 'private' ? identity.memberName : 'the whole family',
         open_in_app: APP_URL,
       };
+    },
+
+    async create_homework(identity, a) {
+      const { family, members } = await loadFamily(identity);
+      const kids = members.filter(m => m.role === 'kid');
+      if (!kids.length) throw new ToolError('This family has no kids in FamilyHub yet. Add them in the app first.');
+      let kid;
+      const kidName = str(a.kid_name, 80);
+      if (kidName) {
+        kid = kids.find(k => k.name === kidName);
+        if (!kid) throw new ToolError(`No kid named "${kidName}". Kids: ${kids.map(k => k.name).join(', ')}.`);
+      } else if (kids.length === 1) {
+        kid = kids[0];
+      } else {
+        throw new ToolError(`kid_name is required - ask the user which kid this homework is for: ${kids.map(k => k.name).join(', ')}.`);
+      }
+
+      const desc = str(a.description, 1000);
+      if (!desc) throw new ToolError('description is required.');
+      // Store a known subject under the name the app keys it by; anything else is kept as written.
+      const subjects = subjectsOf(family);
+      const wanted = str(a.subject, 60);
+      const known = wanted && subjects.find(x => [x.name, x.nameHe].some(n => n && n.trim().toLowerCase() === wanted.toLowerCase()));
+      const subject = known ? known.name : wanted;
+      const due = str(a.due, 10);
+      if (due && !isRealDate(due)) throw new ToolError('due must be a real date in YYYY-MM-DD format.');
+      if (due && due < todayInIsrael(now())) throw new ToolError(`due ${due} is in the past (today is ${todayInIsrael(now())}). Check the date.`);
+      const scope = a.scope === undefined ? 'personal' : a.scope;
+      if (!['personal', 'class'].includes(scope)) throw new ToolError('scope must be "personal" or "class".');
+      const summary = { kid: kid.name, subject: known ? (known.nameHe || known.name) : (subject || null), description: desc, due: due || null };
+
+      if (scope === 'class') {
+        if (await webtopManagesClassHomework()) throw new ToolError('Class homework comes from Webtop in this app and cannot be added by hand. Use scope "personal" to add it for this kid only.');
+        const cid = kid.school?.city && kid.school?.grade ? classIdFor(kid.school) : null;
+        if (!cid) throw new ToolError(`${kid.name} is not registered in a school class yet. Add the school details in the FamilyHub app, or use scope "personal".`);
+        const ref = await db.collection('schoolClasses').doc(cid).collection('homework').add({
+          subject, desc, due,
+          createdBy: { familyUid: identity.familyUid, name: identity.memberName },
+          createdAt: FieldValue.serverTimestamp(),
+          doneBy: {}, doneAtBy: {},
+          createdVia: 'claude',
+        });
+        return { status: 'created', homework_id: ref.id, scope: 'class', class: classLabel(kid.school), ...summary, message: 'Added for the whole class. The other families were notified.', open_in_app: APP_URL };
+      }
+
+      // Personal homework lives in an array on the family document; add to it without touching the rest.
+      const ref = db.collection('families').doc(identity.familyUid);
+      const item = { id: now(), scope: 'personal', child: kid.name, subject, desc, due, done: false };
+      await db.runTransaction(async tx => {
+        const snap = await tx.get(ref);
+        const list = Array.isArray(snap.data()?.homework) ? snap.data().homework : [];
+        while (list.some(h => h.id === item.id)) item.id++;
+        tx.update(ref, { homework: [...list, item] });
+      });
+      return { status: 'created', homework_id: item.id, scope: 'personal', ...summary, open_in_app: APP_URL };
     },
 
     async create_community_event(identity, a) {
