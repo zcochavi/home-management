@@ -114,6 +114,19 @@ const DEFAULT_SUBJECTS = [
   { name: 'Maths', nameHe: 'מתמטיקה' }, { name: 'English', nameHe: 'אנגלית' }, { name: 'Science', nameHe: 'מדעים' },
   { name: 'History', nameHe: 'היסטוריה' }, { name: 'Art', nameHe: 'אמנות' },
 ];
+// Same key the app uses for a kid's "done" mark on class homework (classMemberId).
+const classMemberId = (familyUid, kidName) => familyUid + '__' + kidName.replace(/[^a-z0-9א-תA-Z\u0590-\u05FF]/gi, '_');
+// When a stored homework item was added (ms): a Firestore timestamp on class items, the id on personal ones.
+function createdMs(h) {
+  const c = h && h.createdAt;
+  if (c && typeof c.toMillis === 'function') return c.toMillis();
+  if (typeof c === 'number') return c;
+  if (h && typeof h.id === 'number' && h.id > 1e12) return h.id;
+  return null;
+}
+// Text compared without case, punctuation or spacing differences.
+const sameText = s => String(s || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+const UNDATED_REPEAT_MS = 7 * 24 * 3600 * 1000;
 const subjectsOf = family => (Array.isArray(family.subjects) && family.subjects.length ? family.subjects : DEFAULT_SUBJECTS);
 
 // A problem the person (or Claude) can fix — reported as a tool error, not a server fault.
@@ -196,23 +209,41 @@ const TOOLS = [
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   },
   {
-    name: 'create_homework',
-    title: 'Create homework',
+    name: 'list_homework',
+    title: 'List homework',
     description:
-      "Adds a homework assignment for one of the family's kids, for example from a message a teacher " +
-      'sent. One call per assignment: if a message lists homework in several subjects, call once for each. ' +
-      'By default the assignment is added to that kid only. With scope "class" it is shared with every ' +
-      "family in the kid's class and they are notified, so confirm with the user first; this is only " +
-      'available when get_family_context says class homework is open. Call get_family_context first for ' +
-      'kid names and subjects.',
+      "Lists the open homework of the family's kids: what was added for each kid's class (by any parent) " +
+      'and personal homework. Call this before create_homework so the same assignment is not added twice.',
     inputSchema: {
       type: 'object',
       properties: {
-        kid_name:    { type: 'string', description: 'The kid the homework is for. Required when the family has more than one kid.' },
+        kid_name: { type: 'string', description: 'Only this kid. Leave out for all kids.' },
+      },
+      additionalProperties: false,
+    },
+    annotations: { readOnlyHint: true, openWorldHint: false },
+  },
+  {
+    name: 'create_homework',
+    title: 'Create homework',
+    description:
+      "Adds a homework assignment for the class of one of the family's kids, for example from a message " +
+      'a teacher sent. One call per assignment: if a message lists homework in several subjects, call once ' +
+      "for each. By default the assignment is shared with every family in the kid's class and they are " +
+      'notified. Use scope "personal" only when the user specifically asks to add it for their kid alone. ' +
+      'If get_family_context says class homework is managed by Webtop, or the kid is not in a class, ask ' +
+      'the user whether to add it as personal instead. Call get_family_context first for kid names and ' +
+      'subjects, and list_homework to see what is already there: another parent may have added the same ' +
+      'assignment, possibly worded differently, so skip anything already listed. An exact repeat is refused ' +
+      'by the server and reported as already_exists.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        kid_name:    { type: 'string', description: "The kid whose class the homework is for. Required when the family has more than one kid." },
         description: { type: 'string', description: 'What to do, e.g. "עמודים 42-43, תרגילים 1-5". Keep the original language.' },
         subject:     { type: 'string', description: 'Subject. Use one from get_family_context when one fits; otherwise a short free-text subject.' },
-        due:         { type: 'string', description: 'Due date, YYYY-MM-DD.' },
-        scope:       { type: 'string', enum: ['personal', 'class'], description: 'Default "personal" (this kid only). "class" shares it with the whole class.' },
+        due:         { type: 'string', description: 'Due date, YYYY-MM-DD. Optional: set it only when the source gives one (resolve "tomorrow", "by Thursday" and the like against today from get_family_context); never guess.' },
+        scope:       { type: 'string', enum: ['class', 'personal'], description: 'Default "class" (the whole class). "personal" adds it for this kid only, when the user specifically asks for that.' },
       },
       required: ['description'],
       additionalProperties: false,
@@ -653,6 +684,22 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
     } catch (e) { console.warn('mcp featureFlags: assuming Webtop is on,', e.message); return true; }
   }
 
+  // The same assignment already on the list: same subject and wording, and either the same due
+  // date or - for homework with no due date - added within the last week (so a weekly
+  // "prepare for the quiz" can come back, but one teacher message isn't added twice).
+  function findDuplicate(existing, { subject, desc, due }) {
+    return existing.find(h =>
+      sameText(h.desc) === sameText(desc) && sameText(h.subject) === sameText(subject) && (h.due || '') === due &&
+      (due || (createdMs(h) ?? now()) > now() - UNDATED_REPEAT_MS));
+  }
+  const classHomework = async cid =>
+    (await db.collection('schoolClasses').doc(cid).collection('homework').get()).docs.map(d => ({ id: d.id, ...d.data() }));
+  const subjectLabelOf = (family, subject) => {
+    const k = subjectsOf(family).find(x => x.name === subject);
+    return k ? (k.nameHe || k.name) : (subject || null);
+  };
+  const dayOf = ms => (ms ? todayInIsrael(ms) : null);
+
   const toolImpls = {
     async get_family_context(identity) {
       const { family, members, me } = await loadFamily(identity);
@@ -676,7 +723,7 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
         homework_subjects: subjectsOf(family).map(x => x.nameHe || x.name).filter(Boolean),
         class_homework: (await webtopManagesClassHomework())
           ? 'managed by Webtop sync - only personal homework can be added'
-          : 'open - parents can add homework for the whole class (scope "class")',
+          : 'open - homework is added for the whole class by default',
         event_types: types.map(t => ({
           id: t.id,
           label: t.labelHe || t.labelEn || t.id,
@@ -734,6 +781,37 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
       };
     },
 
+    async list_homework(identity, a) {
+      const { family, members } = await loadFamily(identity);
+      let kids = members.filter(m => m.role === 'kid');
+      const kidName = str(a.kid_name, 80);
+      if (kidName) {
+        kids = kids.filter(k => k.name === kidName);
+        if (!kids.length) throw new ToolError(`No kid named "${kidName}".`);
+      }
+      const today = todayInIsrael(now());
+      // Open and still relevant: not past due by more than a week, or undated and added in the last 30 days
+      const relevant = h => (h.due ? h.due >= todayInIsrael(now() - UNDATED_REPEAT_MS) : (createdMs(h) ?? now()) > now() - 30 * 24 * 3600 * 1000);
+      const out = [];
+      for (const kid of kids) {
+        const cid = kid.school?.city && kid.school?.grade ? classIdFor(kid.school) : null;
+        const doneKey = classMemberId(identity.familyUid, kid.name);
+        const cls = cid ? (await classHomework(cid)).filter(h => relevant(h) && !(h.doneBy && h.doneBy[doneKey])) : [];
+        const personal = (Array.isArray(family.homework) ? family.homework : [])
+          .filter(h => (!h.scope || h.scope === 'personal') && h.child === kid.name && !h.done && relevant(h));
+        const row = scope => h => ({
+          scope, subject: subjectLabelOf(family, h.subject), description: h.desc || '', due: h.due || null,
+          added: dayOf(createdMs(h)), ...(scope === 'class' && h.createdBy?.name ? { added_by: h.createdBy.name } : {}),
+        });
+        out.push({
+          kid: kid.name, class: cid ? classLabel(kid.school) : null,
+          homework: [...cls.map(row('class')), ...personal.map(row('personal'))]
+            .sort((x, y) => (x.due || '9999').localeCompare(y.due || '9999')).slice(0, 60),
+        });
+      }
+      return { today, kids: out };
+    },
+
     async create_homework(identity, a) {
       const { family, members } = await loadFamily(identity);
       const kids = members.filter(m => m.role === 'kid');
@@ -759,14 +837,20 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
       const due = str(a.due, 10);
       if (due && !isRealDate(due)) throw new ToolError('due must be a real date in YYYY-MM-DD format.');
       if (due && due < todayInIsrael(now())) throw new ToolError(`due ${due} is in the past (today is ${todayInIsrael(now())}). Check the date.`);
-      const scope = a.scope === undefined ? 'personal' : a.scope;
-      if (!['personal', 'class'].includes(scope)) throw new ToolError('scope must be "personal" or "class".');
+      const scope = a.scope === undefined ? 'class' : a.scope;
+      if (!['personal', 'class'].includes(scope)) throw new ToolError('scope must be "class" or "personal".');
       const summary = { kid: kid.name, subject: known ? (known.nameHe || known.name) : (subject || null), description: desc, due: due || null };
 
       if (scope === 'class') {
-        if (await webtopManagesClassHomework()) throw new ToolError('Class homework comes from Webtop in this app and cannot be added by hand. Use scope "personal" to add it for this kid only.');
+        if (await webtopManagesClassHomework()) throw new ToolError('Class homework comes from Webtop in this app and cannot be added by hand. Nothing was added. Ask the user whether to add it for this kid only (scope "personal").');
         const cid = kid.school?.city && kid.school?.grade ? classIdFor(kid.school) : null;
-        if (!cid) throw new ToolError(`${kid.name} is not registered in a school class yet. Add the school details in the FamilyHub app, or use scope "personal".`);
+        if (!cid) throw new ToolError(`${kid.name} is not registered in a school class yet. Nothing was added. Ask the user whether to add it for this kid only (scope "personal"), or to add the school details in the FamilyHub app first.`);
+        const dup = findDuplicate(await classHomework(cid), { subject, desc, due });
+        if (dup) {
+          return { status: 'already_exists', scope: 'class', class: classLabel(kid.school), ...summary,
+            added: dayOf(createdMs(dup)), added_by: dup.createdBy?.name || null,
+            message: 'This homework is already on the class list. Nothing was added.' };
+        }
         const ref = await db.collection('schoolClasses').doc(cid).collection('homework').add({
           subject, desc, due,
           createdBy: { familyUid: identity.familyUid, name: identity.memberName },
@@ -780,12 +864,19 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
       // Personal homework lives in an array on the family document; add to it without touching the rest.
       const ref = db.collection('families').doc(identity.familyUid);
       const item = { id: now(), scope: 'personal', child: kid.name, subject, desc, due, done: false };
-      await db.runTransaction(async tx => {
+      const dup = await db.runTransaction(async tx => {
         const snap = await tx.get(ref);
         const list = Array.isArray(snap.data()?.homework) ? snap.data().homework : [];
+        const same = findDuplicate(list.filter(h => (!h.scope || h.scope === 'personal') && h.child === kid.name), { subject, desc, due });
+        if (same) return same;
         while (list.some(h => h.id === item.id)) item.id++;
         tx.update(ref, { homework: [...list, item] });
+        return null;
       });
+      if (dup) {
+        return { status: 'already_exists', scope: 'personal', ...summary, added: dayOf(createdMs(dup)), done: !!dup.done,
+          message: `This homework is already on ${kid.name}'s list. Nothing was added.` };
+      }
       return { status: 'created', homework_id: item.id, scope: 'personal', ...summary, open_in_app: APP_URL };
     },
 
