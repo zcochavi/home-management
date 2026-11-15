@@ -1,0 +1,3 @@
+node_modules/
+# Generated from the web app at build time (npm run copy-web)
+www/
