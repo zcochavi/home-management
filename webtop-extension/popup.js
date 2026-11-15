@@ -13,11 +13,12 @@ const dbgParams     = document.getElementById('dbgParams');
 
 // ── Load current state ────────────────────────────────────────────────────────
 function loadStatus() {
-  chrome.storage.local.get(['familyId', 'familyName', 'lastSync', 'webtopToken', 'syncParams'], data => {
+  chrome.storage.local.get(['familyId', 'familyName', 'lastSync', 'webtopToken', 'syncParamsMap'], data => {
     if (data?.familyId) {
       showLinked(data.familyName || data.familyId, data.lastSync);
       dbgToken.textContent  = data.webtopToken  ? `טוקן: ✅ ${data.webtopToken.slice(0,12)}…` : 'טוקן: ❌ חסר — פתח Webtop';
-      dbgParams.textContent = data.syncParams   ? `פרמטרים: ✅ כיתה ${data.syncParams.classCode ?? '?'}` : 'פרמטרים: ❌ חסר — פתח שיעורי בית ב-Webtop';
+      const kids = Object.values(data.syncParamsMap || {}).map(p => p.studentName || `כיתה ${p.classCode}`);
+      dbgParams.textContent = kids.length ? `ילדים: ✅ ${kids.join(', ')}` : 'ילדים: ❌ פתח את דף שיעורי הבית ב-Webtop לכל ילד';
     } else {
       showUnlinked();
     }
@@ -60,9 +61,10 @@ syncBtn.addEventListener('click', () => {
     syncBtn.disabled = false;
     syncBtn.textContent = 'סנכרן עכשיו';
     if (res?.ok) {
+      const kids = res.students > 1 ? ` · ${res.synced}/${res.students} ילדים` : '';
       const label = res.isFirstSync
-        ? `✅ סנכרון ראשוני: ${res.homeworkCount} שיעורים נטענו (${res.total} בסך הכל)`
-        : `✅ ${res.homeworkCount} שיעורים עודכנו (${res.total} בסך הכל)`;
+        ? `✅ סנכרון ראשוני: ${res.homeworkCount} שיעורים נטענו (${res.total} בסך הכל)${kids}`
+        : `✅ ${res.homeworkCount} שיעורים עודכנו (${res.total} בסך הכל)${kids}`;
       syncResult.textContent = label;
       loadStatus();
     } else {
