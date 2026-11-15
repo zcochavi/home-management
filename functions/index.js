@@ -1786,7 +1786,7 @@ async function _webtopPostRetry(url, cookie, bodyObj, tries = 3) {
 // SendOneTimePassword, which emails them a 6-digit code, and stash the login nonce
 // (guid + uniqueId) server-side keyed by a short-lived pendingId returned to the app.
 // No password is involved or stored on this path.
-exports.webtopRequestOtp = functions.https.onRequest(async (req, res) => {
+const _handleWebtopRequestOtp = async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') { res.set('Access-Control-Allow-Headers', 'Content-Type'); return res.status(204).send(''); }
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
@@ -1853,14 +1853,18 @@ exports.webtopRequestOtp = functions.https.onRequest(async (req, res) => {
   await famRef.update({ webtopOtpLastSentAt: admin.firestore.FieldValue.serverTimestamp() });
 
   return res.json({ ok: true, pendingId });
-});
+};
+// us-central1 (default) and a me-west1 (Tel Aviv) twin, to test whether an
+// Israeli-region egress IP clears Webtop's CloudFront block on cloud IPs.
+exports.webtopRequestOtp   = functions.https.onRequest(_handleWebtopRequestOtp);
+exports.webtopRequestOtpIL = functions.region('me-west1').https.onRequest(_handleWebtopRequestOtp);
 
 // ─── webtopVerifyOtp — email-OTP login, step 2: submit the code, get a token ──
 // The app sends back the code the parent received by email. We complete Webtop's
 // LoginByOneTimePassword and store the returned session token at family level.
 // Stage 2 (student enumeration) will use this token to populate webtopStudents so
 // the existing webtopSync can fetch each child's homework.
-exports.webtopVerifyOtp = functions.https.onRequest(async (req, res) => {
+const _handleWebtopVerifyOtp = async (req, res) => {
   res.set('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') { res.set('Access-Control-Allow-Headers', 'Content-Type'); return res.status(204).send(''); }
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
@@ -1931,7 +1935,9 @@ exports.webtopVerifyOtp = functions.https.onRequest(async (req, res) => {
       mustChangePassword: !!user.mustChangePassword,
     },
   });
-});
+};
+exports.webtopVerifyOtp   = functions.https.onRequest(_handleWebtopVerifyOtp);
+exports.webtopVerifyOtpIL = functions.region('me-west1').https.onRequest(_handleWebtopVerifyOtp);
 
 // ─── webtopSync — runs hourly, respects per-family webtopSyncIntervalHours ────
 exports.webtopSync = functions.pubsub.schedule('*/20 * * * *').onRun(async () => {
