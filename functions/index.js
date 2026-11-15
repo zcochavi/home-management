@@ -1746,6 +1746,41 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
   }
 });
 
+// ─── Helper: POST JSON to Webtop with a timeout; parse body defensively ──────
+async function _webtopPost(url, cookie, bodyObj) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 25000);
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { ...WEBTOP_HDRS, Cookie: cookie },
+      body: JSON.stringify(bodyObj),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch (_) {}
+  return { status: res.status, ok: res.ok, json, text };
+}
+
+// Retry transient network failures (connection reset/timeout) a couple of times.
+async function _webtopPostRetry(url, cookie, bodyObj, tries = 3) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    try {
+      return await _webtopPost(url, cookie, bodyObj);
+    } catch (err) {
+      lastErr = err;
+      if (i < tries - 1) await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 // ─── webtopRequestOtp — email-OTP login, step 1: ask Webtop to email a code ──
 // The parent supplies their Webtop identity (ID number + email). We call Webtop's
 // SendOneTimePassword, which emails them a 6-digit code, and stash the login nonce
@@ -1776,28 +1811,28 @@ exports.webtopRequestOtp = functions.https.onRequest(async (req, res) => {
   const uniqueId = crypto.randomBytes(20).toString('hex');
   const cookie = `uniqueId=${uniqueId}; rememberMeMoe=; input=0`;
 
-  let json;
+  let result;
   try {
-    const r = await fetch(WEBTOP_SEND_OTP, {
-      method: 'POST',
-      headers: { ...WEBTOP_HDRS, Cookie: cookie },
-      body: JSON.stringify({
-        Input: String(email),
-        MemberId: String(memberId),
-        UserName: '',
-        RecoveryType: 1, // 1 = email channel
-        PasswordType: 1, // 1 = one-time code
-        LoginCounter: 0,
-      }),
+    result = await _webtopPostRetry(WEBTOP_SEND_OTP, cookie, {
+      Input: String(email),
+      MemberId: String(memberId),
+      UserName: '',
+      RecoveryType: 1, // 1 = email channel
+      PasswordType: 1, // 1 = one-time code
+      LoginCounter: 0,
     });
-    json = await r.json();
   } catch (err) {
     console.error('webtopRequestOtp fetch failed', err);
-    return res.status(502).json({ error: 'webtop_unreachable' });
+    return res.status(502).json({ error: 'webtop_unreachable', detail: `${err?.name}: ${err?.message}`.slice(0, 200) });
   }
 
+  const json = result.json;
   if (!json || json.status !== true) {
-    return res.status(400).json({ error: 'otp_request_failed', detail: json?.errorDescription || null });
+    return res.status(400).json({
+      error: 'otp_request_failed',
+      httpStatus: result.status,
+      detail: json?.errorDescription || (json ? null : result.text?.slice(0, 300)) || null,
+    });
   }
 
   // The Guid is the data[] entry whose id isn't the "MessageSend" marker.
@@ -1846,29 +1881,28 @@ exports.webtopVerifyOtp = functions.https.onRequest(async (req, res) => {
     getDeviceType: 'Desktop', os: 'Windows', osVersion: '10',
   });
 
-  let json;
+  let result;
   try {
-    const r = await fetch(WEBTOP_LOGIN_OTP, {
-      method: 'POST',
-      headers: { ...WEBTOP_HDRS, Cookie: cookie },
-      body: JSON.stringify({
-        Code: Number(code),
-        Guid: p.guid,
-        UniqueId: p.uniqueId,
-        deviceDataJson,
-        rememberMe: true,
-      }),
+    result = await _webtopPostRetry(WEBTOP_LOGIN_OTP, cookie, {
+      Code: Number(code),
+      Guid: p.guid,
+      UniqueId: p.uniqueId,
+      deviceDataJson,
+      rememberMe: true,
     });
-    json = await r.json();
   } catch (err) {
     console.error('webtopVerifyOtp fetch failed', err);
-    return res.status(502).json({ error: 'webtop_unreachable' });
+    return res.status(502).json({ error: 'webtop_unreachable', detail: `${err?.name}: ${err?.message}`.slice(0, 200) });
   }
 
-  const user = json && json.data && json.data.data;
+  const user = result.json && result.json.data && result.json.data.data;
   const token = user && user.token;
-  if (json?.status !== true || !token) {
-    return res.status(400).json({ error: 'login_failed', detail: json?.errorDescription || null });
+  if (result.json?.status !== true || !token) {
+    return res.status(400).json({
+      error: 'login_failed',
+      httpStatus: result.status,
+      detail: result.json?.errorDescription || (result.json ? null : result.text?.slice(0, 300)) || null,
+    });
   }
 
   await pendRef.delete().catch(() => {});
