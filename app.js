@@ -942,6 +942,33 @@ async function doSignIn() {
   }
 }
 
+// Google sign-in. In a browser: the usual popup. Inside the FamilyHub Android app
+// (Capacitor), Google blocks its web sign-in, so ask Android's native account
+// picker for a Google ID token and sign the web Firebase SDK in with it — the
+// result is the same Firebase user either way. Returns a UserCredential with
+// `.credential` set (one caller re-uses it on the main auth instance).
+const _isNativeApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+async function _googleSignIn(auth) {
+  if (!_isNativeApp()) return auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+  const FA = window.Capacitor.Plugins?.FirebaseAuthentication || window.Capacitor.registerPlugin('FirebaseAuthentication');
+  let res;
+  try {
+    res = await FA.signInWithGoogle();
+  } catch (e) {
+    const msg = String(e?.message || e?.code || e || '');
+    const err = new Error(msg || 'Google sign-in failed');
+    // Backing out of the account picker behaves like closing the popup (silent).
+    err.code = /cancel/i.test(msg) ? 'auth/popup-closed-by-user' : 'auth/native-google-failed';
+    throw err;
+  }
+  const idToken = res?.credential?.idToken;
+  if (!idToken) { const err = new Error('No Google ID token returned'); err.code = 'auth/native-google-failed'; throw err; }
+  const credential = firebase.auth.GoogleAuthProvider.credential(idToken, res?.credential?.accessToken || null);
+  const uc = await auth.signInWithCredential(credential);
+  if (!uc.credential) uc.credential = credential;
+  return uc;
+}
+
 async function doGoogleSignIn() {
   if (!FB_CONFIGURED) return;
   el('siError').textContent = '';
@@ -949,7 +976,7 @@ async function doGoogleSignIn() {
   _googleFlow = true;
   setAuthLoading(true);
   try {
-    const cred = await fbAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    const cred = await _googleSignIn(fbAuth);
     const user = cred.user;
     // Existing family owner, or a joined member already mapped to a family?
     const [own, mapped] = await Promise.all([
@@ -1259,7 +1286,7 @@ async function connectGoogleAccount() {
   const app2 = firebase.initializeApp(FIREBASE_CONFIG, 'link_' + Date.now());
   let linked = false;
   try {
-    const cred = await app2.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    const cred = await _googleSignIn(app2.auth());
     const user = cred.user;
     if (user.uid === S.uid) { await _alert('זהו החשבון של מנהל/ת המשפחה — היכנס/י איתו ישירות במסך הכניסה.'); return; }
     const link = await _linkAccountToFamily(app2, user, code);
@@ -1393,7 +1420,7 @@ async function doJoinWithGoogle() {
   let user;
   try {
     // Popup first — it must open directly from the click, before any other async work
-    user = (await fbAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider())).user;
+    user = (await _googleSignIn(fbAuth)).user;
   } catch(e) {
     _googleFlow = false;
     setAuthLoading(false);
