@@ -52,14 +52,16 @@ Automated: `cd functions && npm test` (sign-in flow, tokens, both tools). Manual
 
 - [ ] **Discovery** — `https://familyhub-7fdd5.firebaseapp.com/.well-known/oauth-authorization-server` returns JSON; a plain GET of `/mcp` returns 401
 - [ ] **Connected apps screen** — hamburger menu → "אפליקציות מחוברות" shows Google Calendar (connect / reconnect / disconnect work, and match the bar on the calendar tab) and, for parents, Claude with the connector address and a working copy button; a kid sees only Google Calendar
-- [ ] **Connect** — in Claude: Settings → Connectors → add custom connector with `https://familyhub-7fdd5.firebaseapp.com/mcp`; the browser opens FamilyHub on the Connected apps screen with the request card (no separate sign-in when already signed in); approve; Claude shows the connector as connected with 4 tools, recorded under the member who approved
+- [ ] **Connect** — in Claude: Settings → Connectors → add custom connector with `https://familyhub-7fdd5.firebaseapp.com/mcp`; the browser opens FamilyHub on the Connected apps screen with the request card (no separate sign-in when already signed in); approve; Claude shows the connector as connected with 5 tools, recorded under the member who approved
 - [ ] **Connect while signed out** — the normal sign-in appears first, then the request card after picking a member
 - [ ] **Decline / expiry** — declining returns to Claude without connecting; a request older than 15 minutes shows "פג תוקף"
 - [ ] **Refused accounts** — logged in as a kid, the request is not offered for approval; a kid's personal code cannot approve
 - [ ] **Disconnect** — "נתק" on the Claude card ends the connection; Claude's next tool call asks to reconnect
 - [ ] **Create recipe** — ask Claude to save a recipe; it appears in Lists → recipes with ingredients, amounts, steps and a "למתכון המקורי" link when a source link was given
 - [ ] **Create homework** — ask Claude to add homework from a teacher's message; it is added for the whole class (Homework tab → class section, classmates notified) with the subject, and the due date only if the message gave one. With several kids Claude asks which one. "Just for my kid" adds it as personal. While the Webtop feature flag is on, Claude asks before adding it as personal
-- [ ] **Homework order** — class and personal homework are listed by due date, soonest first, with undated items last
+- [ ] **Homework order** — class and personal homework are listed by target day, soonest first: the due date, or 3 days after it was added when there is none. Overdue items lead; an undated item added today sits after things due in the next 3 days; an old undated item is near the top
+- [ ] **Homework added date** — each class and personal item shows the date it was added, in light gray under its subject badge
+- [ ] **No duplicate homework** — ask Claude to add the same teacher message twice (and from a second parent's account): the second time it reports the homework already exists and nothing is added; the same text with a different due date is added
 - [ ] **Create event as regular parent** — goes to pending; committee is notified
 - [ ] **Create event as committee** — published immediately; class parents are notified
 - [ ] **Locked collections** — from the browser console of a signed-in app session, reading `mcpTokens`, `mcpAuthCodes` or `mcpClients` is denied

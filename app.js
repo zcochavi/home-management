@@ -9134,10 +9134,8 @@ function renderHomework(){
     classHw = classHw.filter(h => !(h.doneBy && h.doneBy[myDoneKey]));
   }
 
-  // Default order: by due date, soonest first; homework with no due date goes last
-  // (the sort is stable, so within the same date the existing order is kept)
-  classHw = _hwSortByDue(classHw);
-  pending = _hwSortByDue(pending);
+  classHw = _hwSmartSort(classHw);
+  pending = _hwSmartSort(pending);
 
   // Webtop homework section
   const webtopSec=el('hwWebtopSection');
@@ -9211,7 +9209,7 @@ function renderHomework(){
             </div>
             <div class="hw-desc-text ${myDone?'done':''}">${esc(h.desc)}</div>
             ${doneCount>0?`<span class="hw-done-count">${doneCount}/${totalInClass||1}</span>`:''}
-            <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
+            ${_hwSubjectCol(h)}
             ${canDelete?`<button class="del-btn" onclick="deleteClassHW('${classCid}','${h.id}')">${_ico.x}</button>`:''}
           </div>
           ${h.due?`<div class="hw-due">${t('hwDueLabel',fmtDate(h.due))}</div>`:''}
@@ -9244,7 +9242,7 @@ function renderHomework(){
         <div class="check-box ${can?'':'readonly'}" ${can?`onclick="toggleHW(${h.id})"`:''}>
         </div>
         <div class="hw-desc-text">${esc(h.desc)}</div>
-        <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
+        ${_hwSubjectCol(h)}
         ${isParent()?`<button class="del-btn" onclick="deleteHW(${h.id})">${_ico.x}</button>`:''}</div>
       ${h.due?`<div class="hw-due">${t('hwDueLabel',fmtDate(h.due))}</div>`:''}</div>`;
   }).join(''):`<div class="empty">${t('noHw')}</div>`;
@@ -9252,8 +9250,45 @@ function renderHomework(){
   renderHwHistory(S.child);
 }
 
-function _hwSortByDue(list) {
-  return [...list].sort((a, b) => (a.due || '9999-99-99').localeCompare(b.due || '9999-99-99'));
+// When a homework item was added (ms). Class items carry a Firestore timestamp; personal items
+// use their creation time as their id.
+function _hwCreatedMs(h) {
+  const c = h?.createdAt;
+  if (c?.toMillis) return c.toMillis();
+  if (typeof c?.seconds === 'number') return c.seconds * 1000;
+  if (typeof c === 'number') return c;
+  if (typeof h?.id === 'number' && h.id > 1e12) return h.id;
+  return null; // e.g. a class item just written here, before the server stamps it
+}
+const _hwLocalDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+// Homework with no due date is treated as due this many days after it was added.
+const HW_ASSUMED_DAYS = 3;
+// The day an item should be done by: its due date, or the assumed one for undated homework.
+function _hwTargetDay(h) {
+  if (h.due) return h.due;
+  const d = new Date(_hwCreatedMs(h) ?? Date.now());
+  d.setDate(d.getDate() + HW_ASSUMED_DAYS);
+  return _hwLocalDay(d);
+}
+// Default order of open homework: soonest target day first, so overdue items lead, undated
+// homework sits among the dated items of the coming days, and the longer an undated item
+// waits the higher it climbs. On the same day a real due date goes before an assumed one,
+// then older before newer.
+function _hwSmartSort(list) {
+  return list
+    .map(h => ({ h, day: _hwTargetDay(h), assumed: h.due ? 0 : 1, created: _hwCreatedMs(h) ?? Date.now() }))
+    .sort((a, b) => a.day.localeCompare(b.day) || a.assumed - b.assumed || a.created - b.created)
+    .map(x => x.h);
+}
+// Subject badge with the date the homework was added underneath
+function _hwSubjectCol(h) {
+  const ms = _hwCreatedMs(h);
+  const added = ms ? new Date(ms).toLocaleDateString(t('locale'), { day: 'numeric', month: 'short' }) : '';
+  return `<div class="hw-subj-col">
+    <span class="badge" style="${subjectBadgeStyle(h.subject)}">${esc(subjectLabel(h.subject))}</span>
+    ${added ? `<span class="hw-created" title="${getLang() === 'he' ? 'נוסף ב‑' : 'Added '}${added}">${added}</span>` : ''}
+  </div>`;
 }
 
 // Class homework done by `child` is stored on the shared class doc, keyed by familyUid__kidName
