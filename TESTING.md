@@ -58,7 +58,8 @@ Automated: `cd functions && npm test` (sign-in flow, tokens, both tools). Manual
 - [ ] **Refused accounts** — logged in as a kid, the request is not offered for approval; a kid's personal code cannot approve
 - [ ] **Disconnect** — "נתק" on the Claude card ends the connection; Claude's next tool call asks to reconnect
 - [ ] **Create recipe** — ask Claude to save a recipe; it appears in Lists → recipes with ingredients, amounts, steps and a "למתכון המקורי" link when a source link was given
-- [ ] **Create homework** — ask Claude to add homework from a teacher's message; it appears in the Homework tab under the right kid, subject and due date. With several kids Claude asks which one. Class-wide homework is refused while the Webtop feature flag is on
+- [ ] **Create homework** — ask Claude to add homework from a teacher's message; it is added for the whole class (Homework tab → class section, classmates notified) with the subject, and the due date only if the message gave one. With several kids Claude asks which one. "Just for my kid" adds it as personal. While the Webtop feature flag is on, Claude asks before adding it as personal
+- [ ] **Homework order** — class and personal homework are listed by due date, soonest first, with undated items last
 - [ ] **Create event as regular parent** — goes to pending; committee is notified
 - [ ] **Create event as committee** — published immediately; class parents are notified
 - [ ] **Locked collections** — from the browser console of a signed-in app session, reading `mcpTokens`, `mcpAuthCodes` or `mcpClients` is denied

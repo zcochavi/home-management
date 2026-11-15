@@ -9134,6 +9134,11 @@ function renderHomework(){
     classHw = classHw.filter(h => !(h.doneBy && h.doneBy[myDoneKey]));
   }
 
+  // Default order: by due date, soonest first; homework with no due date goes last
+  // (the sort is stable, so within the same date the existing order is kept)
+  classHw = _hwSortByDue(classHw);
+  pending = _hwSortByDue(pending);
+
   // Webtop homework section
   const webtopSec=el('hwWebtopSection');
   const webtopListEl=el('hwWebtopList');
@@ -9245,6 +9250,10 @@ function renderHomework(){
   }).join(''):`<div class="empty">${t('noHw')}</div>`;
 
   renderHwHistory(S.child);
+}
+
+function _hwSortByDue(list) {
+  return [...list].sort((a, b) => (a.due || '9999-99-99').localeCompare(b.due || '9999-99-99'));
 }
 
 // Class homework done by `child` is stored on the shared class doc, keyed by familyUid__kidName
