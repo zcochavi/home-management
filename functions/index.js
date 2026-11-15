@@ -1935,6 +1935,13 @@ const _handleWebtopVerifyOtp = async (req, res) => {
 };
 exports.webtopVerifyOtp = functions.https.onRequest(_handleWebtopVerifyOtp);
 
+// Tel Aviv (me-west1) twins — 2nd gen, since me-west1 doesn't run 1st-gen functions.
+// Webtop's CloudFront blocks our us-central1 egress IP; these test whether an
+// Israeli-region IP gets through. Same handlers as the us-central1 versions.
+const { onRequest: onRequestV2 } = require('firebase-functions/v2/https');
+exports.webtopRequestOtpTlv = onRequestV2({ region: 'me-west1' }, _handleWebtopRequestOtp);
+exports.webtopVerifyOtpTlv  = onRequestV2({ region: 'me-west1' }, _handleWebtopVerifyOtp);
+
 // ─── webtopSync — runs hourly, respects per-family webtopSyncIntervalHours ────
 exports.webtopSync = functions.pubsub.schedule('*/20 * * * *').onRun(async () => {
   const snapshot = await db.collection('families')
