@@ -1631,7 +1631,16 @@ exports.getFamilyDetails = functions.https.onCall(async (data, context) => {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const fetch = require('node-fetch');
+const crypto = require('crypto');
 const WEBTOP_API = 'https://webtopserver.smartschool.co.il/server/api/PupilCard/GetPupilLessonsAndHomework';
+const WEBTOP_SEND_OTP  = 'https://webtopserver.smartschool.co.il/server/api/user/SendOneTimePassword';
+const WEBTOP_LOGIN_OTP = 'https://webtopserver.smartschool.co.il/server/api/user/LoginByOneTimePassword';
+const WEBTOP_HDRS = {
+  'Content-Type': 'application/json',
+  'Origin': 'https://webtop.smartschool.co.il',
+  'Referer': 'https://webtop.smartschool.co.il/',
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+};
 
 // ─── webtopLink — validate a FamilyHub family UID and return its name ─────────
 exports.webtopLink = functions.https.onRequest(async (req, res) => {
@@ -1735,6 +1744,159 @@ exports.webtopSetup = functions.https.onRequest(async (req, res) => {
     console.error('webtopSetup error', err);
     return res.status(500).json({ error: 'server error' });
   }
+});
+
+// ─── webtopRequestOtp — email-OTP login, step 1: ask Webtop to email a code ──
+// The parent supplies their Webtop identity (ID number + email). We call Webtop's
+// SendOneTimePassword, which emails them a 6-digit code, and stash the login nonce
+// (guid + uniqueId) server-side keyed by a short-lived pendingId returned to the app.
+// No password is involved or stored on this path.
+exports.webtopRequestOtp = functions.https.onRequest(async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') { res.set('Access-Control-Allow-Headers', 'Content-Type'); return res.status(204).send(''); }
+  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+  const { familyId, memberId, email } = req.body || {};
+  if (!familyId || !memberId || !email) return res.status(400).json({ error: 'missing fields' });
+
+  // Family must exist — familyId is the (Firebase-generated, hard-to-guess) family doc id.
+  const famRef = db.collection('families').doc(familyId);
+  const famDoc = await famRef.get();
+  if (!famDoc.exists) return res.status(404).json({ error: 'family not found' });
+
+  // Light abuse guard: at most one OTP email per family per 30s (this call sends mail).
+  const lastSent = famDoc.data()?.webtopOtpLastSentAt?.toMillis?.() || 0;
+  const sinceLast = Date.now() - lastSent;
+  if (sinceLast < 30 * 1000) return res.status(429).json({ error: 'too_soon', retryAfterMs: 30 * 1000 - sinceLast });
+
+  // uniqueId is a client-chosen device nonce that Webtop echoes between the two
+  // calls (sent as a cookie here, and again in the login body). We generate one
+  // and reuse it for this login pair. (setInput {id:0} just sets input=0, which
+  // we send directly in the cookie, so no separate setInput round-trip is needed.)
+  const uniqueId = crypto.randomBytes(20).toString('hex');
+  const cookie = `uniqueId=${uniqueId}; rememberMeMoe=; input=0`;
+
+  let json;
+  try {
+    const r = await fetch(WEBTOP_SEND_OTP, {
+      method: 'POST',
+      headers: { ...WEBTOP_HDRS, Cookie: cookie },
+      body: JSON.stringify({
+        Input: String(email),
+        MemberId: String(memberId),
+        UserName: '',
+        RecoveryType: 1, // 1 = email channel
+        PasswordType: 1, // 1 = one-time code
+        LoginCounter: 0,
+      }),
+    });
+    json = await r.json();
+  } catch (err) {
+    console.error('webtopRequestOtp fetch failed', err);
+    return res.status(502).json({ error: 'webtop_unreachable' });
+  }
+
+  if (!json || json.status !== true) {
+    return res.status(400).json({ error: 'otp_request_failed', detail: json?.errorDescription || null });
+  }
+
+  // The Guid is the data[] entry whose id isn't the "MessageSend" marker.
+  const guid = (Array.isArray(json.data) ? json.data : [])
+    .map(d => d && d.id).find(id => id && id !== 'MessageSend');
+  if (!guid) return res.status(502).json({ error: 'no_guid' });
+
+  const pendingId = crypto.randomBytes(16).toString('hex');
+  await db.collection('webtopPendingLogins').doc(pendingId).set({
+    familyId,
+    email: String(email),
+    memberId: String(memberId),
+    guid,
+    uniqueId,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
+  });
+  await famRef.update({ webtopOtpLastSentAt: admin.firestore.FieldValue.serverTimestamp() });
+
+  return res.json({ ok: true, pendingId });
+});
+
+// ─── webtopVerifyOtp — email-OTP login, step 2: submit the code, get a token ──
+// The app sends back the code the parent received by email. We complete Webtop's
+// LoginByOneTimePassword and store the returned session token at family level.
+// Stage 2 (student enumeration) will use this token to populate webtopStudents so
+// the existing webtopSync can fetch each child's homework.
+exports.webtopVerifyOtp = functions.https.onRequest(async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') { res.set('Access-Control-Allow-Headers', 'Content-Type'); return res.status(204).send(''); }
+  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+  const { familyId, pendingId, code } = req.body || {};
+  if (!familyId || !pendingId || !code) return res.status(400).json({ error: 'missing fields' });
+
+  const pendRef = db.collection('webtopPendingLogins').doc(pendingId);
+  const pend = await pendRef.get();
+  if (!pend.exists) return res.status(404).json({ error: 'no_pending_login' });
+  const p = pend.data();
+  if (p.familyId !== familyId) return res.status(403).json({ error: 'family_mismatch' });
+  if (Date.now() > (p.expiresAt || 0)) { await pendRef.delete().catch(() => {}); return res.status(410).json({ error: 'code_expired' }); }
+
+  const cookie = `uniqueId=${p.uniqueId}; rememberMeMoe=; input=0`;
+  const deviceDataJson = JSON.stringify({
+    isMobile: false, isTablet: false, isDesktop: true,
+    getDeviceType: 'Desktop', os: 'Windows', osVersion: '10',
+  });
+
+  let json;
+  try {
+    const r = await fetch(WEBTOP_LOGIN_OTP, {
+      method: 'POST',
+      headers: { ...WEBTOP_HDRS, Cookie: cookie },
+      body: JSON.stringify({
+        Code: Number(code),
+        Guid: p.guid,
+        UniqueId: p.uniqueId,
+        deviceDataJson,
+        rememberMe: true,
+      }),
+    });
+    json = await r.json();
+  } catch (err) {
+    console.error('webtopVerifyOtp fetch failed', err);
+    return res.status(502).json({ error: 'webtop_unreachable' });
+  }
+
+  const user = json && json.data && json.data.data;
+  const token = user && user.token;
+  if (json?.status !== true || !token) {
+    return res.status(400).json({ error: 'login_failed', detail: json?.errorDescription || null });
+  }
+
+  await pendRef.delete().catch(() => {});
+
+  await db.collection('families').doc(familyId).update({
+    webtopAuth: {
+      token,
+      fullCookie: `webToken=${token}`,
+      userId: user.userId || null,
+      institutionCode: user.institutionCode || null,
+      schoolId: user.schoolId || null,
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    webtopSyncError: admin.firestore.FieldValue.delete(),
+    webtopSyncErrorAt: admin.firestore.FieldValue.delete(),
+  });
+
+  return res.json({
+    ok: true,
+    user: {
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      schoolName: user.schoolName || '',
+      mustChangePassword: !!user.mustChangePassword,
+    },
+  });
 });
 
 // ─── webtopSync — runs hourly, respects per-family webtopSyncIntervalHours ────
