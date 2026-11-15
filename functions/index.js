@@ -1781,6 +1781,84 @@ async function _webtopPostRetry(url, cookie, bodyObj, tries = 3) {
   throw lastErr;
 }
 
+// ─── webtopIngest — store homework the browser extension fetched itself ───────
+// Webtop's CDN now blocks cloud-server IPs (any region), so the server can no
+// longer call Webtop. The extension fetches homework from the parent's own
+// browser and posts the already-flattened items here; this endpoint only
+// validates, merges and stores them — it never contacts Webtop.
+exports.webtopIngest = functions.https.onRequest(async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') { res.set('Access-Control-Allow-Headers', 'Content-Type'); return res.status(204).send(''); }
+  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+  const { familyId, syncParams, homework } = req.body || {};
+  if (!familyId || typeof familyId !== 'string' || !syncParams || typeof syncParams !== 'object' || !Array.isArray(homework)) {
+    return res.status(400).json({ error: 'missing fields' });
+  }
+  if (homework.length > 2000) return res.status(400).json({ error: 'too many items' });
+
+  // Same gate as webtopSetup: the family must exist and have gone through webtopLink
+  // (or already have Webtop data from before that check existed).
+  const famRef = db.collection('families').doc(familyId);
+  const familyDoc = await famRef.get();
+  if (!familyDoc.exists) return res.status(404).json({ error: 'family not found' });
+  const fam = familyDoc.data() || {};
+  if (!fam.webtopLinkedAt && !fam.webtopHomework && !fam.webtopStudents) {
+    return res.status(403).json({ error: 'not linked — call webtopLink first' });
+  }
+
+  try {
+    const classCode = String(syncParams.classCode || syncParams.studentID || '');
+    if (!classCode) return res.status(400).json({ error: 'missing classCode' });
+    const safeKey = classCode.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const existingStudents = fam.webtopStudents || {};
+    const isFirstSync = !existingStudents[safeKey]?.initialSyncDone;
+
+    // Items come from a client, so keep only the expected fields, bounded.
+    const clean = homework
+      .map(h => ({
+        subject: String(h?.subject || '').slice(0, 200),
+        text: String(h?.text || '').slice(0, 5000),
+        context: String(h?.context || '').slice(0, 500),
+        date: String(h?.date || '').slice(0, 10),
+        classCode,
+      }))
+      .filter(h => h.text && /^\d{4}-\d{2}-\d{2}$/.test(h.date));
+
+    const hwKey = h => `${h.classCode}|${h.date}|${h.subject}`;
+    const mergedMap = new Map((fam.webtopHomework || []).map(h => [hwKey(h), h]));
+    for (const h of clean) mergedMap.set(hwKey(h), h);
+    const merged = [...mergedMap.values()];
+
+    const updatePayload = {
+      webtopHomework: merged,
+      webtopUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      webtopSyncError: admin.firestore.FieldValue.delete(),
+      webtopSyncErrorAt: admin.firestore.FieldValue.delete(),
+      // No token stored: the server can't use it anymore, and webtopSync skips
+      // token-less entries so it stops flagging "session expired".
+      [`webtopStudents.${safeKey}`]: {
+        syncParams,
+        classCode,
+        studentName: String(syncParams.studentName || ''),
+        initialSyncDone: true,
+        source: 'extension',
+      },
+    };
+    for (const [key, entry] of Object.entries(existingStudents)) {
+      if (key !== safeKey && entry?.syncParams?.studentID === syncParams.studentID) {
+        updatePayload[`webtopStudents.${key}`] = admin.firestore.FieldValue.delete();
+      }
+    }
+    await famRef.update(updatePayload);
+
+    return res.json({ ok: true, homeworkCount: clean.length, total: merged.length, isFirstSync });
+  } catch (err) {
+    console.error('webtopIngest error', err);
+    return res.status(500).json({ error: 'server error' });
+  }
+});
+
 // ─── webtopRequestOtp — email-OTP login, step 1: ask Webtop to email a code ──
 // The parent supplies their Webtop identity (ID number + email). We call Webtop's
 // SendOneTimePassword, which emails them a 6-digit code, and stash the login nonce
@@ -1969,7 +2047,10 @@ exports.webtopSync = functions.pubsub.schedule('*/20 * * * *').onRun(async () =>
   const promises = snapshot.docs.map(async doc => {
     const { webtopStudents, webtopUpdatedAt, webtopSyncIntervalHours } = doc.data();
     if (!webtopStudents || typeof webtopStudents !== 'object') return;
-    const entries = Object.entries(webtopStudents);
+    // Only entries that still carry a server-usable token. Entries written by
+    // webtopIngest (the extension fetches in-browser) have none — skip those, so
+    // this job doesn't overwrite their status with a failed server-side fetch.
+    const entries = Object.entries(webtopStudents).filter(([, e]) => e && e.token && e.syncParams);
     if (!entries.length) return;
     // Check if enough time has passed since last sync
     const intervalMs = (webtopSyncIntervalHours || 1) * 3600 * 1000;
