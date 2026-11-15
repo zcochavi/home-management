@@ -4,47 +4,75 @@ const WEBTOP_ORIGIN     = 'https://webtop.smartschool.co.il';
 const WEBTOP_HW_URL     = 'https://webtopserver.smartschool.co.il/server/api/PupilCard/GetPupilLessonsAndHomework';
 
 // Webtop's CDN blocks cloud servers, so FamilyHub's server can no longer fetch
-// homework itself. This extension now does the fetch from the parent's own
-// browser (where Webtop accepts the connection) and sends only the parsed
-// homework to FamilyHub to store.
+// homework itself. This extension does the fetch from the parent's own browser
+// (where Webtop accepts the connection) and sends only the parsed homework to
+// FamilyHub to store.
 
 const AUTO_SYNC_MIN_GAP_MS = 10 * 60 * 1000; // don't auto-sync more than every 10 min
 const ALARM_NAME = 'fh-webtop-sync';
 
+// Headers Webtop's own site sends with this request.
+const WEBTOP_HEADERS = {
+  'Content-Type': 'application/json',
+  'Accept': 'application/json, text/plain, */*',
+  'Language': 'he',
+  'Rememberme': '0',
+};
+
+// Requests this extension makes itself (service worker, tabId -1) must not be
+// mistaken for the Webtop site's own traffic.
+const isOwnRequest = d => d.tabId < 0 || (d.initiator || '').startsWith('chrome-extension://');
+const studentKey = p => `${p.studentName || ''}|${p.classCode}`;
+
 // ─── Capture the session token (for the popup status display) and auto-sync ───
 chrome.webRequest.onBeforeSendHeaders.addListener(
   (details) => {
+    if (isOwnRequest(details)) return;
     const cookieHeader = details.requestHeaders?.find(h => h.name.toLowerCase() === 'cookie');
     const match = cookieHeader?.value?.match(/(?:^|;\s*)webToken=([^;]+)/);
     if (!match?.[1]) return;
-    const token = match[1].trim();
-    chrome.storage.local.set({ webtopToken: token }).then(() => {
-      // Give onBeforeRequest a moment to store syncParams from the same request.
-      setTimeout(() => syncToFamilyHub({ auto: true }).catch(() => {}), 500);
-    });
+    chrome.storage.local.set({ webtopToken: match[1].trim() });
   },
   { urls: ['https://webtopserver.smartschool.co.il/*'] },
   ['requestHeaders', 'extraHeaders']
 );
 
-// ─── Capture syncParams (studentID / classCode) from Webtop's own requests ────
+// ─── Capture each kid's params — but only from requests that SUCCEEDED ────────
+// The params include an encrypted studentID that changes with the login
+// session, and Webtop's own site sometimes fires stale requests that fail.
+// So hold each request's params until we see it complete with 200.
+const pendingParams = new Map(); // requestId -> params
+
 chrome.webRequest.onBeforeRequest.addListener(
   (details) => {
-    if (!details.requestBody?.raw?.length) return;
+    if (isOwnRequest(details) || !details.requestBody?.raw?.length) return;
     try {
-      const body   = new TextDecoder().decode(details.requestBody.raw[0].bytes);
-      const params = JSON.parse(body);
-      if (!params.studentID || !params.classCode) return;
-      const endpoint = details.url.split('/').pop();
-      chrome.storage.local.get(['syncParams']).then(stored => {
-        if (endpoint.includes('GetPupilLessonsAndHomework') || !stored.syncParams) {
-          chrome.storage.local.set({ syncParams: { ...params, weekIndex: 0 } });
-        }
-      });
+      const params = JSON.parse(new TextDecoder().decode(details.requestBody.raw[0].bytes));
+      if (params.studentID && params.classCode != null) pendingParams.set(details.requestId, params);
     } catch (_) {}
   },
-  { urls: ['https://webtopserver.smartschool.co.il/*'] },
+  { urls: [WEBTOP_HW_URL] },
   ['requestBody']
+);
+
+chrome.webRequest.onCompleted.addListener(
+  async (details) => {
+    const params = pendingParams.get(details.requestId);
+    pendingParams.delete(details.requestId);
+    if (!params || details.statusCode !== 200) return;
+    const fresh = { ...params, weekIndex: 0 };
+    const { syncParamsMap = {} } = await chrome.storage.local.get(['syncParamsMap']);
+    syncParamsMap[studentKey(fresh)] = { ...fresh, capturedAt: Date.now() };
+    await chrome.storage.local.set({ syncParamsMap, syncParams: fresh });
+    // The site just successfully loaded homework — a good moment to sync.
+    syncToFamilyHub({ auto: true }).catch(err => console.log('[FH] auto sync skipped:', err.message));
+  },
+  { urls: [WEBTOP_HW_URL] }
+);
+
+chrome.webRequest.onErrorOccurred.addListener(
+  (details) => pendingParams.delete(details.requestId),
+  { urls: [WEBTOP_HW_URL] }
 );
 
 // ─── Fallback token read when a Webtop tab finishes loading ───────────────────
@@ -72,47 +100,55 @@ chrome.alarms.onAlarm.addListener(a => {
 
 // ─── Fetch one week of homework from Webtop, from this browser ────────────────
 async function fetchWeekFromWebtop(syncParams, weekIndex) {
-  const body = JSON.stringify({ ...syncParams, weekIndex });
+  const { capturedAt, ...params } = syncParams;
+  const body = JSON.stringify({ ...params, weekIndex });
+  const failures = [];
 
-  // 1) Straight from the extension — the browser's own connection and cookies.
+  // 1) Inside an open Webtop tab — same origin, cookies and headers as the
+  //    Webtop site itself, so this is the most faithful option.
+  const tabs = await chrome.tabs.query({ url: 'https://webtop.smartschool.co.il/*' });
+  const tab = tabs.find(t => !t.discarded && !/\/account\/login/.test(t.url || '')) || null;
+  if (tab) {
+    try {
+      const [injection] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: 'MAIN',
+        func: async (url, b, headers) => {
+          try {
+            const r = await fetch(url, { method: 'POST', credentials: 'include', headers, body: b });
+            return { status: r.status, text: await r.text() };
+          } catch (e) {
+            return { status: 0, text: String(e) };
+          }
+        },
+        args: [WEBTOP_HW_URL, body, WEBTOP_HEADERS],
+      });
+      const result = injection?.result;
+      if (result?.status === 200) return JSON.parse(result.text);
+      failures.push(`tab:${result?.status ?? '?'} ${String(result?.text || '').slice(0, 120)}`);
+    } catch (err) {
+      failures.push(`tab:error ${err.message}`);
+    }
+  } else {
+    failures.push(tabs.length ? 'tab:only-login-page' : 'tab:none');
+  }
+
+  // 2) Straight from the extension, with the browser's cookies.
   try {
-    const r = await fetch(WEBTOP_HW_URL, {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    });
+    const r = await fetch(WEBTOP_HW_URL, { method: 'POST', credentials: 'include', headers: WEBTOP_HEADERS, body });
     if (r.ok) {
       const json = await r.json().catch(() => null);
       if (json) return json;
     }
-    console.warn('[FH] direct fetch returned', r.status, '— trying via a Webtop tab');
+    failures.push(`direct:${r.status}`);
   } catch (err) {
-    console.warn('[FH] direct fetch failed — trying via a Webtop tab', err);
+    failures.push(`direct:error ${err.message}`);
   }
 
-  // 2) Fallback: run the same request inside an open Webtop tab, exactly as the
-  //    Webtop site itself does (same origin, same session cookies).
-  const [tab] = await chrome.tabs.query({ url: 'https://webtop.smartschool.co.il/*' });
-  if (!tab) throw new Error('no_webtop_tab');
-  const [injection] = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    world: 'MAIN',
-    func: async (url, b) => {
-      try {
-        const r = await fetch(url, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: b });
-        return { status: r.status, text: await r.text() };
-      } catch (e) {
-        return { status: 0, text: String(e) };
-      }
-    },
-    args: [WEBTOP_HW_URL, body],
-  });
-  const result = injection?.result;
-  if (!result || result.status !== 200) {
-    throw new Error(result?.status === 401 || result?.status === 403 ? 'session_expired' : `webtop_${result?.status ?? 'error'}`);
-  }
-  return JSON.parse(result.text);
+  console.warn(`[FH] week ${weekIndex} for ${syncParams.studentName || syncParams.classCode} failed:`, failures.join(' | '));
+  const err = new Error(tabs.some(t => /\/account\/login/.test(t.url || '')) && !tab ? 'session_expired' : 'webtop_failed');
+  err.detail = failures.join(' | ');
+  throw err;
 }
 
 // Flatten Webtop's day → hour → schedule structure into homework items
@@ -143,7 +179,7 @@ function flattenHomework(json, classCode) {
   return homework;
 }
 
-// ─── Sync: fetch in-browser, send parsed homework to FamilyHub ────────────────
+// ─── Sync: fetch in-browser for every known kid, send results to FamilyHub ────
 let _syncInFlight = null;
 function syncToFamilyHub(opts = {}) {
   if (_syncInFlight) return _syncInFlight;
@@ -152,47 +188,67 @@ function syncToFamilyHub(opts = {}) {
 }
 
 async function _doSync({ auto = false } = {}) {
-  const stored = await chrome.storage.local.get(['syncParams', 'familyId', 'lastSync', 'fullSyncDone']);
-  const { syncParams, familyId, lastSync } = stored;
+  const stored = await chrome.storage.local.get(['syncParamsMap', 'syncParams', 'familyId', 'lastSync', 'fullSyncDone']);
+  const { familyId, lastSync } = stored;
   const fullSyncDone = stored.fullSyncDone || {};
+  // Only params captured from a successful Webtop request (1.3.1+). Older saved
+  // params may carry a stale session-bound studentID, so they're not reused.
+  const students = Object.values(stored.syncParamsMap || {});
 
-  if (!familyId)   throw new Error('not_linked');
-  if (!syncParams) throw new Error('no_params');
+  if (!familyId)        throw new Error('not_linked');
+  if (!students.length) throw new Error('no_params');
   if (auto && lastSync && Date.now() - lastSync < AUTO_SYNC_MIN_GAP_MS) return { ok: true, skipped: true };
 
-  const classCode = String(syncParams.classCode || syncParams.studentID || '');
-  // First sync for this class: pull ~1 month back. Afterwards: current week.
-  const weekOffsets = fullSyncDone[classCode] ? [0] : [0, -1, -2, -3];
+  let homeworkCount = 0, total = 0, isFirstSync = false, synced = 0, lastErr = null;
+  for (const syncParams of students) {
+    const key = studentKey(syncParams);
+    const classCode = String(syncParams.classCode ?? syncParams.studentID ?? '');
+    // First sync for this kid: pull ~1 month back. Afterwards: current week.
+    const weekOffsets = fullSyncDone[key] ? [0] : [0, -1, -2, -3];
 
-  let homework = [];
-  for (const offset of weekOffsets) {
-    const json = await fetchWeekFromWebtop(syncParams, offset);
-    homework = homework.concat(flattenHomework(json, classCode));
+    let homework = [], weeksOk = 0;
+    for (const offset of weekOffsets) {
+      try {
+        homework = homework.concat(flattenHomework(await fetchWeekFromWebtop(syncParams, offset), classCode));
+        weeksOk++;
+      } catch (err) {
+        lastErr = err; // skip this week, keep going
+      }
+    }
+    if (!weeksOk) continue;
+
+    const { capturedAt, ...paramsToSend } = syncParams;
+    const res = await fetchWithRetry(WEBTOP_INGEST_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ familyId, syncParams: paramsToSend, homework }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      lastErr = new Error(body.error || `server_${res.status}`);
+      continue;
+    }
+    const json = await res.json();
+    homeworkCount += json.homeworkCount || 0;
+    total = json.total || total;
+    isFirstSync = isFirstSync || !!json.isFirstSync;
+    if (weeksOk === weekOffsets.length) fullSyncDone[key] = true;
+    synced++;
   }
 
-  const res = await fetchWithRetry(WEBTOP_INGEST_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ familyId, syncParams, homework }),
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error || `server_${res.status}`);
-  }
-  const json = await res.json();
-  fullSyncDone[classCode] = true;
+  if (!synced) throw lastErr || new Error('webtop_failed');
   await chrome.storage.local.set({ lastSync: Date.now(), fullSyncDone });
   setBadge('✓', '#22c55e', 4000);
-  console.log('[FH] sync success:', json);
-  return { ok: true, homeworkCount: json.homeworkCount, total: json.total, isFirstSync: json.isFirstSync };
+  console.log(`[FH] sync success: ${synced}/${students.length} kids, ${homeworkCount} items`);
+  return { ok: true, homeworkCount, total, isFirstSync, synced, students: students.length };
 }
 
 function syncErrorMessage(err) {
   switch (err?.message) {
     case 'not_linked':      return 'לא מחובר למשפחה';
-    case 'no_params':       return 'פרמטרים חסרים — פתח שיעורי בית ב-Webtop';
-    case 'no_webtop_tab':   return 'פתח את Webtop בדפדפן (מחובר) ונסה שוב';
+    case 'no_params':       return 'פתח את דף שיעורי הבית ב-Webtop לכל ילד, ואז סנכרן';
     case 'session_expired': return 'הסשן ב-Webtop פג — היכנס ל-Webtop מחדש';
+    case 'webtop_failed':   return `Webtop לא החזיר שיעורים — פתח את דף שיעורי הבית ב-Webtop ונסה שוב (${err.detail || ''})`;
     default:                return err?.message || 'שגיאה';
   }
 }
@@ -228,7 +284,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     return true;
   }
   if (msg.type === 'UNLINK') {
-    chrome.storage.local.remove(['familyId', 'familyName', 'lastSync', 'webtopToken', 'syncParams', 'fullSyncDone'], () => reply({ ok: true }));
+    chrome.storage.local.remove(['familyId', 'familyName', 'lastSync', 'webtopToken', 'syncParams', 'syncParamsMap', 'fullSyncDone'], () => reply({ ok: true }));
     return true;
   }
   if (msg.type === 'MANUAL_SYNC') {
