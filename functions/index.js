@@ -1854,10 +1854,7 @@ const _handleWebtopRequestOtp = async (req, res) => {
 
   return res.json({ ok: true, pendingId });
 };
-// us-central1 (default) and a me-west1 (Tel Aviv) twin, to test whether an
-// Israeli-region egress IP clears Webtop's CloudFront block on cloud IPs.
-exports.webtopRequestOtp   = functions.https.onRequest(_handleWebtopRequestOtp);
-exports.webtopRequestOtpIL = functions.region('me-west1').https.onRequest(_handleWebtopRequestOtp);
+exports.webtopRequestOtp = functions.https.onRequest(_handleWebtopRequestOtp);
 
 // ─── webtopVerifyOtp — email-OTP login, step 2: submit the code, get a token ──
 // The app sends back the code the parent received by email. We complete Webtop's
@@ -1936,8 +1933,7 @@ const _handleWebtopVerifyOtp = async (req, res) => {
     },
   });
 };
-exports.webtopVerifyOtp   = functions.https.onRequest(_handleWebtopVerifyOtp);
-exports.webtopVerifyOtpIL = functions.region('me-west1').https.onRequest(_handleWebtopVerifyOtp);
+exports.webtopVerifyOtp = functions.https.onRequest(_handleWebtopVerifyOtp);
 
 // ─── webtopSync — runs hourly, respects per-family webtopSyncIntervalHours ────
 exports.webtopSync = functions.pubsub.schedule('*/20 * * * *').onRun(async () => {
