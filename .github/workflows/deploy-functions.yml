@@ -33,6 +33,14 @@ jobs:
       - name: Write service account credentials
         run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > /tmp/sa.json
 
+      # 2nd-gen functions in me-west1 need an artifact cleanup policy, or the
+      # deploy exits with an error after the functions are already created.
+      - name: Set artifact cleanup policy (me-west1)
+        continue-on-error: true
+        run: npx firebase-tools@latest functions:artifacts:setpolicy --location me-west1 --force --project familyhub-7fdd5
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+
       - name: Deploy to Firebase
         run: npx firebase-tools@latest deploy --only functions,firestore:rules,hosting --project familyhub-7fdd5
         env:
