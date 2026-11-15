@@ -880,6 +880,8 @@ body {
 .hw-head { display: flex; align-items: center; gap: 7px; }
 .hw-desc-text { flex: 1; font-size: 13px; font-weight: 600; color: var(--gray-700); }
 .hw-desc-text.done { text-decoration: line-through; color: var(--gray-400); }
+.hw-subj-col { display: flex; flex-direction: column; align-items: center; gap: 2px; flex-shrink: 0; }
+.hw-created { font-size: 10px; font-weight: 600; color: var(--gray-400); white-space: nowrap; line-height: 1.2; }
 .hw-due { font-size: 11px; color: var(--gray-400); font-weight: 600; margin-top: 4px; margin-inline-start: 31px; }
 
 @keyframes hwFlyOut     { 0% { opacity:1; transform:translateX(0); max-height:80px; padding-top:10px; padding-bottom:10px; } 55% { opacity:0; transform:translateX(36px); } 100% { opacity:0; max-height:0; padding-top:0; padding-bottom:0; overflow:hidden; } }

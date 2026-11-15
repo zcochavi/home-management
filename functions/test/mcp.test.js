@@ -319,7 +319,7 @@ test('mcp protocol: initialize, notifications, tools/list, unknown method, GET',
   const note = await s.post('/mcp', { jsonrpc: '2.0', method: 'notifications/initialized' }, { Authorization: 'Bearer ' + access_token });
   assert.equal(note.status, 202);
   const list = await s.rpc(access_token, 'tools/list');
-  assert.deepEqual(list.body.result.tools.map(x => x.name), ['get_family_context', 'create_recipe', 'create_community_event', 'create_homework']);
+  assert.deepEqual(list.body.result.tools.map(x => x.name), ['get_family_context', 'create_recipe', 'create_community_event', 'list_homework', 'create_homework']);
   assert.equal((await s.rpc(access_token, 'resources/list')).body.error.code, -32601);
   const get = await fetch(s.srv.url + '/mcp', { headers: { Authorization: 'Bearer ' + access_token } });
   assert.equal(get.status, 405);
@@ -406,8 +406,9 @@ test('create_community_event: regular parent goes to pending, committee publishe
   assert.equal(s.db.store.size, before, 'a rejected call writes nothing');
 });
 
-test('create_homework: personal by default, class only when Webtop sync is off', async (t) => {
+test('create_homework: whole class by default, personal only on request', async (t) => {
   const s = await setup(); t.after(s.srv.close);
+  await s.db.collection('appConfig').doc('featureFlags').set({ webtopConnection: false });
   await s.db.collection('families').doc('fam1').update({
     chores: [{ id: 1, text: 'כלים' }],
     homework: [{ id: 5, scope: 'personal', child: 'נועה', subject: 'Art', desc: 'ישן', due: '', done: true }],
@@ -415,51 +416,125 @@ test('create_homework: personal by default, class only when Webtop sync is off',
   const { access_token } = await s.connect();
   const ctx = (await s.call(access_token, 'get_family_context', {})).data;
   assert.deepEqual(ctx.homework_subjects, ['מתמטיקה', 'אנגלית', 'מדעים', 'היסטוריה', 'אמנות']);
-  assert.match(ctx.class_homework, /Webtop/);
+  assert.match(ctx.class_homework, /whole class by default/);
 
   // Two kids in this family, so the kid must be named
   assert.match((await s.call(access_token, 'create_homework', { description: 'x' })).text, /kid_name is required/);
-  const r = await s.call(access_token, 'create_homework', { kid_name: 'נועה', subject: 'מתמטיקה', description: ' עמוד 42 ', due: '2026-11-20' });
-  assert.equal(r.data.status, 'created');
-  assert.equal(r.data.subject, 'מתמטיקה');
+
+  // No scope given: goes to the class, with the due date that was given
+  const cls = await s.call(access_token, 'create_homework', { kid_name: 'נועה', subject: 'מתמטיקה', description: ' עמוד 42 ', due: '2026-11-20' });
+  assert.equal(cls.data.scope, 'class');
+  assert.equal(cls.data.subject, 'מתמטיקה');
+  assert.deepEqual(s.db.store.get(`schoolClasses/${CID}/homework/${cls.data.homework_id}`), {
+    subject: 'Maths', desc: 'עמוד 42', due: '2026-11-20', createdBy: { familyUid: 'fam1', name: 'דנה' },
+    createdAt: 'SERVER_TS', doneBy: {}, doneAtBy: {}, createdVia: 'claude',
+  });
+  assert.equal(s.db.store.get('families/fam1').homework.length, 1, 'class homework is not copied into the family');
+
+  // The due date is optional; unknown subjects are kept as written
+  const noDue = await s.call(access_token, 'create_homework', { kid_name: 'נועה', subject: 'תורה', description: 'לקרוא פרק א' });
+  const noDueDoc = s.db.store.get(`schoolClasses/${CID}/homework/${noDue.data.homework_id}`);
+  assert.deepEqual([noDueDoc.subject, noDueDoc.due], ['תורה', '']);
+  assert.equal(noDue.data.due, null);
+
+  // Personal only when asked for
+  const r = await s.call(access_token, 'create_homework', { kid_name: 'נועה', subject: 'מתמטיקה', description: 'תרגול נוסף', due: '2026-11-21', scope: 'personal' });
+  assert.equal(r.data.scope, 'personal');
   let fam = s.db.store.get('families/fam1');
   assert.equal(fam.homework.length, 2, 'existing homework is kept');
-  assert.deepEqual(fam.homework[1], { id: r.data.homework_id, scope: 'personal', child: 'נועה', subject: 'Maths', desc: 'עמוד 42', due: '2026-11-20', done: false });
+  assert.deepEqual(fam.homework[1], { id: r.data.homework_id, scope: 'personal', child: 'נועה', subject: 'Maths', desc: 'תרגול נוסף', due: '2026-11-21', done: false });
   assert.deepEqual(fam.chores, [{ id: 1, text: 'כלים' }], 'the rest of the family document is untouched');
   assert.equal(fam.familyName, 'כהן');
-
-  // A kid with no class can still get personal homework; unknown subjects are kept as written; due is optional
-  const free = await s.call(access_token, 'create_homework', { kid_name: 'איתי', subject: 'תורה', description: 'לקרוא פרק א' });
-  fam = s.db.store.get('families/fam1');
-  assert.deepEqual([fam.homework[2].child, fam.homework[2].subject, fam.homework[2].due], ['איתי', 'תורה', '']);
-  assert.notEqual(free.data.homework_id, r.data.homework_id);
+  const r2 = await s.call(access_token, 'create_homework', { kid_name: 'איתי', description: 'y', scope: 'personal' });
+  assert.notEqual(r2.data.homework_id, r.data.homework_id);
 
   // A family's own subject list replaces the defaults
   await s.db.collection('families').doc('fam1').update({ subjects: [{ name: 'חשבון' }, { name: 'Torah', nameHe: 'תורה' }] });
   assert.deepEqual((await s.call(access_token, 'get_family_context', {})).data.homework_subjects, ['חשבון', 'תורה']);
-  await s.call(access_token, 'create_homework', { kid_name: 'נועה', subject: 'תורה', description: 'y' });
-  assert.equal(s.db.store.get('families/fam1').homework[3].subject, 'Torah');
+  const own = await s.call(access_token, 'create_homework', { kid_name: 'נועה', subject: 'תורה', description: 'y' });
+  assert.equal(s.db.store.get(`schoolClasses/${CID}/homework/${own.data.homework_id}`).subject, 'Torah');
 
+  const before = s.db.store.size, famBefore = s.db.store.get('families/fam1').homework.length;
   const bad = async (args, re) => { const x = await s.call(access_token, 'create_homework', { kid_name: 'נועה', description: 'x', ...args }); assert.ok(x.isError, JSON.stringify(args)); assert.match(x.text, re); };
   await bad({ description: '  ' }, /description is required/);
   await bad({ kid_name: 'דנה' }, /No kid named/);
   await bad({ due: '2026-13-01' }, /real date/);
   await bad({ due: '2026-11-01' }, /past/);
   await bad({ scope: 'school' }, /scope must be/);
-  await bad({ scope: 'class' }, /Webtop/);
-  assert.equal(s.db.store.get('families/fam1').homework.length, 4, 'rejected calls add nothing');
+  // A kid with no class: never silently downgraded to personal
+  await bad({ kid_name: 'איתי' }, /not registered in a school class.*Nothing was added/);
+  // Webtop sync on: class homework can't be added by hand, and again nothing is added quietly
+  await s.db.collection('appConfig').doc('featureFlags').set({ webtopConnection: true });
+  assert.match((await s.call(access_token, 'get_family_context', {})).data.class_homework, /Webtop/);
+  await bad({}, /Webtop.*Nothing was added/);
+  assert.equal(s.db.store.size, before, 'rejected calls add nothing');
+  assert.equal(s.db.store.get('families/fam1').homework.length, famBefore);
+  assert.equal((await s.call(access_token, 'create_homework', { kid_name: 'נועה', description: 'x', scope: 'personal' })).data.scope, 'personal');
+});
 
-  // Webtop sync switched off: parents add class homework by hand, as in the app
+test('homework duplicates are not added, and list_homework shows what is there', async (t) => {
+  const s = await setup(); t.after(s.srv.close);
   await s.db.collection('appConfig').doc('featureFlags').set({ webtopConnection: false });
-  assert.match((await s.call(access_token, 'get_family_context', {})).data.class_homework, /open/);
-  const cls = await s.call(access_token, 'create_homework', { kid_name: 'נועה', subject: 'חשבון', description: 'דף עבודה', due: '2026-11-20', scope: 'class' });
-  assert.equal(cls.data.scope, 'class');
-  assert.deepEqual(s.db.store.get(`schoolClasses/${CID}/homework/${cls.data.homework_id}`), {
-    subject: 'חשבון', desc: 'דף עבודה', due: '2026-11-20', createdBy: { familyUid: 'fam1', name: 'דנה' },
-    createdAt: 'SERVER_TS', doneBy: {}, doneAtBy: {}, createdVia: 'claude',
-  });
-  assert.equal(s.db.store.get('families/fam1').homework.length, 4, 'class homework is not copied into the family');
-  await bad({ kid_name: 'איתי', scope: 'class' }, /not registered in a school class/);
+  const DAY = 24 * 3600 * 1000, T = s.clock.t;
+  const hwCol = s.db.collection('schoolClasses').doc(CID).collection('homework');
+  // Already on the class list, added by another family
+  await hwCol.doc('other1').set({ subject: 'Maths', desc: 'עמוד 42, תרגילים 1-5', due: '2026-11-20', createdBy: { familyUid: 'fam2', name: 'רות' }, createdAt: T - DAY, doneBy: {}, doneAtBy: {} });
+  await hwCol.doc('undated-new').set({ subject: 'English', desc: 'להתכונן להכתבה', due: '', createdBy: { familyUid: 'fam2', name: 'רות' }, createdAt: T - 2 * DAY, doneBy: {} });
+  await hwCol.doc('undated-old').set({ subject: 'Science', desc: 'לקרוא את הפרק', due: '', createdBy: { familyUid: 'fam2', name: 'רות' }, createdAt: T - 10 * DAY, doneBy: {} });
+  await hwCol.doc('done-by-us').set({ subject: 'Art', desc: 'ציור', due: '2026-11-25', createdAt: T - DAY, doneBy: { 'fam1__נועה': true } });
+  await hwCol.doc('long-past').set({ subject: 'Art', desc: 'ישן מאוד', due: '2026-09-01', createdAt: T - 80 * DAY, doneBy: {} });
+  await s.db.collection('families').doc('fam1').update({ homework: [
+    { id: T - DAY, scope: 'personal', child: 'נועה', subject: 'History', desc: 'עבודה על ירושלים', due: '2026-11-22', done: false },
+    { id: 7, scope: 'personal', child: 'נועה', subject: 'History', desc: 'גמור', due: '2026-11-23', done: true },
+    { id: T - DAY + 1, scope: 'personal', child: 'איתי', subject: 'Art', desc: 'של איתי', due: '', done: false },
+  ] });
+  const { access_token } = await s.connect();
+  const add = (args) => s.call(access_token, 'create_homework', { kid_name: 'נועה', ...args });
+  const classCount = () => [...s.db.store.keys()].filter(k => k.startsWith(`schoolClasses/${CID}/homework/`)).length;
+  const before = classCount();
+
+  // Same assignment again, with different spacing, punctuation, case and the Hebrew subject name
+  const dup = await add({ subject: 'מתמטיקה', description: '  עמוד 42 תרגילים 1–5. ', due: '2026-11-20' });
+  assert.equal(dup.isError, false);
+  assert.equal(dup.data.status, 'already_exists');
+  assert.deepEqual([dup.data.added_by, dup.data.added], ['רות', '2026-11-12']);
+  assert.equal(classCount(), before);
+
+  // Different due date, subject or wording is a different assignment
+  assert.equal((await add({ subject: 'מתמטיקה', description: 'עמוד 42, תרגילים 1-5', due: '2026-11-27' })).data.status, 'created');
+  assert.equal((await add({ subject: 'אנגלית', description: 'עמוד 42, תרגילים 1-5', due: '2026-11-20' })).data.status, 'created');
+  assert.equal((await add({ subject: 'מתמטיקה', description: 'עמוד 43, תרגילים 1-5', due: '2026-11-20' })).data.status, 'created');
+  // ...and adding one of those again is refused too
+  assert.equal((await add({ subject: 'מתמטיקה', description: 'עמוד 43 תרגילים 1-5', due: '2026-11-20' })).data.status, 'already_exists');
+
+  // No due date: a repeat within a week is a duplicate, an older one may come back
+  assert.equal((await add({ subject: 'English', description: 'להתכונן להכתבה' })).data.status, 'already_exists');
+  assert.equal((await add({ subject: 'English', description: 'להתכונן להכתבה', due: '2026-11-19' })).data.status, 'created');
+  assert.equal((await add({ subject: 'מדעים', description: 'לקרוא את הפרק' })).data.status, 'created');
+  assert.equal(classCount(), before + 5);
+
+  // Personal homework: checked against that kid's own list only
+  const fam = () => s.db.store.get('families/fam1').homework;
+  const p1 = await add({ subject: 'היסטוריה', description: 'עבודה על ירושלים!', due: '2026-11-22', scope: 'personal' });
+  assert.equal(p1.data.status, 'already_exists');
+  assert.equal(fam().length, 3);
+  assert.equal((await s.call(access_token, 'create_homework', { kid_name: 'איתי', subject: 'היסטוריה', description: 'עבודה על ירושלים', due: '2026-11-22', scope: 'personal' })).data.status, 'created');
+  // The class list and the personal list are separate
+  assert.equal((await add({ subject: 'מתמטיקה', description: 'עמוד 42, תרגילים 1-5', due: '2026-11-20', scope: 'personal' })).data.status, 'created');
+  assert.equal(fam().length, 5);
+
+  const list = (await s.call(access_token, 'list_homework', { kid_name: 'נועה' })).data;
+  assert.equal(list.today, '2026-11-13');
+  assert.equal(list.kids.length, 1);
+  const rows = list.kids[0].homework;
+  assert.ok(rows.some(r => r.scope === 'class' && r.subject === 'מתמטיקה' && r.description === 'עמוד 42, תרגילים 1-5' && r.due === '2026-11-20' && r.added_by === 'רות' && r.added === '2026-11-12'));
+  assert.ok(rows.some(r => r.scope === 'personal' && r.description === 'עבודה על ירושלים'));
+  assert.ok(!rows.some(r => ['ציור', 'גמור', 'ישן מאוד', 'של איתי'].includes(r.description)), 'done, long past and other kids are left out');
+  assert.deepEqual(rows.map(r => r.due || 'z'), rows.map(r => r.due || 'z').sort(), 'soonest due first, undated last');
+  const all = (await s.call(access_token, 'list_homework', {})).data;
+  assert.deepEqual(all.kids.map(k => [k.kid, k.class === null]), [['נועה', false], ['איתי', true]]);
+  assert.ok(all.kids[1].homework.some(r => r.description === 'של איתי'));
+  assert.ok((await s.call(access_token, 'list_homework', { kid_name: 'מישהו' })).isError);
 });
 
 test('committee rules follow the app: admin, family-level role, legacy fallback', async (t) => {
