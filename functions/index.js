@@ -1854,7 +1854,20 @@ const _handleWebtopRequestOtp = async (req, res) => {
 
   return res.json({ ok: true, pendingId });
 };
-exports.webtopRequestOtp = functions.https.onRequest(_handleWebtopRequestOtp);
+// Catch anything a handler throws and answer with the real reason, instead of a
+// bare "Internal Server Error" that hides it.
+const _safeWebtop = (handler) => async (req, res) => {
+  try {
+    await handler(req, res);
+  } catch (err) {
+    console.error('webtop handler crashed', err);
+    if (!res.headersSent) {
+      res.set('Access-Control-Allow-Origin', '*');
+      res.status(500).json({ error: 'internal', detail: `${err?.code || err?.name || 'Error'}: ${err?.message || err}`.slice(0, 300) });
+    }
+  }
+};
+exports.webtopRequestOtp = functions.https.onRequest(_safeWebtop(_handleWebtopRequestOtp));
 
 // ─── webtopVerifyOtp — email-OTP login, step 2: submit the code, get a token ──
 // The app sends back the code the parent received by email. We complete Webtop's
@@ -1933,14 +1946,18 @@ const _handleWebtopVerifyOtp = async (req, res) => {
     },
   });
 };
-exports.webtopVerifyOtp = functions.https.onRequest(_handleWebtopVerifyOtp);
+exports.webtopVerifyOtp = functions.https.onRequest(_safeWebtop(_handleWebtopVerifyOtp));
 
 // Tel Aviv (me-west1) twins — 2nd gen, since me-west1 doesn't run 1st-gen functions.
 // Webtop's CloudFront blocks our us-central1 egress IP; these test whether an
 // Israeli-region IP gets through. Same handlers as the us-central1 versions.
+// Run as the App Engine default service account — the identity the 1st-gen
+// functions use, which has Firestore access. 2nd gen otherwise defaults to the
+// Compute default account, which may not.
 const { onRequest: onRequestV2 } = require('firebase-functions/v2/https');
-exports.webtopRequestOtpTlv = onRequestV2({ region: 'me-west1' }, _handleWebtopRequestOtp);
-exports.webtopVerifyOtpTlv  = onRequestV2({ region: 'me-west1' }, _handleWebtopVerifyOtp);
+const TLV_OPTS = { region: 'me-west1', serviceAccount: 'familyhub-7fdd5@appspot.gserviceaccount.com' };
+exports.webtopRequestOtpTlv = onRequestV2(TLV_OPTS, _safeWebtop(_handleWebtopRequestOtp));
+exports.webtopVerifyOtpTlv  = onRequestV2(TLV_OPTS, _safeWebtop(_handleWebtopVerifyOtp));
 
 // ─── webtopSync — runs hourly, respects per-family webtopSyncIntervalHours ────
 exports.webtopSync = functions.pubsub.schedule('*/20 * * * *').onRun(async () => {
