@@ -9134,8 +9134,10 @@ function renderHomework(){
     classHw = classHw.filter(h => !(h.doneBy && h.doneBy[myDoneKey]));
   }
 
-  classHw = _hwSmartSort(classHw);
-  pending = _hwSmartSort(pending);
+  // Undated homework is assumed due at the subject's next lesson in this kid's class schedule
+  const hwSchedule = classCid ? _commCache[classCid]?.schedule : null;
+  classHw = _hwSmartSort(classHw, hwSchedule);
+  pending = _hwSmartSort(pending, hwSchedule);
 
   // Webtop homework section
   const webtopSec=el('hwWebtopSection');
@@ -9262,22 +9264,49 @@ function _hwCreatedMs(h) {
 }
 const _hwLocalDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-// Homework with no due date is treated as due this many days after it was added.
+// Subject names compared loosely: case, punctuation and spacing are ignored, and so are the
+// Hebrew letters that spellings add or drop ("מתמטיקה" / "מתימטיקה").
+const _hwSubjKey = x => String(x || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '').replace(/[יו]/g, '');
+// Does a schedule cell (free text typed by a parent) hold this homework subject's lesson?
+function _hwLessonMatches(cell, subject) {
+  const c = _hwSubjKey(cell);
+  if (c.length < 2) return false;
+  const known = getSubjects().find(x => x.name === subject || x.nameHe === subject);
+  return [subject, known?.name, known?.nameHe].map(_hwSubjKey).filter(k => k.length >= 2)
+    .some(k => c === k || c.includes(k) || k.includes(c));
+}
+const _HW_DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+// The first day after `fromMs` on which the class schedule has a lesson in `subject`
+// (within a week — the schedule repeats weekly). null when the schedule doesn't say.
+function _hwNextLessonDay(subject, fromMs, schedule) {
+  if (!subject || !schedule?.grid) return null;
+  const d = new Date(fromMs);
+  for (let i = 1; i <= 7; i++) {
+    d.setDate(d.getDate() + 1);
+    if ((schedule.grid[_HW_DAY_KEYS[d.getDay()]] || []).some(cell => _hwLessonMatches(cell, subject))) return _hwLocalDay(d);
+  }
+  return null;
+}
+// Without a schedule to go by, homework with no due date is treated as due this many days after it was added.
 const HW_ASSUMED_DAYS = 3;
-// The day an item should be done by: its due date, or the assumed one for undated homework.
-function _hwTargetDay(h) {
+// The day an item should be done by: its due date; for undated homework, the subject's next
+// lesson after it was added, or failing that HW_ASSUMED_DAYS later.
+function _hwTargetDay(h, schedule) {
   if (h.due) return h.due;
-  const d = new Date(_hwCreatedMs(h) ?? Date.now());
+  const created = _hwCreatedMs(h) ?? Date.now();
+  const lesson = _hwNextLessonDay(h.subject, created, schedule);
+  if (lesson) return lesson;
+  const d = new Date(created);
   d.setDate(d.getDate() + HW_ASSUMED_DAYS);
   return _hwLocalDay(d);
 }
 // Default order of open homework: soonest target day first, so overdue items lead, undated
-// homework sits among the dated items of the coming days, and the longer an undated item
+// homework sits among the dated items around its next lesson, and the longer an undated item
 // waits the higher it climbs. On the same day a real due date goes before an assumed one,
 // then older before newer.
-function _hwSmartSort(list) {
+function _hwSmartSort(list, schedule) {
   return list
-    .map(h => ({ h, day: _hwTargetDay(h), assumed: h.due ? 0 : 1, created: _hwCreatedMs(h) ?? Date.now() }))
+    .map(h => ({ h, day: _hwTargetDay(h, schedule), assumed: h.due ? 0 : 1, created: _hwCreatedMs(h) ?? Date.now() }))
     .sort((a, b) => a.day.localeCompare(b.day) || a.assumed - b.assumed || a.created - b.created)
     .map(x => x.h);
 }
