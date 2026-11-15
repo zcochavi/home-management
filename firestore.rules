@@ -8,6 +8,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Webtop in-flight login nonces (guid + uniqueId for an OTP login awaiting its code).
+    // Written and read only by Cloud Functions (the admin SDK bypasses these rules); never
+    // exposed to clients, so the catch-all below must also exclude this collection.
+    match /webtopPendingLogins/{pendingId} {
+      allow read, write: if false;
+    }
+
     // Maps a joined member's own Firebase Auth uid (family-code or kid-code account, or a personal
     // Google/email account) to the family they belong to. This mapping is what grants access to
     // a family's data below, so a user can only write their own, and only towards a family they
@@ -132,7 +139,7 @@ service cloud.firestore {
     // must be explicitly excluded here — otherwise this catch-all would re-open them anyway.
     match /{collection}/{rest=**} {
       allow read, write: if request.auth != null
-        && !(collection in ['families', 'uidToFamily', 'joinCodes', 'webtopClasses', 'publicShares', 'gcalTokens',
+        && !(collection in ['families', 'uidToFamily', 'joinCodes', 'webtopClasses', 'webtopPendingLogins', 'publicShares', 'gcalTokens',
                             'mcpClients', 'mcpAuthCodes', 'mcpTokens']);
     }
 
