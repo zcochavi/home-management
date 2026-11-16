@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Push notifications: accent color, and the channel the app creates ("FamilyHub"). -->
+    <color name="fh_notification_color">#6C80E8</color>
+    <string name="fh_notification_channel_id" translatable="false">familyhub</string>
+</resources>
