@@ -2276,8 +2276,53 @@ function vapidKeyToUint8Array(base64String) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
+// Saves this device's FCM token under the family (fcmTokens), so the server's
+// notifications reach it. Shared by the website (web push) and the Android app.
+async function _saveFcmToken(token, platform) {
+  const tokenKey = token.slice(0, 20);
+  const prevFamily = localStorage.getItem('familyhub_fcm_family_' + tokenKey);
+  if (prevFamily && prevFamily !== S.uid) {
+    // Token was registered under a different family — remove the stale entry so
+    // pushes to that family don't land on this device anymore.
+    fbDb.collection('families').doc(prevFamily)
+      .collection('fcmTokens').doc(tokenKey)
+      .delete().catch(() => {});
+  }
+  localStorage.setItem('familyhub_fcm_family_' + tokenKey, S.uid);
+  await fbDb.collection('families').doc(S.uid)
+    .collection('fcmTokens').doc(tokenKey)
+    .set({ token, platform, memberName: S.user || '', isOwner: fbAuth.currentUser?.uid === S.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+  console.log('[FCM] registered on', platform);
+}
+
+// Android app: native push via @capacitor-firebase/messaging (web push doesn't run
+// inside apps). Same fcmTokens records as the website, platform 'android', so every
+// notification the server already sends reaches the phone too.
+let _nativeFcmListening = false;
+async function initNativeFCM() {
+  const FM = window.Capacitor.Plugins?.FirebaseMessaging || window.Capacitor.registerPlugin('FirebaseMessaging');
+  try {
+    let perm = await FM.checkPermissions();
+    if (perm.receive !== 'granted') perm = await FM.requestPermissions(); // Android 13+ asks once
+    if (perm.receive !== 'granted') { console.log('[FCM] permission not granted'); return; }
+    // The "FamilyHub" category in the phone's notification settings.
+    await FM.createChannel({ id: 'familyhub', name: 'FamilyHub', description: 'התראות FamilyHub', importance: 4, visibility: 1 }).catch(() => {});
+    const { token } = await FM.getToken();
+    if (token) await _saveFcmToken(token, 'android');
+    if (!_nativeFcmListening) {
+      _nativeFcmListening = true;
+      // In the foreground Android doesn't show the notification itself — show the
+      // same in-app toast the website shows.
+      FM.addListener('notificationReceived', ({ notification }) =>
+        showNotifToast(notification?.title || 'FamilyHub', notification?.body || ''));
+      FM.addListener('tokenReceived', ({ token: t }) => { if (t && S.uid) _saveFcmToken(t, 'android').catch(() => {}); });
+    }
+  } catch (e) { console.warn('[FCM] native:', e.message); }
+}
+
 async function initFCM() {
   if (!FB_CONFIGURED || !fbDb || !S.uid) { console.log('[FCM] skipped: not configured'); return; }
+  if (_isNativeApp()) return initNativeFCM();
   if (!('serviceWorker' in navigator) || !('Notification' in window) || !('PushManager' in window)) return;
   if (typeof firebase.messaging.isSupported === 'function' && !firebase.messaging.isSupported()) {
     console.log('[FCM] not supported in this browser'); return;
@@ -2321,22 +2366,7 @@ async function initFCM() {
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') { console.log('[FCM] permission not granted'); return; }
     const token = await fbMessaging.getToken({ vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
-    if (token) {
-      const tokenKey = token.slice(0, 20);
-      const prevFamily = localStorage.getItem('familyhub_fcm_family_' + tokenKey);
-      if (prevFamily && prevFamily !== S.uid) {
-        // Token was registered under a different family — remove the stale entry so
-        // pushes to that family don't land on this device anymore.
-        fbDb.collection('families').doc(prevFamily)
-          .collection('fcmTokens').doc(tokenKey)
-          .delete().catch(() => {});
-      }
-      localStorage.setItem('familyhub_fcm_family_' + tokenKey, S.uid);
-      await fbDb.collection('families').doc(S.uid)
-        .collection('fcmTokens').doc(tokenKey)
-        .set({ token, platform, memberName: S.user || '', isOwner: fbAuth.currentUser?.uid === S.uid, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-      console.log('[FCM] registered on', platform);
-    }
+    if (token) await _saveFcmToken(token, platform);
     fbMessaging.onMessage(payload => {
       showNotifToast(
         payload.notification?.title || 'FamilyHub',
