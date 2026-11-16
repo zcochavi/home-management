@@ -3168,6 +3168,10 @@ function renderMgmt() {
   renderMgmtCats();
   renderMgmtSubjects();
   renderMgmtCommunity();
+  // "Version update" (clears the browser's cached copy of the website) has no use
+  // inside the Android app, whose files are bundled — app updates come from a new build.
+  const appUpdateCard = el('mgmtAppUpdateCard');
+  if (appUpdateCard) appUpdateCard.style.display = _isNativeApp() ? 'none' : '';
   // Webtop card — parents only
   const webtopCard = el('mgmtWebtopCard');
   if (webtopCard) {
