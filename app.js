@@ -2439,7 +2439,9 @@ function _applyWebtopAutoMatch() {
 // extension. None of this runs on the website (_isNativeApp() is false there).
 const WT_HW_URL  = 'https://webtopserver.smartschool.co.il/server/api/PupilCard/GetPupilLessonsAndHomework';
 const WT_FN_BASE = 'https://us-central1-familyhub-7fdd5.cloudfunctions.net';
-const WT_AUTO_SYNC_MS = 2 * 3600 * 1000;
+// The family's "automatic sync" setting (webtopSyncIntervalHours, default 6h as in
+// the card) sets how often the app syncs while open; never more than every 20 min.
+const _wtAutoSyncMs = () => Math.max(20 * 60 * 1000, (familyData?.webtopSyncIntervalHours || 6) * 3600 * 1000 - 60 * 1000);
 const _wtPlugin = () => window.Capacitor.Plugins?.WebtopConnect || window.Capacitor.registerPlugin('WebtopConnect');
 const _wtKey  = (k) => `fh_webtop_app_${k}_${S.uid}`;
 const _wtLoad = (k, d) => { try { const v = JSON.parse(localStorage.getItem(_wtKey(k))); return v ?? d; } catch { return d; } };
@@ -2553,6 +2555,8 @@ function renderWebtopAppBlock() {
   box.style.display = native ? '' : 'none';
   const ext = el('mgmtWebtopExtension');
   if (ext) ext.style.display = native ? 'none' : '';
+  const note = el('mgmtWebtopIntervalAppNote');
+  if (note) note.style.display = native ? '' : 'none';
   if (!native) return;
   const students = Object.values(_wtLoad('students', {}));
   const last = _wtLoad('lastSync', 0);
@@ -2579,9 +2583,12 @@ function renderWebtopAppBlock() {
 function _webtopAppAutoSync() {
   if (!_isNativeApp() || !S.uid || !featureOn('webtopConnection')) return;
   if (_wtLoad('expired', false) || !Object.keys(_wtLoad('students', {})).length) return;
-  if (Date.now() - _wtLoad('lastSync', 0) > WT_AUTO_SYNC_MS) webtopAppSync();
+  if (Date.now() - _wtLoad('lastSync', 0) >= _wtAutoSyncMs()) webtopAppSync();
 }
+// When the app opens / returns to the foreground, and every minute while it's open.
+// (A closed app doesn't sync — Android would need background work for that.)
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _webtopAppAutoSync(); });
+if (_isNativeApp()) setInterval(() => { if (document.visibilityState === 'visible') _webtopAppAutoSync(); }, 60 * 1000);
 
 function renderMgmtWebtop() {
   renderWebtopAppBlock();

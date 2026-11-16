@@ -1845,10 +1845,16 @@ exports.webtopIngest = functions.https.onRequest(async (req, res) => {
         source: 'extension',
       },
     };
+    // Drop this kid's older entries. Match by name as well as studentID: Webtop's
+    // studentID is encrypted per login session, so after a re-login it no longer
+    // matches and the old entry (often still holding a dead server token, which
+    // made webtopSync raise false "session expired" warnings) would linger.
+    const name = String(syncParams.studentName || '');
     for (const [key, entry] of Object.entries(existingStudents)) {
-      if (key !== safeKey && entry?.syncParams?.studentID === syncParams.studentID) {
-        updatePayload[`webtopStudents.${key}`] = admin.firestore.FieldValue.delete();
-      }
+      if (key === safeKey) continue;
+      const sameKid = entry?.syncParams?.studentID === syncParams.studentID
+        || (name && (entry?.studentName === name || entry?.syncParams?.studentName === name));
+      if (sameKid) updatePayload[`webtopStudents.${key}`] = admin.firestore.FieldValue.delete();
     }
     await famRef.update(updatePayload);
 
