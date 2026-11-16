@@ -16,8 +16,27 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // Permanent upload key, provided by CI from GitHub secrets (never committed —
+    // the repo is public). Google sign-in checks this key's SHA-1, so every build,
+    // debug included, must be signed with it. Without it, Android's default debug key is used.
+    def ksPath = System.getenv("ANDROID_KEYSTORE_PATH")
+    def hasUploadKey = ksPath && file(ksPath).exists()
+    signingConfigs {
+        if (hasUploadKey) {
+            upload {
+                storeFile file(ksPath)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
+        debug {
+            if (hasUploadKey) signingConfig signingConfigs.upload
+        }
         release {
+            if (hasUploadKey) signingConfig signingConfigs.upload
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

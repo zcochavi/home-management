@@ -8,6 +8,7 @@
     "sync": "npm run copy-web && npx cap sync android"
   },
   "dependencies": {
+    "@capacitor-firebase/authentication": "^8.6.0",
     "@capacitor/android": "8.6.2",
     "@capacitor/core": "8.6.2"
   },
