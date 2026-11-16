@@ -44,6 +44,17 @@ async function sendToTokens(tokens, title, body, data = {}) {
           notification: { title, body, requireInteraction: false },
           fcmOptions: { link: 'https://zcochavi.github.io/home-management/' },
         },
+        // Android app: its notification channel, icon and accent color; `tag` makes a
+        // newer notification about the same thing replace the older one, as on the web.
+        android: {
+          priority: 'high',
+          notification: {
+            channelId: 'familyhub',
+            icon: 'ic_stat_familyhub',
+            color: '#6C80E8',
+            ...(strData.tag ? { tag: strData.tag } : {}),
+          },
+        },
       })
     )
   );

@@ -20,6 +20,11 @@
             </intent-filter>
         </activity>
 
+        <!-- Push notifications (FCM): small white icon, accent color, default channel. -->
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_familyhub" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/fh_notification_color" />
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="@string/fh_notification_channel_id" />
+
         <!-- Webtop login screen (WebtopConnectPlugin): Webtop's real site in a WebView. -->
         <activity
             android:name=".WebtopLoginActivity"
