@@ -582,7 +582,15 @@ let _ffServerKnown      = {}; // last server-confirmed values — used only for 
 let _ffUnsubscribe      = null;
 let _ffFirstLoad        = true; // suppress toast for the initial snapshot on (re)subscribe
 
-const featureOn = (key) => _featureFlags[key] !== false; // default true if not set
+// Feature switch values (appConfig/featureFlags): missing/true = on for everyone,
+// false = off, 'web' = on in the browser only (beta on the website, hidden in the
+// Android app until it's flipped to on).
+const _isNativeApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const _ffState  = (v) => v === false ? 'off' : v === 'web' ? 'web' : 'on';
+const featureOn = (key) => {
+  const st = _ffState(_featureFlags[key]); // default 'on' if not set
+  return st === 'web' ? !_isNativeApp() : st === 'on';
+};
 
 const FEATURE_FLAGS_DEF = [
   { key: 'webtopConnection', icon: '📡', labelHe: 'חיבור Webtop', descHe: 'כרטיס חיבור Webtop בהגדרות, שיעורי בית מסונכרנים ועדכון קהילה' },
@@ -600,10 +608,11 @@ function subscribeToFeatureFlags() {
       // _featureFlags optimistically before this snapshot arrives — comparing against that
       // would always see "no change" for the client that made the edit.
       if (!_ffFirstLoad) {
+        const verb = { on: 'הופעל', off: 'כובה', web: 'הופעל באתר בלבד' };
         FEATURE_FLAGS_DEF.forEach(f => {
-          const was = _ffServerKnown[f.key] !== false;
-          const now = next[f.key] !== false;
-          if (was !== now) showToast(`${f.labelHe} ${now ? 'הופעל' : 'כובה'} ✓`, 'success');
+          const was = _ffState(_ffServerKnown[f.key]);
+          const now = _ffState(next[f.key]);
+          if (was !== now) showToast(`${f.labelHe} ${verb[now]} ✓`, 'success');
         });
       }
       _featureFlags = next;
@@ -947,7 +956,6 @@ async function doSignIn() {
 // picker for a Google ID token and sign the web Firebase SDK in with it — the
 // result is the same Firebase user either way. Returns a UserCredential with
 // `.credential` set (one caller re-uses it on the main auth instance).
-const _isNativeApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 async function _googleSignIn(auth) {
   if (!_isNativeApp()) return auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
   const FA = window.Capacitor.Plugins?.FirebaseAuthentication || window.Capacitor.registerPlugin('FirebaseAuthentication');
@@ -5850,8 +5858,9 @@ function _adminLogHtml(combined) {
 function renderAdminFeatureFlags() {
   const cont = el('adminFeatureFlags');
   if (!cont) return;
+  const opts = [['off', 'כבוי'], ['web', 'אתר בלבד'], ['on', 'פעיל לכולם']];
   cont.innerHTML = FEATURE_FLAGS_DEF.map(f => {
-    const on = featureOn(f.key);
+    const st = _ffState(_featureFlags[f.key]);
     return `<div class="ff-row">
       <div class="ff-row-info">
         <span class="ff-icon">${f.icon}</span>
@@ -5860,15 +5869,18 @@ function renderAdminFeatureFlags() {
           <div class="ff-desc">${f.descHe}</div>
         </div>
       </div>
-      <label class="ff-toggle">
-        <input type="checkbox" ${on ? 'checked' : ''} onchange="saveFeatureFlag('${f.key}',this.checked)">
-        <span class="ff-slider"></span>
-      </label>
+      <div class="ff-seg" role="radiogroup" aria-label="${f.labelHe}">
+        ${opts.map(([v, label]) => `<button type="button" role="radio" aria-checked="${st === v}"
+          class="${st === v ? `active ${v}` : ''}" onclick="saveFeatureFlag('${f.key}','${v}')">${label}</button>`).join('')}
+      </div>
     </div>`;
   }).join('');
 }
 
-async function saveFeatureFlag(key, value) {
+async function saveFeatureFlag(key, state) {
+  const value = state === 'off' ? false : state === 'web' ? 'web' : true;
+  const prev = _featureFlags[key];
+  if (_ffState(prev) === _ffState(value)) return;
   _featureFlags[key] = value;
   // Immediately re-render all affected areas — don't wait for onSnapshot
   renderAdminFeatureFlags();
@@ -5881,7 +5893,8 @@ async function saveFeatureFlag(key, value) {
     // Success toast comes from subscribeToFeatureFlags' onSnapshot — shown to every
     // connected client (including this one) so the change is visible to the whole family.
   } catch(e) {
-    _featureFlags[key] = !value;
+    _featureFlags[key] = prev;
+    renderAdminFeatureFlags();
     showToast('שגיאה בשמירה', 'error');
   }
 }
