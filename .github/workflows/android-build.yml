@@ -2,15 +2,15 @@ name: Build Android app
 
 # Builds an installable debug APK of the FamilyHub Android app (the web app
 # wrapped with Capacitor). Download it from the run's "Artifacts" section.
+# Never deploys anything and is not part of the web deploy path.
 on:
   workflow_dispatch:
+  # PR checks only for changes to the app itself, so web-only PRs on the normal
+  # feature-branch -> main -> gh-pages path are never held up by an Android build.
   pull_request:
     branches: [main]
     paths:
       - 'mobile/**'
-      - 'index.html'
-      - 'app.js'
-      - 'styles.css'
       - '.github/workflows/android-build.yml'
   push:
     branches: [main]
