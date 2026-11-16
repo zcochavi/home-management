@@ -2387,6 +2387,7 @@ function subscribeToFamily(uid) {
     pruneShoppingHistory();
     migrateGroceryIfNeeded();
     _applyWebtopAutoMatch();
+    if (el('mgmtWebtopCard')?.offsetParent) renderMgmtWebtop();
     afterLoad();
   }, err => {
     console.error('Firestore error:', err);
@@ -2534,7 +2535,7 @@ async function webtopAppSync({ manual = false } = {}) {
     }
   } finally {
     _wtSyncing = false;
-    renderWebtopAppBlock();
+    renderMgmtWebtop();
   }
 }
 
