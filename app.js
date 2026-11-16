@@ -2377,6 +2377,7 @@ function subscribeToFamily(uid) {
     S.homework     = d.homework     || [];
     S.events       = d.events       || [];
     _webtopHomework = d.webtopHomework || [];
+    _webtopAppAutoSync();
     _webtopUpdatedAt = d.webtopUpdatedAt?.toDate?.() || null;
     S.stars        = d.stars        || {};
     S.groceryPool      = d.groceryPool      || [];
@@ -2429,7 +2430,168 @@ function _applyWebtopAutoMatch() {
   });
 }
 
+// ─── Webtop inside the Android app ────────────────────────────────────────────
+// Webtop blocks cloud servers and its CORS rules stop this page from calling it,
+// but it accepts requests from the phone itself. In the Android app, the
+// WebtopConnect native plugin opens Webtop's real site for the parent to log in
+// (capturing each kid's homework params from the site's own requests), then
+// fetches homework from the phone; results go to webtopIngest, like the desktop
+// extension. None of this runs on the website (_isNativeApp() is false there).
+const WT_HW_URL  = 'https://webtopserver.smartschool.co.il/server/api/PupilCard/GetPupilLessonsAndHomework';
+const WT_FN_BASE = 'https://us-central1-familyhub-7fdd5.cloudfunctions.net';
+// The family's "automatic sync" setting (webtopSyncIntervalHours, default 6h as in
+// the card) sets how often the app syncs while open; never more than every 20 min.
+const _wtAutoSyncMs = () => Math.max(20 * 60 * 1000, (familyData?.webtopSyncIntervalHours || 6) * 3600 * 1000 - 60 * 1000);
+const _wtPlugin = () => window.Capacitor.Plugins?.WebtopConnect || window.Capacitor.registerPlugin('WebtopConnect');
+const _wtKey  = (k) => `fh_webtop_app_${k}_${S.uid}`;
+const _wtLoad = (k, d) => { try { const v = JSON.parse(localStorage.getItem(_wtKey(k))); return v ?? d; } catch { return d; } };
+const _wtSave = (k, v) => { try { localStorage.setItem(_wtKey(k), JSON.stringify(v)); } catch {} };
+const _wtStudentKey = (p) => `${p.studentName || ''}|${p.classCode}`;
+let _wtSyncing = false;
+
+// Webtop's day → hour → schedule structure → homework items (same shape as the
+// extension and the server produce).
+function _webtopFlatten(json, classCode) {
+  const out = [];
+  for (const day of Object.values(json?.data || {})) {
+    for (const hour of Object.values(day?.hoursData || {})) {
+      if (!Array.isArray(hour?.scheduale)) continue;
+      for (const s of hour.scheduale) {
+        if (s?.homeWork) out.push({ subject: s.subject_name || '', text: s.homeWork, context: s.descClass || '', date: (day.date || '').slice(0, 10), classCode });
+      }
+    }
+  }
+  return out;
+}
+
+async function webtopAppConnect() {
+  if (!_isNativeApp()) return;
+  let students = [];
+  try {
+    ({ students = [] } = await _wtPlugin().open());
+  } catch (e) {
+    showToast('שגיאה בפתיחת Webtop', 'error');
+    return;
+  }
+  if (!students.length) {
+    showToast('לא נמצאו ילדים — היכנסו ופתחו את דף שיעורי הבית של כל ילד/ה', 'error');
+    renderWebtopAppBlock();
+    return;
+  }
+  // Params carry a session-bound studentID, so a new login replaces the old set.
+  const map = {};
+  for (const p of students) map[_wtStudentKey(p)] = p;
+  _wtSave('students', map);
+  _wtSave('expired', false);
+  // webtopIngest only accepts families that went through webtopLink.
+  await fetch(`${WT_FN_BASE}/webtopLink`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ familyId: S.uid }) }).catch(() => {});
+  await webtopAppSync({ manual: true });
+}
+
+async function webtopAppSync({ manual = false } = {}) {
+  if (!_isNativeApp() || _wtSyncing || !S.uid) return;
+  const students = Object.values(_wtLoad('students', {}));
+  if (!students.length) { if (manual) showToast('יש להתחבר ל-Webtop קודם', 'error'); return; }
+  _wtSyncing = true;
+  renderWebtopAppBlock();
+  const full = _wtLoad('fullSync', {});
+  let items = 0, kidsOk = 0, authFail = 0, otherFail = 0;
+  try {
+    for (const p of students) {
+      const key = _wtStudentKey(p);
+      const classCode = String(p.classCode ?? p.studentID ?? '');
+      const weeks = full[key] ? [0] : [0, -1, -2, -3]; // first sync: ~1 month back
+      let hw = [], weeksOk = 0;
+      for (const w of weeks) {
+        try {
+          const r = await _wtPlugin().post({ url: WT_HW_URL, body: JSON.stringify({ ...p, weekIndex: w }) });
+          if (r.status === 200) { hw = hw.concat(_webtopFlatten(JSON.parse(r.text), classCode)); weeksOk++; }
+          else if ([401, 403, 500].includes(r.status)) authFail++; // Webtop answers 500 to an expired session
+          else otherFail++;
+        } catch (e) { otherFail++; }
+      }
+      if (!weeksOk) continue;
+      const res = await fetch(`${WT_FN_BASE}/webtopIngest`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ familyId: S.uid, syncParams: p, homework: hw }),
+      }).catch(() => null);
+      if (!res || !res.ok) { otherFail++; continue; }
+      const j = await res.json().catch(() => ({}));
+      items += j.homeworkCount || 0;
+      kidsOk++;
+      if (weeksOk === weeks.length) full[key] = true;
+    }
+    _wtSave('fullSync', full);
+    if (kidsOk) {
+      _wtSave('lastSync', Date.now());
+      _wtSave('expired', false);
+      if (manual) showToast(`✓ סונכרנו ${items} שיעורי בית`, 'success');
+    } else if (authFail && !otherFail) {
+      _wtSave('expired', true);
+      if (manual) showToast('ההתחברות ל-Webtop פגה — התחברו מחדש', 'error');
+    } else if (manual) {
+      showToast('הסנכרון נכשל — בדקו חיבור ונסו שוב', 'error');
+    }
+  } finally {
+    _wtSyncing = false;
+    renderWebtopAppBlock();
+  }
+}
+
+async function webtopAppDisconnect() {
+  if (!_isNativeApp()) return;
+  if (!(await _confirm('לנתק את Webtop במכשיר הזה? שיעורי הבית שכבר סונכרנו יישארו.'))) return;
+  try { await _wtPlugin().disconnect(); } catch (e) {}
+  ['students', 'fullSync', 'lastSync', 'expired'].forEach(k => { try { localStorage.removeItem(_wtKey(k)); } catch {} });
+  renderWebtopAppBlock();
+}
+
+// In the app the Webtop card shows the in-app connection instead of the
+// extension instructions. On the website it stays exactly as it was.
+function renderWebtopAppBlock() {
+  const box = el('mgmtWebtopApp');
+  if (!box) return;
+  const native = _isNativeApp();
+  box.style.display = native ? '' : 'none';
+  const ext = el('mgmtWebtopExtension');
+  if (ext) ext.style.display = native ? 'none' : '';
+  const note = el('mgmtWebtopIntervalAppNote');
+  if (note) note.style.display = native ? '' : 'none';
+  if (!native) return;
+  const students = Object.values(_wtLoad('students', {}));
+  const last = _wtLoad('lastSync', 0);
+  const expired = _wtLoad('expired', false);
+  const st = el('mgmtWebtopAppStatus');
+  if (_wtSyncing) {
+    st.textContent = '⏳ מסנכרן…'; st.style.color = '#6366f1';
+  } else if (!students.length) {
+    st.textContent = 'לא מחובר במכשיר הזה'; st.style.color = '#9ca3af';
+  } else if (expired) {
+    st.textContent = '⚠️ ההתחברות פגה — התחברו מחדש'; st.style.color = '#d97706';
+  } else {
+    const names = students.map(p => p.studentName || `כיתה ${p.classCode}`).join(', ');
+    const when = last ? new Date(last).toLocaleString(t('locale'), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'טרם';
+    st.textContent = `✅ ${names} · סונכרן: ${when}`; st.style.color = '#16a34a';
+  }
+  el('mgmtWebtopAppConnect').textContent = students.length ? '🔑 התחברות מחדש ל-Webtop' : '🔗 התחברות ל-Webtop';
+  el('mgmtWebtopAppSync').style.display = students.length ? '' : 'none';
+  el('mgmtWebtopAppSync').disabled = _wtSyncing;
+  el('mgmtWebtopAppDisconnect').style.display = students.length ? '' : 'none';
+}
+
+// Sync quietly when the app opens or comes back to the foreground (at most every 2h).
+function _webtopAppAutoSync() {
+  if (!_isNativeApp() || !S.uid || !featureOn('webtopConnection')) return;
+  if (_wtLoad('expired', false) || !Object.keys(_wtLoad('students', {})).length) return;
+  if (Date.now() - _wtLoad('lastSync', 0) >= _wtAutoSyncMs()) webtopAppSync();
+}
+// When the app opens / returns to the foreground, and every minute while it's open.
+// (A closed app doesn't sync — Android would need background work for that.)
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _webtopAppAutoSync(); });
+if (_isNativeApp()) setInterval(() => { if (document.visibilityState === 'visible') _webtopAppAutoSync(); }, 60 * 1000);
+
 function renderMgmtWebtop() {
+  renderWebtopAppBlock();
   const el2 = el('mgmtWebtopStatus');
   if (!el2) return;
   const students = [...new Set(_webtopHomework.map(h => h.studentName).filter(Boolean))];

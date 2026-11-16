@@ -25,6 +25,8 @@ jobs:
   build:
     name: Build debug APK
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # to publish the APK to the android-latest release
     steps:
       - uses: actions/checkout@v4
 
@@ -87,3 +89,18 @@ jobs:
           name: familyhub-android-debug
           path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
+
+      # Builds from main are also published to one fixed link, so the newest app
+      # can be installed straight from the phone (no zip):
+      # https://github.com/zcochavi/home-management/releases/download/android-latest/FamilyHub.apk
+      - name: Publish to the android-latest download link
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/FamilyHub.apk"
+          gh release delete android-latest --yes --cleanup-tag --repo "$GITHUB_REPOSITORY" || true
+          gh release create android-latest "$RUNNER_TEMP/FamilyHub.apk" \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "FamilyHub Android (latest test build)" \
+            --notes "Test build from main, commit ${GITHUB_SHA::7} ($(date -u '+%Y-%m-%d %H:%M UTC')). Replaced automatically by every new build. Install: download FamilyHub.apk on the phone and open it."
