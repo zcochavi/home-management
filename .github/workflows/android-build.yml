@@ -1,0 +1,89 @@
+name: Build Android app
+
+# Builds an installable debug APK of the FamilyHub Android app (the web app
+# wrapped with Capacitor). Download it from the run's "Artifacts" section.
+# Never deploys anything and is not part of the web deploy path.
+on:
+  workflow_dispatch:
+  # PR checks only for changes to the app itself, so web-only PRs on the normal
+  # feature-branch -> main -> gh-pages path are never held up by an Android build.
+  pull_request:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/android-build.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - 'index.html'
+      - 'app.js'
+      - 'styles.css'
+      - '.github/workflows/android-build.yml'
+
+jobs:
+  build:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install Capacitor
+        run: npm ci
+        working-directory: mobile
+
+      - name: Copy web app into the Android project
+        run: npm run sync
+        working-directory: mobile
+
+      # Permanent upload key from repo secrets (the repo is public, so it is never
+      # committed). Google sign-in only works in builds signed with this key.
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.p12"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/upload.p12" >> "$GITHUB_ENV"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 secret not set - using a throwaway debug key; Google sign-in will not work in this build."
+          fi
+
+      # Firebase's Android config. Committed at mobile/android/app/google-services.json
+      # (not secret), or supplied via the GOOGLE_SERVICES_JSON secret. The native
+      # sign-in plugin needs it — without it the app would crash on launch.
+      - name: Firebase config
+        env:
+          GS_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          f=mobile/android/app/google-services.json
+          if [ ! -f "$f" ] && [ -n "$GS_JSON" ]; then printf '%s' "$GS_JSON" > "$f"; fi
+          if [ ! -f "$f" ]; then
+            echo "::error::mobile/android/app/google-services.json is missing - register the Android app (com.familyhub.app) in Firebase and add the file."
+            exit 1
+          fi
+
+      - name: Build APK
+        run: ./gradlew assembleDebug --no-daemon
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: familyhub-android-debug
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

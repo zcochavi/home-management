@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FamilyHub</string>
+    <string name="title_activity_main">FamilyHub</string>
+    <string name="package_name">com.familyhub.app</string>
+    <string name="custom_url_scheme">com.familyhub.app</string>
+</resources>

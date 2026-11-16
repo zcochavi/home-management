@@ -582,7 +582,15 @@ let _ffServerKnown      = {}; // last server-confirmed values — used only for 
 let _ffUnsubscribe      = null;
 let _ffFirstLoad        = true; // suppress toast for the initial snapshot on (re)subscribe
 
-const featureOn = (key) => _featureFlags[key] !== false; // default true if not set
+// Feature switch values (appConfig/featureFlags): missing/true = on for everyone,
+// false = off, 'web' = on in the browser only (beta on the website, hidden in the
+// Android app until it's flipped to on).
+const _isNativeApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const _ffState  = (v) => v === false ? 'off' : v === 'web' ? 'web' : 'on';
+const featureOn = (key) => {
+  const st = _ffState(_featureFlags[key]); // default 'on' if not set
+  return st === 'web' ? !_isNativeApp() : st === 'on';
+};
 
 const FEATURE_FLAGS_DEF = [
   { key: 'webtopConnection', icon: '📡', labelHe: 'חיבור Webtop', descHe: 'כרטיס חיבור Webtop בהגדרות, שיעורי בית מסונכרנים ועדכון קהילה' },
@@ -600,10 +608,11 @@ function subscribeToFeatureFlags() {
       // _featureFlags optimistically before this snapshot arrives — comparing against that
       // would always see "no change" for the client that made the edit.
       if (!_ffFirstLoad) {
+        const verb = { on: 'הופעל', off: 'כובה', web: 'הופעל באתר בלבד' };
         FEATURE_FLAGS_DEF.forEach(f => {
-          const was = _ffServerKnown[f.key] !== false;
-          const now = next[f.key] !== false;
-          if (was !== now) showToast(`${f.labelHe} ${now ? 'הופעל' : 'כובה'} ✓`, 'success');
+          const was = _ffState(_ffServerKnown[f.key]);
+          const now = _ffState(next[f.key]);
+          if (was !== now) showToast(`${f.labelHe} ${verb[now]} ✓`, 'success');
         });
       }
       _featureFlags = next;
@@ -942,6 +951,32 @@ async function doSignIn() {
   }
 }
 
+// Google sign-in. In a browser: the usual popup. Inside the FamilyHub Android app
+// (Capacitor), Google blocks its web sign-in, so ask Android's native account
+// picker for a Google ID token and sign the web Firebase SDK in with it — the
+// result is the same Firebase user either way. Returns a UserCredential with
+// `.credential` set (one caller re-uses it on the main auth instance).
+async function _googleSignIn(auth) {
+  if (!_isNativeApp()) return auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+  const FA = window.Capacitor.Plugins?.FirebaseAuthentication || window.Capacitor.registerPlugin('FirebaseAuthentication');
+  let res;
+  try {
+    res = await FA.signInWithGoogle();
+  } catch (e) {
+    const msg = String(e?.message || e?.code || e || '');
+    const err = new Error(msg || 'Google sign-in failed');
+    // Backing out of the account picker behaves like closing the popup (silent).
+    err.code = /cancel/i.test(msg) ? 'auth/popup-closed-by-user' : 'auth/native-google-failed';
+    throw err;
+  }
+  const idToken = res?.credential?.idToken;
+  if (!idToken) { const err = new Error('No Google ID token returned'); err.code = 'auth/native-google-failed'; throw err; }
+  const credential = firebase.auth.GoogleAuthProvider.credential(idToken, res?.credential?.accessToken || null);
+  const uc = await auth.signInWithCredential(credential);
+  if (!uc.credential) uc.credential = credential;
+  return uc;
+}
+
 async function doGoogleSignIn() {
   if (!FB_CONFIGURED) return;
   el('siError').textContent = '';
@@ -949,7 +984,7 @@ async function doGoogleSignIn() {
   _googleFlow = true;
   setAuthLoading(true);
   try {
-    const cred = await fbAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    const cred = await _googleSignIn(fbAuth);
     const user = cred.user;
     // Existing family owner, or a joined member already mapped to a family?
     const [own, mapped] = await Promise.all([
@@ -1259,7 +1294,7 @@ async function connectGoogleAccount() {
   const app2 = firebase.initializeApp(FIREBASE_CONFIG, 'link_' + Date.now());
   let linked = false;
   try {
-    const cred = await app2.auth().signInWithPopup(new firebase.auth.GoogleAuthProvider());
+    const cred = await _googleSignIn(app2.auth());
     const user = cred.user;
     if (user.uid === S.uid) { await _alert('זהו החשבון של מנהל/ת המשפחה — היכנס/י איתו ישירות במסך הכניסה.'); return; }
     const link = await _linkAccountToFamily(app2, user, code);
@@ -1393,7 +1428,7 @@ async function doJoinWithGoogle() {
   let user;
   try {
     // Popup first — it must open directly from the click, before any other async work
-    user = (await fbAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider())).user;
+    user = (await _googleSignIn(fbAuth)).user;
   } catch(e) {
     _googleFlow = false;
     setAuthLoading(false);
@@ -5823,8 +5858,9 @@ function _adminLogHtml(combined) {
 function renderAdminFeatureFlags() {
   const cont = el('adminFeatureFlags');
   if (!cont) return;
+  const opts = [['off', 'כבוי'], ['web', 'אתר בלבד'], ['on', 'פעיל לכולם']];
   cont.innerHTML = FEATURE_FLAGS_DEF.map(f => {
-    const on = featureOn(f.key);
+    const st = _ffState(_featureFlags[f.key]);
     return `<div class="ff-row">
       <div class="ff-row-info">
         <span class="ff-icon">${f.icon}</span>
@@ -5833,15 +5869,18 @@ function renderAdminFeatureFlags() {
           <div class="ff-desc">${f.descHe}</div>
         </div>
       </div>
-      <label class="ff-toggle">
-        <input type="checkbox" ${on ? 'checked' : ''} onchange="saveFeatureFlag('${f.key}',this.checked)">
-        <span class="ff-slider"></span>
-      </label>
+      <div class="ff-seg" role="radiogroup" aria-label="${f.labelHe}">
+        ${opts.map(([v, label]) => `<button type="button" role="radio" aria-checked="${st === v}"
+          class="${st === v ? `active ${v}` : ''}" onclick="saveFeatureFlag('${f.key}','${v}')">${label}</button>`).join('')}
+      </div>
     </div>`;
   }).join('');
 }
 
-async function saveFeatureFlag(key, value) {
+async function saveFeatureFlag(key, state) {
+  const value = state === 'off' ? false : state === 'web' ? 'web' : true;
+  const prev = _featureFlags[key];
+  if (_ffState(prev) === _ffState(value)) return;
   _featureFlags[key] = value;
   // Immediately re-render all affected areas — don't wait for onSnapshot
   renderAdminFeatureFlags();
@@ -5854,7 +5893,8 @@ async function saveFeatureFlag(key, value) {
     // Success toast comes from subscribeToFeatureFlags' onSnapshot — shown to every
     // connected client (including this one) so the change is visible to the whole family.
   } catch(e) {
-    _featureFlags[key] = !value;
+    _featureFlags[key] = prev;
+    renderAdminFeatureFlags();
     showToast('שגיאה בשמירה', 'error');
   }
 }

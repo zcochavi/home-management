@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "655474126170",
+    "project_id": "familyhub-7fdd5",
+    "storage_bucket": "familyhub-7fdd5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:655474126170:android:bcc9df94ed04f9527b9763",
+        "android_client_info": {
+          "package_name": "com.familyhub.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "655474126170-1pmk0344i4cbvjj7kdpq3m7decednlso.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDAYe9ISrq_4rg5RHd6hMp-Ov9ZQF-fj38"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "655474126170-1pmk0344i4cbvjj7kdpq3m7decednlso.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

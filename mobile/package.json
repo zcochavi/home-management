@@ -1,0 +1,18 @@
+{
+  "name": "familyhub-mobile",
+  "private": true,
+  "version": "1.0.0",
+  "description": "FamilyHub Android app (Capacitor shell around the FamilyHub web app)",
+  "scripts": {
+    "copy-web": "node scripts/copy-web.mjs",
+    "sync": "npm run copy-web && npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor-firebase/authentication": "^8.6.0",
+    "@capacitor/android": "8.6.2",
+    "@capacitor/core": "8.6.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.2"
+  }
+}
