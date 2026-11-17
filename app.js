@@ -587,13 +587,21 @@ let _ffFirstLoad        = true; // suppress toast for the initial snapshot on (r
 // Android app until it's flipped to on).
 const _isNativeApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 const _ffState  = (v) => v === false ? 'off' : v === 'web' ? 'web' : 'on';
+// A switch's stored value, or — if never set — its default: on, unless its definition
+// says defaultOff (for things that must not appear until deliberately enabled).
+const _ffRaw = (key, src = _featureFlags) => {
+  const v = src[key];
+  if (v === undefined && FEATURE_FLAGS_DEF.find(f => f.key === key)?.defaultOff) return false;
+  return v;
+};
 const featureOn = (key) => {
-  const st = _ffState(_featureFlags[key]); // default 'on' if not set
+  const st = _ffState(_ffRaw(key));
   return st === 'web' ? !_isNativeApp() : st === 'on';
 };
 
 const FEATURE_FLAGS_DEF = [
   { key: 'webtopConnection', icon: '📡', labelHe: 'חיבור Webtop', descHe: 'כרטיס חיבור Webtop בהגדרות, שיעורי בית מסונכרנים ועדכון קהילה' },
+  { key: 'androidBeta', icon: '📱', labelHe: 'הזמנה לבודקי אנדרואיד', descHe: 'כרטיס בבית שמזמין הורים לבדוק את האפליקציה — באתר, באנדרואיד, כשיש קישור', defaultOff: true, urlField: 'androidBetaUrl' },
 ];
 
 function subscribeToFeatureFlags() {
@@ -610,8 +618,8 @@ function subscribeToFeatureFlags() {
       if (!_ffFirstLoad) {
         const verb = { on: 'הופעל', off: 'כובה', web: 'הופעל באתר בלבד' };
         FEATURE_FLAGS_DEF.forEach(f => {
-          const was = _ffState(_ffServerKnown[f.key]);
-          const now = _ffState(next[f.key]);
+          const was = _ffState(_ffRaw(f.key, _ffServerKnown));
+          const now = _ffState(_ffRaw(f.key, next));
           if (was !== now) showToast(`${f.labelHe} ${verb[now]} ✓`, 'success');
         });
       }
@@ -6142,7 +6150,7 @@ function renderAdminFeatureFlags() {
   if (!cont) return;
   const opts = [['off', 'כבוי'], ['web', 'אתר בלבד'], ['on', 'פעיל לכולם']];
   cont.innerHTML = FEATURE_FLAGS_DEF.map(f => {
-    const st = _ffState(_featureFlags[f.key]);
+    const st = _ffState(_ffRaw(f.key));
     return `<div class="ff-row">
       <div class="ff-row-info">
         <span class="ff-icon">${f.icon}</span>
@@ -6155,14 +6163,17 @@ function renderAdminFeatureFlags() {
         ${opts.map(([v, label]) => `<button type="button" role="radio" aria-checked="${st === v}"
           class="${st === v ? `active ${v}` : ''}" onclick="saveFeatureFlag('${f.key}','${v}')">${label}</button>`).join('')}
       </div>
-    </div>`;
+    </div>${f.urlField ? `<div class="ff-url-row">
+      <input type="url" id="ffUrl_${f.urlField}" dir="ltr" placeholder="https://groups.google.com/g/..." value="${esc(_featureFlags[f.urlField] || '')}">
+      <button type="button" class="mgmt-add-btn" onclick="saveFeatureFlagUrl('${f.urlField}')">שמור קישור</button>
+    </div>` : ''}`;
   }).join('');
 }
 
 async function saveFeatureFlag(key, state) {
   const value = state === 'off' ? false : state === 'web' ? 'web' : true;
   const prev = _featureFlags[key];
-  if (_ffState(prev) === _ffState(value)) return;
+  if (_ffState(_ffRaw(key)) === _ffState(value)) return;
   _featureFlags[key] = value;
   // Immediately re-render all affected areas — don't wait for onSnapshot
   renderAdminFeatureFlags();
@@ -6179,6 +6190,19 @@ async function saveFeatureFlag(key, state) {
     renderAdminFeatureFlags();
     showToast('שגיאה בשמירה', 'error');
   }
+}
+
+// A link that goes with a switch (e.g. the Android beta join link), saved next to it.
+async function saveFeatureFlagUrl(field) {
+  const input = el('ffUrl_' + field);
+  const url = (input?.value || '').trim();
+  if (url && !/^https:\/\/\S+$/.test(url)) { showToast('הקישור חייב להתחיל ב-https://', 'error'); return; }
+  try {
+    await fbDb.collection('appConfig').doc('featureFlags').set({ [field]: url }, { merge: true });
+    _featureFlags[field] = url;
+    showToast(url ? 'הקישור נשמר ✓' : 'הקישור נמחק', 'success');
+    renderHome();
+  } catch (e) { showToast('שגיאה בשמירה', 'error'); }
 }
 
 async function _fetchAdminPanelData() {
@@ -7778,6 +7802,31 @@ function renderWeatherWidget() {
   if (sep) sep.style.display = '';
 }
 
+// "Join the Android beta" card on the home screen: parents, on the website, on an
+// Android phone, while the androidBeta switch is on and a join link is set. "Not now"
+// hides it for that person on that device.
+const _androidBetaDismissKey = () => `fh_android_beta_dismissed_${S.uid}_${S.user}`;
+function _androidBetaCardHtml() {
+  const url = _featureFlags.androidBetaUrl;
+  if (!url || !featureOn('androidBeta') || _isNativeApp() || isKid() || !/Android/i.test(navigator.userAgent)) return '';
+  try { if (localStorage.getItem(_androidBetaDismissKey())) return ''; } catch (e) {}
+  return `<div class="android-beta-card">
+    <div class="abc-icon">📱</div>
+    <div class="abc-body">
+      <div class="abc-title">FamilyHub מגיעה לאנדרואיד!</div>
+      <div class="abc-text">מחפשים הורים שיבדקו את האפליקציה לפני שהיא עולה לחנות — עם סנכרון שיעורי בית מ-Webtop ישירות בטלפון. רק להצטרף ולהשאיר מותקן שבועיים.</div>
+      <div class="abc-actions">
+        <a class="abc-join" href="${esc(url)}" target="_blank" rel="noopener">הצטרפות לבדיקה</a>
+        <button type="button" class="abc-later" onclick="dismissAndroidBeta()">לא עכשיו</button>
+      </div>
+    </div>
+  </div>`;
+}
+function dismissAndroidBeta() {
+  try { localStorage.setItem(_androidBetaDismissKey(), '1'); } catch (e) {}
+  renderHome();
+}
+
 function renderHome() {
   const homeChipsEl = el('homeChips');
   if (homeChipsEl) { homeChipsEl.innerHTML = _allMemberChipsHtml(); _applyChipsSpread('homeChips'); }
@@ -7798,6 +7847,9 @@ function renderHome() {
       <div class="hgc-line2"><span>${dateStr}</span><span class="header-date-sep" id="headerWeatherSep" style="display:none">·</span><span id="headerWeather"></span></div>
     </div>`;
   }
+
+  const betaCard = _androidBetaCardHtml();
+  if (betaCard) bannerEl.insertAdjacentHTML('beforeend', betaCard);
 
   renderWeatherWidget();
 
