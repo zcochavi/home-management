@@ -2414,3 +2414,16 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .capps-url { display: flex; gap: 8px; margin-top: 6px; }
 .capps-url input { flex: 1; min-width: 0; border: 1.5px solid var(--gray-300); border-radius: var(--r-input); padding: 9px 10px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--gray-900); background: var(--gray-50); text-align: left; }
 .capps-url .btn { padding: 9px 14px; font-size: 13px; }
+
+/* Android beta invitation (home screen, website on Android phones only) */
+.android-beta-card { display: flex; gap: 12px; align-items: flex-start; margin-top: 12px; padding: 14px 16px; border-radius: 16px;
+  background: linear-gradient(135deg, #eef1ff, #f6f0ff); border: 1px solid #dfe3fb; }
+.android-beta-card .abc-icon { font-size: 28px; line-height: 1; flex-shrink: 0; }
+.android-beta-card .abc-body { flex: 1; min-width: 0; }
+.android-beta-card .abc-title { font-size: 15px; font-weight: 800; color: var(--gray-900); }
+.android-beta-card .abc-text { font-size: 12.5px; font-weight: 600; color: var(--gray-600); line-height: 1.6; margin-top: 4px; }
+.android-beta-card .abc-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.android-beta-card .abc-join { background: var(--primary-500); color: #fff; text-decoration: none; font-size: 13px; font-weight: 700; padding: 8px 16px; border-radius: 999px; }
+.android-beta-card .abc-later { background: transparent; border: 0; color: var(--gray-500); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; padding: 8px 6px; }
+.ff-url-row { display: flex; gap: 8px; padding: 0 0 12px; border-bottom: 1px solid var(--gray-100); }
+.ff-url-row input { flex: 1; min-width: 0; font-size: 12px; padding: 7px 10px; border: 1.5px solid var(--gray-200); border-radius: 8px; }
