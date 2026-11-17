@@ -2887,6 +2887,7 @@ async function _gcalServerRefresh() {
 }
 async function _gcalApplyToken(accessToken, expiresIn) {
   gcal.accessToken = accessToken;
+  gcal.lastErr = ''; // connected now — don't keep showing an earlier failure
   try { gapi.client.setToken({ access_token: accessToken }); } catch(e) {}
   _gcalTokSave(accessToken, expiresIn);
   if (S.uid && S.user) localStorage.setItem('familyhub_gcal_' + S.uid + '_' + S.user, '1');
