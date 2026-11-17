@@ -2286,6 +2286,12 @@ function gcalDocRef(context, member) {
 }
 
 async function googleTokenRequest(params) {
+  // Secrets are bound at deploy time: after rotating GOOGLE_OAUTH_CLIENT_SECRET in
+  // Secret Manager, redeploy the functions. A missing value is logged loudly here;
+  // a wrong one comes back from Google as invalid_client ("client secret is invalid").
+  if (!(process.env.GOOGLE_OAUTH_CLIENT_SECRET || '').trim()) {
+    console.error('googleTokenRequest: GOOGLE_OAUTH_CLIENT_SECRET is empty — set it in Secret Manager and redeploy');
+  }
   const res = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
