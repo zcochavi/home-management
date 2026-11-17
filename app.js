@@ -2925,7 +2925,7 @@ function tryAutoConnectGCal() {
   // Schedule a silent reconnect on the next user gesture (click/tap).
   // requestAccessToken() requires a user-gesture context to avoid popup blockers;
   // piggybacking on the very next tap achieves this invisibly.
-  if (!gcalConnected() && gcalWasConnected() && gcalReady() && gcal.tokenClient && !_gcalGestureListener) {
+  if (!_isNativeApp() && !gcalConnected() && gcalWasConnected() && gcalReady() && gcal.tokenClient && !_gcalGestureListener) {
     _gcalGestureListener = () => {
       document.removeEventListener('click',      _gcalGestureListener);
       document.removeEventListener('touchstart', _gcalGestureListener);
@@ -2972,8 +2972,29 @@ async function fetchGCalEvents() {
   }
   gcal.syncing=false; renderGCalBar(); renderCalendar();
 }
+// Android app: Google blocks its web consent popup inside apps, so ask Android's
+// native authorization screen (GoogleCalendarAuth plugin) for a one-time code for
+// the same OAuth client. The server exchanges it like the website's code, so the
+// connection (saved per FamilyHub login + member) is shared with the website.
+async function connectGCalNative() {
+  const P = window.Capacitor.Plugins?.GoogleCalendarAuth || window.Capacitor.registerPlugin('GoogleCalendarAuth');
+  try {
+    const r = await P.authorize({ serverClientId: GOOGLE_CLIENT_ID, scopes: [GCAL_SCOPE] });
+    if (!r?.serverAuthCode) throw new Error('Google returned no authorization code');
+    const x = await fbFunctions.httpsCallable('gcalExchangeCode')({ code: r.serverAuthCode, member: S.user, native: true });
+    gcal.serverFailed = false; gcal.codeBroken = false; gcal.lastErr = '';
+    await _gcalApplyToken(x.data.accessToken, x.data.expiresIn);
+  } catch (e) {
+    if (/cancel/i.test(String(e?.message || ''))) { renderGCalBar(); return; }
+    console.error('connectGCalNative:', e);
+    gcal.lastErr = 'connect: ' + _gcalErrText(e);
+    showToast((getLang() === 'he' ? 'החיבור ל-Google Calendar נכשל: ' : 'Google Calendar connection failed: ') + _gcalErrText(e), 'error', 8000);
+    renderGCalBar();
+  }
+}
 function connectGCal() {
   if (!gcalReady()) return;
+  if (_isNativeApp()) return connectGCalNative();
   if (gcal.codeClient && !gcal.codeBroken) gcal.codeClient.requestCode();
   else if (gcal.tokenClient) gcal.tokenClient.requestAccessToken({prompt:''});
 }

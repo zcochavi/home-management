@@ -2305,8 +2305,10 @@ exports.gcalExchangeCode = gcalCallable(async (data, context) => {
   if (!data?.code || typeof data.code !== 'string') {
     throw new functions.https.HttpsError('invalid-argument', 'Missing code');
   }
+  // Website (Google's JS popup) codes use the 'postmessage' redirect; codes from the
+  // Android app's native authorization (server auth codes) are exchanged with none.
   const { ok, json } = await googleTokenRequest({
-    code: data.code, grant_type: 'authorization_code', redirect_uri: 'postmessage',
+    code: data.code, grant_type: 'authorization_code', redirect_uri: data.native ? '' : 'postmessage',
   });
   if (!ok || !json.access_token) {
     console.error('gcalExchangeCode failed:', json.error, json.error_description);
