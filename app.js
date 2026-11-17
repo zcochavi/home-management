@@ -2916,6 +2916,13 @@ async function onGCalCode(resp) {
   }
 }
 function tryAutoConnectGCal() {
+  if (_isNativeApp() && !gcalWasConnected() && !gcalConnected() && gcalReady() && !gcal.nativeProbeDone && S.uid && S.user) {
+    // The connection lives server-side per login + member, so one made on the website
+    // works here too — check once quietly; if there's none, Connect is offered as usual.
+    gcal.nativeProbeDone = true;
+    _gcalServerRefresh().then(ok => { if (ok === false) { gcal.serverFailed = false; renderGCalBar(); } });
+    return;
+  }
   if (gcalWasConnected() && _gcalTokRestore()) return;
   if (gcalWasConnected() && gcalReady() && !gcalConnected() && !gcal.serverFailed) {
     _gcalServerRefresh().then(ok => { if (ok === false && gcal.serverFailed) tryAutoConnectGCal(); });
@@ -2972,26 +2979,35 @@ async function fetchGCalEvents() {
   }
   gcal.syncing=false; renderGCalBar(); renderCalendar();
 }
-// Android app: Google blocks its web consent popup inside apps, so ask Android's
-// native authorization screen (GoogleCalendarAuth plugin) for a one-time code for
-// the same OAuth client. The server exchanges it like the website's code, so the
-// connection (saved per FamilyHub login + member) is shared with the website.
+// Android app: Google blocks its consent popup inside apps, so Connect opens Google's
+// normal consent page in the phone's browser (same OAuth client as the website). The
+// gcalOAuthCallback function saves the connection server-side — per FamilyHub login +
+// member, shared with the website — and when the user comes back to the app we pick
+// it up with the usual server refresh.
 async function connectGCalNative() {
   const P = window.Capacitor.Plugins?.GoogleCalendarAuth || window.Capacitor.registerPlugin('GoogleCalendarAuth');
   try {
-    const r = await P.authorize({ serverClientId: GOOGLE_CLIENT_ID, scopes: [GCAL_SCOPE] });
-    if (!r?.serverAuthCode) throw new Error('Google returned no authorization code');
-    const x = await fbFunctions.httpsCallable('gcalExchangeCode')({ code: r.serverAuthCode, member: S.user, native: true });
-    gcal.serverFailed = false; gcal.codeBroken = false; gcal.lastErr = '';
-    await _gcalApplyToken(x.data.accessToken, x.data.expiresIn);
+    const { data } = await fbFunctions.httpsCallable('gcalStartAuth')({ member: S.user });
+    gcal.awaitingBrowser = true;
+    await P.openConsent({ url: data.url });
   } catch (e) {
-    if (/cancel/i.test(String(e?.message || ''))) { renderGCalBar(); return; }
+    gcal.awaitingBrowser = false;
     console.error('connectGCalNative:', e);
     gcal.lastErr = 'connect: ' + _gcalErrText(e);
     showToast((getLang() === 'he' ? 'החיבור ל-Google Calendar נכשל: ' : 'Google Calendar connection failed: ') + _gcalErrText(e), 'error', 8000);
     renderGCalBar();
   }
 }
+// Back from the browser consent: try to pick up the new connection.
+function _gcalNativeResume() {
+  if (!_isNativeApp() || document.visibilityState !== 'visible' || !gcal.awaitingBrowser || gcalConnected()) return;
+  gcal.serverFailed = false;
+  _gcalServerRefresh().then(ok => {
+    if (ok) gcal.awaitingBrowser = false;
+    else if (ok === false) { gcal.serverFailed = false; renderGCalBar(); } // not finished yet — try again on next return
+  });
+}
+document.addEventListener('visibilitychange', _gcalNativeResume);
 function connectGCal() {
   if (!gcalReady()) return;
   if (_isNativeApp()) return connectGCalNative();
