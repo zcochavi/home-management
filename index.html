@@ -410,6 +410,14 @@
       </div>
     </div>
 
+    <!-- ── Notification test (Android app only; shown by renderPushTestCard) ── -->
+    <div class="card" id="mgmtPushTestCard" style="display:none">
+      <div class="card-title">🔔 בדיקת התראות</div>
+      <div class="mgmt-section-hint">שולח התראה אמיתית למכשיר הזה בלבד. אחרי הלחיצה עברו למסך הבית — ההתראה תגיע תוך כ-5 שניות.</div>
+      <div id="pushTestStatus" style="margin:10px 0 8px;font-size:12px;font-weight:600;line-height:1.8"></div>
+      <button class="mgmt-add-btn" id="pushTestBtn" style="width:100%;padding:10px" onclick="sendTestPush()">🔔 שלח לי התראת בדיקה</button>
+    </div>
+
     <!-- ── App Update ── -->
     <div class="card" id="mgmtAppUpdateCard">
       <div class="card-title">🔄 עדכון גרסה</div>
