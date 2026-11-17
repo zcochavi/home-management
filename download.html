@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FamilyHub להורדה</title>
+  <meta name="description" content="הורדת הגרסה האחרונה של אפליקציית FamilyHub לאנדרואיד">
+  <meta name="theme-color" content="#6C80E8">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <style>
+    :root {
+      --bg: #f3f5fd;
+      --card: #ffffff;
+      --text: #1a1a2e;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --primary: #6C80E8;
+      --primary-dark: #5568d3;
+      --ok: #16a34a;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #121320;
+        --card: #1c1d2e;
+        --text: #eceefb;
+        --muted: #a1a6c4;
+        --line: #2c2e45;
+        --ok: #4ade80;
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg: #121320; --card: #1c1d2e; --text: #eceefb; --muted: #a1a6c4; --line: #2c2e45; --ok: #4ade80;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Heebo", system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      padding: 32px 16px;
+    }
+    main { width: 100%; max-width: 440px; }
+    .head { text-align: center; margin-bottom: 20px; }
+    .head img { width: 88px; height: 88px; border-radius: 22px; box-shadow: 0 6px 20px rgba(108,128,232,.35); }
+    h1 { font-size: 24px; margin: 14px 0 4px; }
+    .sub { color: var(--muted); font-size: 14px; margin: 0; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 14px;
+    }
+    .download {
+      display: block;
+      text-align: center;
+      text-decoration: none;
+      background: var(--primary);
+      color: #fff;
+      font-size: 18px;
+      font-weight: 700;
+      padding: 16px;
+      border-radius: 14px;
+      transition: background .15s;
+    }
+    .download:hover, .download:focus-visible { background: var(--primary-dark); }
+    .download:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 40%, transparent); outline-offset: 2px; }
+    .build { text-align: center; color: var(--muted); font-size: 13px; margin: 12px 0 0; min-height: 1.4em; }
+    .build b { color: var(--ok); font-weight: 600; }
+    h2 { font-size: 15px; margin: 0 0 10px; }
+    ol { margin: 0; padding-inline-start: 20px; line-height: 1.8; font-size: 14px; }
+    .note { color: var(--muted); font-size: 12.5px; line-height: 1.7; margin: 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="head">
+      <img src="icon-192.png" alt="">
+      <h1>FamilyHub לאנדרואיד</h1>
+      <p class="sub">גרסת בדיקה — מתעדכנת אוטומטית עם כל שינוי</p>
+    </div>
+
+    <div class="card">
+      <a class="download" id="downloadBtn"
+         href="https://github.com/zcochavi/home-management/releases/download/android-latest/FamilyHub.apk">
+        ⬇️ הורדת הגרסה האחרונה
+      </a>
+      <p class="build" id="buildInfo" aria-live="polite"></p>
+    </div>
+
+    <div class="card">
+      <h2>התקנה</h2>
+      <ol>
+        <li>לחצו על הכפתור — הקובץ <bdi>FamilyHub.apk</bdi> יורד.</li>
+        <li>פתחו את הקובץ שירד (מההתראה או מתיקיית ההורדות).</li>
+        <li>בפעם הראשונה אנדרואיד יבקש לאשר התקנה מהדפדפן — אשרו.</li>
+        <li>לחצו <b>עדכון</b> (או <b>התקנה</b> בפעם הראשונה). לא צריך להסיר את הגרסה הקודמת.</li>
+      </ol>
+    </div>
+
+    <p class="note">טיפ: הוסיפו את הדף הזה למסך הבית (בכרום: ⋮ ← הוספה למסך הבית) — וכך תמיד תגיעו לגרסה העדכנית בלחיצה אחת.</p>
+  </main>
+
+  <script>
+    // Show when the current build was published, so it's clear whether it's newer
+    // than the installed one. Public GitHub API; the button works without it.
+    (async () => {
+      const info = document.getElementById('buildInfo');
+      try {
+        const r = await fetch('https://api.github.com/repos/zcochavi/home-management/releases/tags/android-latest', { headers: { Accept: 'application/vnd.github+json' } });
+        if (!r.ok) return;
+        const rel = await r.json();
+        const asset = (rel.assets || []).find(a => a.name === 'FamilyHub.apk');
+        if (!asset) return;
+        const when = new Date(asset.updated_at).toLocaleString('he-IL', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
+        const mb = (asset.size / 1048576).toFixed(1);
+        info.innerHTML = `גרסה מ-<b>${when}</b> · <bdi>${mb} MB</bdi>`;
+      } catch (e) { /* offline or rate-limited: just the button */ }
+    })();
+  </script>
+</body>
+</html>
