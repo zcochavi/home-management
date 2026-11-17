@@ -2305,10 +2305,8 @@ exports.gcalExchangeCode = gcalCallable(async (data, context) => {
   if (!data?.code || typeof data.code !== 'string') {
     throw new functions.https.HttpsError('invalid-argument', 'Missing code');
   }
-  // Website (Google's JS popup) codes use the 'postmessage' redirect; codes from the
-  // Android app's native authorization (server auth codes) are exchanged with none.
   const { ok, json } = await googleTokenRequest({
-    code: data.code, grant_type: 'authorization_code', redirect_uri: data.native ? '' : 'postmessage',
+    code: data.code, grant_type: 'authorization_code', redirect_uri: 'postmessage',
   });
   if (!ok || !json.access_token) {
     console.error('gcalExchangeCode failed:', json.error, json.error_description);
@@ -2364,6 +2362,79 @@ exports.gcalDisconnect = gcalCallable(async (data, context) => {
     await ref.delete();
   }
   return { ok: true };
+});
+
+// ── Google Calendar from the Android app: consent in the browser ───────────────
+// Google blocks its consent popup inside apps, and the app's identity (package +
+// signing key) can't also be registered in the calendar client's project (it's
+// taken by the Firebase project for Google sign-in). So the app opens Google's
+// normal consent page in the phone's browser for the SAME web client, with this
+// function as the redirect URI. It exchanges the code and saves the refresh token
+// in the same gcalTokens doc the website's connect uses, so the connection is
+// shared. The `state` is a one-time server nonce bound to the caller's login and
+// member, so nobody can attach a grant to someone else's account.
+//
+// One-time setup: add GCAL_REDIRECT_URI to the web client's Authorized redirect URIs.
+const GCAL_REDIRECT_URI = 'https://us-central1-familyhub-7fdd5.cloudfunctions.net/gcalOAuthCallback';
+
+exports.gcalStartAuth = gcalCallable(async (data, context) => {
+  const ref = gcalDocRef(context, data?.member); // checks sign-in + member
+  const state = crypto.randomBytes(24).toString('hex');
+  await db.collection('gcalAuthStates').doc(state).set({
+    tokenDocId: ref.id,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    expiresAt: Date.now() + 10 * 60 * 1000,
+  });
+  const url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+    client_id: GCAL_CLIENT_ID,
+    redirect_uri: GCAL_REDIRECT_URI,
+    response_type: 'code',
+    scope: 'https://www.googleapis.com/auth/calendar.events',
+    access_type: 'offline',
+    prompt: 'consent', // always returns a refresh token
+    include_granted_scopes: 'true',
+    state,
+  }).toString();
+  return { url };
+});
+
+function gcalCallbackPage(res, status, ok, message) {
+  const back = 'intent://gcal-connected#Intent;scheme=familyhub;package=com.familyhub.app;end';
+  res.status(status).set('Content-Type', 'text/html; charset=utf-8').send(`<!doctype html>
+<html lang="he" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FamilyHub · Google Calendar</title>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:#f3f5fd;color:#1a1a2e;font-family:system-ui,Arial,sans-serif;text-align:center}
+@media (prefers-color-scheme: dark){body{background:#121320;color:#eceefb}}
+.box{max-width:380px}.icon{font-size:56px}h1{font-size:22px;margin:12px 0 8px}p{font-size:15px;line-height:1.6;opacity:.8}
+a{display:inline-block;margin-top:18px;background:#6C80E8;color:#fff;text-decoration:none;font-weight:700;padding:14px 26px;border-radius:14px}</style></head>
+<body><div class="box"><div class="icon">${ok ? '✅' : '⚠️'}</div><h1>${ok ? 'Google Calendar מחובר' : 'החיבור לא הושלם'}</h1>
+<p>${message}</p><a href="${back}">חזרה ל-FamilyHub</a></div></body></html>`);
+}
+
+exports.gcalOAuthCallback = functions.runWith({ secrets: ['GOOGLE_OAUTH_CLIENT_SECRET'] }).https.onRequest(async (req, res) => {
+  const { code, state, error } = req.query || {};
+  if (!state || typeof state !== 'string') return gcalCallbackPage(res, 400, false, 'קישור לא תקין. נסו להתחבר שוב מהאפליקציה.');
+  const stateRef = db.collection('gcalAuthStates').doc(state);
+  const st = await stateRef.get();
+  if (!st.exists) return gcalCallbackPage(res, 400, false, 'הקישור כבר שומש או פג תוקפו. נסו להתחבר שוב מהאפליקציה.');
+  const { tokenDocId, expiresAt } = st.data();
+  await stateRef.delete(); // one-time
+  if (Date.now() > (expiresAt || 0)) return gcalCallbackPage(res, 400, false, 'הקישור פג תוקף. נסו להתחבר שוב מהאפליקציה.');
+  if (error || !code || typeof code !== 'string') return gcalCallbackPage(res, 200, false, 'האישור בוטל. אפשר לנסות שוב מהאפליקציה.');
+
+  const { ok, json } = await googleTokenRequest({ code, grant_type: 'authorization_code', redirect_uri: GCAL_REDIRECT_URI });
+  if (!ok || !json.access_token) {
+    console.error('gcalOAuthCallback exchange failed:', json.error, json.error_description);
+    return gcalCallbackPage(res, 502, false, `Google דחה את הבקשה (${String(json.error || 'unknown')}). נסו שוב מהאפליקציה.`);
+  }
+  const tokenRef = db.collection('gcalTokens').doc(tokenDocId);
+  if (json.refresh_token) {
+    await tokenRef.set({ refreshToken: json.refresh_token, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+  } else if (!(await tokenRef.get()).exists) {
+    console.warn('gcalOAuthCallback: no refresh token issued');
+    return gcalCallbackPage(res, 502, false, 'Google לא החזיר חיבור קבוע. נסו להתחבר שוב מהאפליקציה.');
+  }
+  return gcalCallbackPage(res, 200, true, 'אפשר לחזור לאפליקציה — האירועים שלכם יופיעו בלוח השנה.');
 });
 
 // ── Claude connector (MCP server + its OAuth sign-in) ─────
