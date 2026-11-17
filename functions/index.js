@@ -28,6 +28,30 @@ async function removeStaleToken(token) {
   await Promise.all(snaps.docs.map(d => d.ref.delete()));
 }
 
+// One push message, as every FamilyHub notification is sent (web push + Android app).
+function buildPushMessage(token, title, body, strData = {}) {
+  return {
+    token,
+    notification: { title, body },
+    data: strData,
+    webpush: {
+      notification: { title, body, requireInteraction: false },
+      fcmOptions: { link: 'https://zcochavi.github.io/home-management/' },
+    },
+    // Android app: its notification channel, icon and accent color; `tag` makes a
+    // newer notification about the same thing replace the older one, as on the web.
+    android: {
+      priority: 'high',
+      notification: {
+        channelId: 'familyhub',
+        icon: 'ic_stat_familyhub',
+        color: '#6C80E8',
+        ...(strData.tag ? { tag: strData.tag } : {}),
+      },
+    },
+  };
+}
+
 async function sendToTokens(tokens, title, body, data = {}) {
   if (!tokens.length) { console.log('sendToTokens: no tokens, skipping'); return; }
   console.log(`sendToTokens: sending "${title}" to ${tokens.length} token(s)`);
@@ -35,28 +59,7 @@ async function sendToTokens(tokens, title, body, data = {}) {
     Object.entries(data).map(([k, v]) => [k, String(v)])
   );
   const results = await Promise.allSettled(
-    tokens.map(token =>
-      admin.messaging().send({
-        token,
-        notification: { title, body },
-        data: strData,
-        webpush: {
-          notification: { title, body, requireInteraction: false },
-          fcmOptions: { link: 'https://zcochavi.github.io/home-management/' },
-        },
-        // Android app: its notification channel, icon and accent color; `tag` makes a
-        // newer notification about the same thing replace the older one, as on the web.
-        android: {
-          priority: 'high',
-          notification: {
-            channelId: 'familyhub',
-            icon: 'ic_stat_familyhub',
-            color: '#6C80E8',
-            ...(strData.tag ? { tag: strData.tag } : {}),
-          },
-        },
-      })
-    )
+    tokens.map(token => admin.messaging().send(buildPushMessage(token, title, body, strData)))
   );
   results.forEach((r, i) => {
     if (r.status === 'fulfilled') {
@@ -516,6 +519,41 @@ exports.dailyNotificationJobs = functions.pubsub
 
     return null;
   });
+
+// "Send me a test notification" (Settings in the Android app). Sends one real push,
+// built exactly like real notifications, to the calling device only — and only if
+// that device's token is registered under a family the caller belongs to. Waits a
+// few seconds first so the user can leave the app and see a system notification.
+// Returns the outcome instead of throwing, so the app can show what happened.
+exports.sendTestNotification = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  const { familyUid, token } = data || {};
+  if (!familyUid || !token || typeof token !== 'string') {
+    throw new functions.https.HttpsError('invalid-argument', 'Missing fields');
+  }
+  if (uid !== familyUid) {
+    const map = await db.collection('uidToFamily').doc(uid).get();
+    if (map.data()?.familyUid !== familyUid) throw new functions.https.HttpsError('permission-denied', 'Not a member of this family');
+  }
+  const tokenDoc = await db.collection('families').doc(familyUid).collection('fcmTokens').doc(token.slice(0, 20)).get();
+  if (!tokenDoc.exists || tokenDoc.data()?.token !== token) return { ok: false, reason: 'not_registered' };
+
+  const delaySec = Math.min(Math.max(Number(data.delaySec) || 0, 0), 10);
+  if (delaySec) await new Promise(r => setTimeout(r, delaySec * 1000));
+  try {
+    const messageId = await admin.messaging().send(buildPushMessage(token,
+      'בדיקת התראות ✓', 'אם את/ה רואה את זה — התראות FamilyHub עובדות במכשיר הזה.', { type: 'test', tag: 'fh-test' }));
+    return { ok: true, messageId };
+  } catch (err) {
+    const code = err?.errorInfo?.code || err?.code || 'unknown';
+    console.error('sendTestNotification failed', code, err?.message);
+    if (String(code).includes('registration-token-not-registered') || String(code).includes('invalid-registration-token')) {
+      removeStaleToken(token);
+    }
+    return { ok: false, reason: 'send_failed', code: String(code), message: String(err?.message || '').slice(0, 200) };
+  }
+});
 
 exports.updatePresence = functions.https.onCall(async (data, context) => {
   if (!context.auth?.uid) throw new functions.https.HttpsError('unauthenticated', 'Login required');
