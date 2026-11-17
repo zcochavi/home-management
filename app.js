@@ -2299,8 +2299,10 @@ async function _saveFcmToken(token, platform) {
 // inside apps). Same fcmTokens records as the website, platform 'android', so every
 // notification the server already sends reaches the phone too.
 let _nativeFcmListening = false;
+let _nativeFcmToken = null; // this phone's FCM token once registered
+const _fmPlugin = () => window.Capacitor.Plugins?.FirebaseMessaging || window.Capacitor.registerPlugin('FirebaseMessaging');
 async function initNativeFCM() {
-  const FM = window.Capacitor.Plugins?.FirebaseMessaging || window.Capacitor.registerPlugin('FirebaseMessaging');
+  const FM = _fmPlugin();
   try {
     let perm = await FM.checkPermissions();
     if (perm.receive !== 'granted') perm = await FM.requestPermissions(); // Android 13+ asks once
@@ -2308,16 +2310,60 @@ async function initNativeFCM() {
     // The "FamilyHub" category in the phone's notification settings.
     await FM.createChannel({ id: 'familyhub', name: 'FamilyHub', description: 'התראות FamilyHub', importance: 4, visibility: 1 }).catch(() => {});
     const { token } = await FM.getToken();
-    if (token) await _saveFcmToken(token, 'android');
+    if (token) { await _saveFcmToken(token, 'android'); _nativeFcmToken = token; }
     if (!_nativeFcmListening) {
       _nativeFcmListening = true;
       // In the foreground Android doesn't show the notification itself — show the
       // same in-app toast the website shows.
       FM.addListener('notificationReceived', ({ notification }) =>
         showNotifToast(notification?.title || 'FamilyHub', notification?.body || ''));
-      FM.addListener('tokenReceived', ({ token: t }) => { if (t && S.uid) _saveFcmToken(t, 'android').catch(() => {}); });
+      FM.addListener('tokenReceived', ({ token: t }) => { if (t && S.uid) { _nativeFcmToken = t; _saveFcmToken(t, 'android').catch(() => {}); } });
     }
   } catch (e) { console.warn('[FCM] native:', e.message); }
+}
+
+// Settings card (Android app only): is this phone allowed / registered for
+// notifications, plus "send me a test notification" — a real push to this phone only.
+async function renderPushTestCard() {
+  const card = el('mgmtPushTestCard');
+  if (!card) return;
+  card.style.display = _isNativeApp() ? '' : 'none';
+  if (!_isNativeApp()) return;
+  let perm = '';
+  try { perm = (await _fmPlugin().checkPermissions()).receive; } catch (e) {}
+  const permTxt = perm === 'granted' ? '✅ התראות מותרות במכשיר'
+    : perm === 'denied' ? '❌ התראות חסומות — אפשרו בהגדרות הטלפון ← אפליקציות ← FamilyHub ← התראות'
+    : '⚪ התראות עוד לא אושרו — הלחיצה תבקש אישור';
+  let regTxt = '⚪ המכשיר עוד לא רשום לקבלת התראות';
+  if (_nativeFcmToken && S.uid) {
+    try {
+      const d = await fbDb.collection('families').doc(S.uid).collection('fcmTokens').doc(_nativeFcmToken.slice(0, 20)).get();
+      regTxt = d.exists ? '✅ המכשיר רשום לקבלת התראות' : '⚠️ המכשיר לא נמצא ברישום — הלחיצה תרשום אותו';
+    } catch (e) {}
+  }
+  el('pushTestStatus').innerHTML = `${permTxt}<br>${regTxt}`;
+}
+
+async function sendTestPush() {
+  if (!_isNativeApp()) return;
+  const btn = el('pushTestBtn');
+  btn.disabled = true;
+  try {
+    await initNativeFCM(); // asks permission / registers this phone if needed
+    await renderPushTestCard();
+    if (!_nativeFcmToken) { showToast('לא ניתן לרשום את המכשיר — בדקו שהתראות מותרות', 'error'); return; }
+    btn.textContent = '⏳ נשלח בעוד 5 שניות — עברו למסך הבית';
+    const res = (await fbFunctions.httpsCallable('sendTestNotification')({ familyUid: S.uid, token: _nativeFcmToken, delaySec: 5 })).data || {};
+    if (res.ok) showToast('✓ ההתראה נשלחה — בדקו את שורת ההתראות', 'success');
+    else if (res.reason === 'not_registered') showToast('המכשיר לא רשום — נסו שוב', 'error');
+    else showToast(`השליחה נכשלה: ${res.code || 'שגיאה'}`, 'error', 8000);
+  } catch (e) {
+    showToast('שגיאה: ' + (e.message || e), 'error', 8000);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔔 שלח לי התראת בדיקה';
+    renderPushTestCard();
+  }
 }
 
 async function initFCM() {
@@ -3202,6 +3248,7 @@ function renderMgmt() {
   // inside the Android app, whose files are bundled — app updates come from a new build.
   const appUpdateCard = el('mgmtAppUpdateCard');
   if (appUpdateCard) appUpdateCard.style.display = _isNativeApp() ? 'none' : '';
+  renderPushTestCard(); // app only
   // Webtop card — parents only
   const webtopCard = el('mgmtWebtopCard');
   if (webtopCard) {
