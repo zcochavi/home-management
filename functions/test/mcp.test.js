@@ -463,6 +463,15 @@ test('create_homework: whole class by default, personal only on request', async 
   await bad({ scope: 'school' }, /scope must be/);
   // A kid with no class: never silently downgraded to personal
   await bad({ kid_name: 'איתי' }, /not registered in a school class.*Nothing was added/);
+  // Mashov sync on and this kid mapped to a Mashov child: that kid's class homework comes from Mashov
+  const fam0 = s.db.store.get('families/fam1');
+  await s.db.collection('families').doc('fam1').update({ members: fam0.members.map(m => m.name === 'נועה' ? { ...m, mashovChildId: 'g1' } : m) });
+  await s.db.collection('appConfig').doc('featureFlags').set({ webtopConnection: false, mashovConnection: true });
+  const mctx = (await s.call(access_token, 'get_family_context', {})).data;
+  assert.match(mctx.kids.find(k => k.name === 'נועה').class_homework, /Mashov/);
+  assert.equal(mctx.kids.find(k => k.name === 'איתי').class_homework, undefined);
+  assert.match(mctx.class_homework, /whole class by default/);
+  await bad({}, /Mashov.*Nothing was added/);
   // Webtop sync on: class homework can't be added by hand, and again nothing is added quietly
   await s.db.collection('appConfig').doc('featureFlags').set({ webtopConnection: true });
   assert.match((await s.call(access_token, 'get_family_context', {})).data.class_homework, /Webtop/);

@@ -71,6 +71,19 @@ Automated: `cd functions && npm test` (sign-in flow, tokens, both tools). Manual
 
 ---
 
+## Mashov Sync
+
+Turn on the **חיבור משו״ב** feature flag first (Admin → feature flags; it is off by default).
+
+- [ ] **Settings card** — parents see a "📘 חיבור משו״ב" card under the Webtop card; kids don't. With the flag off the card is hidden
+- [ ] **Chrome extension** — install the updated extension (1.4.0), link the family code, log into web.mashov.info with a parent account. The popup's 📘 row lists the kids; "סנכרן עכשיו" syncs Mashov (and Webtop if it has params) and reports a count
+- [ ] **Android app** — Settings → משו״ב → התחברות: log in (password or Ministry of Education), tap סיום. The card shows the kids and a sync time; "סנכרן עכשיו" works; reopening the app later syncs again (at most every 3h); "ניתוק" clears it on this device
+- [ ] **Kid mapping** — each Mashov child is auto-matched to the kid with the same first name (or the only kid in that grade); the dropdown can change it
+- [ ] **Homework tab** — a kid mapped to Mashov sees only their own Mashov homework, under "📘 משו״ב — שיעורי בית מסונכרנים", with the lesson topic and "📎 קובץ מצורף" when the teacher attached a file. A double lesson with the same homework shows once. Checking an item marks it done; a sibling on Webtop still sees their Webtop list
+- [ ] **Home** — undone Mashov items appear in the homework summary with a 📘 icon
+- [ ] **Class homework by hand** — for a kid mapped to Mashov (Webtop flag off), the "for the whole class" option is gone and Claude's create_homework asks before adding it as personal
+- [ ] **Teacher edits** — after a teacher changes or deletes homework in Mashov, the next sync updates / removes it
+
 ## School & City Approval
 
 - [ ] **New school request** — enter an unknown school name for a kid; verify pending badge appears and admin gets notification

@@ -231,7 +231,7 @@ const TOOLS = [
       'a teacher sent. One call per assignment: if a message lists homework in several subjects, call once ' +
       "for each. By default the assignment is shared with every family in the kid's class and they are " +
       'notified. Use scope "personal" only when the user specifically asks to add it for their kid alone. ' +
-      'If get_family_context says class homework is managed by Webtop, or the kid is not in a class, ask ' +
+      'If get_family_context says class homework is managed by Webtop or Mashov (for the family or for that kid), or the kid is not in a class, ask ' +
       'the user whether to add it as personal instead. Call get_family_context first for kid names and ' +
       'subjects, and list_homework to see what is already there: another parent may have added the same ' +
       'assignment, possibly worded differently, so skip anything already listed. An exact repeat is refused ' +
@@ -677,12 +677,16 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
 
   // The app only lets parents add class-wide homework by hand while the Webtop sync feature is
   // switched off (appConfig/featureFlags.webtopConnection === false); otherwise Webtop supplies it.
-  async function webtopManagesClassHomework() {
+  // Webtop sync is on unless switched off; Mashov sync is off unless switched on (true, or 'web').
+  // A kid mapped to a Mashov child (members[].mashovChildId) gets class homework from Mashov.
+  async function syncFlags() {
     try {
       const snap = await db.collection('appConfig').doc('featureFlags').get();
-      return !(snap.exists && snap.data().webtopConnection === false);
-    } catch (e) { console.warn('mcp featureFlags: assuming Webtop is on,', e.message); return true; }
+      const f = snap.exists ? snap.data() : {};
+      return { webtop: f.webtopConnection !== false, mashov: f.mashovConnection === true || f.mashovConnection === 'web' };
+    } catch (e) { console.warn('mcp featureFlags: assuming Webtop is on,', e.message); return { webtop: true, mashov: false }; }
   }
+  const onMashov = (flags, kid) => flags.mashov && !!kid?.mashovChildId;
 
   // The same assignment already on the list: same subject and wording, and either the same due
   // date or - for homework with no due date - added within the last week (so a weekly
@@ -704,6 +708,7 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
     async get_family_context(identity) {
       const { family, members, me } = await loadFamily(identity);
       const types = await eventTypes();
+      const flags = await syncFlags();
       return {
         connected_as: identity.memberName,
         family_name: family.familyName || '',
@@ -711,17 +716,20 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
         timezone: 'Asia/Jerusalem',
         kids: members.filter(m => m.role === 'kid').map(m => {
           const cid = m.school?.city && m.school?.grade ? classIdFor(m.school) : null;
-          if (!cid) return { name: m.name, in_class: false };
+          const mashovNote = onMashov(flags, m) && !flags.webtop
+            ? { class_homework: 'managed by Mashov sync - only personal homework can be added' } : {};
+          if (!cid) return { name: m.name, in_class: false, ...mashovNote };
           const direct = publishesDirectly(identity, family, members, me, cid);
           return {
             name: m.name,
             in_class: true,
             class: classLabel(m.school),
             community_events: direct ? 'published immediately (committee member)' : 'sent for committee approval',
+            ...mashovNote,
           };
         }),
         homework_subjects: subjectsOf(family).map(x => x.nameHe || x.name).filter(Boolean),
-        class_homework: (await webtopManagesClassHomework())
+        class_homework: flags.webtop
           ? 'managed by Webtop sync - only personal homework can be added'
           : 'open - homework is added for the whole class by default',
         event_types: types.map(t => ({
@@ -842,7 +850,9 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
       const summary = { kid: kid.name, subject: known ? (known.nameHe || known.name) : (subject || null), description: desc, due: due || null };
 
       if (scope === 'class') {
-        if (await webtopManagesClassHomework()) throw new ToolError('Class homework comes from Webtop in this app and cannot be added by hand. Nothing was added. Ask the user whether to add it for this kid only (scope "personal").');
+        const flags = await syncFlags();
+        if (flags.webtop) throw new ToolError('Class homework comes from Webtop in this app and cannot be added by hand. Nothing was added. Ask the user whether to add it for this kid only (scope "personal").');
+        if (onMashov(flags, kid)) throw new ToolError(`${kid.name}'s class homework comes from Mashov in this app and cannot be added by hand. Nothing was added. Ask the user whether to add it for this kid only (scope "personal").`);
         const cid = kid.school?.city && kid.school?.grade ? classIdFor(kid.school) : null;
         if (!cid) throw new ToolError(`${kid.name} is not registered in a school class yet. Nothing was added. Ask the user whether to add it for this kid only (scope "personal"), or to add the school details in the FamilyHub app first.`);
         const dup = findDuplicate(await classHomework(cid), { subject, desc, due });

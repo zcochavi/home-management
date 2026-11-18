@@ -583,6 +583,8 @@ let _presenceInterval   = null;
 let _notifUnsubscribe   = null;
 let _webtopHomework     = []; // [{subject, text, date, studentId, studentName}]
 let _webtopUpdatedAt    = null;
+let _mashovHomework     = []; // [{subject, text, context, date, classCode:'mashov_<childGuid>', files?}]
+let _mashovUpdatedAt    = null;
 let _featureFlags       = {}; // loaded from appConfig/featureFlags
 let _ffServerKnown      = {}; // last server-confirmed values — used only for diffing, untouched by local optimistic updates
 let _ffUnsubscribe      = null;
@@ -607,6 +609,7 @@ const featureOn = (key) => {
 
 const FEATURE_FLAGS_DEF = [
   { key: 'webtopConnection', icon: '📡', labelHe: 'חיבור Webtop', descHe: 'כרטיס חיבור Webtop בהגדרות, שיעורי בית מסונכרנים ועדכון קהילה' },
+  { key: 'mashovConnection', icon: '📘', labelHe: 'חיבור משו״ב', descHe: 'כרטיס חיבור משו״ב בהגדרות ושיעורי בית מסונכרנים ממשו״ב, לכל ילד/ה שמשויך/ת לילד/ה במשו״ב', defaultOff: true },
   { key: 'androidBeta', icon: '📱', labelHe: 'הזמנה לבודקי אנדרואיד', descHe: 'כרטיס בבית שמזמין הורים לבדוק את האפליקציה — באתר, באנדרואיד, כשיש קישור', defaultOff: true, urlField: 'androidBetaUrl' },
 ];
 
@@ -2184,6 +2187,7 @@ async function authSignOut() {
   unsubscribeLists();
   if (fbUnsubscribe) { fbUnsubscribe(); fbUnsubscribe = null; }
   _webtopHomework = []; _webtopUpdatedAt = null;
+  _mashovHomework = []; _mashovUpdatedAt = null;
   const firebaseUid = fbAuth?.currentUser?.uid;
   if (firebaseUid) localStorage.removeItem('familyhub_family_uid_' + firebaseUid);
   if (firebaseUid) localStorage.removeItem('familyhub_locked_member_' + firebaseUid);
@@ -2469,6 +2473,9 @@ function subscribeToFamily(uid) {
     _webtopHomework = d.webtopHomework || [];
     _webtopAppAutoSync();
     _webtopUpdatedAt = d.webtopUpdatedAt?.toDate?.() || null;
+    _mashovHomework = d.mashovHomework || [];
+    _mashovUpdatedAt = d.mashovUpdatedAt?.toDate?.() || null;
+    _mashovAppAutoSync();
     S.stars        = d.stars        || {};
     S.groceryPool      = d.groceryPool      || [];
     S.shoppingList     = d.shoppingList     || [];
@@ -2477,7 +2484,9 @@ function subscribeToFamily(uid) {
     pruneShoppingHistory();
     migrateGroceryIfNeeded();
     _applyWebtopAutoMatch();
+    _applyMashovAutoMatch();
     if (el('mgmtWebtopCard')?.offsetParent) renderMgmtWebtop();
+    if (el('mgmtMashovCard')?.offsetParent) renderMgmtMashov();
     afterLoad();
   }, err => {
     console.error('Firestore error:', err);
@@ -2763,6 +2772,236 @@ function renderMgmtWebtop() {
       <button onclick="setWebtopSyncInterval(${o.h})" style="font-size:11px;padding:4px 10px;border-radius:20px;border:1.5px solid ${o.h===current?'#6366f1':'#e2e8f0'};background:${o.h===current?'#6366f1':'#fff'};color:${o.h===current?'#fff':'#4a5568'};cursor:pointer;font-weight:${o.h===current?'700':'400'}">${o.label}</button>
     `).join('');
   }
+}
+
+// ─── Synced homework: Webtop + Mashov ─────────────────────────────────────────
+// Each kid's school uses one system. A kid is on Mashov when mapped to a Mashov child
+// (member.mashovChildId); otherwise Webtop's class mapping (member.webtopClassCode)
+// applies. Both feeds share the Webtop item shape; Mashov items carry
+// classCode 'mashov_<childGuid>', so the rendering and done-state code
+// (webtopHomeworkDone, keyed classCode|date|subject) serve both.
+const _MASHOV_PREFIX = 'mashov_';
+const _isMashovItem = (h) => String(h?.classCode || '').startsWith(_MASHOV_PREFIX);
+function _syncedHw() {
+  return [
+    ...(featureOn('webtopConnection') ? _webtopHomework : []),
+    ...(featureOn('mashovConnection') ? _mashovHomework : []),
+  ];
+}
+// The classCode a kid's synced homework carries (Mashov when mapped there, else Webtop).
+function _kidSyncCode(m) {
+  if (!m) return null;
+  if (m.mashovChildId && featureOn('mashovConnection')) return _MASHOV_PREFIX + m.mashovChildId;
+  return m.webtopClassCode || null;
+}
+const _kidSyncCodeByName = (name) => _kidSyncCode(getMembers().find(m => m.name === name));
+const _anySyncEnabled = () => featureOn('webtopConnection') || featureOn('mashovConnection');
+// Class homework comes from a sync (so it can't be added for the class by hand) while the
+// Webtop feature is on, or when this kid is on Mashov.
+const _classHwSynced = (kidName) => featureOn('webtopConnection')
+  || (featureOn('mashovConnection') && !!getMembers().find(m => m.name === kidName)?.mashovChildId);
+
+// ─── Mashov: kid mapping ──────────────────────────────────────────────────────
+// Auto-map each Mashov child to a kid: same first name, else the only kid in that grade.
+function _applyMashovAutoMatch() {
+  const students = familyData?.mashovStudents;
+  if (!students || !featureOn('mashovConnection')) return;
+  const kids = getKids();
+  const members = getMembers();
+  Object.values(students).forEach(({ childGuid, studentName, className }) => {
+    if (!childGuid || kids.some(k => members.find(m => m.name === k)?.mashovChildId === childGuid)) return;
+    const unmapped = kids.filter(k => !members.find(m => m.name === k)?.mashovChildId);
+    const sn = String(studentName || '').trim();
+    let matches = sn ? unmapped.filter(k => k.trim() === sn) : [];
+    if (!matches.length && sn) matches = unmapped.filter(k => k.includes(sn) || sn.includes(k));
+    if (matches.length !== 1) {
+      const grade = _gradeToNum(String(className || '').replace(/\d+$/, ''));
+      const byGrade = grade ? unmapped.filter(k => _gradeToNum(members.find(m => m.name === k)?.school?.grade) === grade) : [];
+      matches = byGrade.length === 1 ? byGrade : [];
+    }
+    if (matches.length === 1) {
+      const m = members.find(m => m.name === matches[0]);
+      if (m) m.mashovChildId = childGuid; // in-memory so the first render sees it
+      setTimeout(() => setMashovKidChild(childGuid, matches[0]), 0);
+    }
+  });
+}
+
+async function setMashovKidChild(childGuid, kidName) {
+  if (!fbDb || !S.uid) return;
+  const members = getMembers().map(m => {
+    const next = { ...m };
+    if (m.name === kidName) next.mashovChildId = childGuid;
+    else if (m.mashovChildId === childGuid) delete next.mashovChildId;
+    return next;
+  });
+  if (familyData) familyData.members = members;
+  await fbDb.collection('families').doc(S.uid).update({ members });
+  renderMgmtMashov();
+  renderHomework();
+}
+
+function copyFamilyCode(btn) {
+  navigator.clipboard.writeText(S.uid || '').then(() => {
+    if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = '⎘'; }, 1500); }
+  }).catch(() => {});
+}
+
+// ─── Mashov inside the Android app ────────────────────────────────────────────
+// Like Webtop: the MashovConnect native plugin opens Mashov's real site for the parent
+// to log in (any login method — password or Ministry of Education), notes the kids
+// from the site's own login response and the session's CSRF token, then fetches each
+// kid's homework from the phone; results go to mashovIngest. Not used on the website.
+const MASHOV_API = 'https://web.mashov.info/api';
+const _msPlugin = () => window.Capacitor.Plugins?.MashovConnect || window.Capacitor.registerPlugin('MashovConnect');
+const _msKey  = (k) => `fh_mashov_app_${k}_${S.uid}`;
+const _msLoad = (k, d) => { try { const v = JSON.parse(localStorage.getItem(_msKey(k))); return v ?? d; } catch { return d; } };
+const _msSave = (k, v) => { try { localStorage.setItem(_msKey(k), JSON.stringify(v)); } catch {} };
+const _msAutoSyncMs = 3 * 3600 * 1000;
+const _isoDaysAgo = (n) => { const d = new Date(Date.now() - n * 864e5); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+const _msChildLabel = (c) => c.privateName || c.studentName || 'ילד/ה';
+let _msSyncing = false;
+
+async function mashovAppConnect() {
+  if (!_isNativeApp()) return;
+  let res;
+  try { res = await _msPlugin().open(); } catch (e) { showToast('שגיאה בפתיחת משו״ב', 'error'); return; }
+  const children = (res?.children || []).filter(c => c?.childGuid);
+  if (!children.length) {
+    showToast('לא זוהו ילדים — היכנסו למשו״ב עם פרטי ההורה ונסו שוב', 'error');
+    renderMashovAppBlock();
+    return;
+  }
+  const map = {};
+  for (const c of children) map[c.childGuid.toLowerCase()] = c;
+  _msSave('children', map);
+  if (res.csrf) _msSave('csrf', res.csrf);
+  _msSave('expired', false);
+  await fetch(`${WT_FN_BASE}/mashovLink`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ familyId: S.uid }) }).catch(() => {});
+  await mashovAppSync({ manual: true });
+}
+
+async function mashovAppSync({ manual = false } = {}) {
+  if (!_isNativeApp() || _msSyncing || !S.uid) return;
+  const children = Object.values(_msLoad('children', {}));
+  if (!children.length) { if (manual) showToast('יש להתחבר למשו״ב קודם', 'error'); return; }
+  _msSyncing = true;
+  renderMashovAppBlock();
+  const full = _msLoad('fullSync', {});
+  let items = 0, kidsOk = 0, authFail = 0, otherFail = 0;
+  try {
+    for (const c of children) {
+      const guid = c.childGuid.toLowerCase();
+      const since = _isoDaysAgo(full[guid] ? 21 : 35); // first sync: ~5 weeks back
+      let raw;
+      try {
+        const r = await _msPlugin().get({ url: `${MASHOV_API}/students/${guid}/homework`, csrf: _msLoad('csrf', '') });
+        if (r.csrf) _msSave('csrf', r.csrf);
+        if (r.status === 200) raw = JSON.parse(r.text);
+        else if ([401, 403].includes(r.status)) { authFail++; continue; }
+        else { otherFail++; continue; }
+      } catch (e) { otherFail++; continue; }
+      const homework = (Array.isArray(raw) ? raw : []).filter(h => String(h?.lessonDate || '').slice(0, 10) >= since);
+      const res = await fetch(`${WT_FN_BASE}/mashovIngest`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ familyId: S.uid, child: c, since, homework, source: 'android' }),
+      }).catch(() => null);
+      if (!res || !res.ok) { otherFail++; continue; }
+      const j = await res.json().catch(() => ({}));
+      items += j.homeworkCount || 0;
+      kidsOk++;
+      full[guid] = true;
+    }
+    _msSave('fullSync', full);
+    if (kidsOk) {
+      _msSave('lastSync', Date.now());
+      _msSave('expired', false);
+      if (manual) showToast(`✓ סונכרנו ${items} שיעורי בית ממשו״ב`, 'success');
+    } else if (authFail && !otherFail) {
+      _msSave('expired', true);
+      if (manual) showToast('ההתחברות למשו״ב פגה — התחברו מחדש', 'error');
+    } else if (manual) {
+      showToast('הסנכרון נכשל — בדקו חיבור ונסו שוב', 'error');
+    }
+  } finally {
+    _msSyncing = false;
+    renderMgmtMashov();
+  }
+}
+
+async function mashovAppDisconnect() {
+  if (!_isNativeApp()) return;
+  if (!(await _confirm('לנתק את משו״ב במכשיר הזה? שיעורי הבית שכבר סונכרנו יישארו.'))) return;
+  try { await _msPlugin().disconnect(); } catch (e) {}
+  ['children', 'csrf', 'fullSync', 'lastSync', 'expired'].forEach(k => { try { localStorage.removeItem(_msKey(k)); } catch {} });
+  renderMashovAppBlock();
+}
+
+function renderMashovAppBlock() {
+  const box = el('mgmtMashovApp');
+  if (!box) return;
+  const native = _isNativeApp();
+  box.style.display = native ? '' : 'none';
+  const ext = el('mgmtMashovExtension');
+  if (ext) ext.style.display = native ? 'none' : '';
+  if (!native) return;
+  const children = Object.values(_msLoad('children', {}));
+  const last = _msLoad('lastSync', 0);
+  const st = el('mgmtMashovAppStatus');
+  if (_msSyncing) {
+    st.textContent = '⏳ מסנכרן…'; st.style.color = '#6366f1';
+  } else if (!children.length) {
+    st.textContent = 'לא מחובר במכשיר הזה'; st.style.color = '#9ca3af';
+  } else if (_msLoad('expired', false)) {
+    st.textContent = '⚠️ ההתחברות פגה — התחברו מחדש'; st.style.color = '#d97706';
+  } else {
+    const when = last ? new Date(last).toLocaleString(t('locale'), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'טרם';
+    st.textContent = `✅ ${children.map(_msChildLabel).join(', ')} · סונכרן: ${when}`; st.style.color = '#16a34a';
+  }
+  el('mgmtMashovAppConnect').textContent = children.length ? '🔑 התחברות מחדש למשו״ב' : '🔗 התחברות למשו״ב';
+  el('mgmtMashovAppSync').style.display = children.length ? '' : 'none';
+  el('mgmtMashovAppSync').disabled = _msSyncing;
+  el('mgmtMashovAppDisconnect').style.display = children.length ? '' : 'none';
+}
+
+// Sync quietly when the app opens / returns to the foreground, at most every 3h.
+function _mashovAppAutoSync() {
+  if (!_isNativeApp() || !S.uid || !featureOn('mashovConnection')) return;
+  if (_msLoad('expired', false) || !Object.keys(_msLoad('children', {})).length) return;
+  if (Date.now() - _msLoad('lastSync', 0) >= _msAutoSyncMs) mashovAppSync();
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _mashovAppAutoSync(); });
+if (_isNativeApp()) setInterval(() => { if (document.visibilityState === 'visible') _mashovAppAutoSync(); }, 60 * 1000);
+
+function renderMgmtMashov() {
+  renderMashovAppBlock();
+  const statusEl = el('mgmtMashovStatus');
+  if (!statusEl) return;
+  const entries = Object.values(familyData?.mashovStudents || {}).filter(e => e?.childGuid);
+  if (entries.length) {
+    statusEl.textContent = `✅ מחובר — ${entries.map(e => e.studentName || e.className).join(', ')}, ${_mashovHomework.length} שיעורי בית`;
+    statusEl.style.color = '#16a34a';
+  } else {
+    statusEl.textContent = 'לא מחובר עדיין';
+    statusEl.style.color = '#9ca3af';
+  }
+  const mappingEl = el('mgmtMashovMapping');
+  if (!mappingEl) return;
+  if (!entries.length) { mappingEl.style.display = 'none'; return; }
+  const kids = getKids();
+  const members = getMembers();
+  mappingEl.style.display = '';
+  mappingEl.innerHTML = entries.map(e => {
+    const assigned = kids.find(k => members.find(m => m.name === k)?.mashovChildId === e.childGuid) || '';
+    const label = [e.studentName, e.className].filter(Boolean).join(' · ');
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="font-size:12px;color:#4a5568;flex:1">${esc(label || 'ילד/ה')}${assigned ? '' : '<span style="font-size:10px;color:#9ca3af"> (לא זוהה)</span>'}</span>
+      <select onchange="setMashovKidChild('${esc(e.childGuid)}',this.value)" style="font-size:12px;border:1.5px solid #e2e8f0;border-radius:8px;padding:3px 6px;background:#fff">
+        <option value="">— לא משויך —</option>
+        ${kids.map(k => `<option value="${esc(k)}" ${assigned === k ? 'selected' : ''}>${esc(k)}</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('');
 }
 
 let _firstJoinNotified = false;
@@ -3308,6 +3547,13 @@ function renderMgmt() {
     const codeEl = el('mgmtWebtopCode');
     if (codeEl) codeEl.textContent = S.uid || '';
     renderMgmtWebtop();
+  }
+  const mashovCard = el('mgmtMashovCard');
+  if (mashovCard) {
+    mashovCard.style.display = isParent() && featureOn('mashovConnection') ? '' : 'none';
+    const codeEl = el('mgmtMashovCode');
+    if (codeEl) codeEl.textContent = S.uid || '';
+    renderMgmtMashov();
   }
 }
 
@@ -6258,6 +6504,8 @@ async function saveFeatureFlag(key, state) {
   if (S.tab === 'homework') renderHomework();
   const webtopCard = el('mgmtWebtopCard');
   if (webtopCard) webtopCard.style.display = isParent() && featureOn('webtopConnection') ? '' : 'none';
+  const mashovCard = el('mgmtMashovCard');
+  if (mashovCard) { mashovCard.style.display = isParent() && featureOn('mashovConnection') ? '' : 'none'; if (mashovCard.style.display === '') renderMgmtMashov(); }
   try {
     await fbDb.collection('appConfig').doc('featureFlags').set({ [key]: value }, { merge: true });
     // Success toast comes from subscribeToFeatureFlags' onSnapshot — shown to every
@@ -7979,25 +8227,27 @@ function renderHome() {
     loadCommunityData(_classHwNeedsLoad).then(() => { if (S.tab === 'home') renderHome(); });
   }
 
-  // Add Webtop homework (undone items for the relevant child/class)
+  // Add synced homework — Webtop and Mashov (undone items for the relevant child/class)
   const _wtDoneMap = familyData?.webtopHomeworkDone || {};
-  let wtHomeHw = featureOn('webtopConnection') ? _webtopHomework.filter(h => {
+  let wtHomeHw = _syncedHw().filter(h => {
     const key = `${h.classCode}|${h.date}|${h.subject}`;
     return !_wtDoneMap[key] && !_classHwExpired(h);
-  }) : [];
+  });
   if (isKid()) {
-    const myCode = getMembers().find(m => m.name === S.user)?.webtopClassCode;
+    const myCode = _kidSyncCodeByName(S.user);
     if (myCode) wtHomeHw = wtHomeHw.filter(h => h.classCode === myCode);
+    else wtHomeHw = wtHomeHw.filter(h => !_isMashovItem(h)); // Mashov items are per child — never a sibling's
   } else if (S.filter !== 'All' && getKids().includes(S.filter)) {
-    const kidCode = getMembers().find(m => m.name === S.filter)?.webtopClassCode;
+    const kidCode = _kidSyncCodeByName(S.filter);
     if (kidCode) wtHomeHw = wtHomeHw.filter(h => h.classCode === kidCode);
+    else wtHomeHw = wtHomeHw.filter(h => !_isMashovItem(h));
   }
 
   // Merge: when webtop is off only show personal homework
   const combined = [
     ...hw.map(h => ({ _type:'hw', _due: h.due||'', ...h })),
     ...classHw.map(h => ({ _type:'class', _due: h.due||'', ...h })),
-    ...(featureOn('webtopConnection') ? wtHomeHw.map(h => ({ _type:'wt', _due: h.date||'', ...h })) : []),
+    ...wtHomeHw.map(h => ({ _type:'wt', _due: h.date||'', ...h })),
   ].sort((a,b) => {
     if (!a._due && !b._due) return 0;
     if (!a._due) return 1;
@@ -8012,7 +8262,7 @@ function renderHome() {
   const _wtCodeToKid = {};
   if (isParent()) {
     getKids().forEach(k => {
-      const cc = getMembers().find(m => m.name === k)?.webtopClassCode;
+      const cc = _kidSyncCodeByName(k);
       if (cc) _wtCodeToKid[cc] = k;
     });
     // Fallback: single student scenario where code might not match
@@ -8034,14 +8284,14 @@ function renderHome() {
           if (h.subject) parts.push(`<span style="${webtopSubjectStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(h.subject)}</span>`);
           if (h.date) parts.push(fmtDate(h.date.slice(0,10)));
           const doneKey = `${h.classCode}|${h.date}|${h.subject}`;
-          const canToggle = isParent() || (isKid() && getMembers().find(m=>m.name===S.user)?.webtopClassCode === h.classCode);
+          const canToggle = isParent() || (isKid() && _kidSyncCodeByName(S.user) === h.classCode);
           return `<div class="task-row home-task-row">
             <div class="check-box ${canToggle?'':'readonly'}" ${canToggle?`onclick="toggleWebtopDone('${esc(doneKey)}')"`:''}></div>
             <div class="task-body">
               <div class="task-text">${esc(h.text)}</div>
               ${parts.length ? `<div class="task-sub">${parts.join(' · ')}</div>` : ''}
             </div>
-            <div class="home-type-icon">📡</div>
+            <div class="home-type-icon">${_isMashovItem(h) ? '📘' : '📡'}</div>
           </div>`;
         }
         if (h._type === 'class') {
@@ -9438,7 +9688,7 @@ let _hwAddOpen = false; // add-homework form is collapsed behind a FAB, like Lis
 
 function hwFabClick() {
   if (!S.child || !(isParent() || S.child === S.user)) return;
-  const scopeAllowed = isParent() && !featureOn('webtopConnection');
+  const scopeAllowed = isParent() && !_classHwSynced(S.child);
   if (!scopeAllowed) { _hwScopePick('personal'); _hwOpenAddForm(); return; }
   const picker = el('hwFabPicker');
   if (!picker) return;
@@ -9496,7 +9746,7 @@ function renderHomework(){
 
   // Scope toggle: parents only, and only when Webtop isn't the source of class homework
   const scopeEl = el('hwScopeSeg');
-  const scopeAllowed = isParent() && !featureOn('webtopConnection');
+  const scopeAllowed = isParent() && !_classHwSynced(S.child);
   if (scopeEl) scopeEl.style.display = scopeAllowed ? '' : 'none';
   if (!scopeAllowed) _hwScope = 'personal';
 
@@ -9518,25 +9768,30 @@ function renderHomework(){
     loadCommunityData([childMember]).then(() => { if (S.tab === 'homework') renderHomework(); });
   }
   let classHw = classCid ? (_commCache[classCid]?.homework || []).filter(h => !_classHwExpired(h)) : [];
-  const _wtLive = _webtopHomework.filter(h => !_classHwExpired(h));
+  const _wtLive = _syncedHw().filter(h => !_classHwExpired(h));
   const allPending=S.child
     ? S.homework.filter(h=>(!h.scope||h.scope==='personal')&&h.child===S.child&&!h.done)
     : [];
 
   // Base webtop list filtered by child/classCode only (no subject/search yet)
-  const childClassCode = childMember?.webtopClassCode || null;
-  // anyMapped: at least one KID in the family has a classCode assigned
-  const anyMapped = getKids().some(k => getMembers().find(m => m.name === k)?.webtopClassCode);
+  const childClassCode = _kidSyncCode(childMember);
+  const childOnMashov = String(childClassCode || '').startsWith(_MASHOV_PREFIX);
+  // anyMapped: at least one KID in the family has a classCode (or Mashov child) assigned
+  const anyMapped = getKids().some(k => _kidSyncCodeByName(k));
   // filtered: homework for this child's classCode — fall back to ALL if code
   // doesn't match anything (e.g. stale safeKey mismatch from older syncs)
   const filtered = childClassCode
     ? _wtLive.filter(h => h.classCode === childClassCode)
     : [];
+  // Mashov items are per child, so they never fall back to another kid's list.
+  const _wtOnly = _wtLive.filter(h => !_isMashovItem(h));
   const allWtHw = !S.child
     ? _wtLive                                              // parent all-kids view
+    : childOnMashov
+      ? filtered                                           // Mashov: this child's items only
     : childClassCode
-      ? (filtered.length ? filtered : _wtLive)            // mapped: filtered, fallback to all if empty
-      : (!anyMapped ? _wtLive : []);               // unmapped kid: all only if nobody is mapped yet
+      ? (filtered.length ? filtered : _wtOnly)            // mapped: filtered, fallback to all Webtop items if empty
+      : (!anyMapped ? _wtOnly : []);               // unmapped kid: all only if nobody is mapped yet
 
   // Subject filter chips — union of subjects across active AND history (all three sections)
   const subjChipsEl=el('hwSubjectChips');
@@ -9594,13 +9849,21 @@ function renderHomework(){
   const webtopSec=el('hwWebtopSection');
   const webtopListEl=el('hwWebtopList');
   if(webtopSec&&webtopListEl){
-    if(!featureOn('webtopConnection')){
+    // Header names the source: Mashov, Webtop, or both (parent view of kids on each).
+    const hdrEl=el('hwWebtopHdr')?.querySelector('span');
+    if(hdrEl){
+      const hasM=wtHw.some(_isMashovItem), hasW=wtHw.some(h=>!_isMashovItem(h));
+      hdrEl.textContent = (hasM&&!hasW)||(childOnMashov&&!wtHw.length) ? '📘 משו״ב — שיעורי בית מסונכרנים'
+        : (hasM&&hasW) ? '📡 שיעורי בית מסונכרנים (Webtop · משו״ב)'
+        : '📡 Webtop — שיעורי בית מסונכרנים';
+    }
+    if(!_anySyncEnabled()){
       webtopSec.style.display='none';
       const syncTimeEl=el('hwWebtopSyncTime');
       if(syncTimeEl) syncTimeEl.textContent='';
     } else {
       // Show a hint when homework exists but this child has no classCode mapping
-      const noMapping = S.child && !childClassCode && anyMapped && _webtopHomework.length > 0;
+      const noMapping = S.child && !childClassCode && anyMapped && _wtLive.length > 0;
       if(!wtHw.length && !noMapping){
         webtopSec.style.display='none';
         const syncTimeEl=el('hwWebtopSyncTime');
@@ -9613,24 +9876,27 @@ function renderHomework(){
       } else {
         webtopSec.style.display='';
         const syncTimeEl=el('hwWebtopSyncTime');
-        if(syncTimeEl&&_webtopUpdatedAt){
-          syncTimeEl.textContent=_webtopUpdatedAt.toLocaleString(t('locale'),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+        const _syncAt = childOnMashov ? _mashovUpdatedAt
+          : (wtHw.every(_isMashovItem) ? _mashovUpdatedAt : _webtopUpdatedAt);
+        if(syncTimeEl&&_syncAt){
+          syncTimeEl.textContent=_syncAt.toLocaleString(t('locale'),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
         }
         const doneMap = familyData?.webtopHomeworkDone || {};
         webtopListEl.innerHTML=wtHw.map(h=>{
           const doneKey = `${h.classCode}|${h.date}|${h.subject}`;
           const isDone = !!doneMap[doneKey];
           const canToggle = isParent() ||
-            (isKid() && getMembers().find(m=>m.name===S.user)?.webtopClassCode === h.classCode);
+            (isKid() && _kidSyncCodeByName(S.user) === h.classCode);
           return `<div class="hw-item hw-webtop-item${isDone?' hw-webtop-done':''}">
             <div class="hw-head">
               ${canToggle
                 ? `<div class="check-box${isDone?' done':''}" onclick="toggleWebtopDone('${esc(doneKey)}')"></div>`
-                : `<span class="hw-webtop-icon">📡</span>`}
+                : `<span class="hw-webtop-icon">${_isMashovItem(h)?'📘':'📡'}</span>`}
               <div class="hw-desc-text${isDone?' done':''}">${esc(h.text)}</div>
               ${h.subject?`<span class="badge" style="${webtopSubjectStyle(h.subject)}">${esc(h.subject)}</span>`:''}
             </div>
             ${h.context?`<div class="hw-webtop-context">${esc(h.context)}</div>`:''}
+            ${h.files?`<div class="hw-webtop-context">📎 ${h.files>1?`${h.files} קבצים מצורפים`:'קובץ מצורף'} — לצפייה במשו״ב</div>`:''}
             ${h.date?`<div class="hw-due">${fmtDate(h.date.slice(0,10))}</div>`:''}
           </div>`;
         }).join('');
@@ -9977,7 +10243,7 @@ async function addHomework(){
   const desc=descEl.value.trim();
   if(!desc){descEl.focus();descEl.classList.add('input-shake');setTimeout(()=>descEl.classList.remove('input-shake'),500);return;}
   if(_hwScope==='class'){
-    if(!isParent()||featureOn('webtopConnection'))return;
+    if(!isParent()||_classHwSynced(S.child))return;
     const childMember = S.child ? getMembers().find(m=>m.name===S.child) : null;
     const cid = childMember?.school ? classIdFor(childMember.school) : null;
     if(!cid){ showToast('יש לשייך את הילד/ה לבית ספר ולכיתה לפני הוספת שיעור בית לכיתה', 'error'); return; }
