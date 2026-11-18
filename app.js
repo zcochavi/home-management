@@ -5219,7 +5219,7 @@ function renderCommCard(kid) {
       ${_eventLinkableLists().length ? `
       <select class="auth-input" id="commEvList_${cid}" style="margin-bottom:6px">
         <option value="">🔗 ${t('commEventListLink')}</option>
-        ${_eventLinkableLists().map(l => `<option value="${esc(l.id)}">${_hasClaimShare(l) ? '🙋' : '📝'} ${esc(l.name)}</option>`).join('')}
+        ${_eventLinkableLists().map(l => `<option value="${esc(l.id)}">🎉 ${esc(l.name)}</option>`).join('')}
       </select>` : ''}
       ${cache.classmates.length ? `
       <div class="comm-celeb-picker" id="commEvCelebWrap_${cid}" style="margin-bottom:6px;display:${(getEventTypes()[0]?.id === 'birthday') ? '' : 'none'}">
@@ -11601,23 +11601,19 @@ async function _createListShare(list, mode) {
 }
 
 // ── Community event ↔ list link ──
-// Lists a parent can attach to a community event; "who brings what" lists first
+// Lists a parent can attach to a community event: active (not archived) event-planning
+// lists this member can see
 function _eventLinkableLists() {
-  return (S.lists || [])
-    .filter(l => !l.archived)
-    .sort((a, b) => (_hasClaimShare(b) ? 1 : 0) - (_hasClaimShare(a) ? 1 : 0));
+  return (S.lists || []).filter(l => l.type === 'event' && !l.archived && _listVisible(l));
 }
 
-// Reuses the list's existing share (claim > edit > any), or creates a "who brings what" one
+// Events always link a "who brings what" share: reuse the list's existing one, or create it
 async function _ensureEventListShare(listId) {
-  const list = (S.lists || []).find(l => l.id === listId);
+  const list = _eventLinkableLists().find(l => l.id === listId);
   if (!list) return null;
-  const shares = list.publicShares || [];
-  const existing = shares.find(s => s.mode === 'claim') || shares.find(s => s.mode === 'edit') || shares[0];
-  if (existing) return { token: existing.token, mode: existing.mode, name: list.name };
-  const mode = list.type === 'recipe' ? 'readonly' : 'claim';
-  const token = await _createListShare(list, mode);
-  return { token, mode, name: list.name };
+  const existing = (list.publicShares || []).find(s => s.mode === 'claim');
+  const token = existing ? existing.token : await _createListShare(list, 'claim');
+  return { token, mode: 'claim', name: list.name };
 }
 
 function _eventListLinkHtml(ev) {
