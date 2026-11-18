@@ -410,6 +410,31 @@
       </div>
     </div>
 
+    <!-- ── Mashov Integration (for kids whose school uses Mashov instead of Webtop) ── -->
+    <div class="card" id="mgmtMashovCard" style="display:none">
+      <div class="card-title">📘 חיבור משו״ב</div>
+      <div id="mgmtMashovExtension">
+        <div class="mgmt-section-hint">לילדים שבית הספר שלהם עובד עם משו״ב: התקינו את תוסף FamilyHub ב-Chrome (אותו תוסף של Webtop), הזינו בו את קוד המשפחה, והיכנסו למשו״ב עם פרטי ההורה — שיעורי הבית יסונכרנו אוטומטית.</div>
+        <div style="margin:10px 0 6px;font-size:12px;font-weight:700;color:#4a5568">קוד המשפחה שלך</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div id="mgmtMashovCode" style="flex:1;font-family:monospace;font-size:13px;background:#f1f5f9;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;color:#1a1a2e;word-break:break-all;direction:ltr"></div>
+          <button class="mgmt-add-btn" onclick="copyFamilyCode(this)" title="העתק">⎘</button>
+        </div>
+      </div>
+      <!-- Android app only (shown by renderMashovAppBlock): connect Mashov from the phone -->
+      <div id="mgmtMashovApp" style="display:none">
+        <div class="mgmt-section-hint">היכנסו למשו״ב כרגיל עם פרטי ההורה (סיסמה או הזדהות משרד החינוך) ולחצו 'סיום' — מכאן שיעורי הבית של כל הילדים יסונכרנו מהטלפון אוטומטית.</div>
+        <div id="mgmtMashovAppStatus" style="margin:10px 0 8px;font-size:12px;font-weight:600"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="mgmt-add-btn" id="mgmtMashovAppConnect" style="flex:1;padding:10px" onclick="mashovAppConnect()">🔗 התחברות למשו״ב</button>
+          <button class="mgmt-add-btn" id="mgmtMashovAppSync" style="flex:1;padding:10px;display:none" onclick="mashovAppSync({manual:true})">🔄 סנכרן עכשיו</button>
+        </div>
+        <button id="mgmtMashovAppDisconnect" style="display:none;margin-top:8px;background:none;border:0;color:#9ca3af;font-size:12px;text-decoration:underline;cursor:pointer" onclick="mashovAppDisconnect()">ניתוק משו״ב במכשיר הזה</button>
+      </div>
+      <div id="mgmtMashovStatus" style="margin-top:8px;font-size:12px;font-weight:600">לא מחובר עדיין</div>
+      <div id="mgmtMashovMapping" style="display:none;margin-top:12px"></div>
+    </div>
+
     <!-- ── Notification test (Android app only; shown by renderPushTestCard) ── -->
     <div class="card" id="mgmtPushTestCard" style="display:none">
       <div class="card-title">🔔 בדיקת התראות</div>
@@ -464,7 +489,7 @@
     <p>לאפליקציה חשבון מנהל יחיד, בעל גישה תפעולית לנתוני שימוש מצטברים, נוכחות ומשך שימוש, ולפניות שנשלחו דרך "פנייה למנהל המערכת" — לצורך תפעול השירות, אישור בקשות קהילתיות (בתי ספר/אירועים חדשים), ומתן מענה לפניות.</p>
 
     <div style="font-weight:800;color:var(--gray-900);margin:18px 0 6px">6. שירותי צד שלישי</div>
-    <p>האפליקציה משתמשת בשירותי Google Firebase לאחסון ותפעול, ומאפשרת — בהתאם לבחירתכם — חיבור ליומן Google, שליפת תחזית מזג אוויר, וחיבור אופציונלי לתוסף סנכרון שיעורי בית מול מערכת Webtop/Smartschool של בית הספר.</p>
+    <p>האפליקציה משתמשת בשירותי Google Firebase לאחסון ותפעול, ומאפשרת — בהתאם לבחירתכם — חיבור ליומן Google, שליפת תחזית מזג אוויר, וחיבור אופציונלי לתוסף סנכרון שיעורי בית מול מערכת Webtop/Smartschool או משו״ב של בית הספר.</p>
 
     <div style="font-weight:800;color:var(--gray-900);margin:18px 0 6px">7. ללא אחריות</div>
     <p>האפליקציה ניתנת "כפי שהיא", ללא התחייבות לזמינות רציפה, לדיוק נתונים מסונכרנים (כגון שיעורי בית מ-Webtop, התלויים במערכת חיצונית), או להתאמה לכל צורך. השימוש באפליקציה הוא באחריותכם.</p>
@@ -504,7 +529,8 @@
     <strong>אירוח האתר</strong> — ממשק האפליקציה עצמו מוגש דרך GitHub Pages.<br>
     <strong>יומן Google</strong> (אופציונלי, רק אם תחברו) — גישה לאירועי היומן בלבד (יצירה/קריאה/מחיקה של אירועים), לא ליומן כולו ולא לחשבון Google שלכם.<br>
     <strong>מזג אוויר</strong> — מיקום משוער (GPS מהמכשיר, עיר בית הספר של הילד, או כתובת ה-IP שלכם כגיבוי) נשלח לשירות תחזית חיצוני (Open-Meteo) כדי להציג תחזית מקומית; המיקום אינו נשמר.<br>
-    <strong>Webtop/Smartschool</strong> (אופציונלי, דרך תוסף Chrome נלווה) — אם תבחרו לחבר, פרטי ההתחברות של הילד למערכת Webtop של בית הספר נשמרים בשרת לצורך סנכרון שיעורי בית. חיבור זה דורש הזנת קוד המשפחה שלכם לתוסף — יש להתייחס לקוד זה כאל סיסמה ולא לשתף אותו מעבר לכך.</p>
+    <strong>Webtop/Smartschool</strong> (אופציונלי, דרך תוסף Chrome נלווה) — אם תבחרו לחבר, פרטי ההתחברות של הילד למערכת Webtop של בית הספר נשמרים בשרת לצורך סנכרון שיעורי בית. חיבור זה דורש הזנת קוד המשפחה שלכם לתוסף — יש להתייחס לקוד זה כאל סיסמה ולא לשתף אותו מעבר לכך.<br>
+    <strong>משו״ב</strong> (אופציונלי, דרך אותו תוסף Chrome או באפליקציית אנדרואיד) — ההתחברות למשו״ב נעשית בדפדפן או בטלפון שלכם בלבד; סיסמת משו״ב ופרטי ההתחברות אינם נשלחים לשרת ואינם נשמרים בו. לשרת נשלחים רק שיעורי הבית, שם הילד/ה והכיתה.</p>
 
     <div style="font-weight:800;color:var(--gray-900);margin:18px 0 6px">4. התראות</div>
     <p>אנו שולחים התראות Push עבור תזכורות משימות ושיעורי בית, עדכוני קהילה, אישורי בקשות, ותגובות מהמנהל — מבוססות על טוקן מכשיר המקושר למשפחה ולבן המשפחה הרלוונטי.</p>

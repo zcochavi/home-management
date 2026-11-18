@@ -2219,6 +2219,95 @@ async function _fetchWebtopHomework(token, syncParams, fullCookie, weekOffset = 
   return homework;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// MASHOV INTEGRATION
+// ═══════════════════════════════════════════════════════════════════════════════
+// Some schools use Mashov instead of Webtop. It works like the Webtop connection
+// does now: the parent logs into Mashov in their own browser (Chrome extension) or
+// in the Android app, which fetches each kid's homework from there and posts it to
+// mashovIngest. The server never logs into Mashov and never sees a password.
+// Stored on the family doc:
+//   mashovHomework  — [{subject, text, context, date, classCode: "mashov_<childGuid>", files?}]
+//   mashovStudents  — { <childGuid>: {childGuid, studentName, className, schoolName, ...} }
+// The app maps a kid to a Mashov child via members[].mashovChildId.
+
+const mashov = require('./mashov-helpers');
+
+// ─── mashovLink — validate a family code before the first ingest ──────────────
+exports.mashovLink = functions.https.onRequest(async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') { res.set('Access-Control-Allow-Headers', 'Content-Type'); return res.status(204).send(''); }
+  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+  const { familyId } = req.body || {};
+  if (!familyId || typeof familyId !== 'string') return res.status(400).json({ error: 'missing familyId' });
+  try {
+    const ref = db.collection('families').doc(familyId);
+    const doc = await ref.get();
+    if (!doc.exists) return res.status(404).json({ error: 'family not found' });
+    // Same reason as webtopLink: mashovIngest requires that a link step happened.
+    await ref.update({ mashovLinkedAt: admin.firestore.FieldValue.serverTimestamp() });
+    return res.json({ ok: true, familyName: doc.data()?.familyName || '' });
+  } catch (err) {
+    console.error('mashovLink error', err);
+    return res.status(500).json({ error: 'server error' });
+  }
+});
+
+// ─── mashovIngest — store one kid's homework, fetched by the extension / app ───
+// Body: { familyId, child: {childGuid, privateName, familyName, classCode, classNum, schoolName},
+//         since: 'YYYY-MM-DD', homework: [raw Mashov homework entries] }
+exports.mashovIngest = functions.https.onRequest(async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  if (req.method === 'OPTIONS') { res.set('Access-Control-Allow-Headers', 'Content-Type'); return res.status(204).send(''); }
+  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+
+  const { familyId, homework } = req.body || {};
+  const child = mashov.cleanMashovChild(req.body?.child);
+  if (!familyId || typeof familyId !== 'string' || !child || !Array.isArray(homework)) {
+    return res.status(400).json({ error: 'missing fields' });
+  }
+  if (homework.length > 3000) return res.status(400).json({ error: 'too many items' });
+  // Window the client fetched; default ~5 weeks back. Never more than a year.
+  const minSince = new Date(Date.now() - 366 * 864e5).toISOString().slice(0, 10);
+  let since = mashov.DATE_RE.test(String(req.body.since || '')) ? String(req.body.since) : new Date(Date.now() - 35 * 864e5).toISOString().slice(0, 10);
+  if (since < minSince) since = minSince;
+
+  const famRef = db.collection('families').doc(familyId);
+  const familyDoc = await famRef.get();
+  if (!familyDoc.exists) return res.status(404).json({ error: 'family not found' });
+  const fam = familyDoc.data() || {};
+  // Linked through mashovLink, or through webtopLink (the same extension links both).
+  if (!fam.mashovLinkedAt && !fam.mashovStudents && !fam.webtopLinkedAt) {
+    return res.status(403).json({ error: 'not linked — call mashovLink first' });
+  }
+
+  try {
+    const classCode = mashov.mashovClassCode(child.childGuid);
+    const clean = mashov.flattenMashovHomework(homework, child.childGuid, since);
+    const merged = mashov.mergeMashovHomework(fam.mashovHomework, clean, classCode, since);
+    const isFirstSync = !fam.mashovStudents?.[child.childGuid]?.initialSyncDone;
+    await famRef.update({
+      mashovHomework: merged,
+      mashovUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      [`mashovStudents.${child.childGuid}`]: {
+        childGuid: child.childGuid,
+        classCode,
+        studentName: child.privateName,
+        familyName: child.familyName,
+        className: `${child.classCode}${child.classNum}`,
+        schoolName: child.schoolName,
+        initialSyncDone: true,
+        source: String(req.body.source || '').slice(0, 20) || 'extension',
+      },
+    });
+    return res.json({ ok: true, homeworkCount: clean.length, total: merged.filter(h => h.classCode === classCode).length, isFirstSync });
+  } catch (err) {
+    console.error('mashovIngest error', err);
+    return res.status(500).json({ error: 'server error' });
+  }
+});
+
 
 // ── Family notifications ──────────────────────────────────
 
