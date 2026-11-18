@@ -124,6 +124,7 @@ const STRINGS = {
     commPayNow:'💳 שלם עכשיו',
     commPayboxGift:'🎁 לתשלום ב-Paybox',
     commWhosCelebrating:'🎂 מי חוגגים?',
+    commCelebrantsNone:'אין ילדים מתאימים בכיתה',
     commCelebrantsPickerLabel:'🎂 מי חוגגים? (ניתן לסמן עד 3)',
     commWhosAttending:'מי מגיע?',
     commAttendingCount:'מגיעים',
@@ -245,6 +246,7 @@ const STRINGS = {
     commPayNow:'💳 Pay now',
     commPayboxGift:'🎁 Pay via Paybox',
     commWhosCelebrating:'🎂 Who\'s celebrating?',
+    commCelebrantsNone:'No matching kids in the class',
     commCelebrantsPickerLabel:'🎂 Who\'s celebrating? (up to 3)',
     commWhosAttending:'Who\'s coming?',
     commAttendingCount:'coming',
@@ -5197,15 +5199,15 @@ function renderCommCard(kid) {
       <div id="commEvGenderWrap_${cid}" style="margin-bottom:6px;display:${(getEventTypes()[0]?.hasGenderFilter) ? '' : 'none'}">
         <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">מי מוזמן?</div>
         <div style="display:flex;gap:8px">
-          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" value="all"   checked> כולם</label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" value="boys">  👦 בנים בלבד</label>
-          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" value="girls"> 👧 בנות בלבד</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" onchange="_syncCelebPicker('${cid}')" value="all"   checked> כולם</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" onchange="_syncCelebPicker('${cid}')" value="boys">  👦 בנים בלבד</label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:13px;font-weight:700;cursor:pointer"><input type="radio" name="commEvGender_${cid}" onchange="_syncCelebPicker('${cid}')" value="girls"> 👧 בנות בלבד</label>
         </div>
       </div>
       ${canPublishDirectly(cid) ? `
       <div style="display:flex;gap:8px;margin-bottom:6px;align-items:center">
         <span style="font-size:12px;font-weight:700;color:#718096;white-space:nowrap">${t('commScopeLabel')}:</span>
-        <select class="auth-input" id="commEvScope_${cid}" style="flex:1">
+        <select class="auth-input" id="commEvScope_${cid}" style="flex:1" onchange="_syncCelebPicker('${cid}')">
           <option value="class">🏫 ${t('commScopeClass')}</option>
           <option value="grade">📚 ${t('commScopeGrade')}</option>
           <option value="school">🏛 ${t('commScopeSchool')}</option>
@@ -5222,9 +5224,9 @@ function renderCommCard(kid) {
       ${cache.classmates.length ? `
       <div class="comm-celeb-picker" id="commEvCelebWrap_${cid}" style="margin-bottom:6px;display:${(getEventTypes()[0]?.id === 'birthday') ? '' : 'none'}">
         <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">${t('commCelebrantsPickerLabel')}</div>
-        <div id="commEvCelebList_${cid}">
-          ${cache.classmates.map((c,i) => `
-            <div class="comm-celeb-row">
+        <div id="commEvCelebList_${cid}" class="comm-celeb-grid">
+          ${[...cache.classmates].sort((a,b) => (a.kidName||'').localeCompare(b.kidName||'', 'he')).map((c,i) => `
+            <div class="comm-celeb-row" data-gender="${esc(c.gender||'')}">
               <label class="comm-celeb-check-label">
                 <input type="checkbox" class="comm-celeb-check" data-uid="${esc(c.familyUid)}" data-kid="${esc(c.kidName)}"
                   onchange="onCelebCheckToggle('${cid}', ${i})">
@@ -5234,6 +5236,7 @@ function renderCommCard(kid) {
                 placeholder="${t('commEventPaybox')}" dir="ltr" style="display:none;margin-top:4px">
             </div>`).join('')}
         </div>
+        <div class="comm-celeb-empty" id="commEvCelebEmpty_${cid}" style="display:none">${t('commCelebrantsNone')}</div>
       </div>` : ''}
       <div id="commEvError_${cid}" style="display:none;font-size:12px;color:var(--error);font-weight:700;margin-bottom:8px;padding:6px 10px;background:var(--error-bg);border-radius:8px"></div>
       <div style="display:flex;gap:8px">
@@ -5346,11 +5349,51 @@ function onCommEvTypeChange(cid) {
   if (dateHint) dateHint.style.display = typeCfg.mDate ? 'none' : '';
   const dateEl = el('commEvDate_' + cid);
   if (dateEl) { if (typeCfg.mDate) dateEl.dataset.required = '1'; else delete dateEl.dataset.required; _syncDateInput(dateEl); }
-  const celebWrap = el('commEvCelebWrap_' + cid);
-  if (celebWrap) celebWrap.style.display = type === 'birthday' ? '' : 'none';
+  _syncCelebPicker(cid);
   // Attendance confirmations default on only for birthdays; the parent can still toggle it
   const rsvpEl = el('commEvRsvp_' + cid);
   if (rsvpEl) rsvpEl.checked = type === 'birthday';
+}
+
+// Celebrant picker: birthdays at class scope only, filtered to the invited gender.
+// Kids whose family never set a gender stay visible under either filter.
+function _syncCelebPicker(cid) {
+  const wrap = el('commEvCelebWrap_' + cid);
+  if (!wrap) return;
+  const type  = el('commEvType_' + cid)?.value;
+  const scope = el('commEvScope_' + cid)?.value || 'class';
+  const show  = type === 'birthday' && scope === 'class';
+  wrap.style.display = show ? '' : 'none';
+  const gender = document.querySelector(`input[name="commEvGender_${cid}"]:checked`)?.value || 'all';
+  const needed = gender === 'boys' ? 'boy' : gender === 'girls' ? 'girl' : '';
+  const rows = el('commEvCelebList_' + cid)?.querySelectorAll('.comm-celeb-row') || [];
+  let visible = 0;
+  rows.forEach(row => {
+    const g = row.dataset.gender;
+    const fits = show && (!needed || !g || g === needed);
+    row.style.display = fits ? '' : 'none';
+    if (fits) { visible++; return; }
+    // A hidden kid can't stay selected
+    const chk = row.querySelector('.comm-celeb-check');
+    if (chk?.checked) {
+      chk.checked = false;
+      const paybox = row.querySelector('.comm-celeb-paybox');
+      if (paybox) { paybox.value = ''; paybox.style.display = 'none'; }
+    }
+  });
+  const empty = el('commEvCelebEmpty_' + cid);
+  if (empty) empty.style.display = show && !visible ? '' : 'none';
+  _capCelebChecks(cid);
+}
+
+// Cap at 3 celebrants (the card only has room to show 3) — disable the rest once reached
+function _capCelebChecks(cid) {
+  const rows = el('commEvCelebList_' + cid)?.querySelectorAll('.comm-celeb-row') || [];
+  const checkedCount = [...rows].filter(r => r.querySelector('.comm-celeb-check')?.checked).length;
+  rows.forEach(r => {
+    const chk = r.querySelector('.comm-celeb-check');
+    if (chk && !chk.checked) chk.disabled = checkedCount >= 3;
+  });
 }
 
 function onCelebCheckToggle(cid, i) {
@@ -5366,12 +5409,7 @@ function onCelebCheckToggle(cid, i) {
     paybox.style.display = checked ? '' : 'none';
     if (!checked) paybox.value = ''; // unchecking always clears — no orphaned paybox state
   }
-  // Cap at 3 celebrants (the card only has room to show 3) — disable the rest once reached
-  const checkedCount = [...(rows||[])].filter(r => r.querySelector('.comm-celeb-check')?.checked).length;
-  rows?.forEach(r => {
-    const chk = r.querySelector('.comm-celeb-check');
-    if (chk && !chk.checked) chk.disabled = checkedCount >= 3;
-  });
+  _capCelebChecks(cid);
 }
 
 function matchesGenderFilter(ev, kidName) {
@@ -5393,6 +5431,7 @@ function toggleCommAddForm(cid) {
   if (_commAddOpen[cid]) {
     setTimeout(() => {
       _buildSoftDd('commEvTypeDd_' + cid, 'commEvType_' + cid);
+      _syncCelebPicker(cid);
       form?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, 50);
   }
@@ -5452,7 +5491,7 @@ async function submitClassEvent(cid) {
   const payboxRaw  = el('commEvPaybox_' + cid)?.value.trim() || '';
   const payboxUrl  = payboxRaw && (payboxRaw.startsWith('http://') || payboxRaw.startsWith('https://')) ? payboxRaw : '';
   const celebrants = [];
-  if (type === 'birthday') {
+  if (type === 'birthday' && scope === 'class') {
     el('commEvCelebList_' + cid)?.querySelectorAll('.comm-celeb-row').forEach(row => {
       const chk = row.querySelector('.comm-celeb-check');
       if (!chk?.checked) return;
