@@ -592,6 +592,10 @@ let _ffFirstLoad        = true; // suppress toast for the initial snapshot on (r
 // false = off, 'web' = on in the browser only (beta on the website, hidden in the
 // Android app until it's flipped to on).
 const _isNativeApp = () => !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+// Base URL for links people share (invites, list shares). The Android app is served from
+// https://localhost, which means nothing to whoever receives the link — use the public site there.
+const PUBLIC_APP_URL = 'https://zcochavi.github.io/home-management/';
+const _publicAppUrl = () => _isNativeApp() ? PUBLIC_APP_URL : location.origin + location.pathname;
 const _ffState  = (v) => v === false ? 'off' : v === 'web' ? 'web' : 'on';
 // A switch's stored value, or — if never set — its default: on, unless its definition
 // says defaultOff (for things that must not appear until deliberately enabled).
@@ -2200,7 +2204,7 @@ async function authSignOut() {
 function shareInvite() {
   const code = familyData?.familyCode;
   if (!code) return;
-  const url  = location.origin + location.pathname + '?join=' + code;
+  const url  = _publicAppUrl() + '?join=' + code;
   const text = `הצטרפ/י למשפחת ${familyData?.familyName || ''} ב-FamilyHub!\nקוד הצטרפות: ${code}\n${url}`;
   if (navigator.share) {
     navigator.share({ title: 'FamilyHub', text });
@@ -2213,7 +2217,7 @@ function shareInvite() {
 }
 
 function shareKidCode(name, code) {
-  const url  = location.origin + location.pathname + '?join=' + code;
+  const url  = _publicAppUrl() + '?join=' + code;
   const text = `הצטרפ/י כ-${name} למשפחת ${familyData?.familyName || ''} ב-FamilyHub!\nקוד אישי: ${code}\n${url}`;
   if (navigator.share) {
     navigator.share({ title: 'FamilyHub', text });
@@ -2255,7 +2259,7 @@ async function regenSpouseCode(memberName) {
 }
 
 function shareSpouseCode(name, code) {
-  const url  = location.origin + location.pathname + '?join=' + code;
+  const url  = _publicAppUrl() + '?join=' + code;
   const text = `הצטרפ/י כ-${name} למשפחת ${familyData?.familyName || ''} ב-FamilyHub!\nקוד כניסה אישי: ${code}\n${url}`;
   if (navigator.share) {
     navigator.share({ title: 'FamilyHub', text });
@@ -11508,7 +11512,7 @@ function listOpenShareMenu(listId) {
   const list = (S.lists || []).find(l => l.id === listId);
   if (!list) return;
   const shares = list.publicShares || [];
-  const baseUrl = location.origin + location.pathname;
+  const baseUrl = _publicAppUrl();
 
   let activeHtml = '';
   if (shares.length) {
@@ -11619,7 +11623,7 @@ async function _ensureEventListShare(listId) {
 function _eventListLinkHtml(ev) {
   const ll = ev?.listLink;
   if (!ll?.token || !/^[a-zA-Z0-9]+$/.test(ll.token)) return '';
-  const url = `${location.origin}${location.pathname}?share=${ll.token}`;
+  const url = `${_publicAppUrl()}?share=${ll.token}`;
   const icon = ll.mode === 'claim' ? '🙋' : '📝';
   return `<a class="paybox-btn list-link-btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${icon} ${esc(ll.name || t('commEventListOpen'))}</a>`;
 }
