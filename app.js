@@ -119,6 +119,8 @@ const STRINGS = {
     commEventTitle:'כותרת האירוע...',
     commEventNote:'הערה (אופציונלי)',
     commEventPaybox:'קישור Paybox (אופציונלי)',
+    commEventListLink:'קישור לרשימה מהאפליקציה (אופציונלי)',
+    commEventListOpen:'פתח רשימה',
     commPayNow:'💳 שלם עכשיו',
     commPayboxGift:'🎁 לתשלום ב-Paybox',
     commWhosCelebrating:'🎂 מי חוגגים?',
@@ -238,6 +240,8 @@ const STRINGS = {
     commEventTitle:'Event title...',
     commEventNote:'Note (optional)',
     commEventPaybox:'Paybox link (optional)',
+    commEventListLink:'Link a list from the app (optional)',
+    commEventListOpen:'Open list',
     commPayNow:'💳 Pay now',
     commPayboxGift:'🎁 Pay via Paybox',
     commWhosCelebrating:'🎂 Who\'s celebrating?',
@@ -4556,6 +4560,7 @@ function renderPostCard(ev, cid) {
         ${ev.time ? `<div class="post-card-info-item"><span class="post-card-info-badge post-card-info-badge-clock">${_ico.clock}</span><div class="post-card-info-text">${esc(ev.time)}</div></div>` : ''}
       </div>` : ''}
       ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
+      ${_eventListLinkHtml(ev)}
     </div>
     ${_celebrantsHtml(ev)}
     ${_attendSectionHtml(ev, scope, sid, cid)}
@@ -5188,7 +5193,7 @@ function renderCommCard(kid) {
           ${getEventTypes().map(et=>`<option value="${et.id}">${et.icon} ${eventTypeName(et.id)}</option>`).join('')}
         </select>
       </div>
-      <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="commEvRsvp_${cid}" checked> ✋ אישורי הגעה</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:6px"><input type="checkbox" id="commEvRsvp_${cid}"${(getEventTypes()[0]?.id === 'birthday') ? ' checked' : ''}> ✋ אישורי הגעה</label>
       <div id="commEvGenderWrap_${cid}" style="margin-bottom:6px;display:${(getEventTypes()[0]?.hasGenderFilter) ? '' : 'none'}">
         <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">מי מוזמן?</div>
         <div style="display:flex;gap:8px">
@@ -5207,8 +5212,13 @@ function renderCommCard(kid) {
         </select>
       </div>` : `<input type="hidden" id="commEvScope_${cid}" value="class">`}
       <input class="auth-input" id="commEvLocation_${cid}" placeholder="📍 מיקום (אופציונלי)" style="margin-bottom:6px" oninput="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
-      <input class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" style="margin-bottom:6px">
+      <textarea class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" rows="3" style="margin-bottom:6px;resize:vertical;min-height:64px;font-family:inherit;line-height:1.5"></textarea>
       <input class="auth-input" id="commEvPaybox_${cid}" placeholder="${t('commEventPaybox')}" style="margin-bottom:6px" type="url" dir="ltr">
+      ${_eventLinkableLists().length ? `
+      <select class="auth-input" id="commEvList_${cid}" style="margin-bottom:6px">
+        <option value="">🔗 ${t('commEventListLink')}</option>
+        ${_eventLinkableLists().map(l => `<option value="${esc(l.id)}">${_hasClaimShare(l) ? '🙋' : '📝'} ${esc(l.name)}</option>`).join('')}
+      </select>` : ''}
       ${cache.classmates.length ? `
       <div class="comm-celeb-picker" id="commEvCelebWrap_${cid}" style="margin-bottom:6px;display:${(getEventTypes()[0]?.id === 'birthday') ? '' : 'none'}">
         <div style="font-size:12px;font-weight:700;color:#718096;margin-bottom:6px">${t('commCelebrantsPickerLabel')}</div>
@@ -5314,7 +5324,9 @@ async function renderCommunity() {
 function _syncCommFab() {
   const wrap = el('commFabWrap');
   if (!wrap) return;
-  const show = S.tab === 'community' && isParent() && _commVisibleCids.length > 0;
+  // Hidden while the add-event form is open — the form has its own cancel button
+  const formOpen = _commVisibleCids.some(c => _commAddOpen[c]);
+  const show = S.tab === 'community' && isParent() && _commVisibleCids.length > 0 && !formOpen;
   wrap.style.display = show ? '' : 'none';
   const fab = el('commFab');
   if (fab) {
@@ -5336,6 +5348,9 @@ function onCommEvTypeChange(cid) {
   if (dateEl) { if (typeCfg.mDate) dateEl.dataset.required = '1'; else delete dateEl.dataset.required; _syncDateInput(dateEl); }
   const celebWrap = el('commEvCelebWrap_' + cid);
   if (celebWrap) celebWrap.style.display = type === 'birthday' ? '' : 'none';
+  // Attendance confirmations default on only for birthdays; the parent can still toggle it
+  const rsvpEl = el('commEvRsvp_' + cid);
+  if (rsvpEl) rsvpEl.checked = type === 'birthday';
 }
 
 function onCelebCheckToggle(cid, i) {
@@ -5381,9 +5396,8 @@ function toggleCommAddForm(cid) {
       form?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }, 50);
   }
-  // Sync FAB icon
-  const fab = el('commFab');
-  if (fab) fab.classList.toggle('chore-fab-open', Object.values(_commAddOpen).some(v => v));
+  _commHidePicker();
+  _syncCommFab(); // hides the FAB while the form is open
 }
 
 function commFabClick() {
@@ -5477,6 +5491,7 @@ async function submitClassEvent(cid) {
   if (location) docData.location = location;
   if (payboxUrl) docData.payboxUrl = payboxUrl;
   if (celebrants.length) docData.celebrants = celebrants.slice(0, 3);
+  const linkedListId = el('commEvList_' + cid)?.value || '';
 
   // Resolve target collection and document ID
   const kid = _myKidInClass(cid);
@@ -5492,6 +5507,10 @@ async function submitClassEvent(cid) {
   const _btn = el('commAddForm_' + cid)?.querySelector('.auth-btn-main');
   if (_btn) _btn.disabled = true;
   try {
+    if (linkedListId) {
+      const listLink = await _ensureEventListShare(linkedListId);
+      if (listLink) docData.listLink = listLink;
+    }
     if (canPublishDirectly(cid)) {
       await fbDb.collection(collName).doc(docId).collection('events').add(docData);
     } else {
@@ -10128,7 +10147,7 @@ function renderDayPanel(events){
         <div class="event-body" style="width:100%">
           <div class="event-title">${eventTypeIcon(e.type)} ${esc(e.title)}</div>
           <div class="event-meta">${e.time?_ico.clock+' '+e.time:t('allDay')}${e.location?' · '+_ico.pin+' '+esc(e.location):''}${e.note?` · ${esc(e.note)}`:''}</div>
-          ${payBtn}
+          ${payBtn}${_eventListLinkHtml(e)}
         </div>
         <span class="event-person-chip" style="background:${col}22;color:${col}">🏫 ${esc(e.classKid)}</span>
         ${gcalBtn}
@@ -11507,6 +11526,19 @@ async function listCreateShare(listId) {
   const list = (S.lists || []).find(l => l.id === listId);
   if (!list || !S.uid) return;
   const mode = document.querySelector('input[name="shareMode"]:checked')?.value || 'readonly';
+  try {
+    await _createListShare(list, mode);
+    _cmodalClose(false);
+    setTimeout(() => listOpenShareMenu(listId), 100);
+  } catch(e) {
+    console.error('[share] create failed:', e);
+    _showSnackbar('שגיאה ביצירת הקישור');
+  }
+}
+
+// Creates a public share doc for a list and records it on the list; returns the token
+async function _createListShare(list, mode) {
+  const listId = list.id;
   const token = _genShareToken();
   const rawItems = JSON.parse(JSON.stringify(list.items || []));
   const shareItems = mode === 'readonly'
@@ -11522,17 +11554,39 @@ async function listCreateShare(listId) {
     createdAt: firebase.firestore.FieldValue.serverTimestamp(),
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
-  try {
-    await fbDb.collection('publicShares').doc(token).set(shareDoc);
-    const publicShares = [...(list.publicShares || []), { token, mode }];
-    await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
-      .update({ publicShares, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-    _cmodalClose(false);
-    setTimeout(() => listOpenShareMenu(listId), 100);
-  } catch(e) {
-    console.error('[share] create failed:', e);
-    _showSnackbar('שגיאה ביצירת הקישור');
-  }
+  await fbDb.collection('publicShares').doc(token).set(shareDoc);
+  const publicShares = [...(list.publicShares || []), { token, mode }];
+  await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+    .update({ publicShares, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+  return token;
+}
+
+// ── Community event ↔ list link ──
+// Lists a parent can attach to a community event; "who brings what" lists first
+function _eventLinkableLists() {
+  return (S.lists || [])
+    .filter(l => !l.archived)
+    .sort((a, b) => (_hasClaimShare(b) ? 1 : 0) - (_hasClaimShare(a) ? 1 : 0));
+}
+
+// Reuses the list's existing share (claim > edit > any), or creates a "who brings what" one
+async function _ensureEventListShare(listId) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list) return null;
+  const shares = list.publicShares || [];
+  const existing = shares.find(s => s.mode === 'claim') || shares.find(s => s.mode === 'edit') || shares[0];
+  if (existing) return { token: existing.token, mode: existing.mode, name: list.name };
+  const mode = list.type === 'recipe' ? 'readonly' : 'claim';
+  const token = await _createListShare(list, mode);
+  return { token, mode, name: list.name };
+}
+
+function _eventListLinkHtml(ev) {
+  const ll = ev?.listLink;
+  if (!ll?.token || !/^[a-zA-Z0-9]+$/.test(ll.token)) return '';
+  const url = `${location.origin}${location.pathname}?share=${ll.token}`;
+  const icon = ll.mode === 'claim' ? '🙋' : '📝';
+  return `<a class="paybox-btn list-link-btn" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${icon} ${esc(ll.name || t('commEventListOpen'))}</a>`;
 }
 
 async function listRevokeShare(listId, token) {
