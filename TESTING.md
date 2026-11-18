@@ -38,6 +38,8 @@ Run through this before any significant deploy (major refactor, new feature, Clo
 ## Community & Events
 
 - [ ] **Submit event as regular parent** — verify it goes to pending, not published directly
+- [ ] **New event form** — tapping the FAB opens the form and hides the FAB; cancel or publish brings it back. "✋ אישורי הגעה" is checked only when the type is יום הולדת and flips when the type changes. The note is a multi-line textarea and its line breaks show on the card
+- [ ] **Link a list to an event** — pick a list in "🔗 קישור לרשימה"; a list without a share gets a new "🙋 מי מביא מה" link, one with a share reuses it. The card shows a button that opens the guest view of that list
 - [ ] **Pending notification** — committee/admin receives notification (not the submitter)
 - [ ] **Approve event** — committee member approves; event appears in community; submitter receives approval notification
 - [ ] **Reject event** — committee member rejects; event disappears from pending
