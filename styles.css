@@ -1364,6 +1364,8 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 
 .paybox-btn { display: inline-flex; align-items: center; gap: 5px; margin-top: 6px; padding: 5px 12px; border-radius: var(--r-pill); background: var(--primary-500); color: white; font-size: 12px; font-weight: 700; text-decoration: none; border: none; cursor: pointer; transition: opacity var(--t-fast); }
 .paybox-btn:hover { opacity: 0.85; }
+.list-link-btn { background: var(--success); }
+.paybox-btn + .list-link-btn { margin-inline-start: 6px; }
 
 .comm-add-form { background: var(--gray-50); border-radius: var(--r-md); padding: 14px; margin-top: 8px; display: none; border: 1px solid var(--gray-100); }
 .comm-add-form.open { display: block; }
