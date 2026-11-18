@@ -5484,6 +5484,13 @@ async function submitClassEvent(cid) {
   if (scope === 'grade') { collName = 'schoolGrades'; docId = gradeIdFor(kid?.school) || cid; }
   if (scope === 'school') { collName = 'schools'; docId = schoolIdFor(kid?.school) || cid; }
 
+  if (scope !== 'class' && docId === cid) {
+    _showErr(scope === 'grade' ? 'לא ניתן לזהות את השכבה — בדקו את פרטי בית הספר של הילד/ה' : 'לא ניתן לזהות את בית הספר — בדקו את פרטי בית הספר של הילד/ה');
+    return;
+  }
+
+  const _btn = el('commAddForm_' + cid)?.querySelector('.auth-btn-main');
+  if (_btn) _btn.disabled = true;
   try {
     if (canPublishDirectly(cid)) {
       await fbDb.collection(collName).doc(docId).collection('events').add(docData);
@@ -5493,8 +5500,20 @@ async function submitClassEvent(cid) {
       _alert(t('pendingSubmitted'));
     }
     _commAddOpen[cid] = false;
-    // onSnapshot will update the cache and re-render automatically
-  } catch(e) { console.error('submitClassEvent:', e); }
+    el('commAddForm_' + cid)?.classList.remove('open');
+    _syncCommFab();
+    if (canPublishDirectly(cid) && scope !== 'class') {
+      // Grade/school events are fetched once (no onSnapshot) — force a reload so the new event shows
+      unsubscribeAllComm(); _commCache = {};
+      await renderCommunity();
+    }
+    // Class events: onSnapshot will update the cache and re-render automatically
+  } catch(e) {
+    console.error('submitClassEvent:', e);
+    _showErr('הפרסום נכשל: ' + (e.code || e.message || 'שגיאה לא ידועה'));
+  } finally {
+    if (_btn) _btn.disabled = false;
+  }
 }
 
 async function deleteClassEvent(scope, scopeId, eventId) {
