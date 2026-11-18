@@ -95,7 +95,9 @@ async function _readTokenFromCookies() {
 chrome.runtime.onInstalled.addListener(() => chrome.alarms.create(ALARM_NAME, { periodInMinutes: 120 }));
 chrome.runtime.onStartup.addListener(() => chrome.alarms.create(ALARM_NAME, { periodInMinutes: 120 }));
 chrome.alarms.onAlarm.addListener(a => {
-  if (a.name === ALARM_NAME) syncToFamilyHub({ auto: true }).catch(err => console.log('[FH] alarm sync skipped:', err.message));
+  if (a.name !== ALARM_NAME) return;
+  syncToFamilyHub({ auto: true }).catch(err => console.log('[FH] alarm sync skipped:', err.message));
+  syncMashov({ auto: true }).catch(err => console.log('[FH] mashov alarm sync skipped:', err.message));
 });
 
 // ─── Fetch one week of homework from Webtop, from this browser ────────────────
@@ -246,9 +248,12 @@ async function _doSync({ auto = false } = {}) {
 function syncErrorMessage(err) {
   switch (err?.message) {
     case 'not_linked':      return 'לא מחובר למשפחה';
-    case 'no_params':       return 'פתח את דף שיעורי הבית ב-Webtop לכל ילד, ואז סנכרן';
+    case 'no_params':       return 'פתח את דף שיעורי הבית ב-Webtop לכל ילד, או היכנס למשו״ב, ואז סנכרן';
     case 'session_expired': return 'הסשן ב-Webtop פג — היכנס ל-Webtop מחדש';
     case 'webtop_failed':   return `Webtop לא החזיר שיעורים — פתח את דף שיעורי הבית ב-Webtop ונסה שוב (${err.detail || ''})`;
+    case 'mashov_no_kids':  return 'היכנס למשו״ב עם פרטי ההורה, ואז סנכרן';
+    case 'mashov_session_expired': return 'הסשן במשו״ב פג — היכנס למשו״ב מחדש';
+    case 'mashov_failed':   return `משו״ב לא החזיר שיעורים — פתח את משו״ב ונסה שוב (${err.detail || ''})`;
     default:                return err?.message || 'שגיאה';
   }
 }
@@ -284,11 +289,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
     return true;
   }
   if (msg.type === 'UNLINK') {
-    chrome.storage.local.remove(['familyId', 'familyName', 'lastSync', 'webtopToken', 'syncParams', 'syncParamsMap', 'fullSyncDone'], () => reply({ ok: true }));
+    chrome.storage.local.remove(['familyId', 'familyName', 'lastSync', 'webtopToken', 'syncParams', 'syncParamsMap', 'fullSyncDone', ...MASHOV_KEYS], () => reply({ ok: true }));
     return true;
   }
+  if (msg.type === 'FH_MASHOV_CHILD') { onMashovChild(msg.payload); return; }
+  if (msg.type === 'FH_MASHOV_CSRF') {
+    const v = String(msg.payload || '');
+    if (v && v.length <= 500) chrome.storage.local.set({ mashovCsrf: v });
+    return;
+  }
   if (msg.type === 'MANUAL_SYNC') {
-    syncToFamilyHub({ auto: false })
+    syncAll()
       .then(reply)
       .catch(err => { setBadge('!', '#ef4444', 6000); reply({ ok: false, error: syncErrorMessage(err) }); });
     return true;
@@ -308,10 +319,172 @@ async function linkFamily(familyId) {
     });
     if (!res.ok) return { ok: false, error: 'קוד לא תקין' };
     const { familyName } = await res.json();
+    // Mashov's ingest accepts families linked either way; record a Mashov link too.
+    fetch(MASHOV_LINK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ familyId }) }).catch(() => {});
     await chrome.storage.local.set({ familyId, familyName });
     await _readTokenFromCookies();
     return { ok: true, familyName };
   } catch (_) {
     return { ok: false, error: 'שגיאת רשת' };
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Mashov — for kids whose school uses Mashov instead of Webtop
+// ═══════════════════════════════════════════════════════════════════════════════
+// mashov-capture.js (on web.mashov.info) reports the kids from the site's login
+// response and the session's CSRF token. Homework is fetched from this browser with
+// the parent's Mashov session and sent to FamilyHub's mashovIngest, which never
+// contacts Mashov itself. No Mashov password is ever seen or stored.
+const MASHOV_INGEST_URL = 'https://us-central1-familyhub-7fdd5.cloudfunctions.net/mashovIngest';
+const MASHOV_LINK_URL   = 'https://us-central1-familyhub-7fdd5.cloudfunctions.net/mashovLink';
+const MASHOV_ORIGIN     = 'https://web.mashov.info';
+const MASHOV_KEYS = ['mashovChildren', 'mashovCsrf', 'mashovLastSync', 'mashovFullSync'];
+const GUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const isoDaysAgo = (n) => {
+  const d = new Date(Date.now() - n * 864e5);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+let _mashovAutoTimer = null;
+async function onMashovChild(c) {
+  const guid = String(c?.childGuid || '').toLowerCase();
+  if (!GUID_RE.test(guid)) return;
+  const { mashovChildren = {} } = await chrome.storage.local.get(['mashovChildren']);
+  const prev = mashovChildren[guid];
+  // An id seen in a URL must not replace the named entry from the login response.
+  if (prev && !c.privateName) return;
+  const s = (v, n) => String(v ?? '').slice(0, n);
+  mashovChildren[guid] = {
+    childGuid: guid, privateName: s(c.privateName, 60), familyName: s(c.familyName, 60),
+    classCode: s(c.classCode, 10), classNum: s(c.classNum, 10), schoolName: s(c.schoolName, 120),
+  };
+  await chrome.storage.local.set({ mashovChildren });
+  // The parent just logged in / opened a kid — a good moment to sync (once things settle).
+  clearTimeout(_mashovAutoTimer);
+  _mashovAutoTimer = setTimeout(() => syncMashov({ auto: true }).catch(err => console.log('[FH] mashov auto sync skipped:', err.message)), 4000);
+}
+
+async function _mashovCsrf() {
+  const { mashovCsrf } = await chrome.storage.local.get(['mashovCsrf']);
+  if (mashovCsrf) return mashovCsrf;
+  try {
+    const all = await chrome.cookies.getAll({ url: MASHOV_ORIGIN });
+    const c = all.find(x => /^(csrf-token|xsrf-token)$/i.test(x.name));
+    if (c?.value) return decodeURIComponent(c.value);
+  } catch (_) {}
+  return '';
+}
+
+async function fetchMashovHomework(childGuid) {
+  const url = `${MASHOV_ORIGIN}/api/students/${childGuid}/homework`;
+  const headers = { 'Accept': 'application/json, text/plain, */*' };
+  const csrf = await _mashovCsrf();
+  if (csrf) headers['X-Csrf-Token'] = csrf;
+  const failures = [];
+  let authFail = false;
+
+  // 1) Inside an open Mashov tab — the site's own origin and cookies.
+  const tabs = await chrome.tabs.query({ url: `${MASHOV_ORIGIN}/*` });
+  const tab = tabs.find(t => !t.discarded && !/\/login/i.test(t.url || '')) || null;
+  if (tab) {
+    try {
+      const [injection] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        world: 'MAIN',
+        func: async (u, h) => {
+          try {
+            const r = await fetch(u, { credentials: 'include', headers: h });
+            return { status: r.status, text: await r.text() };
+          } catch (e) { return { status: 0, text: String(e) }; }
+        },
+        args: [url, headers],
+      });
+      const r = injection?.result;
+      if (r?.status === 200) return JSON.parse(r.text);
+      if (r?.status === 401 || r?.status === 403) authFail = true;
+      failures.push(`tab:${r?.status ?? '?'}`);
+    } catch (err) { failures.push(`tab:error ${err.message}`); }
+  } else {
+    failures.push(tabs.length ? 'tab:only-login-page' : 'tab:none');
+  }
+
+  // 2) Straight from the extension, with the browser's Mashov cookies.
+  try {
+    const r = await fetch(url, { credentials: 'include', headers });
+    if (r.ok) { const j = await r.json().catch(() => null); if (j) return j; }
+    if (r.status === 401 || r.status === 403) authFail = true;
+    failures.push(`direct:${r.status}`);
+  } catch (err) { failures.push(`direct:error ${err.message}`); }
+
+  const err = new Error(authFail || (tabs.length && !tab) ? 'mashov_session_expired' : 'mashov_failed');
+  err.detail = failures.join(' | ');
+  throw err;
+}
+
+let _mashovInFlight = null;
+function syncMashov(opts = {}) {
+  if (_mashovInFlight) return _mashovInFlight;
+  _mashovInFlight = _doMashovSync(opts).finally(() => { _mashovInFlight = null; });
+  return _mashovInFlight;
+}
+
+async function _doMashovSync({ auto = false } = {}) {
+  const st = await chrome.storage.local.get(['familyId', 'mashovChildren', 'mashovLastSync', 'mashovFullSync']);
+  const kids = Object.values(st.mashovChildren || {});
+  const full = st.mashovFullSync || {};
+  if (!st.familyId) throw new Error('not_linked');
+  if (!kids.length) throw new Error('mashov_no_kids');
+  if (auto && st.mashovLastSync && Date.now() - st.mashovLastSync < AUTO_SYNC_MIN_GAP_MS) return { ok: true, skipped: true };
+
+  let homeworkCount = 0, total = 0, isFirstSync = false, synced = 0, lastErr = null;
+  for (const child of kids) {
+    const since = isoDaysAgo(full[child.childGuid] ? 21 : 35); // first sync: ~5 weeks back
+    let raw;
+    try { raw = await fetchMashovHomework(child.childGuid); }
+    catch (err) { lastErr = err; continue; }
+    const homework = (Array.isArray(raw) ? raw : []).filter(h => String(h?.lessonDate || '').slice(0, 10) >= since);
+    const res = await fetchWithRetry(MASHOV_INGEST_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ familyId: st.familyId, child, since, homework, source: 'extension' }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      lastErr = new Error(body.error || `server_${res.status}`);
+      continue;
+    }
+    const json = await res.json();
+    homeworkCount += json.homeworkCount || 0;
+    total += json.total || 0;
+    isFirstSync = isFirstSync || !!json.isFirstSync;
+    full[child.childGuid] = true;
+    synced++;
+  }
+  if (!synced) throw lastErr || new Error('mashov_failed');
+  await chrome.storage.local.set({ mashovLastSync: Date.now(), mashovFullSync: full });
+  setBadge('✓', '#22c55e', 4000);
+  return { ok: true, homeworkCount, total, isFirstSync, synced, students: kids.length };
+}
+
+// Manual sync from the popup: Webtop and/or Mashov, whichever this browser has.
+async function syncAll() {
+  const { syncParamsMap = {}, mashovChildren = {} } = await chrome.storage.local.get(['syncParamsMap', 'mashovChildren']);
+  const hasWebtop = Object.keys(syncParamsMap).length > 0;
+  const hasMashov = Object.keys(mashovChildren).length > 0;
+  if (!hasWebtop && !hasMashov) return syncToFamilyHub({ auto: false }); // throws the usual "no_params"
+  const results = [], errors = [];
+  for (const [has, run] of [[hasWebtop, () => syncToFamilyHub({ auto: false })], [hasMashov, () => syncMashov({ auto: false })]]) {
+    if (!has) continue;
+    try { results.push(await run()); } catch (err) { errors.push(err); }
+  }
+  if (!results.length) throw errors[0];
+  const sum = (k) => results.reduce((n, r) => n + (r[k] || 0), 0);
+  return {
+    ok: true,
+    homeworkCount: sum('homeworkCount'), total: sum('total'), synced: sum('synced'), students: sum('students'),
+    isFirstSync: results.some(r => r.isFirstSync),
+    warning: errors.length ? syncErrorMessage(errors[0]) : null,
+  };
 }

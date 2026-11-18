@@ -10,15 +10,20 @@ const syncBtn       = document.getElementById('syncBtn');
 const syncResult    = document.getElementById('syncResult');
 const dbgToken      = document.getElementById('dbgToken');
 const dbgParams     = document.getElementById('dbgParams');
+const dbgMashov     = document.getElementById('dbgMashov');
 
 // ── Load current state ────────────────────────────────────────────────────────
 function loadStatus() {
-  chrome.storage.local.get(['familyId', 'familyName', 'lastSync', 'webtopToken', 'syncParamsMap'], data => {
+  chrome.storage.local.get(['familyId', 'familyName', 'lastSync', 'webtopToken', 'syncParamsMap', 'mashovChildren', 'mashovLastSync'], data => {
     if (data?.familyId) {
       showLinked(data.familyName || data.familyId, data.lastSync);
       dbgToken.textContent  = data.webtopToken  ? `טוקן: ✅ ${data.webtopToken.slice(0,12)}…` : 'טוקן: ❌ חסר — פתח Webtop';
       const kids = Object.values(data.syncParamsMap || {}).map(p => p.studentName || `כיתה ${p.classCode}`);
       dbgParams.textContent = kids.length ? `ילדים: ✅ ${kids.join(', ')}` : 'ילדים: ❌ פתח את דף שיעורי הבית ב-Webtop לכל ילד';
+      const mKids = Object.values(data.mashovChildren || {}).map(c => c.privateName || 'ילד/ה');
+      dbgMashov.textContent = mKids.length
+        ? `משו״ב: ✅ ${mKids.join(', ')}${data.mashovLastSync ? ` · ${timeSince(data.mashovLastSync)}` : ''}`
+        : 'משו״ב: — (בית ספר עם משו״ב? היכנס למשו״ב עם פרטי ההורה)';
     } else {
       showUnlinked();
     }
@@ -65,7 +70,7 @@ syncBtn.addEventListener('click', () => {
       const label = res.isFirstSync
         ? `✅ סנכרון ראשוני: ${res.homeworkCount} שיעורים נטענו (${res.total} בסך הכל)${kids}`
         : `✅ ${res.homeworkCount} שיעורים עודכנו (${res.total} בסך הכל)${kids}`;
-      syncResult.textContent = label;
+      syncResult.textContent = res.warning ? `${label} · ⚠️ ${res.warning}` : label;
       loadStatus();
     } else {
       syncResult.style.color = '#ef4444';

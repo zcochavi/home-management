@@ -40,6 +40,14 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode"
             android:exported="false" />
 
+        <!-- Mashov login screen (MashovConnectPlugin): Mashov's real site in a WebView. -->
+        <activity
+            android:name=".MashovLoginActivity"
+            android:label="משו״ב"
+            android:theme="@style/AppTheme.NoActionBar"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|screenLayout|uiMode"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
