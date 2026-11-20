@@ -233,6 +233,53 @@ exports.onGradeEventCreated = functions.firestore
       { type: 'gradeEvent', gradeId: gid, eventId: ctx.params.eventId });
   });
 
+// Guest edits on a shared list link that allows them (add / rename / delete an item).
+// The guest queues a request under publicShares/{token}/edits; this applies it to the owner's
+// list and pushes the result to every link of that list. See share-edit-helpers.js.
+const shareEdits = require('./share-edit-helpers');
+exports.onShareEdit = functions.firestore
+  .document('publicShares/{token}/edits/{editId}')
+  .onCreate(async (snap, ctx) => {
+    const token = ctx.params.token;
+    try {
+      const edit = shareEdits.cleanEdit(snap.data());
+      if (!edit) return;
+      const shareSnap = await db.collection('publicShares').doc(token).get();
+      const share = shareSnap.exists ? shareSnap.data() : null;
+      if (!share || share.allowEdits !== true || !['self', 'edit', 'claim'].includes(share.mode)) return;
+      if (!share.familyUid || !share.listId) return;
+      const listRef = db.collection('families').doc(share.familyUid).collection('lists').doc(share.listId);
+      const list = await db.runTransaction(async tx => {
+        const ls = await tx.get(listRef);
+        if (!ls.exists) return null;
+        const data = ls.data();
+        // Only a link the list still lists may change it (a revoked link's doc is deleted anyway)
+        if (!(data.publicShares || []).some(s => s.token === token && s.allowEdits === true)) return null;
+        const items = shareEdits.applyEdit(data.items || [], edit, Date.now());
+        if (!items) return null;
+        tx.update(listRef, { items, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        return { ...data, items };
+      });
+      if (!list) return;
+      await Promise.all((list.publicShares || []).map(s => {
+        const ref = db.collection('publicShares').doc(s.token);
+        return db.runTransaction(async tx => {
+          const ss = await tx.get(ref);
+          if (!ss.exists) return;
+          const d = ss.data();
+          tx.update(ref, {
+            items: shareEdits.shareItemsFor(list.items, d.mode, d.items || []),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }).catch(e => console.warn(`onShareEdit: push to share ${s.token} failed:`, e.message));
+      }));
+    } catch (e) {
+      console.error(`onShareEdit (${token}):`, e);
+    } finally {
+      await snap.ref.delete().catch(() => {});
+    }
+  });
+
 exports.onSchoolEventCreated = functions.firestore
   .document('schools/{schoolId}/events/{eventId}')
   .onCreate(async (snap, ctx) => {

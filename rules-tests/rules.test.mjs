@@ -79,5 +79,21 @@ await check('owner reads own family', assertSucceeds(getDoc(doc(owner, 'families
 await check('connector tokens stay locked', assertFails(getDoc(doc(owner, 'mcpTokens/t'))));
 await check('connector tokens cannot be forged', assertFails(setDoc(doc(owner, 'mcpTokens/forged'), { kind: 'access' })));
 await check('community collections still open to signed-in users', assertSucceeds(addDoc(collection(owner, 'schoolClasses/c1/pendingEvents'), { title: 'x' })));
+// guest edit requests on shared list links
+await env.withSecurityRulesDisabled(async c => { const d = c.firestore();
+  await setDoc(doc(d, 'publicShares/tokEdit'), { familyUid: 'victim', listId: 'l1', mode: 'claim', allowEdits: true, items: [] });
+  await setDoc(doc(d, 'publicShares/tokNoEdit'), { familyUid: 'victim', listId: 'l1', mode: 'claim', items: [] });
+  await setDoc(doc(d, 'publicShares/tokView'), { familyUid: 'victim', listId: 'l1', mode: 'readonly', allowEdits: true, items: [] });
+});
+const guest = as('anonGuest');
+await check('guest queues an add on a link that allows edits', assertSucceeds(addDoc(collection(guest, 'publicShares/tokEdit/edits'), { op: 'add', name: 'חלב', by: 'דנה' })));
+await check('guest queues a rename / delete by item id', assertSucceeds(addDoc(collection(guest, 'publicShares/tokEdit/edits'), { op: 'delete', itemId: 1700000000000 })));
+await check('no edits on a link without allowEdits', assertFails(addDoc(collection(guest, 'publicShares/tokNoEdit/edits'), { op: 'add', name: 'x' })));
+await check('no edits on a view-only link', assertFails(addDoc(collection(guest, 'publicShares/tokView/edits'), { op: 'add', name: 'x' })));
+await check('edit requests only take known ops', assertFails(addDoc(collection(guest, 'publicShares/tokEdit/edits'), { op: 'wipe' })));
+await check('edit requests only take known fields', assertFails(addDoc(collection(guest, 'publicShares/tokEdit/edits'), { op: 'add', name: 'x', familyUid: 'other' })));
+await check('edit request names are capped', assertFails(addDoc(collection(guest, 'publicShares/tokEdit/edits'), { op: 'add', name: 'x'.repeat(121) })));
+await check('signed-out visitors cannot queue edits', assertFails(addDoc(collection(env.unauthenticatedContext().firestore(), 'publicShares/tokEdit/edits'), { op: 'add', name: 'x' })));
+await check('edit requests cannot be read back', assertFails(getDocs(collection(guest, 'publicShares/tokEdit/edits'))));
 console.log(`\n${pass} passed, ${fail} failed`);
 await env.cleanup(); process.exit(fail ? 1 : 0);
