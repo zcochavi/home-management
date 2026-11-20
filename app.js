@@ -11961,6 +11961,10 @@ function listOpenShareMenu(listId) {
           </div>
           <input id="share-url-${i}" class="share-url-input" type="text" value="${url}" readonly
             onclick="this.select()" dir="ltr">
+          ${_shareCanAllowEdits(list, s.mode) ? `<label class="share-edit-toggle">
+            <input type="checkbox" ${s.allowEdits ? 'checked' : ''} onchange="listSetShareEdits('${listId}','${s.token}',this.checked)">
+            ✏️ מי שיש לו את הקישור יכול לערוך פריטים
+          </label>` : ''}
         </div>`;
       }).join('')}
     </div>`;
@@ -11990,11 +11994,17 @@ function listOpenShareMenu(listId) {
     <div class="share-section-label">צור קישור חדש</div>
     <div class="share-mode-col">
       ${available.map((o, i) => `
-      <label class="share-mode-opt"><input type="radio" name="shareMode" value="${o.mode}"${i === 0 ? ' checked' : ''}>
+      <label class="share-mode-opt"><input type="radio" name="shareMode" value="${o.mode}"${i === 0 ? ' checked' : ''}
+        onchange="const r=el('shareAllowEditsRow');if(r)r.style.display=${_shareCanAllowEdits(list, o.mode) ? "''" : "'none'"}">
         <div><div class="share-mode-title">${o.title}</div><div class="share-mode-desc">${o.desc}</div></div>
       </label>`).join('')}
     </div>
-    ${conflictNote ? `<div class="share-mode-desc" style="margin:6px 2px 0">${conflictNote}</div>` : ''}` : ''}
+    ${conflictNote ? `<div class="share-mode-desc" style="margin:6px 2px 0">${conflictNote}</div>` : ''}
+    ${available.some(o => _shareCanAllowEdits(list, o.mode)) ? `
+    <label class="share-edit-toggle" id="shareAllowEditsRow" style="${_shareCanAllowEdits(list, available[0].mode) ? '' : 'display:none'}">
+      <input type="checkbox" id="shareAllowEdits">
+      <span><b>✏️ לאפשר עריכה?</b><br><span class="share-mode-desc">מי שיש לו את הקישור יוכל להוסיף, לשנות שם ולמחוק פריטים</span></span>
+    </label>` : ''}` : ''}
     <div class="cmodal-btns">
       ${available.length ? `<button class="cmodal-btn cmodal-ok" onclick="listCreateShare('${listId}')">צור קישור</button>` : ''}
       <button class="cmodal-btn cmodal-cancel" onclick="_cmodalClose(false)">סגור</button>
@@ -12009,8 +12019,9 @@ async function listCreateShare(listId) {
   if (!list || !S.uid) return;
   const mode = document.querySelector('input[name="shareMode"]:checked')?.value;
   if (!mode || _shareModeBlocked(list, mode)) { _cmodalClose(false); setTimeout(() => listOpenShareMenu(listId), 100); return; }
+  const allowEdits = _shareCanAllowEdits(list, mode) && !!el('shareAllowEdits')?.checked;
   try {
-    await _createListShare(list, mode);
+    await _createListShare(list, mode, allowEdits);
     _cmodalClose(false);
     setTimeout(() => listOpenShareMenu(listId), 100);
   } catch(e) {
@@ -12019,8 +12030,32 @@ async function listCreateShare(listId) {
   }
 }
 
+// "Allow edits" (guests add / rename / delete items) — every type except view-only, never on recipes
+const _shareCanAllowEdits = (list, mode) => mode !== 'readonly' && list.type !== 'recipe';
+
+// Turn edits on/off on an existing link; the link (URL) stays the same
+async function listSetShareEdits(listId, token, on) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list || !S.uid) return;
+  const publicShares = (list.publicShares || []).map(s => {
+    if (s.token !== token) return s;
+    const { allowEdits, ...rest } = s;
+    return on ? { ...rest, allowEdits: true } : rest;
+  });
+  try {
+    await fbDb.collection('publicShares').doc(token).update({ allowEdits: !!on, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+      .update({ publicShares, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    list.publicShares = publicShares;
+    _showSnackbar(on ? 'עריכה הופעלה לקישור ✏️' : 'עריכה בוטלה לקישור');
+  } catch(e) {
+    console.error('[share] edits toggle failed:', e);
+    _showSnackbar('שגיאה בעדכון הקישור');
+  }
+}
+
 // Creates a public share doc for a list and records it on the list; returns the token
-async function _createListShare(list, mode) {
+async function _createListShare(list, mode, allowEdits = false) {
   const listId = list.id;
   const token = _genShareToken();
   const rawItems = JSON.parse(JSON.stringify(list.items || []));
@@ -12031,6 +12066,7 @@ async function _createListShare(list, mode) {
     familyUid: S.uid, listId, mode,
     sharedBy: S.user || localStorage.getItem('familyhub_member_' + S.uid) || null,
     type: list.type, name: list.name,
+    ...(allowEdits ? { allowEdits: true } : {}),
     items: shareItems,
     meta:  JSON.parse(JSON.stringify(list.meta  || {})),
     ...(list.type === 'recipe' && list.steps ? { steps: JSON.parse(JSON.stringify(list.steps)).map(({ done, ...rest }) => rest) } : {}),
@@ -12038,7 +12074,7 @@ async function _createListShare(list, mode) {
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
   await fbDb.collection('publicShares').doc(token).set(shareDoc);
-  const publicShares = [...(list.publicShares || []), { token, mode }];
+  const publicShares = [...(list.publicShares || []), { token, mode, ...(allowEdits ? { allowEdits: true } : {}) }];
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ publicShares, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   return token;
@@ -12143,7 +12179,7 @@ function _renderGuestShare(token, share) {
   if (nameEl) nameEl.innerHTML = `${typeEmoji} ${esc(share.name)}`;
   if (modeEl) {
     const modeInfo = { edit:'🤝 משותף', claim:'🙋 מי מביא מה', self:'✅ סימון אישי', readonly:'👁 צפייה בלבד' };
-    modeEl.textContent = modeInfo[share.mode] || modeInfo.readonly;
+    modeEl.textContent = (modeInfo[share.mode] || modeInfo.readonly) + (_guestCanEdit(share) ? ' · ✏️ ניתן לעריכה' : '');
     modeEl.className = `guest-mode-badge${_isJointMode(share.mode) ? ' guest-mode-edit' : share.mode === 'self' ? ' guest-mode-self' : ''}`;
   }
   const cont = el('guestContent');
@@ -12153,6 +12189,7 @@ function _renderGuestShare(token, share) {
   const isClaim = share.mode === 'claim';
   const isEdit = share.mode === 'edit' || isClaim;
   const canCheck = (isSelf || isEdit) && !isClaim;
+  const canEdit  = _guestCanEdit(share);
 
   // Joint mode: require a name before allowing any interaction
   if (isEdit && !_guestGetName(token)) {
@@ -12217,16 +12254,17 @@ function _renderGuestShare(token, share) {
     const items = isClaim ? [] : (share.items || []);
     const undone = items.filter(it => !itemDone(it));
     const done   = items.filter(it =>  itemDone(it));
-    const checkBtn = (it, isDone) => canCheck
+    const checkBtn = (it, isDone) => canCheck && !it._pending
       ? `<button class="list-check-btn${isDone?' checked':''}" onclick="guestToggleItem('${token}','${it.id}')">${isDone?chkSvg:''}</button>`
       : `<div style="width:28px;flex-shrink:0"></div>`;
     // Only show the "empty" hint when there are no items at all; if everything is
     // checked off, the completed section below is all that's needed.
     if (!isClaim && (undone.length || !done.length)) h += `<div class="card list-items-card">
-      ${undone.length ? undone.map(it => `<div class="list-item">
+      ${undone.length ? undone.map(it => `<div class="list-item${it._pending ? ' guest-item-pending' : ''}">
         ${checkBtn(it, false)}
         <span class="list-item-name">${esc(it.name)}</span>
         ${it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
+        ${canEdit ? _guestEditBtn(token, it) : ''}
       </div>`).join('') : `<div class="list-empty-hint">הרשימה ריקה</div>`}
     </div>`;
     if (done.length) h += `<div class="card list-items-card" style="margin-top:${undone.length ? 8 : 0}px">
@@ -12236,7 +12274,15 @@ function _renderGuestShare(token, share) {
         <span class="list-item-name">${esc(it.name)}</span>
         ${it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
         ${_checkerBadge(checkerName(it))}
+        ${canEdit ? _guestEditBtn(token, it) : ''}
       </div>`).join('')}
+    </div>`;
+    if (canEdit) h += `<div class="card guest-add-card">
+      <input class="guest-add-input" id="guestAddName" type="text" maxlength="120" placeholder="➕ הוספת פריט..." dir="auto"
+        onkeydown="if(event.key==='Enter')guestAddItem('${token}')">
+      ${share.type === 'packing' ? `<input class="guest-add-input guest-add-qty" id="guestAddQty" type="text" maxlength="20" placeholder="כמות" dir="auto"
+        onkeydown="if(event.key==='Enter')guestAddItem('${token}')">` : ''}
+      <button class="guest-add-btn" onclick="guestAddItem('${token}')">הוסף</button>
     </div>`;
   }
   // Info disclaimer: who shared the link and when (older shares have no sharer name)
@@ -12323,18 +12369,87 @@ function _guestClaimHtml(token, share) {
   let h = `<div class="claim-summary">${taken.length} מתוך ${items.length} נבחרו</div>
     <div class="claim-chips">${chip('all', 'הכל', items.length)}${chip('free', 'פנוי', free.length)}${chip('mine', 'שלי', mine.length)}</div>`;
   const shown = f === 'free' ? free : f === 'mine' ? mine : [...free, ...taken];
+  const editBtn = it => _guestCanEdit(share) ? _guestEditBtn(token, it) : '';
   const row = it => {
     const qty = it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : '';
+    if (it._pending) return `<div class="list-item guest-item-pending"><span class="list-item-name">${esc(it.name)}</span>${qty}</div>`;
     if (!it.done) return `<div class="list-item"><span class="list-item-name">${esc(it.name)}</span>${qty}
-      <button class="claim-btn" onclick="guestToggleItem('${token}','${it.id}')">🙋 אני אביא</button></div>`;
+      <button class="claim-btn" onclick="guestToggleItem('${token}','${it.id}')">🙋 אני אביא</button>${editBtn(it)}</div>`;
     const isMine = isMineItem(it);
     return `<div class="list-item list-item-done"><span class="list-item-name">${esc(it.name)}</span>${qty}
       ${_checkerBadge(it.checkedBy, it.checkedById, isMine ? it.checkedBy + ' (אני)' : null)}
-      ${isMine ? `<button class="claim-x" title="ביטול" onclick="guestToggleItem('${token}','${it.id}')">×</button>` : ''}</div>`;
+      ${isMine ? `<button class="claim-x" title="ביטול" onclick="guestToggleItem('${token}','${it.id}')">×</button>` : ''}${editBtn(it)}</div>`;
   };
   h += `<div class="card list-items-card">${shown.length ? shown.map(row).join('')
     : `<div class="list-empty-hint">${f === 'mine' ? 'עוד לא בחרת פריטים' : f === 'free' ? 'הכל כבר נבחר 🎉' : 'הרשימה ריקה'}</div>`}</div>`;
   return h;
+}
+
+// ── Guest edits (link created with "allow edits") ──
+// Changes show right away; the request goes to publicShares/{token}/edits, and the onShareEdit
+// function applies it to the owner's list and every link of it — the share snapshot then confirms.
+const _guestCanEdit = share => !!share?.allowEdits && share.mode !== 'readonly' && share.type !== 'recipe';
+function _guestEditBtn(token, it) {
+  if (it._pending) return '';
+  return `<button class="guest-item-edit" title="עריכה" aria-label="עריכה" onclick="guestEditItem('${token}','${esc(String(it.id))}')">✏️</button>`;
+}
+async function _guestQueueEdit(token, edit) {
+  const by = _isJointMode(_guestShare?.mode) ? _guestGetName(token).slice(0, 30) : '';
+  await fbDb.collection('publicShares').doc(token).collection('edits').add(by ? { ...edit, by } : edit);
+}
+async function _guestApplyEdit(token, edit, optimistic) {
+  if (!_guestShare) return;
+  const before = _guestShare.items;
+  _guestShare.items = optimistic(before || []);
+  _renderGuestShare(token, _guestShare);
+  try { await _guestQueueEdit(token, edit); }
+  catch (e) {
+    console.error('[guest] edit failed:', e);
+    if (_guestShare) { _guestShare.items = before; _renderGuestShare(token, _guestShare); }
+    showToast('השינוי לא נשמר — ייתכן שהבעלים ביטל את אפשרות העריכה', 'error', 6000);
+  }
+}
+async function guestAddItem(token) {
+  if (!_guestCanEdit(_guestShare)) return;
+  const inp = el('guestAddName');
+  const name = inp?.value.trim().slice(0, 120);
+  if (!name) { inp?.focus(); return; }
+  const qty = (el('guestAddQty')?.value || '').trim().slice(0, 20);
+  const edit = { op: 'add', name, ...(qty ? { qty } : {}) };
+  await _guestApplyEdit(token, edit, items => [...items, { id: 'pending-' + Date.now(), name, done: false, ...(qty ? { qty } : {}), _pending: true }]);
+  setTimeout(() => el('guestAddName')?.focus(), 0);
+}
+async function guestEditItem(token, itemId) {
+  if (!_guestCanEdit(_guestShare)) return;
+  const it = (_guestShare.items || []).find(i => String(i.id) === String(itemId));
+  if (!it) return;
+  const withQty = _guestShare.type === 'packing';
+  const ov = _cmodalEl();
+  ov.innerHTML = `<div class="cmodal-box" onclick="event.stopPropagation()">
+    <div class="cmodal-msg">✏️ עריכת פריט</div>
+    <input id="_gEditName" class="add-input" type="text" maxlength="120" value="${esc(it.name || '')}" dir="auto"
+      style="margin:8px 0 4px;font-size:15px;width:100%;box-sizing:border-box">
+    ${withQty ? `<input id="_gEditQty" class="add-input" type="text" maxlength="20" value="${esc(it.qty || '')}" placeholder="כמות" dir="auto"
+      style="margin:4px 0;font-size:15px;width:100%;box-sizing:border-box">` : ''}
+    <div class="cmodal-btns">
+      <button class="cmodal-btn cmodal-ok" onclick="_cmodalClose('save')">שמור</button>
+      <button class="cmodal-btn cmodal-ok cmodal-danger" onclick="_cmodalClose('delete')">🗑 מחק</button>
+      <button class="cmodal-btn cmodal-cancel" onclick="_cmodalClose(null)">ביטול</button>
+    </div>
+  </div>`;
+  requestAnimationFrame(() => { ov.classList.add('cmodal-visible'); setTimeout(() => el('_gEditName')?.focus(), 80); });
+  const action = await new Promise(res => { _cmodalResolve = res; });
+  if (action === 'delete') {
+    const taken = it.done && it.checkedBy && _guestShare.mode === 'claim' ? `\n${esc(it.checkedBy)} כבר בחר/ה להביא אותו.` : '';
+    if (!await _confirm(`למחוק את "${esc(it.name)}" מהרשימה?${taken}`, { danger: true, okLabel: 'מחק' })) return;
+    return _guestApplyEdit(token, { op: 'delete', itemId: String(it.id) }, items => items.filter(i => String(i.id) !== String(it.id)));
+  }
+  if (action !== 'save') return;
+  const name = (el('_gEditName')?.value || '').trim().slice(0, 120);
+  const qty  = withQty ? (el('_gEditQty')?.value || '').trim().slice(0, 20) : undefined;
+  if (!name || (name === it.name && (qty === undefined || qty === (it.qty || '')))) return;
+  const edit = { op: 'rename', itemId: String(it.id), name, ...(qty ? { qty } : {}) };
+  return _guestApplyEdit(token, edit, items => items.map(i => String(i.id) === String(it.id) ? { ...i, name, ...(qty ? { qty } : {}) } : i));
 }
 
 async function guestToggleItem(token, itemId) {

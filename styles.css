@@ -2449,3 +2449,15 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .comm-ev-photo-remove { position: absolute; top: 6px; inset-inline-end: 6px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(0,0,0,0.6); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
 /* Event form: link field and list picker have long hints — smaller text so they fit on phones */
 .comm-add-form [id^="commEvPaybox_"], .comm-add-form [id^="commEvList_"] { font-size: 13px; }
+
+/* List sharing: "allow edits" option and guest editing */
+.share-edit-toggle { display: flex; align-items: flex-start; gap: 8px; margin: 8px 2px 2px; font-size: 13px; font-weight: 700; color: var(--gray-700); cursor: pointer; line-height: 1.4; }
+.share-edit-toggle input { margin-top: 2px; flex-shrink: 0; }
+.guest-item-edit { flex-shrink: 0; margin-inline-start: 4px; width: 30px; height: 30px; border: none; border-radius: 50%; background: transparent; font-size: 14px; cursor: pointer; opacity: 0.6; }
+.guest-item-edit:hover { opacity: 1; background: var(--gray-100); }
+.guest-item-pending { opacity: 0.5; }
+.guest-add-card { box-sizing: border-box; display: flex; gap: 6px; align-items: center; margin-top: 8px; padding: 10px; }
+.guest-add-input { flex: 1; min-width: 0; padding: 10px 12px; border: 1.5px solid var(--gray-200); border-radius: 10px; font: inherit; font-size: 14px; background: var(--surface); outline: none; }
+.guest-add-input:focus { border-color: var(--primary-500); }
+.guest-add-qty { flex: 0 0 64px; }
+.guest-add-btn { flex-shrink: 0; padding: 10px 14px; border: none; border-radius: 10px; background: var(--primary-500); color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }

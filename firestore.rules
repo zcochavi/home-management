@@ -138,6 +138,21 @@ service cloud.firestore {
          request.resource.data.items.size() == resource.data.items.size());
       allow delete: if isFamilyMember(resource.data.familyUid);
     }
+    // Guest edit requests on a link whose owner allowed edits (add / rename / delete an item).
+    // Write-only for guests; the onShareEdit function applies each one to the owner's list
+    // (after checking the list still lists this link with edits on) and then deletes it.
+    match /publicShares/{token}/edits/{editId} {
+      allow read, update, delete: if false;
+      allow create: if request.auth != null
+        && get(/databases/$(database)/documents/publicShares/$(token)).data.get('allowEdits', false) == true
+        && get(/databases/$(database)/documents/publicShares/$(token)).data.mode in ['self', 'edit', 'claim']
+        && request.resource.data.keys().hasOnly(['op', 'itemId', 'name', 'qty', 'by'])
+        && request.resource.data.op in ['add', 'rename', 'delete']
+        && (!('itemId' in request.resource.data) || request.resource.data.itemId is string || request.resource.data.itemId is int)
+        && (!('name' in request.resource.data) || (request.resource.data.name is string && request.resource.data.name.size() <= 120))
+        && (!('qty'  in request.resource.data) || (request.resource.data.qty  is string && request.resource.data.qty.size()  <= 20))
+        && (!('by'   in request.resource.data) || (request.resource.data.by   is string && request.resource.data.by.size()   <= 30));
+    }
 
     // All other collections (school community directory, pending requests, etc.) — any authenticated user may read/write, same as before this file
     // existed. These are intentionally cross-family (community features).
