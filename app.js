@@ -5854,7 +5854,10 @@ async function onCommEvPhotoPick(cid, input) {
   input.value = '';
   if (!file) return;
   const errEl = el('commEvError_' + cid);
-  const photo = await compressEventPhoto(file);
+  let src;
+  try { src = await _toDecodableImage(file); }
+  catch (e) { if (errEl) { errEl.textContent = _heicFailedMsg(); errEl.style.display = ''; } return; }
+  const photo = await compressEventPhoto(src);
   if (!photo) {
     if (errEl) { errEl.textContent = t('commEventPhotoError'); errEl.style.display = ''; }
     return;
@@ -7302,6 +7305,68 @@ async function hsRemoveSubject(name) {
 }
 
 // ════════════════════════════════════════
+//  HEIC PHOTOS
+// ════════════════════════════════════════
+// Many phones (Samsung "high efficiency", iPhone) save photos as HEIC, which Chrome — and so
+// the website and the Android app's WebView — can't decode. Such a photo is converted to JPEG
+// on the device first, with heic2any (MIT). It's ~1.3MB, so it's only downloaded the first
+// time someone picks a HEIC photo. Pinned version + integrity hash: a CDN serving different
+// bytes is refused by the browser.
+const _HEIC2ANY_URLS = [
+  'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js',
+  'https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js',
+];
+const _HEIC2ANY_SRI = 'sha384-OTofQ0MEeiSgh62havBcemCIK0gqj809wX6UA0uPISNMRnR6NZyCdGzX3SbLrgwL';
+let _heic2anyLoad = null;
+function _loadHeic2any() {
+  if (window.heic2any) return Promise.resolve(window.heic2any);
+  if (_heic2anyLoad) return _heic2anyLoad;
+  const tryUrl = i => new Promise((resolve, reject) => {
+    const sc = document.createElement('script');
+    sc.src = _HEIC2ANY_URLS[i];
+    sc.integrity = _HEIC2ANY_SRI;
+    sc.crossOrigin = 'anonymous';
+    sc.onload = () => window.heic2any ? resolve(window.heic2any) : reject(new Error('heic2any missing'));
+    sc.onerror = () => { sc.remove(); reject(new Error('load failed: ' + _HEIC2ANY_URLS[i])); };
+    document.head.appendChild(sc);
+  }).catch(e => i + 1 < _HEIC2ANY_URLS.length ? tryUrl(i + 1) : Promise.reject(e));
+  _heic2anyLoad = tryUrl(0).catch(e => { _heic2anyLoad = null; throw e; }); // allow a retry later
+  return _heic2anyLoad;
+}
+// HEIC by MIME type / extension, or — since Android often reports no type — by the file's
+// ISO-BMFF header ("ftyp" + a HEIC brand). AVIF shares the container but Chrome decodes it.
+async function _isHeicFile(file) {
+  if (/^image\/hei[cf](-sequence)?$/i.test(file.type || '') || /\.hei[cf]$/i.test(file.name || '')) return true;
+  if (file.type && file.type !== 'application/octet-stream') return false;
+  try {
+    const head = new TextDecoder('latin1').decode(await file.slice(0, 64).arrayBuffer());
+    if (head.slice(4, 8) !== 'ftyp') return false;
+    const brand = head.slice(8, 12);
+    if (['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs'].includes(brand)) return true;
+    return ['mif1', 'msf1'].includes(brand) && /hei[cx]/.test(head);
+  } catch (_) { return false; }
+}
+// Returns something the browser can draw: the file itself, or a JPEG converted from HEIC.
+// Throws { heic: true } if a HEIC photo couldn't be converted (e.g. offline).
+async function _toDecodableImage(file) {
+  if (!await _isHeicFile(file)) return file;
+  showToast(getLang() === 'he' ? '⏳ ממיר תמונה...' : '⏳ Converting photo...', 'info', 3000);
+  try {
+    const conv = await _loadHeic2any();
+    const out = await conv({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+    return Array.isArray(out) ? out[0] : out; // multi-image HEIC (bursts): use the first
+  } catch (e) {
+    console.error('[heic] conversion failed:', e);
+    const err = new Error('heic conversion failed'); err.heic = true; throw err;
+  }
+}
+function _heicFailedMsg() {
+  return getLang() === 'he'
+    ? 'לא הצלחנו להמיר את תמונת ה-HEIC. בדקו את החיבור לאינטרנט ונסו שוב, או בחרו צילום מסך של התמונה.'
+    : "Couldn't convert the HEIC photo. Check your connection and try again, or pick a screenshot of it.";
+}
+
+// ════════════════════════════════════════
 //  PHOTO MANAGEMENT
 // ════════════════════════════════════════
 let _photoTarget = null;
@@ -7315,18 +7380,17 @@ async function handlePhotoFile(event) {
   const file = event.target.files[0];
   if (!file || !_photoTarget) return;
   const he = getLang() === 'he';
-  const photo = await resizePhoto(file, 120);
+  const target = _photoTarget; // the picker can change it while a HEIC photo converts
+  let src;
+  try { src = await _toDecodableImage(file); }
+  catch (e) { showToast(_heicFailedMsg(), 'error', 8000); return; }
+  const photo = await resizePhoto(src, 120);
   if (!photo) {
-    // Most often a HEIC photo (Samsung "high efficiency" / iPhone), which Android's WebView and Chrome can't decode
-    const heic = /hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name || '');
-    showToast(he
-      ? (heic ? 'התמונה בפורמט HEIC שלא נתמך. בחרו תמונה אחרת או צלמו מסך שלה ובחרו את צילום המסך.' : 'לא ניתן לקרוא את התמונה. נסו תמונה אחרת.')
-      : (heic ? "That photo is HEIC, which isn't supported. Pick another photo, or a screenshot of it." : "Couldn't read that photo. Try another one."),
-      'error', 8000);
+    showToast(he ? 'לא ניתן לקרוא את התמונה. נסו תמונה אחרת.' : "Couldn't read that photo. Try another one.", 'error', 8000);
     return;
   }
   try {
-    await saveMemberPhoto(_photoTarget, photo);
+    await saveMemberPhoto(target, photo);
   } catch(e) {
     console.error('saveMemberPhoto:', e);
     showToast((he ? 'שמירת התמונה נכשלה: ' : 'Saving the photo failed: ') + (e.code || e.message || ''), 'error', 8000);
@@ -13059,13 +13123,13 @@ function listPickPhoto(listId) {
     const file = inp.files && inp.files[0];
     if (!file) return;
     try {
-      const dataUrl = await _resizeImageToDataUrl(file, 480);
+      const dataUrl = await _resizeImageToDataUrl(await _toDecodableImage(file), 480);
       await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
         .update({ photo: dataUrl, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
       _showSnackbar('התמונה עודכנה');
     } catch(e) {
       console.error('[lists] photo upload failed:', e);
-      _showSnackbar('שגיאה בהעלאת התמונה');
+      _showSnackbar(e?.heic ? _heicFailedMsg() : 'שגיאה בהעלאת התמונה');
     }
   };
   inp.click();
