@@ -7309,9 +7309,24 @@ function pickPhoto(name) {
 async function handlePhotoFile(event) {
   const file = event.target.files[0];
   if (!file || !_photoTarget) return;
+  const he = getLang() === 'he';
   const photo = await resizePhoto(file, 120);
-  if (!photo) return;
-  await saveMemberPhoto(_photoTarget, photo);
+  if (!photo) {
+    // Most often a HEIC photo (Samsung "high efficiency" / iPhone), which Android's WebView and Chrome can't decode
+    const heic = /hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name || '');
+    showToast(he
+      ? (heic ? 'התמונה בפורמט HEIC שלא נתמך. בחרו תמונה אחרת או צלמו מסך שלה ובחרו את צילום המסך.' : 'לא ניתן לקרוא את התמונה. נסו תמונה אחרת.')
+      : (heic ? "That photo is HEIC, which isn't supported. Pick another photo, or a screenshot of it." : "Couldn't read that photo. Try another one."),
+      'error', 8000);
+    return;
+  }
+  try {
+    await saveMemberPhoto(_photoTarget, photo);
+  } catch(e) {
+    console.error('saveMemberPhoto:', e);
+    showToast((he ? 'שמירת התמונה נכשלה: ' : 'Saving the photo failed: ') + (e.code || e.message || ''), 'error', 8000);
+    return;
+  }
   if (!el('mgmtScreen').classList.contains('hidden')) renderMgmtMembers();
   renderHeader();
   if (_menuOpen) renderMenu();
