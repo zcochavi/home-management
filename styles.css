@@ -2447,3 +2447,5 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .comm-ev-photo-preview { position: relative; border-radius: 10px; overflow: hidden; }
 .comm-ev-photo-preview img { display: block; width: 100%; max-height: 200px; object-fit: cover; }
 .comm-ev-photo-remove { position: absolute; top: 6px; inset-inline-end: 6px; width: 28px; height: 28px; border-radius: 50%; border: none; background: rgba(0,0,0,0.6); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
+/* Event form: link field and list picker have long hints — smaller text so they fit on phones */
+.comm-add-form [id^="commEvPaybox_"], .comm-add-form [id^="commEvList_"] { font-size: 13px; }
