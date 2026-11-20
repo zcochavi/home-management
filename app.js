@@ -11915,6 +11915,16 @@ function _nameHue(name) {
 // Share modes where guests write back to the share doc ('edit' = shared marking, 'claim' = who brings what)
 const _isJointMode = m => m === 'edit' || m === 'claim';
 const _hasClaimShare = list => (list.publicShares || []).some(s => s.mode === 'claim');
+// One link per share type: every link of a list gets the owner's changes live, so a second
+// link of the same type adds nothing. 'edit' (shared marking) and 'claim' (who brings what)
+// each keep their own guest state, so a list has at most one of the two.
+function _shareModeBlocked(list, mode) {
+  const modes = (list.publicShares || []).map(s => s.mode);
+  if (modes.includes(mode)) return 'exists';
+  if (mode === 'edit'  && modes.includes('claim')) return 'conflict';
+  if (mode === 'claim' && modes.includes('edit'))  return 'conflict';
+  return null;
+}
 
 // A guest's claims carry a private id, so two guests with the same name still get different colors
 const _badgeHue = (name, id) => _nameHue(id ? name + '#' + id : name);
@@ -11956,30 +11966,37 @@ function listOpenShareMenu(listId) {
     </div>`;
   }
 
+  // Offer only the share types this list doesn't have yet (see _shareModeBlocked)
+  const allOpts = [
+    { mode: 'readonly', title: '👁 צפייה בלבד', desc: 'קריאה בלבד, ללא אפשרות סימון' },
+    ...(list.type !== 'recipe' ? [{ mode: 'self', title: '✅ סימון אישי', desc: 'כל אחד מסמן לעצמו — הסימונים לא משותפים' }] : []),
+    ...(list.type !== 'recipe' && !list.archived ? [
+      { mode: 'edit',  title: '🤝 סימון משותף', desc: 'הסימונים גלויים לכל מי שיש לו את הקישור' },
+      { mode: 'claim', title: '🙋 מי מביא מה',  desc: 'כל אחד בוחר פריטים שהוא מביא — פריט שנבחר נעול לאחרים' },
+    ] : []),
+  ];
+  const available = allOpts.filter(o => !_shareModeBlocked(list, o.mode));
+  const conflictOpt = allOpts.find(o => _shareModeBlocked(list, o.mode) === 'conflict');
+  const conflictNote = conflictOpt
+    ? `ℹ️ כדי לשתף כ"${conflictOpt.title.replace(/^\S+\s/, '')}" יש לבטל קודם את הקישור "${conflictOpt.mode === 'claim' ? 'סימון משותף' : 'מי מביא מה'}".`
+    : '';
+
   const ov = _cmodalEl();
   ov.innerHTML = `<div class="cmodal-box share-modal" onclick="event.stopPropagation()">
     <div class="share-modal-title">🔗 שתף רשימה</div>
     <div class="share-modal-listname">${esc(list.name)}</div>
     ${activeHtml}
+    ${available.length ? `
     <div class="share-section-label">צור קישור חדש</div>
     <div class="share-mode-col">
-      <label class="share-mode-opt"><input type="radio" name="shareMode" value="readonly" checked>
-        <div><div class="share-mode-title">👁 צפייה בלבד</div><div class="share-mode-desc">קריאה בלבד, ללא אפשרות סימון</div></div>
-      </label>
-      ${list.type !== 'recipe' ? `
-      <label class="share-mode-opt"><input type="radio" name="shareMode" value="self">
-        <div><div class="share-mode-title">✅ סימון אישי</div><div class="share-mode-desc">כל אחד מסמן לעצמו — הסימונים לא משותפים</div></div>
-      </label>` : ''}
-      ${list.type !== 'recipe' && !list.archived ? `
-      <label class="share-mode-opt"><input type="radio" name="shareMode" value="edit">
-        <div><div class="share-mode-title">🤝 סימון משותף</div><div class="share-mode-desc">הסימונים גלויים לכל מי שיש לו את הקישור</div></div>
-      </label>
-      <label class="share-mode-opt"><input type="radio" name="shareMode" value="claim">
-        <div><div class="share-mode-title">🙋 מי מביא מה</div><div class="share-mode-desc">כל אחד בוחר פריטים שהוא מביא — פריט שנבחר נעול לאחרים</div></div>
-      </label>` : ''}
+      ${available.map((o, i) => `
+      <label class="share-mode-opt"><input type="radio" name="shareMode" value="${o.mode}"${i === 0 ? ' checked' : ''}>
+        <div><div class="share-mode-title">${o.title}</div><div class="share-mode-desc">${o.desc}</div></div>
+      </label>`).join('')}
     </div>
+    ${conflictNote ? `<div class="share-mode-desc" style="margin:6px 2px 0">${conflictNote}</div>` : ''}` : ''}
     <div class="cmodal-btns">
-      <button class="cmodal-btn cmodal-ok" onclick="listCreateShare('${listId}')">צור קישור</button>
+      ${available.length ? `<button class="cmodal-btn cmodal-ok" onclick="listCreateShare('${listId}')">צור קישור</button>` : ''}
       <button class="cmodal-btn cmodal-cancel" onclick="_cmodalClose(false)">סגור</button>
     </div>
   </div>`;
@@ -11990,7 +12007,8 @@ function listOpenShareMenu(listId) {
 async function listCreateShare(listId) {
   const list = (S.lists || []).find(l => l.id === listId);
   if (!list || !S.uid) return;
-  const mode = document.querySelector('input[name="shareMode"]:checked')?.value || 'readonly';
+  const mode = document.querySelector('input[name="shareMode"]:checked')?.value;
+  if (!mode || _shareModeBlocked(list, mode)) { _cmodalClose(false); setTimeout(() => listOpenShareMenu(listId), 100); return; }
   try {
     await _createListShare(list, mode);
     _cmodalClose(false);
@@ -12033,13 +12051,15 @@ function _eventLinkableLists() {
   return (S.lists || []).filter(l => l.type === 'event' && !l.archived && _listVisible(l));
 }
 
-// Events always link a "who brings what" share: reuse the list's existing one, or create it
+// Events link the list's joint share: reuse its "who brings what" or shared-marking link
+// (a list has at most one of the two), or create a "who brings what" one
 async function _ensureEventListShare(listId) {
   const list = _eventLinkableLists().find(l => l.id === listId);
   if (!list) return null;
-  const existing = (list.publicShares || []).find(s => s.mode === 'claim');
-  const token = existing ? existing.token : await _createListShare(list, 'claim');
-  return { token, mode: 'claim', name: list.name };
+  const shares = list.publicShares || [];
+  const existing = shares.find(s => s.mode === 'claim') || shares.find(s => s.mode === 'edit');
+  if (existing) return { token: existing.token, mode: existing.mode, name: list.name };
+  return { token: await _createListShare(list, 'claim'), mode: 'claim', name: list.name };
 }
 
 function _eventListLinkHtml(ev) {
