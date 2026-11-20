@@ -754,7 +754,9 @@ const myFullName = () => (S.user && familyData?.familyName) ? S.user + ' ' + fam
 
 // Committee members and admin publish immediately; regular parents need approval
 const canPublishDirectly = (cid) => isParent() && isCommitteeFor(cid);
-const gcalReady   = () => gcal.gapiReady && gcal.gisReady && !GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID');
+// The Android app connects through the phone's browser (connectGCalNative) and never uses
+// Google's sign-in library (gis), which doesn't run inside an app WebView — so only the website waits for it.
+const gcalReady   = () => gcal.gapiReady && (gcal.gisReady || _isNativeApp()) && !GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID');
 const gcalConnected = () => !!gcal.accessToken;
 
 // ════════════════════════════════════════
@@ -3102,16 +3104,25 @@ function gapiLoaded() {
   });
 }
 function gisLoaded() {
+  if (_isNativeApp()) return; // not used in the app (see gcalReady)
   if (!GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID')) {
-    gcal.tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id:GOOGLE_CLIENT_ID, scope:GCAL_SCOPE, callback:onGCalToken,
-    });
-    // Authorization-code flow: the server keeps a refresh token so the user stays connected
-    gcal.codeClient = google.accounts.oauth2.initCodeClient({
-      client_id:GOOGLE_CLIENT_ID, scope:GCAL_SCOPE, ux_mode:'popup', callback:onGCalCode,
-    });
+    try {
+      gcal.tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id:GOOGLE_CLIENT_ID, scope:GCAL_SCOPE, callback:onGCalToken,
+      });
+      // Authorization-code flow: the server keeps a refresh token so the user stays connected
+      gcal.codeClient = google.accounts.oauth2.initCodeClient({
+        client_id:GOOGLE_CLIENT_ID, scope:GCAL_SCOPE, ux_mode:'popup', callback:onGCalCode,
+      });
+    } catch(e) { console.error('gis init failed', e); return gisFailed(); }
   }
   gcal.gisReady=true; renderGCalBar(); tryAutoConnectGCal();
+}
+// Google's sign-in script didn't load (offline, blocked by a content blocker, ...) — say so
+// instead of showing "loading" forever.
+function gisFailed() {
+  if (_isNativeApp()) return;
+  gcal.gisFailed = true; renderGCalBar();
 }
 function gcalWasConnected() {
   return !!(S.uid && S.user && localStorage.getItem('familyhub_gcal_' + S.uid + '_' + S.user) === '1');
@@ -3284,7 +3295,7 @@ function connectGCal() {
 }
 function disconnectGCal() {
   if (fbFunctions && S.uid && S.user) fbFunctions.httpsCallable('gcalDisconnect')({ member: S.user }).catch(()=>{});
-  if (gcal.accessToken) google.accounts.oauth2.revoke(gcal.accessToken,()=>{});
+  if (gcal.accessToken && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(gcal.accessToken,()=>{});
   gcal.serverFailed = false;
   gcal.accessToken=null; gcal.events=[]; _gcalTokClear();
   if (S.uid && S.user) localStorage.removeItem('familyhub_gcal_' + S.uid + '_' + S.user);
@@ -3301,6 +3312,11 @@ function renderGCalBar() {
   if (!st) return;
   if (GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID')) {
     st.innerHTML=`<span class="needs-setup">${t('gcalSetup')}</span>`; bt.innerHTML=''; return;
+  }
+  if (!gcalReady() && gcal.gisFailed) {
+    st.innerHTML=`<span style="color:#9ca3af;font-weight:700">${getLang()==='he' ? 'לא ניתן לטעון את רכיב ההתחברות של Google — בדקו את החיבור לאינטרנט או חוסם פרסומות' : "Couldn't load Google sign-in — check your connection or ad blocker"}</span>`;
+    bt.innerHTML=`<button class="gcal-btn gcal-btn-connect" onclick="location.reload()">${getLang()==='he' ? 'נסה שוב' : 'Retry'}</button>`;
+    return;
   }
   if (!gcalReady())   { st.textContent=t('gcalLoading')+` (gapi ${gcal.gapiReady?'✓':'✗'} gis ${gcal.gisReady?'✓':'✗'})`; bt.innerHTML=''; return; }
   if (gcal.syncing)   { st.textContent=t('gcalSyncing'); bt.innerHTML=''; return; }
