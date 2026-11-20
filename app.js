@@ -119,12 +119,12 @@ const STRINGS = {
     commEventTitle:'כותרת האירוע...',
     commEventNote:'הערה (אופציונלי)',
     commEventPaybox:'קישור Paybox (אופציונלי)',
-    commEventLink:'🔗 קישור (Paybox, Google Docs, טופס... אופציונלי)',
+    commEventLink:'🔗 קישור (Paybox, Docs...)',
     commEventPhoto:'📷 הוספת תמונה (אופציונלי)',
     commEventPhotoRemove:'הסר תמונה',
     commEventPhotoError:'לא ניתן לטעון את התמונה',
     commLinkOpen:'פתח קישור',
-    commEventListLink:'קישור לרשימה מהאפליקציה (אופציונלי)',
+    commEventListLink:'קישור לרשימה (אופציונלי)',
     commEventListOpen:'פתח רשימה',
     commPayNow:'💳 שלם עכשיו',
     commPayboxGift:'🎁 לתשלום ב-Paybox',
@@ -246,12 +246,12 @@ const STRINGS = {
     commEventTitle:'Event title...',
     commEventNote:'Note (optional)',
     commEventPaybox:'Paybox link (optional)',
-    commEventLink:'🔗 Link (Paybox, Google Docs, form... optional)',
+    commEventLink:'🔗 Link (Paybox, Docs...)',
     commEventPhoto:'📷 Add a photo (optional)',
     commEventPhotoRemove:'Remove photo',
     commEventPhotoError:"Couldn't load that photo",
     commLinkOpen:'Open link',
-    commEventListLink:'Link a list from the app (optional)',
+    commEventListLink:'Link a list (optional)',
     commEventListOpen:'Open list',
     commPayNow:'💳 Pay now',
     commPayboxGift:'🎁 Pay via Paybox',
@@ -754,7 +754,9 @@ const myFullName = () => (S.user && familyData?.familyName) ? S.user + ' ' + fam
 
 // Committee members and admin publish immediately; regular parents need approval
 const canPublishDirectly = (cid) => isParent() && isCommitteeFor(cid);
-const gcalReady   = () => gcal.gapiReady && gcal.gisReady && !GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID');
+// The Android app connects through the phone's browser (connectGCalNative) and never uses
+// Google's sign-in library (gis), which doesn't run inside an app WebView — so only the website waits for it.
+const gcalReady   = () => gcal.gapiReady && (gcal.gisReady || _isNativeApp()) && !GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID');
 const gcalConnected = () => !!gcal.accessToken;
 
 // ════════════════════════════════════════
@@ -3107,16 +3109,25 @@ function gapiLoaded() {
   });
 }
 function gisLoaded() {
+  if (_isNativeApp()) return; // not used in the app (see gcalReady)
   if (!GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID')) {
-    gcal.tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id:GOOGLE_CLIENT_ID, scope:GCAL_SCOPE, callback:onGCalToken,
-    });
-    // Authorization-code flow: the server keeps a refresh token so the user stays connected
-    gcal.codeClient = google.accounts.oauth2.initCodeClient({
-      client_id:GOOGLE_CLIENT_ID, scope:GCAL_SCOPE, ux_mode:'popup', callback:onGCalCode,
-    });
+    try {
+      gcal.tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id:GOOGLE_CLIENT_ID, scope:GCAL_SCOPE, callback:onGCalToken,
+      });
+      // Authorization-code flow: the server keeps a refresh token so the user stays connected
+      gcal.codeClient = google.accounts.oauth2.initCodeClient({
+        client_id:GOOGLE_CLIENT_ID, scope:GCAL_SCOPE, ux_mode:'popup', callback:onGCalCode,
+      });
+    } catch(e) { console.error('gis init failed', e); return gisFailed(); }
   }
   gcal.gisReady=true; renderGCalBar(); tryAutoConnectGCal();
+}
+// Google's sign-in script didn't load (offline, blocked by a content blocker, ...) — say so
+// instead of showing "loading" forever.
+function gisFailed() {
+  if (_isNativeApp()) return;
+  gcal.gisFailed = true; renderGCalBar();
 }
 function gcalWasConnected() {
   return !!(S.uid && S.user && localStorage.getItem('familyhub_gcal_' + S.uid + '_' + S.user) === '1');
@@ -3289,7 +3300,7 @@ function connectGCal() {
 }
 function disconnectGCal() {
   if (fbFunctions && S.uid && S.user) fbFunctions.httpsCallable('gcalDisconnect')({ member: S.user }).catch(()=>{});
-  if (gcal.accessToken) google.accounts.oauth2.revoke(gcal.accessToken,()=>{});
+  if (gcal.accessToken && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(gcal.accessToken,()=>{});
   gcal.serverFailed = false;
   gcal.accessToken=null; gcal.events=[]; _gcalTokClear();
   if (S.uid && S.user) localStorage.removeItem('familyhub_gcal_' + S.uid + '_' + S.user);
@@ -3306,6 +3317,11 @@ function renderGCalBar() {
   if (!st) return;
   if (GOOGLE_CLIENT_ID.includes('YOUR_CLIENT_ID')) {
     st.innerHTML=`<span class="needs-setup">${t('gcalSetup')}</span>`; bt.innerHTML=''; return;
+  }
+  if (!gcalReady() && gcal.gisFailed) {
+    st.innerHTML=`<span style="color:#9ca3af;font-weight:700">${getLang()==='he' ? 'לא ניתן לטעון את רכיב ההתחברות של Google — בדקו את החיבור לאינטרנט או חוסם פרסומות' : "Couldn't load Google sign-in — check your connection or ad blocker"}</span>`;
+    bt.innerHTML=`<button class="gcal-btn gcal-btn-connect" onclick="location.reload()">${getLang()==='he' ? 'נסה שוב' : 'Retry'}</button>`;
+    return;
   }
   if (!gcalReady())   { st.textContent=t('gcalLoading')+` (gapi ${gcal.gapiReady?'✓':'✗'} gis ${gcal.gisReady?'✓':'✗'})`; bt.innerHTML=''; return; }
   if (gcal.syncing)   { st.textContent=t('gcalSyncing'); bt.innerHTML=''; return; }
@@ -7298,9 +7314,24 @@ function pickPhoto(name) {
 async function handlePhotoFile(event) {
   const file = event.target.files[0];
   if (!file || !_photoTarget) return;
+  const he = getLang() === 'he';
   const photo = await resizePhoto(file, 120);
-  if (!photo) return;
-  await saveMemberPhoto(_photoTarget, photo);
+  if (!photo) {
+    // Most often a HEIC photo (Samsung "high efficiency" / iPhone), which Android's WebView and Chrome can't decode
+    const heic = /hei[cf]/i.test(file.type) || /\.hei[cf]$/i.test(file.name || '');
+    showToast(he
+      ? (heic ? 'התמונה בפורמט HEIC שלא נתמך. בחרו תמונה אחרת או צלמו מסך שלה ובחרו את צילום המסך.' : 'לא ניתן לקרוא את התמונה. נסו תמונה אחרת.')
+      : (heic ? "That photo is HEIC, which isn't supported. Pick another photo, or a screenshot of it." : "Couldn't read that photo. Try another one."),
+      'error', 8000);
+    return;
+  }
+  try {
+    await saveMemberPhoto(_photoTarget, photo);
+  } catch(e) {
+    console.error('saveMemberPhoto:', e);
+    showToast((he ? 'שמירת התמונה נכשלה: ' : 'Saving the photo failed: ') + (e.code || e.message || ''), 'error', 8000);
+    return;
+  }
   if (!el('mgmtScreen').classList.contains('hidden')) renderMgmtMembers();
   renderHeader();
   if (_menuOpen) renderMenu();
@@ -11889,6 +11920,16 @@ function _nameHue(name) {
 // Share modes where guests write back to the share doc ('edit' = shared marking, 'claim' = who brings what)
 const _isJointMode = m => m === 'edit' || m === 'claim';
 const _hasClaimShare = list => (list.publicShares || []).some(s => s.mode === 'claim');
+// One link per share type: every link of a list gets the owner's changes live, so a second
+// link of the same type adds nothing. 'edit' (shared marking) and 'claim' (who brings what)
+// each keep their own guest state, so a list has at most one of the two.
+function _shareModeBlocked(list, mode) {
+  const modes = (list.publicShares || []).map(s => s.mode);
+  if (modes.includes(mode)) return 'exists';
+  if (mode === 'edit'  && modes.includes('claim')) return 'conflict';
+  if (mode === 'claim' && modes.includes('edit'))  return 'conflict';
+  return null;
+}
 
 // A guest's claims carry a private id, so two guests with the same name still get different colors
 const _badgeHue = (name, id) => _nameHue(id ? name + '#' + id : name);
@@ -11925,35 +11966,52 @@ function listOpenShareMenu(listId) {
           </div>
           <input id="share-url-${i}" class="share-url-input" type="text" value="${url}" readonly
             onclick="this.select()" dir="ltr">
+          ${_shareCanAllowEdits(list, s.mode) ? `<label class="share-edit-toggle">
+            <input type="checkbox" ${s.allowEdits ? 'checked' : ''} onchange="listSetShareEdits('${listId}','${s.token}',this.checked)">
+            ✏️ מי שיש לו את הקישור יכול לערוך פריטים
+          </label>` : ''}
         </div>`;
       }).join('')}
     </div>`;
   }
+
+  // Offer only the share types this list doesn't have yet (see _shareModeBlocked)
+  const allOpts = [
+    { mode: 'readonly', title: '👁 צפייה בלבד', desc: 'קריאה בלבד, ללא אפשרות סימון' },
+    ...(list.type !== 'recipe' ? [{ mode: 'self', title: '✅ סימון אישי', desc: 'כל אחד מסמן לעצמו — הסימונים לא משותפים' }] : []),
+    ...(list.type !== 'recipe' && !list.archived ? [
+      { mode: 'edit',  title: '🤝 סימון משותף', desc: 'הסימונים גלויים לכל מי שיש לו את הקישור' },
+      { mode: 'claim', title: '🙋 מי מביא מה',  desc: 'כל אחד בוחר פריטים שהוא מביא — פריט שנבחר נעול לאחרים' },
+    ] : []),
+  ];
+  const available = allOpts.filter(o => !_shareModeBlocked(list, o.mode));
+  const conflictOpt = allOpts.find(o => _shareModeBlocked(list, o.mode) === 'conflict');
+  const conflictNote = conflictOpt
+    ? `ℹ️ כדי לשתף כ"${conflictOpt.title.replace(/^\S+\s/, '')}" יש לבטל קודם את הקישור "${conflictOpt.mode === 'claim' ? 'סימון משותף' : 'מי מביא מה'}".`
+    : '';
 
   const ov = _cmodalEl();
   ov.innerHTML = `<div class="cmodal-box share-modal" onclick="event.stopPropagation()">
     <div class="share-modal-title">🔗 שתף רשימה</div>
     <div class="share-modal-listname">${esc(list.name)}</div>
     ${activeHtml}
+    ${available.length ? `
     <div class="share-section-label">צור קישור חדש</div>
     <div class="share-mode-col">
-      <label class="share-mode-opt"><input type="radio" name="shareMode" value="readonly" checked>
-        <div><div class="share-mode-title">👁 צפייה בלבד</div><div class="share-mode-desc">קריאה בלבד, ללא אפשרות סימון</div></div>
-      </label>
-      ${list.type !== 'recipe' ? `
-      <label class="share-mode-opt"><input type="radio" name="shareMode" value="self">
-        <div><div class="share-mode-title">✅ סימון אישי</div><div class="share-mode-desc">כל אחד מסמן לעצמו — הסימונים לא משותפים</div></div>
-      </label>` : ''}
-      ${list.type !== 'recipe' && !list.archived ? `
-      <label class="share-mode-opt"><input type="radio" name="shareMode" value="edit">
-        <div><div class="share-mode-title">🤝 סימון משותף</div><div class="share-mode-desc">הסימונים גלויים לכל מי שיש לו את הקישור</div></div>
-      </label>
-      <label class="share-mode-opt"><input type="radio" name="shareMode" value="claim">
-        <div><div class="share-mode-title">🙋 מי מביא מה</div><div class="share-mode-desc">כל אחד בוחר פריטים שהוא מביא — פריט שנבחר נעול לאחרים</div></div>
-      </label>` : ''}
+      ${available.map((o, i) => `
+      <label class="share-mode-opt"><input type="radio" name="shareMode" value="${o.mode}"${i === 0 ? ' checked' : ''}
+        onchange="const r=el('shareAllowEditsRow');if(r)r.style.display=${_shareCanAllowEdits(list, o.mode) ? "''" : "'none'"}">
+        <div><div class="share-mode-title">${o.title}</div><div class="share-mode-desc">${o.desc}</div></div>
+      </label>`).join('')}
     </div>
+    ${conflictNote ? `<div class="share-mode-desc" style="margin:6px 2px 0">${conflictNote}</div>` : ''}
+    ${available.some(o => _shareCanAllowEdits(list, o.mode)) ? `
+    <label class="share-edit-toggle" id="shareAllowEditsRow" style="${_shareCanAllowEdits(list, available[0].mode) ? '' : 'display:none'}">
+      <input type="checkbox" id="shareAllowEdits">
+      <span><b>✏️ לאפשר עריכה?</b><br><span class="share-mode-desc">מי שיש לו את הקישור יוכל להוסיף, לשנות שם ולמחוק פריטים</span></span>
+    </label>` : ''}` : ''}
     <div class="cmodal-btns">
-      <button class="cmodal-btn cmodal-ok" onclick="listCreateShare('${listId}')">צור קישור</button>
+      ${available.length ? `<button class="cmodal-btn cmodal-ok" onclick="listCreateShare('${listId}')">צור קישור</button>` : ''}
       <button class="cmodal-btn cmodal-cancel" onclick="_cmodalClose(false)">סגור</button>
     </div>
   </div>`;
@@ -11964,9 +12022,11 @@ function listOpenShareMenu(listId) {
 async function listCreateShare(listId) {
   const list = (S.lists || []).find(l => l.id === listId);
   if (!list || !S.uid) return;
-  const mode = document.querySelector('input[name="shareMode"]:checked')?.value || 'readonly';
+  const mode = document.querySelector('input[name="shareMode"]:checked')?.value;
+  if (!mode || _shareModeBlocked(list, mode)) { _cmodalClose(false); setTimeout(() => listOpenShareMenu(listId), 100); return; }
+  const allowEdits = _shareCanAllowEdits(list, mode) && !!el('shareAllowEdits')?.checked;
   try {
-    await _createListShare(list, mode);
+    await _createListShare(list, mode, allowEdits);
     _cmodalClose(false);
     setTimeout(() => listOpenShareMenu(listId), 100);
   } catch(e) {
@@ -11975,8 +12035,32 @@ async function listCreateShare(listId) {
   }
 }
 
+// "Allow edits" (guests add / rename / delete items) — every type except view-only, never on recipes
+const _shareCanAllowEdits = (list, mode) => mode !== 'readonly' && list.type !== 'recipe';
+
+// Turn edits on/off on an existing link; the link (URL) stays the same
+async function listSetShareEdits(listId, token, on) {
+  const list = (S.lists || []).find(l => l.id === listId);
+  if (!list || !S.uid) return;
+  const publicShares = (list.publicShares || []).map(s => {
+    if (s.token !== token) return s;
+    const { allowEdits, ...rest } = s;
+    return on ? { ...rest, allowEdits: true } : rest;
+  });
+  try {
+    await fbDb.collection('publicShares').doc(token).update({ allowEdits: !!on, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
+      .update({ publicShares, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+    list.publicShares = publicShares;
+    _showSnackbar(on ? 'עריכה הופעלה לקישור ✏️' : 'עריכה בוטלה לקישור');
+  } catch(e) {
+    console.error('[share] edits toggle failed:', e);
+    _showSnackbar('שגיאה בעדכון הקישור');
+  }
+}
+
 // Creates a public share doc for a list and records it on the list; returns the token
-async function _createListShare(list, mode) {
+async function _createListShare(list, mode, allowEdits = false) {
   const listId = list.id;
   const token = _genShareToken();
   const rawItems = JSON.parse(JSON.stringify(list.items || []));
@@ -11987,6 +12071,7 @@ async function _createListShare(list, mode) {
     familyUid: S.uid, listId, mode,
     sharedBy: S.user || localStorage.getItem('familyhub_member_' + S.uid) || null,
     type: list.type, name: list.name,
+    ...(allowEdits ? { allowEdits: true } : {}),
     items: shareItems,
     meta:  JSON.parse(JSON.stringify(list.meta  || {})),
     ...(list.type === 'recipe' && list.steps ? { steps: JSON.parse(JSON.stringify(list.steps)).map(({ done, ...rest }) => rest) } : {}),
@@ -11994,7 +12079,7 @@ async function _createListShare(list, mode) {
     updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
   };
   await fbDb.collection('publicShares').doc(token).set(shareDoc);
-  const publicShares = [...(list.publicShares || []), { token, mode }];
+  const publicShares = [...(list.publicShares || []), { token, mode, ...(allowEdits ? { allowEdits: true } : {}) }];
   await fbDb.collection('families').doc(S.uid).collection('lists').doc(listId)
     .update({ publicShares, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
   return token;
@@ -12007,13 +12092,15 @@ function _eventLinkableLists() {
   return (S.lists || []).filter(l => l.type === 'event' && !l.archived && _listVisible(l));
 }
 
-// Events always link a "who brings what" share: reuse the list's existing one, or create it
+// Events link the list's joint share: reuse its "who brings what" or shared-marking link
+// (a list has at most one of the two), or create a "who brings what" one
 async function _ensureEventListShare(listId) {
   const list = _eventLinkableLists().find(l => l.id === listId);
   if (!list) return null;
-  const existing = (list.publicShares || []).find(s => s.mode === 'claim');
-  const token = existing ? existing.token : await _createListShare(list, 'claim');
-  return { token, mode: 'claim', name: list.name };
+  const shares = list.publicShares || [];
+  const existing = shares.find(s => s.mode === 'claim') || shares.find(s => s.mode === 'edit');
+  if (existing) return { token: existing.token, mode: existing.mode, name: list.name };
+  return { token: await _createListShare(list, 'claim'), mode: 'claim', name: list.name };
 }
 
 function _eventListLinkHtml(ev) {
@@ -12097,7 +12184,7 @@ function _renderGuestShare(token, share) {
   if (nameEl) nameEl.innerHTML = `${typeEmoji} ${esc(share.name)}`;
   if (modeEl) {
     const modeInfo = { edit:'🤝 משותף', claim:'🙋 מי מביא מה', self:'✅ סימון אישי', readonly:'👁 צפייה בלבד' };
-    modeEl.textContent = modeInfo[share.mode] || modeInfo.readonly;
+    modeEl.textContent = (modeInfo[share.mode] || modeInfo.readonly) + (_guestCanEdit(share) ? ' · ✏️ ניתן לעריכה' : '');
     modeEl.className = `guest-mode-badge${_isJointMode(share.mode) ? ' guest-mode-edit' : share.mode === 'self' ? ' guest-mode-self' : ''}`;
   }
   const cont = el('guestContent');
@@ -12107,6 +12194,7 @@ function _renderGuestShare(token, share) {
   const isClaim = share.mode === 'claim';
   const isEdit = share.mode === 'edit' || isClaim;
   const canCheck = (isSelf || isEdit) && !isClaim;
+  const canEdit  = _guestCanEdit(share);
 
   // Joint mode: require a name before allowing any interaction
   if (isEdit && !_guestGetName(token)) {
@@ -12171,16 +12259,17 @@ function _renderGuestShare(token, share) {
     const items = isClaim ? [] : (share.items || []);
     const undone = items.filter(it => !itemDone(it));
     const done   = items.filter(it =>  itemDone(it));
-    const checkBtn = (it, isDone) => canCheck
+    const checkBtn = (it, isDone) => canCheck && !it._pending
       ? `<button class="list-check-btn${isDone?' checked':''}" onclick="guestToggleItem('${token}','${it.id}')">${isDone?chkSvg:''}</button>`
       : `<div style="width:28px;flex-shrink:0"></div>`;
     // Only show the "empty" hint when there are no items at all; if everything is
     // checked off, the completed section below is all that's needed.
     if (!isClaim && (undone.length || !done.length)) h += `<div class="card list-items-card">
-      ${undone.length ? undone.map(it => `<div class="list-item">
+      ${undone.length ? undone.map(it => `<div class="list-item${it._pending ? ' guest-item-pending' : ''}">
         ${checkBtn(it, false)}
         <span class="list-item-name">${esc(it.name)}</span>
         ${it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
+        ${canEdit ? _guestEditBtn(token, it) : ''}
       </div>`).join('') : `<div class="list-empty-hint">הרשימה ריקה</div>`}
     </div>`;
     if (done.length) h += `<div class="card list-items-card" style="margin-top:${undone.length ? 8 : 0}px">
@@ -12190,7 +12279,15 @@ function _renderGuestShare(token, share) {
         <span class="list-item-name">${esc(it.name)}</span>
         ${it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : ''}
         ${_checkerBadge(checkerName(it))}
+        ${canEdit ? _guestEditBtn(token, it) : ''}
       </div>`).join('')}
+    </div>`;
+    if (canEdit) h += `<div class="card guest-add-card">
+      <input class="guest-add-input" id="guestAddName" type="text" maxlength="120" placeholder="➕ הוספת פריט..." dir="auto"
+        onkeydown="if(event.key==='Enter')guestAddItem('${token}')">
+      ${share.type === 'packing' ? `<input class="guest-add-input guest-add-qty" id="guestAddQty" type="text" maxlength="20" placeholder="כמות" dir="auto"
+        onkeydown="if(event.key==='Enter')guestAddItem('${token}')">` : ''}
+      <button class="guest-add-btn" onclick="guestAddItem('${token}')">הוסף</button>
     </div>`;
   }
   // Info disclaimer: who shared the link and when (older shares have no sharer name)
@@ -12277,18 +12374,87 @@ function _guestClaimHtml(token, share) {
   let h = `<div class="claim-summary">${taken.length} מתוך ${items.length} נבחרו</div>
     <div class="claim-chips">${chip('all', 'הכל', items.length)}${chip('free', 'פנוי', free.length)}${chip('mine', 'שלי', mine.length)}</div>`;
   const shown = f === 'free' ? free : f === 'mine' ? mine : [...free, ...taken];
+  const editBtn = it => _guestCanEdit(share) ? _guestEditBtn(token, it) : '';
   const row = it => {
     const qty = it.qty ? `<span class="list-item-qty">${esc(it.qty)}</span>` : '';
+    if (it._pending) return `<div class="list-item guest-item-pending"><span class="list-item-name">${esc(it.name)}</span>${qty}</div>`;
     if (!it.done) return `<div class="list-item"><span class="list-item-name">${esc(it.name)}</span>${qty}
-      <button class="claim-btn" onclick="guestToggleItem('${token}','${it.id}')">🙋 אני אביא</button></div>`;
+      <button class="claim-btn" onclick="guestToggleItem('${token}','${it.id}')">🙋 אני אביא</button>${editBtn(it)}</div>`;
     const isMine = isMineItem(it);
     return `<div class="list-item list-item-done"><span class="list-item-name">${esc(it.name)}</span>${qty}
       ${_checkerBadge(it.checkedBy, it.checkedById, isMine ? it.checkedBy + ' (אני)' : null)}
-      ${isMine ? `<button class="claim-x" title="ביטול" onclick="guestToggleItem('${token}','${it.id}')">×</button>` : ''}</div>`;
+      ${isMine ? `<button class="claim-x" title="ביטול" onclick="guestToggleItem('${token}','${it.id}')">×</button>` : ''}${editBtn(it)}</div>`;
   };
   h += `<div class="card list-items-card">${shown.length ? shown.map(row).join('')
     : `<div class="list-empty-hint">${f === 'mine' ? 'עוד לא בחרת פריטים' : f === 'free' ? 'הכל כבר נבחר 🎉' : 'הרשימה ריקה'}</div>`}</div>`;
   return h;
+}
+
+// ── Guest edits (link created with "allow edits") ──
+// Changes show right away; the request goes to publicShares/{token}/edits, and the onShareEdit
+// function applies it to the owner's list and every link of it — the share snapshot then confirms.
+const _guestCanEdit = share => !!share?.allowEdits && share.mode !== 'readonly' && share.type !== 'recipe';
+function _guestEditBtn(token, it) {
+  if (it._pending) return '';
+  return `<button class="guest-item-edit" title="עריכה" aria-label="עריכה" onclick="guestEditItem('${token}','${esc(String(it.id))}')">✏️</button>`;
+}
+async function _guestQueueEdit(token, edit) {
+  const by = _isJointMode(_guestShare?.mode) ? _guestGetName(token).slice(0, 30) : '';
+  await fbDb.collection('publicShares').doc(token).collection('edits').add(by ? { ...edit, by } : edit);
+}
+async function _guestApplyEdit(token, edit, optimistic) {
+  if (!_guestShare) return;
+  const before = _guestShare.items;
+  _guestShare.items = optimistic(before || []);
+  _renderGuestShare(token, _guestShare);
+  try { await _guestQueueEdit(token, edit); }
+  catch (e) {
+    console.error('[guest] edit failed:', e);
+    if (_guestShare) { _guestShare.items = before; _renderGuestShare(token, _guestShare); }
+    showToast('השינוי לא נשמר — ייתכן שהבעלים ביטל את אפשרות העריכה', 'error', 6000);
+  }
+}
+async function guestAddItem(token) {
+  if (!_guestCanEdit(_guestShare)) return;
+  const inp = el('guestAddName');
+  const name = inp?.value.trim().slice(0, 120);
+  if (!name) { inp?.focus(); return; }
+  const qty = (el('guestAddQty')?.value || '').trim().slice(0, 20);
+  const edit = { op: 'add', name, ...(qty ? { qty } : {}) };
+  await _guestApplyEdit(token, edit, items => [...items, { id: 'pending-' + Date.now(), name, done: false, ...(qty ? { qty } : {}), _pending: true }]);
+  setTimeout(() => el('guestAddName')?.focus(), 0);
+}
+async function guestEditItem(token, itemId) {
+  if (!_guestCanEdit(_guestShare)) return;
+  const it = (_guestShare.items || []).find(i => String(i.id) === String(itemId));
+  if (!it) return;
+  const withQty = _guestShare.type === 'packing';
+  const ov = _cmodalEl();
+  ov.innerHTML = `<div class="cmodal-box" onclick="event.stopPropagation()">
+    <div class="cmodal-msg">✏️ עריכת פריט</div>
+    <input id="_gEditName" class="add-input" type="text" maxlength="120" value="${esc(it.name || '')}" dir="auto"
+      style="margin:8px 0 4px;font-size:15px;width:100%;box-sizing:border-box">
+    ${withQty ? `<input id="_gEditQty" class="add-input" type="text" maxlength="20" value="${esc(it.qty || '')}" placeholder="כמות" dir="auto"
+      style="margin:4px 0;font-size:15px;width:100%;box-sizing:border-box">` : ''}
+    <div class="cmodal-btns">
+      <button class="cmodal-btn cmodal-ok" onclick="_cmodalClose('save')">שמור</button>
+      <button class="cmodal-btn cmodal-ok cmodal-danger" onclick="_cmodalClose('delete')">🗑 מחק</button>
+      <button class="cmodal-btn cmodal-cancel" onclick="_cmodalClose(null)">ביטול</button>
+    </div>
+  </div>`;
+  requestAnimationFrame(() => { ov.classList.add('cmodal-visible'); setTimeout(() => el('_gEditName')?.focus(), 80); });
+  const action = await new Promise(res => { _cmodalResolve = res; });
+  if (action === 'delete') {
+    const taken = it.done && it.checkedBy && _guestShare.mode === 'claim' ? `\n${esc(it.checkedBy)} כבר בחר/ה להביא אותו.` : '';
+    if (!await _confirm(`למחוק את "${esc(it.name)}" מהרשימה?${taken}`, { danger: true, okLabel: 'מחק' })) return;
+    return _guestApplyEdit(token, { op: 'delete', itemId: String(it.id) }, items => items.filter(i => String(i.id) !== String(it.id)));
+  }
+  if (action !== 'save') return;
+  const name = (el('_gEditName')?.value || '').trim().slice(0, 120);
+  const qty  = withQty ? (el('_gEditQty')?.value || '').trim().slice(0, 20) : undefined;
+  if (!name || (name === it.name && (qty === undefined || qty === (it.qty || '')))) return;
+  const edit = { op: 'rename', itemId: String(it.id), name, ...(qty ? { qty } : {}) };
+  return _guestApplyEdit(token, edit, items => items.map(i => String(i.id) === String(it.id) ? { ...i, name, ...(qty ? { qty } : {}) } : i));
 }
 
 async function guestToggleItem(token, itemId) {
