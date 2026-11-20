@@ -2992,8 +2992,15 @@ function renderMgmtMashov() {
   const statusEl = el('mgmtMashovStatus');
   if (!statusEl) return;
   const entries = Object.values(familyData?.mashovStudents || {}).filter(e => e?.childGuid);
+  const kids = getKids();
+  const members = getMembers();
+  const assignedKid = (e) => kids.find(k => members.find(m => m.name === k)?.mashovChildId === e.childGuid) || '';
+  // Mashov's name for the child comes only from its login response; until the extension
+  // or app has seen one, fall back to the kid the child is assigned to here.
+  const childLabel = (e) => [e.studentName, e.className].filter(Boolean).join(' · ') || assignedKid(e);
   if (entries.length) {
-    statusEl.textContent = `✅ מחובר — ${entries.map(e => e.studentName || e.className).join(', ')}, ${_mashovHomework.length} שיעורי בית`;
+    const names = entries.map(e => e.studentName || assignedKid(e) || e.className).filter(Boolean);
+    statusEl.textContent = `✅ מחובר — ${names.length ? `${names.join(', ')}, ` : ''}${_mashovHomework.length} שיעורי בית`;
     statusEl.style.color = '#16a34a';
   } else {
     statusEl.textContent = 'לא מחובר עדיין';
@@ -3002,12 +3009,10 @@ function renderMgmtMashov() {
   const mappingEl = el('mgmtMashovMapping');
   if (!mappingEl) return;
   if (!entries.length) { mappingEl.style.display = 'none'; return; }
-  const kids = getKids();
-  const members = getMembers();
   mappingEl.style.display = '';
   mappingEl.innerHTML = entries.map(e => {
-    const assigned = kids.find(k => members.find(m => m.name === k)?.mashovChildId === e.childGuid) || '';
-    const label = [e.studentName, e.className].filter(Boolean).join(' · ');
+    const assigned = assignedKid(e);
+    const label = childLabel(e);
     return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
       <span style="font-size:12px;color:#4a5568;flex:1">${esc(label || 'ילד/ה')}${assigned ? '' : '<span style="font-size:10px;color:#9ca3af"> (לא זוהה)</span>'}</span>
       <select onchange="setMashovKidChild('${esc(e.childGuid)}',this.value)" style="font-size:12px;border:1.5px solid #e2e8f0;border-radius:8px;padding:3px 6px;background:#fff">
