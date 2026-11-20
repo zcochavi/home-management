@@ -119,6 +119,11 @@ const STRINGS = {
     commEventTitle:'כותרת האירוע...',
     commEventNote:'הערה (אופציונלי)',
     commEventPaybox:'קישור Paybox (אופציונלי)',
+    commEventLink:'🔗 קישור (Paybox, Google Docs, טופס... אופציונלי)',
+    commEventPhoto:'📷 הוספת תמונה (אופציונלי)',
+    commEventPhotoRemove:'הסר תמונה',
+    commEventPhotoError:'לא ניתן לטעון את התמונה',
+    commLinkOpen:'פתח קישור',
     commEventListLink:'קישור לרשימה מהאפליקציה (אופציונלי)',
     commEventListOpen:'פתח רשימה',
     commPayNow:'💳 שלם עכשיו',
@@ -241,6 +246,11 @@ const STRINGS = {
     commEventTitle:'Event title...',
     commEventNote:'Note (optional)',
     commEventPaybox:'Paybox link (optional)',
+    commEventLink:'🔗 Link (Paybox, Google Docs, form... optional)',
+    commEventPhoto:'📷 Add a photo (optional)',
+    commEventPhotoRemove:'Remove photo',
+    commEventPhotoError:"Couldn't load that photo",
+    commLinkOpen:'Open link',
     commEventListLink:'Link a list from the app (optional)',
     commEventListOpen:'Open list',
     commPayNow:'💳 Pay now',
@@ -4811,7 +4821,8 @@ function renderPostCard(ev, cid) {
         ${ev.date ? `<div class="post-card-info-item"><span class="post-card-info-badge post-card-info-badge-date">${_ico.calendar}</span><div class="post-card-info-text">${fmtEventDate(ev.date)}</div></div>` : ''}
         ${ev.time ? `<div class="post-card-info-item"><span class="post-card-info-badge post-card-info-badge-clock">${_ico.clock}</span><div class="post-card-info-text">${esc(ev.time)}</div></div>` : ''}
       </div>` : ''}
-      ${ev.payboxUrl ? `<a class="paybox-btn" href="${esc(ev.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>` : ''}
+      ${_eventPhotoHtml(ev)}
+      ${_eventLinkHtml(ev.payboxUrl)}
       ${_eventListLinkHtml(ev)}
     </div>
     ${_celebrantsHtml(ev)}
@@ -5465,7 +5476,15 @@ function renderCommCard(kid) {
       </div>` : `<input type="hidden" id="commEvScope_${cid}" value="class">`}
       <input class="auth-input" id="commEvLocation_${cid}" placeholder="📍 מיקום (אופציונלי)" style="margin-bottom:6px" oninput="this.classList.remove('input-error');el('commEvError_${cid}').style.display='none'">
       <textarea class="auth-input" id="commEvNote_${cid}" placeholder="${t('commEventNote')}" rows="3" style="margin-bottom:6px;resize:vertical;min-height:64px;font-family:inherit;line-height:1.5"></textarea>
-      <input class="auth-input" id="commEvPaybox_${cid}" placeholder="${t('commEventPaybox')}" style="margin-bottom:6px" type="url" dir="ltr">
+      <input class="auth-input" id="commEvPaybox_${cid}" placeholder="${t('commEventLink')}" style="margin-bottom:6px" type="url" dir="ltr">
+      <div class="comm-ev-photo" style="margin-bottom:6px">
+        <input type="file" accept="image/*" id="commEvPhotoInput_${cid}" style="display:none" onchange="onCommEvPhotoPick('${cid}', this)">
+        <button type="button" class="comm-ev-photo-add" id="commEvPhotoAdd_${cid}" onclick="el('commEvPhotoInput_${cid}').click()">${t('commEventPhoto')}</button>
+        <div class="comm-ev-photo-preview" id="commEvPhotoPreview_${cid}" style="display:none">
+          <img id="commEvPhotoImg_${cid}" alt="">
+          <button type="button" class="comm-ev-photo-remove" onclick="clearCommEvPhoto('${cid}')" aria-label="${t('commEventPhotoRemove')}" title="${t('commEventPhotoRemove')}">×</button>
+        </div>
+      </div>
       ${_eventLinkableLists().length ? `
       <select class="auth-input" id="commEvList_${cid}" style="margin-bottom:6px">
         <option value="">🔗 ${t('commEventListLink')}</option>
@@ -5570,7 +5589,15 @@ async function renderCommunity() {
   if (bannerEl) _renderCommPendingBanner(bannerEl);
   kidsWithSchool.forEach(kid => {
     const cid = classIdFor(kid.school);
-    if (cid) _buildSoftDd('commEvTypeDd_' + cid, 'commEvType_' + cid);
+    if (!cid) return;
+    _buildSoftDd('commEvTypeDd_' + cid, 'commEvType_' + cid);
+    // A live update rebuilds the form — put back a photo the parent already picked
+    if (_commEvPhoto[cid]) {
+      const img = el('commEvPhotoImg_' + cid);
+      if (img) img.src = _commEvPhoto[cid];
+      el('commEvPhotoPreview_' + cid)?.style.setProperty('display', '');
+      el('commEvPhotoAdd_' + cid)?.style.setProperty('display', 'none');
+    }
   });
 }
 
@@ -5676,6 +5703,7 @@ function matchesGenderFilter(ev, kidName) {
 
 function toggleCommAddForm(cid) {
   _commAddOpen[cid] = !_commAddOpen[cid];
+  if (!_commAddOpen[cid]) clearCommEvPhoto(cid);
   const form = el('commAddForm_' + cid);
   form?.classList.toggle('open', !!_commAddOpen[cid]);
   if (_commAddOpen[cid]) {
@@ -5730,6 +5758,101 @@ function _commHidePicker() {
     el('commFab')?.classList.remove('chore-fab-open');
 }
 
+// ── Event link button: any http(s) link, labelled by what it points to ──
+const _LINK_KINDS = [
+  // [test(host, path), icon, label]  — Paybox keeps the "Pay now" button
+  [(h)    => /(^|\.)payboxapp\.(com|page\.link)$/.test(h) || h === 'paybox.co.il' || h.endsWith('.paybox.co.il'), null, null],
+  [(h, p) => h === 'docs.google.com' && p.startsWith('/document'),     '📄', 'Google Docs'],
+  [(h, p) => h === 'docs.google.com' && p.startsWith('/spreadsheets'), '📊', 'Google Sheets'],
+  [(h, p) => h === 'docs.google.com' && p.startsWith('/presentation'), '📽️', 'Google Slides'],
+  [(h, p) => (h === 'docs.google.com' && p.startsWith('/forms')) || h === 'forms.gle', '📋', 'Google Forms'],
+  [(h)    => h === 'drive.google.com',                                 '📁', 'Google Drive'],
+  [(h)    => h === 'meet.google.com',                                  '🎥', 'Google Meet'],
+  [(h)    => h === 'zoom.us' || h.endsWith('.zoom.us'),                '🎥', 'Zoom'],
+  [(h)    => h === 'wa.me' || h.endsWith('whatsapp.com'),              '💬', 'WhatsApp'],
+  [(h)    => h === 'youtu.be' || h.endsWith('youtube.com'),            '▶️', 'YouTube'],
+  [(h)    => h === 'canva.com' || h.endsWith('.canva.com'),            '🎨', 'Canva'],
+];
+function _eventLinkHtml(url) {
+  if (!url || !/^https?:\/\//i.test(url)) return '';
+  let host = '', path = '';
+  try { const u = new URL(url); host = u.hostname.toLowerCase().replace(/^www\./, ''); path = u.pathname; } catch { return ''; }
+  const kind = _LINK_KINDS.find(([test]) => test(host, path));
+  let label;
+  if (kind && !kind[1]) label = t('commPayNow');
+  else if (kind)        label = `${kind[1]} ${kind[2]}`;
+  else                  label = `🔗 ${host || t('commLinkOpen')}`;
+  const cls = kind && !kind[1] ? 'paybox-btn' : 'paybox-btn event-link-btn';
+  return `<a class="${cls}" href="${esc(url)}" target="_blank" rel="noopener noreferrer" dir="auto">${esc(label)}</a>`;
+}
+
+// ── Event photo: one image, compressed in the browser and stored on the event doc ──
+const _commEvPhoto = {};   // cid -> data URL of the photo picked in that class's add form
+function _eventPhotoHtml(ev) {
+  const src = ev?.photo;
+  if (typeof src !== 'string' || !src.startsWith('data:image/')) return '';
+  return `<div class="post-card-photo"><img src="${esc(src)}" alt="" loading="lazy" onclick="openEventPhoto(this.src)"></div>`;
+}
+function openEventPhoto(src) {
+  const ov = document.createElement('div');
+  ov.className = 'event-photo-viewer';
+  ov.innerHTML = `<img alt="">`;
+  ov.querySelector('img').src = src;
+  ov.onclick = () => ov.remove();
+  document.body.appendChild(ov);
+}
+// Scale to fit maxSide and re-encode as JPEG, stepping quality/size down until the
+// data URL fits comfortably inside a Firestore document (1 MiB limit).
+function compressEventPhoto(file, maxSide = 1280, maxChars = 450000) {
+  return new Promise(resolve => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let side = maxSide, out = null;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const scale = Math.min(1, side / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width  = Math.max(1, Math.round(img.width  * scale));
+        c.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); // PNG transparency -> white
+        ctx.drawImage(img, 0, 0, c.width, c.height);
+        out = c.toDataURL('image/jpeg', attempt < 2 ? 0.8 - attempt * 0.15 : 0.65);
+        if (out.length <= maxChars) return resolve(out);
+        side = Math.round(side * 0.8);
+      }
+      resolve(out && out.length <= maxChars ? out : null);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+    img.src = url;
+  });
+}
+async function onCommEvPhotoPick(cid, input) {
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  const errEl = el('commEvError_' + cid);
+  const photo = await compressEventPhoto(file);
+  if (!photo) {
+    if (errEl) { errEl.textContent = t('commEventPhotoError'); errEl.style.display = ''; }
+    return;
+  }
+  if (errEl) errEl.style.display = 'none';
+  _commEvPhoto[cid] = photo;
+  const img = el('commEvPhotoImg_' + cid);
+  if (img) img.src = photo;
+  el('commEvPhotoPreview_' + cid)?.style.setProperty('display', '');
+  el('commEvPhotoAdd_' + cid)?.style.setProperty('display', 'none');
+}
+function clearCommEvPhoto(cid) {
+  delete _commEvPhoto[cid];
+  const img = el('commEvPhotoImg_' + cid);
+  if (img) img.removeAttribute('src');
+  el('commEvPhotoPreview_' + cid)?.style.setProperty('display', 'none');
+  el('commEvPhotoAdd_' + cid)?.style.setProperty('display', '');
+}
+
 async function submitClassEvent(cid) {
   const title      = el('commEvTitle_'  + cid)?.value.trim();
   const date       = el('commEvDate_'   + cid)?.value;
@@ -5780,6 +5903,7 @@ async function submitClassEvent(cid) {
   if (location) docData.location = location;
   if (payboxUrl) docData.payboxUrl = payboxUrl;
   if (celebrants.length) docData.celebrants = celebrants.slice(0, 3);
+  if (_commEvPhoto[cid]) docData.photo = _commEvPhoto[cid];
   const linkedListId = el('commEvList_' + cid)?.value || '';
 
   // Resolve target collection and document ID
@@ -5808,6 +5932,7 @@ async function submitClassEvent(cid) {
       _alert(t('pendingSubmitted'));
     }
     _commAddOpen[cid] = false;
+    clearCommEvPhoto(cid);
     el('commAddForm_' + cid)?.classList.remove('open');
     _syncCommFab();
     if (canPublishDirectly(cid) && scope !== 'class') {
@@ -10451,7 +10576,7 @@ function renderDayPanel(events){
           ? `<button class="gcal-class-btn synced" title="הסר מ-Google Calendar" onclick="unsyncClassEvent('${e.id}')">G ✓</button>`
           : `<button class="gcal-class-btn" title="הוסף ל-Google Calendar" onclick="syncClassEventToGcal('${e.id}','${esc(e.title).replace(/'/g,"\\'")}','${e.date}','${e.time||''}')">+ G</button>`
         : '';
-      const payBtn=e.payboxUrl?`<a class="paybox-btn" href="${esc(e.payboxUrl)}" target="_blank" rel="noopener noreferrer">${t('commPayNow')}</a>`:'';
+      const payBtn=_eventLinkHtml(e.payboxUrl);
       return `<div class="event-item" style="border-inline-start-color:${col};flex-wrap:wrap">
         <div class="event-body" style="width:100%">
           <div class="event-title">${eventTypeIcon(e.type)} ${esc(e.title)}</div>

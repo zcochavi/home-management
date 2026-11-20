@@ -200,7 +200,7 @@ const TOOLS = [
         note:     { type: 'string', description: 'Details for parents: what to bring, cost, and so on.' },
         scope:    { type: 'string', enum: ['class', 'grade', 'school'], description: 'Audience. Default "class". "grade" and "school" are for committee members only.' },
         gender_filter: { type: 'string', enum: ['all', 'boys', 'girls'], description: 'Only for event types that support it (such as birthday). Default "all".' },
-        paybox_url:    { type: 'string', description: 'Payment link, if any.' },
+        paybox_url:    { type: 'string', description: 'A link for the event, if any (Paybox payment, Google Doc/Sheet/Form, etc.).' },
         rsvp:          { type: 'boolean', description: 'Whether parents can answer attending or not. Default true.' },
       },
       required: ['title'],
