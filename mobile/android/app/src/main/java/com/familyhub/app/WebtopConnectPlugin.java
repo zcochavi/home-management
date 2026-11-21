@@ -55,6 +55,12 @@ public class WebtopConnectPlugin extends Plugin {
         } catch (Exception e) {
             ret.put("students", new JSArray());
         }
+        try {
+            String trace = result.getData() != null ? result.getData().getStringExtra(WebtopLoginActivity.EXTRA_TRACE) : null;
+            ret.put("trace", new JSArray(trace != null ? trace : "[]"));
+        } catch (Exception e) {
+            ret.put("trace", new JSArray());
+        }
         call.resolve(ret);
     }
 

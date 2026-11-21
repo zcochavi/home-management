@@ -39,6 +39,8 @@ import java.util.Map;
  */
 public class WebtopLoginActivity extends AppCompatActivity {
     public static final String EXTRA_STUDENTS = "students";
+    public static final String EXTRA_TRACE = "trace";
+    private static final int TRACE_MAX = 400;
     static final String WEBTOP_URL = "https://webtop.smartschool.co.il/";
 
     // Injected into Webtop's pages. Reports the body of every successful
@@ -55,6 +57,9 @@ public class WebtopLoginActivity extends AppCompatActivity {
         "return os.apply(this,arguments);};})();";
 
     private final Map<String, JSONObject> students = new LinkedHashMap<>();
+    // Diagnostic recording of Webtop's own API requests (masked; see assets/fh/webtop-trace.js)
+    private final JSONArray trace = new JSONArray();
+    private String traceJs = null;
     private WebView webView;
     private TextView statusView;
 
@@ -102,16 +107,22 @@ public class WebtopLoginActivity extends AppCompatActivity {
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
 
         webView.addJavascriptInterface(new Bridge(), "FHWebtop");
+        traceJs = readAsset("fh/webtop-trace.js");
         boolean docStart = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT);
         if (docStart) {
             WebViewCompat.addDocumentStartJavaScript(webView, CAPTURE_JS,
+                Collections.singleton("https://webtop.smartschool.co.il"));
+            if (traceJs != null) WebViewCompat.addDocumentStartJavaScript(webView, traceJs,
                 Collections.singleton("https://webtop.smartschool.co.il"));
         }
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
                 // Fallback for older WebViews without document-start scripts.
-                if (!docStart && url != null && url.startsWith(WEBTOP_URL)) view.evaluateJavascript(CAPTURE_JS, null);
+                if (!docStart && url != null && url.startsWith(WEBTOP_URL)) {
+                    view.evaluateJavascript(CAPTURE_JS, null);
+                    if (traceJs != null) view.evaluateJavascript(traceJs, null);
+                }
                 CookieManager.getInstance().flush();
             }
         });
@@ -126,7 +137,24 @@ public class WebtopLoginActivity extends AppCompatActivity {
         webView.loadUrl(WEBTOP_URL);
     }
 
+    private String readAsset(String path) {
+        try (java.io.InputStream in = getAssets().open(path)) {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096]; int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            return out.toString("UTF-8");
+        } catch (Exception e) { return null; }
+    }
+
     private class Bridge {
+        @JavascriptInterface
+        public void onTrace(String json) {
+            try {
+                JSONObject e = new JSONObject(json);
+                runOnUiThread(() -> { if (trace.length() < TRACE_MAX) trace.put(e); });
+            } catch (Exception ignored) {}
+        }
+
         @JavascriptInterface
         public void onStudent(String json) {
             try {
@@ -146,6 +174,7 @@ public class WebtopLoginActivity extends AppCompatActivity {
         for (JSONObject p : students.values()) arr.put(p);
         Intent data = new Intent();
         data.putExtra(EXTRA_STUDENTS, arr.toString());
+        data.putExtra(EXTRA_TRACE, trace.toString());
         setResult(RESULT_OK, data);
         finish();
     }
