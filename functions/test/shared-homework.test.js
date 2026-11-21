@@ -48,3 +48,17 @@ test('changedItems returns only new or changed items', () => {
   const unmapped = { ...fam, members: fam.members.map(m => m.name === 'רוני' ? { ...m, webtopClassCode: undefined } : m) };
   assert.deepEqual(h.changedItems(unmapped, fam, classIdFor, NOW).map(x => x.data.subject), ['אנגלית']);
 });
+
+test('connectedClasses: kids mapped to a system the family is linked to', () => {
+  const s = { city: 'פת', name: 'א', grade: 'ה', classNum: '2' }, s2 = { city: 'פת', name: 'ב', grade: 'ז', classNum: '1' };
+  const base = { members: [
+    { name: 'a', role: 'kid', webtopClassCode: 'C7', school: s2 },
+    { name: 'b', role: 'kid', mashovChildId: 'g1', school: s },
+    { name: 'c', role: 'kid', school: { city: 'x', grade: 'א' } },
+    { name: 'p', role: 'parent', webtopClassCode: 'C7', school: s },
+  ] };
+  assert.deepEqual([...h.connectedClasses(base, classIdFor)], [], 'not linked anywhere');
+  assert.deepEqual([...h.connectedClasses({ ...base, webtopLinkedAt: 1 }, classIdFor)], ['פת~~ב~~ז~~1']);
+  assert.deepEqual([...h.connectedClasses({ ...base, mashovStudents: { g1: {} } }, classIdFor)], ['פת~~א~~ה~~2']);
+  assert.deepEqual([...h.connectedClasses({ ...base, mashovStudents: { other: {} } }, classIdFor)], []);
+});

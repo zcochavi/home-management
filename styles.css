@@ -2467,3 +2467,16 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .mgmt-disconnect-btn { background: #fff5f5; color: #c53030; border: 1px solid #fed7d7; border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .mgmt-disconnect-btn:disabled { opacity: 0.6; cursor: default; }
 .mgmt-disconnect-hint { font-size: 11px; color: var(--gray-400); font-weight: 600; margin-top: 4px; }
+
+/* Homework: "connect your class" wizard */
+.hw-wiz { border: 1.5px solid var(--primary-200, #c7d2fe); background: var(--primary-50); }
+.hw-wiz-title { font-size: 15px; font-weight: 900; color: var(--gray-900); margin-bottom: 6px; }
+.hw-wiz-text { font-size: 13px; color: var(--gray-600, #4b5563); line-height: 1.5; margin-bottom: 12px; }
+.hw-wiz-q { font-size: 13px; font-weight: 800; color: var(--gray-800, #1f2937); margin-bottom: 8px; }
+.hw-wiz-how { font-size: 12px; color: var(--gray-500); line-height: 1.5; margin-bottom: 10px; }
+.hw-wiz-choices { display: flex; gap: 8px; flex-wrap: wrap; }
+.hw-wiz-choice, .hw-wiz-go { flex: 1; min-width: 120px; padding: 11px 12px; border-radius: 12px; font: inherit; font-size: 14px; font-weight: 800; cursor: pointer; }
+.hw-wiz-choice { background: #fff; color: var(--primary-700); border: 1.5px solid var(--primary-500); }
+.hw-wiz-go { background: var(--primary-500); color: #fff; border: none; }
+.hw-wiz-back { background: none; border: none; color: var(--primary-600); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: underline; }
+.hw-wiz-later { display: block; margin: 10px auto 0; background: none; border: none; color: var(--gray-400); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }

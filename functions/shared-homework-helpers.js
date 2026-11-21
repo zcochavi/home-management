@@ -70,4 +70,22 @@ function changedItems(before, after, classIdFor, now = Date.now()) {
     .map(([, v]) => v);
 }
 
-module.exports = { syncId, kidFor, sharedItems, changedItems, PUBLISH_DAYS, MASHOV_PREFIX };
+// Classes this family is connected to a school system for: a kid with a school, mapped to
+// Webtop (its class code, while the family is linked to Webtop) or to a Mashov child the
+// family is connected to. Drives the homework tab's "connect your class" wizard.
+function connectedClasses(fam, classIdFor) {
+  const members = Array.isArray(fam?.members) ? fam.members : [];
+  const webtopLinked = !!fam?.webtopLinkedAt || Object.keys(fam?.webtopStudents || {}).length > 0;
+  const mashov = fam?.mashovStudents || {};
+  const out = new Set();
+  for (const m of members) {
+    if (m?.role !== 'kid' || !m.school) continue;
+    const viaWebtop = webtopLinked && !!m.webtopClassCode;
+    const viaMashov = !!m.mashovChildId && !!mashov[m.mashovChildId];
+    const cid = (viaWebtop || viaMashov) ? classIdFor(m.school) : null;
+    if (cid) out.add(cid);
+  }
+  return out;
+}
+
+module.exports = { syncId, kidFor, sharedItems, changedItems, connectedClasses, PUBLISH_DAYS, MASHOV_PREFIX };
