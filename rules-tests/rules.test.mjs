@@ -79,6 +79,13 @@ await check('owner reads own family', assertSucceeds(getDoc(doc(owner, 'families
 await check('connector tokens stay locked', assertFails(getDoc(doc(owner, 'mcpTokens/t'))));
 await check('connector tokens cannot be forged', assertFails(setDoc(doc(owner, 'mcpTokens/forged'), { kind: 'access' })));
 await check('community collections still open to signed-in users', assertSucceeds(addDoc(collection(owner, 'schoolClasses/c1/pendingEvents'), { title: 'x' })));
+// replacing a member's code (regenMemberCode deletes the old joinCodes doc)
+await env.withSecurityRulesDisabled(async c => { await setDoc(doc(c.firestore(), 'joinCodes/OLDK23'), { ownerUid: 'victim', memberName: 'kid' }); });
+const oldDevice = as('oldKidDevice', 'oldk23@fh.familyhub');
+await check('kid device joins with its code', assertSucceeds(setDoc(doc(oldDevice, 'uidToFamily/oldKidDevice'), { familyUid: 'victim', memberName: 'kid' }, { merge: true })));
+await check('family member deletes the replaced code', assertSucceeds(deleteDoc(doc(owner, 'joinCodes/OLDK23'))));
+await check('a new device cannot join with the replaced code', assertFails(setDoc(doc(as('newKidDevice', 'oldk23@fh.familyhub'), 'uidToFamily/newKidDevice'), { familyUid: 'victim', memberName: 'kid' }, { merge: true })));
+await check('the already-joined device keeps its mapping', assertSucceeds(setDoc(doc(oldDevice, 'uidToFamily/oldKidDevice'), { familyUid: 'victim', memberName: 'kid' }, { merge: true })));
 // guest edit requests on shared list links
 await env.withSecurityRulesDisabled(async c => { const d = c.firestore();
   await setDoc(doc(d, 'publicShares/tokEdit'), { familyUid: 'victim', listId: 'l1', mode: 'claim', allowEdits: true, items: [] });

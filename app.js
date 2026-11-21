@@ -1220,6 +1220,15 @@ async function doJoin() {
       await _failJoin('קוד לא נמצא או פג תוקפו. בקש קוד חדש ממי שהזמין אותך.');
       return;
     }
+    // A replaced code's joinCodes doc is deleted (regenMemberCode); without it the rules won't
+    // map this device to the family, so say so now instead of failing on the data load later
+    try {
+      const codeSnap = await fbDb.collection('joinCodes').doc(code).get();
+      if (!codeSnap.exists) {
+        await _failJoin('הקוד הזה הוחלף בקוד חדש. בקש את הקוד העדכני ממי שהזמין אותך.');
+        return;
+      }
+    } catch (_) {} // can't check (offline): carry on as before
 
     localStorage.setItem('familyhub_family_uid_' + cred.user.uid, ownerUid);
     if (memberName) localStorage.setItem('familyhub_locked_member_' + cred.user.uid, memberName);
@@ -2259,20 +2268,37 @@ async function generateSpouseCode(memberName) {
   }
 }
 
-async function regenSpouseCode(memberName) {
-  const btn = document.querySelector(`[data-spouse-regen="${CSS.escape(memberName)}"]`);
+// Replace a member's personal join code (kids and parents). The old code's joinCodes doc is
+// deleted: joining needs it (firestore.rules only map an invite account to a family whose
+// code doc exists, and doJoin checks it), so the old code can no longer be used to join.
+// Devices that already joined with it stay signed in.
+async function regenMemberCode(memberName) {
+  const old = getMembers().find(m => m.name === memberName)?.joinCode || null;
+  const ok = await _confirm(
+    `ליצור קוד כניסה חדש ל-${esc(memberName)}?<br><br>` +
+    `<span style="font-size:13px;color:var(--gray-500)">הקוד הנוכחי${old ? ` (${esc(old)})` : ''} יפסיק לעבוד להצטרפות. ` +
+    `מכשירים שכבר מחוברים איתו יישארו מחוברים.</span>`,
+    { okLabel: 'צור קוד חדש' });
+  if (!ok) return;
+  const btn = document.querySelector(`[data-code-regen="${CSS.escape(memberName)}"]`);
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   try {
     const code = await createMemberCode(S.uid, memberName);
     const members = getMembers().map(m => m.name === memberName ? { ...m, joinCode: code } : m);
     if (familyData) familyData.members = members;
     await fbDb.collection('families').doc(S.uid).update({ members });
+    if (old && old !== code) {
+      await fbDb.collection('joinCodes').doc(old).delete()
+        .catch(e => console.warn('[codes] old code not revoked:', e.message));
+    }
     renderMgmtMembers();
+    _showSnackbar(`קוד חדש ל-${memberName}: ${code}`);
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = '🔄'; }
     _alert('שגיאה: ' + e.message);
   }
 }
+const regenSpouseCode = regenMemberCode; // older name
 
 function shareSpouseCode(name, code) {
   const url  = _publicAppUrl() + '?join=' + code;
@@ -3648,13 +3674,14 @@ function renderMgmtMembers() {
           <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
             <span style="font-size:11px;color:#6a11cb;font-weight:700;background:#f0e6ff;padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
             <button style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#718096;display:flex;align-items:center" onclick="shareKidCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
+            <button data-code-regen="${esc(m.name)}" style="font-size:11px;background:#fff5f5;color:#c53030;border:1px solid #fed7d7;border-radius:8px;padding:2px 8px;cursor:pointer;font-family:inherit" onclick="regenMemberCode('${esc(m.name)}')" title="צור קוד חדש">🔄</button>
           </div>` : ''}
         ${m.role === 'parent' && m.name !== S.user ? (m.joinCode ? `
           <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
             <span style="font-size:10px;color:#718096;margin-left:2px">🔑</span>
             <span style="font-size:11px;color:var(--primary-600);font-weight:700;background:var(--primary-50);padding:2px 8px;border-radius:8px;letter-spacing:1px">${esc(m.joinCode)}</span>
             <button style="background:none;border:none;cursor:pointer;padding:2px 4px;color:#718096;display:flex;align-items:center" onclick="shareSpouseCode('${esc(m.name)}','${esc(m.joinCode)}')" title="שתף קוד"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></button>
-            <button data-spouse-regen="${esc(m.name)}" style="font-size:11px;background:#fff5f5;color:#c53030;border:1px solid #fed7d7;border-radius:8px;padding:2px 8px;cursor:pointer;font-family:inherit" onclick="regenSpouseCode('${esc(m.name)}')" title="צור קוד חדש">🔄</button>
+            <button data-code-regen="${esc(m.name)}" style="font-size:11px;background:#fff5f5;color:#c53030;border:1px solid #fed7d7;border-radius:8px;padding:2px 8px;cursor:pointer;font-family:inherit" onclick="regenMemberCode('${esc(m.name)}')" title="צור קוד חדש">🔄</button>
           </div>` : `
           <div style="margin-top:4px">
             <button data-spouse-gen="${esc(m.name)}" style="font-size:11px;background:#ebf8ff;color:#2b6cb0;border:1px solid #bee3f8;border-radius:8px;padding:2px 10px;cursor:pointer;font-family:inherit" onclick="generateSpouseCode('${esc(m.name)}')">🔑 צור קוד כניסה</button>
