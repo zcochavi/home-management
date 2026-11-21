@@ -628,6 +628,8 @@ const FEATURE_FLAGS_DEF = [
   { key: 'webtopConnection', icon: '📡', labelHe: 'חיבור Webtop', descHe: 'כרטיס חיבור Webtop בהגדרות, שיעורי בית מסונכרנים ועדכון קהילה' },
   { key: 'mashovConnection', icon: '📘', labelHe: 'חיבור משו״ב', descHe: 'כרטיס חיבור משו״ב בהגדרות ושיעורי בית מסונכרנים ממשו״ב, לכל ילד/ה שמשויך/ת לילד/ה במשו״ב', defaultOff: true },
   { key: 'androidBeta', icon: '📱', labelHe: 'הזמנה לבודקי אנדרואיד', descHe: 'כרטיס בבית שמזמין הורים לבדוק את האפליקציה — באתר, באנדרואיד, כשיש קישור', defaultOff: true, urlField: 'androidBetaUrl' },
+  // appOnly: exists only in the Android app, so the switch is just off / on
+  { key: 'pushTestCard', icon: '🔔', labelHe: 'כרטיס בדיקת התראות', descHe: 'כרטיס "בדיקת התראות" בהגדרות המשפחה — באפליקציית אנדרואיד בלבד', appOnly: true },
 ];
 
 function subscribeToFeatureFlags() {
@@ -655,6 +657,10 @@ function subscribeToFeatureFlags() {
       // Re-render affected areas immediately
       if (S.tab === 'homework') renderHomework();
       renderMgmtWebtop && renderMgmtWebtop();
+      if (el('adminSyncIntervals')?.offsetParent) renderAdminSyncIntervals();
+      if (el('adminUndatedPosts')?.offsetParent) renderAdminUndatedPosts();
+      if (S.tab === 'community') renderCommunity();
+      if (el('mgmtScreen') && !el('mgmtScreen').classList.contains('hidden')) renderPushTestCard();
       if (S.tab === 'home') renderHome();
     }, () => { _featureFlags = {}; _ffServerKnown = {}; });
 }
@@ -2416,8 +2422,9 @@ async function initNativeFCM() {
 async function renderPushTestCard() {
   const card = el('mgmtPushTestCard');
   if (!card) return;
-  card.style.display = _isNativeApp() ? '' : 'none';
-  if (!_isNativeApp()) return;
+  const show = _isNativeApp() && featureOn('pushTestCard');
+  card.style.display = show ? '' : 'none';
+  if (!show) return;
   let perm = '';
   try { perm = (await _fmPlugin().checkPermissions()).receive; } catch (e) {}
   const permTxt = perm === 'granted' ? '✅ התראות מותרות במכשיר'
@@ -2617,9 +2624,14 @@ function _applyWebtopAutoMatch() {
 // extension. None of this runs on the website (_isNativeApp() is false there).
 const WT_HW_URL  = 'https://webtopserver.smartschool.co.il/server/api/PupilCard/GetPupilLessonsAndHomework';
 const WT_FN_BASE = 'https://us-central1-familyhub-7fdd5.cloudfunctions.net';
-// The family's "automatic sync" setting (webtopSyncIntervalHours, default 6h as in
-// the card) sets how often the app syncs while open; never more than every 20 min.
-const _wtAutoSyncMs = () => Math.max(20 * 60 * 1000, (familyData?.webtopSyncIntervalHours || 6) * 3600 * 1000 - 60 * 1000);
+// Automatic sync intervals are an admin setting (Settings → admin → sync frequency), one
+// for Webtop and one for Mashov, stored on appConfig/featureFlags next to the feature
+// switches; the webtopSync function reads the Webtop one too. Never more than every 20 min.
+const SYNC_INTERVAL_DEFAULTS = { webtop: 6, mashov: 3 };
+const SYNC_INTERVAL_OPTIONS = [{h:0.334,label:'כל 20 דקות'},{h:1,label:'כל שעה'},{h:3,label:'כל 3 שעות'},{h:6,label:'כל 6 שעות'},{h:12,label:'כל 12 שעות'},{h:24,label:'פעם ביום'}];
+const _syncIntervalHours = sys => Number(_featureFlags?.[sys + 'SyncIntervalHours']) || SYNC_INTERVAL_DEFAULTS[sys];
+const _syncIntervalMs = sys => Math.max(20 * 60 * 1000, _syncIntervalHours(sys) * 3600 * 1000 - 60 * 1000);
+const _wtAutoSyncMs = () => _syncIntervalMs('webtop');
 const _wtPlugin = () => window.Capacitor.Plugins?.WebtopConnect || window.Capacitor.registerPlugin('WebtopConnect');
 const _wtKey  = (k) => `fh_webtop_app_${k}_${S.uid}`;
 const _wtLoad = (k, d) => { try { const v = JSON.parse(localStorage.getItem(_wtKey(k))); return v ?? d; } catch { return d; } };
@@ -2733,8 +2745,6 @@ function renderWebtopAppBlock() {
   box.style.display = native ? '' : 'none';
   const ext = el('mgmtWebtopExtension');
   if (ext) ext.style.display = native ? 'none' : '';
-  const note = el('mgmtWebtopIntervalAppNote');
-  if (note) note.style.display = native ? '' : 'none';
   if (!native) return;
   const students = Object.values(_wtLoad('students', {}));
   const last = _wtLoad('lastSync', 0);
@@ -2839,17 +2849,6 @@ function renderMgmtWebtop() {
     }
   }
 
-  // Sync interval buttons
-  const intervalRow = el('mgmtWebtopIntervalRow');
-  const intervalBtns = el('mgmtWebtopIntervalBtns');
-  if (intervalRow && intervalBtns) {
-    intervalRow.style.display = classEntries.length > 0 ? 'flex' : 'none';
-    const current = familyData?.webtopSyncIntervalHours || 6;
-    const options = [{h:0.334,label:'כל 20 דקות'},{h:1,label:'כל שעה'},{h:3,label:'כל 3 שעות'},{h:6,label:'כל 6 שעות'},{h:12,label:'כל 12 שעות'},{h:24,label:'פעם ביום'}];
-    intervalBtns.innerHTML = options.map(o => `
-      <button onclick="setWebtopSyncInterval(${o.h})" style="font-size:11px;padding:4px 10px;border-radius:20px;border:1.5px solid ${o.h===current?'#6366f1':'#e2e8f0'};background:${o.h===current?'#6366f1':'#fff'};color:${o.h===current?'#fff':'#4a5568'};cursor:pointer;font-weight:${o.h===current?'700':'400'}">${o.label}</button>
-    `).join('');
-  }
 }
 
 // ─── Synced homework: Webtop + Mashov ─────────────────────────────────────────
@@ -3009,7 +3008,7 @@ const _msPlugin = () => window.Capacitor.Plugins?.MashovConnect || window.Capaci
 const _msKey  = (k) => `fh_mashov_app_${k}_${S.uid}`;
 const _msLoad = (k, d) => { try { const v = JSON.parse(localStorage.getItem(_msKey(k))); return v ?? d; } catch { return d; } };
 const _msSave = (k, v) => { try { localStorage.setItem(_msKey(k), JSON.stringify(v)); } catch {} };
-const _msAutoSyncMs = 3 * 3600 * 1000;
+const _msAutoSyncMs = () => _syncIntervalMs('mashov');
 const _isoDaysAgo = (n) => { const d = new Date(Date.now() - n * 864e5); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const _msChildLabel = (c) => c.privateName || c.studentName || 'ילד/ה';
 let _msSyncing = false;
@@ -3120,7 +3119,7 @@ function renderMashovAppBlock() {
 function _mashovAppAutoSync() {
   if (!_isNativeApp() || !S.uid || !featureOn('mashovConnection')) return;
   if (_msLoad('expired', false) || !Object.keys(_msLoad('children', {})).length) return;
-  if (Date.now() - _msLoad('lastSync', 0) >= _msAutoSyncMs) mashovAppSync();
+  if (Date.now() - _msLoad('lastSync', 0) >= _msAutoSyncMs()) mashovAppSync();
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _mashovAppAutoSync(); });
 if (_isNativeApp()) setInterval(() => { if (document.visibilityState === 'visible') _mashovAppAutoSync(); }, 60 * 1000);
@@ -3711,21 +3710,9 @@ function renderMgmt() {
   const appUpdateCard = el('mgmtAppUpdateCard');
   if (appUpdateCard) appUpdateCard.style.display = _isNativeApp() ? 'none' : '';
   renderPushTestCard(); // app only
-  // Webtop card — parents only
-  const webtopCard = el('mgmtWebtopCard');
-  if (webtopCard) {
-    webtopCard.style.display = isParent() && featureOn('webtopConnection') ? '' : 'none';
-    const codeEl = el('mgmtWebtopCode');
-    if (codeEl) codeEl.textContent = S.uid || '';
-    renderMgmtWebtop();
-  }
-  const mashovCard = el('mgmtMashovCard');
-  if (mashovCard) {
-    mashovCard.style.display = isParent() && featureOn('mashovConnection') ? '' : 'none';
-    const codeEl = el('mgmtMashovCode');
-    if (codeEl) codeEl.textContent = S.uid || '';
-    renderMgmtMashov();
-  }
+  // Webtop / Mashov now live in "connected apps"; family settings keeps a pointer to them
+  const schoolHint = el('mgmtSchoolAppsHint');
+  if (schoolHint) schoolHint.style.display = isParent() && _anySyncEnabled() ? '' : 'none';
 }
 
 async function setWebtopKidClass(classCode, kidName) {
@@ -3740,12 +3727,6 @@ async function setWebtopKidClass(classCode, kidName) {
   renderHomework();
 }
 
-async function setWebtopSyncInterval(hours) {
-  if (!fbDb || !S.uid) return;
-  if (familyData) familyData.webtopSyncIntervalHours = hours;
-  await fbDb.collection('families').doc(S.uid).update({ webtopSyncIntervalHours: hours });
-  renderMgmtWebtop();
-}
 
 function copyWebtopCode() {
   const code = S.uid || '';
@@ -4609,6 +4590,19 @@ function classLabelFor(school) {
   const parts = [school.city, school.name];
   if (school.grade) parts.push('כיתה ' + school.grade + (school.classNum ? '\'' + school.classNum : ''));
   return parts.filter(Boolean).join(', ');
+}
+// Community posts without a date (announcements and the like) stay on the wall for an
+// admin-chosen time after they were posted (appConfig/featureFlags.undatedPostDays).
+const UNDATED_POST_DAY_OPTIONS = [{d:3,label:'3 ימים'},{d:7,label:'שבוע'},{d:14,label:'שבועיים'},{d:30,label:'חודש'},{d:90,label:'3 חודשים'}];
+const UNDATED_POST_DEFAULT_DAYS = 30;
+const _undatedPostDays = () => Number(_featureFlags?.undatedPostDays) || UNDATED_POST_DEFAULT_DAYS;
+// Is a community post still shown? Dated: its date hasn't passed. Undated: posted within the
+// admin's window (a post the server hasn't stamped yet — just published — counts as new).
+function postStillShown(ev) {
+  if (ev?.date) return isEventUpcoming(ev.date);
+  const c = ev?.createdAt;
+  const ms = c?.toMillis ? c.toMillis() : typeof c?.seconds === 'number' ? c.seconds * 1000 : typeof c === 'number' ? c : null;
+  return ms == null || Date.now() - ms < _undatedPostDays() * 864e5;
 }
 function isEventUpcoming(dateStr) {
   if (!dateStr) return true;
@@ -5494,7 +5488,7 @@ function renderCommCard(kid) {
   const _cutoff = new Date(); _cutoff.setDate(_cutoff.getDate() - 14);
   const _today  = new Date().toISOString().slice(0,10);
   const upcoming = allEvs.filter(e => {
-    if (!e.date) return true;
+    if (!e.date) return postStillShown(e);
     const [ey,em,ed] = e.date.split('-').map(Number);
     return new Date(ey, em-1, ed) >= _cutoff;
   }).sort((a,b) => {
@@ -6781,9 +6775,11 @@ function _adminLogHtml(combined) {
 function renderAdminFeatureFlags() {
   const cont = el('adminFeatureFlags');
   if (!cont) return;
-  const opts = [['off', 'כבוי'], ['web', 'אתר בלבד'], ['on', 'פעיל לכולם']];
+  const opts3 = [['off', 'כבוי'], ['web', 'אתר בלבד'], ['on', 'פעיל לכולם']];
+  const opts2 = [['off', 'כבוי'], ['on', 'פעיל']];
   cont.innerHTML = FEATURE_FLAGS_DEF.map(f => {
-    const st = _ffState(_ffRaw(f.key));
+    const opts = f.appOnly ? opts2 : opts3;
+    const st = f.appOnly && _ffState(_ffRaw(f.key)) === 'web' ? 'off' : _ffState(_ffRaw(f.key));
     return `<div class="ff-row">
       <div class="ff-row-info">
         <span class="ff-icon">${f.icon}</span>
@@ -6803,6 +6799,64 @@ function renderAdminFeatureFlags() {
   }).join('');
 }
 
+function renderAdminUndatedPosts() {
+  const cont = el('adminUndatedPosts');
+  if (!cont) return;
+  const cur = _undatedPostDays();
+  cont.innerHTML = `<div class="ff-row ff-row-stack">
+    <div class="ff-row-info"><span class="ff-icon">📌</span>
+      <div><div class="ff-label">כמה זמן פוסט ללא תאריך נשאר על הקיר</div>
+      <div class="ff-desc">מרגע הפרסום. פוסטים עם תאריך יורדים אחרי התאריך שלהם, כמו קודם.</div></div></div>
+    <div class="sync-int-btns">${UNDATED_POST_DAY_OPTIONS.map(o =>
+      `<button type="button" class="${o.d === cur ? 'active' : ''}" onclick="saveUndatedPostDays(${o.d})">${o.label}</button>`).join('')}</div>
+  </div>`;
+}
+async function saveUndatedPostDays(days) {
+  const prev = _featureFlags.undatedPostDays;
+  _featureFlags.undatedPostDays = days;
+  renderAdminUndatedPosts();
+  if (S.tab === 'community') renderCommunity();
+  if (S.tab === 'home') renderHome();
+  try {
+    await fbDb.collection('appConfig').doc('featureFlags').set({ undatedPostDays: days }, { merge: true });
+    showToast('משך הצגת פוסטים ללא תאריך עודכן ✓', 'success');
+  } catch (e) {
+    _featureFlags.undatedPostDays = prev;
+    renderAdminUndatedPosts();
+    showToast('שגיאה בשמירה', 'error');
+  }
+}
+function renderAdminSyncIntervals() {
+  const cont = el('adminSyncIntervals');
+  if (!cont) return;
+  const row = (sys, icon, name, note) => {
+    const cur = _syncIntervalHours(sys);
+    return `<div class="ff-row ff-row-stack">
+      <div class="ff-row-info"><span class="ff-icon">${icon}</span>
+        <div><div class="ff-label">${name}</div><div class="ff-desc">${note}</div></div></div>
+      <div class="sync-int-btns">${SYNC_INTERVAL_OPTIONS.map(o =>
+        `<button type="button" class="${o.h === cur ? 'active' : ''}" onclick="saveSyncInterval('${sys}',${o.h})">${o.label}</button>`).join('')}</div>
+    </div>`;
+  };
+  cont.innerHTML = row('webtop', '📡', 'Webtop', 'לכל המשפחות: סנכרון מהשרת, ובאפליקציה כשהיא פתוחה')
+    + row('mashov', '📘', 'משו״ב', 'לכל המשפחות: באפליקציה כשהיא פתוחה')
+    + `<div class="ff-desc" style="margin:4px 2px 0">תוסף ה-Chrome מסנכרן בקצב קבוע משלו (כל שעתיים).</div>`;
+}
+async function saveSyncInterval(sys, hours) {
+  const key = sys + 'SyncIntervalHours';
+  const prev = _featureFlags[key];
+  _featureFlags[key] = hours;
+  renderAdminSyncIntervals();
+  try {
+    await fbDb.collection('appConfig').doc('featureFlags').set({ [key]: hours }, { merge: true });
+    showToast('תדירות הסנכרון עודכנה ✓', 'success');
+  } catch (e) {
+    _featureFlags[key] = prev;
+    renderAdminSyncIntervals();
+    showToast('שגיאה בשמירה', 'error');
+  }
+}
+
 async function saveFeatureFlag(key, state) {
   const value = state === 'off' ? false : state === 'web' ? 'web' : true;
   const prev = _featureFlags[key];
@@ -6812,6 +6866,7 @@ async function saveFeatureFlag(key, state) {
   renderAdminFeatureFlags();
   renderHome();
   if (S.tab === 'homework') renderHomework();
+  renderPushTestCard();
   const webtopCard = el('mgmtWebtopCard');
   if (webtopCard) webtopCard.style.display = isParent() && featureOn('webtopConnection') ? '' : 'none';
   const mashovCard = el('mgmtMashovCard');
@@ -6874,6 +6929,8 @@ function _applyAdminPanelCache(data, showLog) {
   safe('maintenance', renderMaintenanceTools);
   safe('eventTypes', renderAdminEventTypes);
   safe('featureFlags', renderAdminFeatureFlags);
+  safe('syncIntervals', renderAdminSyncIntervals);
+  safe('undatedPosts', renderAdminUndatedPosts);
 }
 
 function renderAdminEventTypes() {
@@ -7753,10 +7810,35 @@ async function _connectorCall(path, data = {}) {
   return body;
 }
 
-function openConnectedApps() {
+// focus 'webtop' | 'mashov' | 'school' scrolls to that card (from the homework wizard or the
+// pointer left in family settings)
+function openConnectedApps(focus) {
   el('connectedAppsPanel').classList.remove('hidden');
   _renderConnectedApps();
+  renderSchoolAppCards();
   if (isParent()) _loadConnections();
+  if (focus) {
+    const id = focus === 'mashov' ? 'mgmtMashovCard' : focus === 'webtop' ? 'mgmtWebtopCard'
+      : (el('mgmtWebtopCard')?.offsetParent ? 'mgmtWebtopCard' : 'mgmtMashovCard');
+    setTimeout(() => el(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+  }
+}
+// Webtop / Mashov cards in "connected apps" — parents only, each behind its feature switch
+function renderSchoolAppCards() {
+  const webtopCard = el('mgmtWebtopCard');
+  if (webtopCard) {
+    webtopCard.style.display = isParent() && featureOn('webtopConnection') ? '' : 'none';
+    const codeEl = el('mgmtWebtopCode');
+    if (codeEl) codeEl.textContent = S.uid || '';
+    renderMgmtWebtop();
+  }
+  const mashovCard = el('mgmtMashovCard');
+  if (mashovCard) {
+    mashovCard.style.display = isParent() && featureOn('mashovConnection') ? '' : 'none';
+    const codeEl = el('mgmtMashovCode');
+    if (codeEl) codeEl.textContent = S.uid || '';
+    renderMgmtMashov();
+  }
 }
 function closeConnectedApps() { el('connectedAppsPanel').classList.add('hidden'); }
 function _cappsRefresh() {
@@ -8188,7 +8270,7 @@ function renderHomeUpcoming() {
     if (!cid || !_commCache[cid]) return;
     const cache = _commCache[cid];
     [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])].forEach(ev => {
-      if (isEventUpcoming(ev.date) && matchesGenderFilter(ev, name)) {
+      if (postStillShown(ev) && matchesGenderFilter(ev, name)) {
         const key = `${ev.id}_${name}`;
         if (!_seenHomeClassKeys.has(key)) { _seenHomeClassKeys.add(key); classEvs.push({ ...ev, _src: 'class', _kid: name }); }
       }
@@ -8626,16 +8708,18 @@ function renderHome() {
     .filter(h => !_syncedDoneVal(h));
 
   // Merge: when webtop is off only show personal homework
-  const combined = [
+  // Personal / class homework by due date (soonest first, undated last), then synced
+  // homework by the date it was given, newest first — the same order as the homework tab
+  const byDue = [
     ...hw.map(h => ({ _type:'hw', _due: h.due||'', ...h })),
     ...classHw.map(h => ({ _type:'class', _due: h.due||'', ...h })),
-    ...wtHomeHw.map(h => ({ _type:'wt', _due: h.date||'', ...h })),
   ].sort((a,b) => {
     if (!a._due && !b._due) return 0;
     if (!a._due) return 1;
     if (!b._due) return -1;
     return a._due.localeCompare(b._due);
   });
+  const combined = [...byDue, ..._hwSortByGiven(wtHomeHw).map(h => ({ _type:'wt', _due: h.date||'', ...h }))];
 
   // Build a reliable classCode→kid map for the "All" parent view.
   // Primary: kid.webtopClassCode === h.classCode (exact match).
@@ -10159,11 +10243,11 @@ function _renderHwConnectWizard(kidName) {
       ? (pick.key === 'webtop'
           ? 'נפתח את Webtop — התחברו כרגיל ופתחו את דף שיעורי הבית של כל ילד/ה פעם אחת.'
           : 'נפתח את משו״ב — התחברו עם פרטי ההורה.')
-      : 'החיבור נעשה מאפליקציית FamilyHub לאנדרואיד, או מהמחשב עם תוסף FamilyHub ל-Chrome. פרטים בהגדרות.';
+      : 'החיבור נעשה מאפליקציית FamilyHub לאנדרואיד, או מהמחשב עם תוסף FamilyHub ל-Chrome. פרטים באפליקציות מחוברות.';
     step = `<div class="hw-wiz-q">${pick.icon} חיבור ${pick.name}</div>
       <div class="hw-wiz-how">${how}</div>
       <div class="hw-wiz-choices">
-        <button class="hw-wiz-go" onclick="_hwWizardConnect('${pick.key}')">${native ? '🔗 התחברות' : '⚙️ להגדרות החיבור'}</button>
+        <button class="hw-wiz-go" onclick="_hwWizardConnect('${pick.key}')">${native ? '🔗 התחברות' : '🔗 לאפליקציות מחוברות'}</button>
         ${systems.length > 1 ? `<button class="hw-wiz-back" onclick="_hwWizardChoose(null)">החלפת מערכת</button>` : ''}
       </div>`;
   }
@@ -10179,8 +10263,7 @@ function _hwWizardChoose(key) { _hwWizardPick = key; _renderHwConnectWizard(S.ch
 function _hwWizardSnooze(cid) { _hwWizardSnoozed[cid] = true; _renderHwConnectWizard(S.child); }
 function _hwWizardConnect(key) {
   if (_isNativeApp()) return key === 'mashov' ? mashovAppConnect() : webtopAppConnect();
-  openMgmt();
-  setTimeout(() => el(key === 'mashov' ? 'mgmtMashovCard' : 'mgmtWebtopCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+  openConnectedApps(key);
 }
 
 function renderHomework(){
@@ -10235,9 +10318,11 @@ function renderHomework(){
     const allPersonal=S.child
       ? S.homework.filter(h=>(!h.scope||h.scope==='personal')&&h.child===S.child)
       : [];
-    const allSubjs=[...new Set([...classHw,...allPersonal,..._syncedHwForChild(S.child, _wtLive)].map(h=>h.subject).filter(Boolean))];
+    const _subjByKey=new Map();
+    [...classHw,...allPersonal,..._syncedHwForChild(S.child, _wtLive)].forEach(h=>{const k=_hwSubjKey(h.subject);if(k&&!_subjByKey.has(k))_subjByKey.set(k,String(h.subject).trim());});
+    const allSubjs=[..._subjByKey.values()];
     if(allSubjs.length>1){
-      if(_hwSubjectFilter&&!allSubjs.includes(_hwSubjectFilter))_hwSubjectFilter=null;
+      if(_hwSubjectFilter&&!_subjByKey.has(_hwSubjKey(_hwSubjectFilter)))_hwSubjectFilter=null;
       subjChipsEl.style.display='';
       subjChipsEl.innerHTML=allSubjs.map(s=>
         `<div class="hw-subj-chip${_hwSubjectFilter===s?' active':''}" style="${webtopSubjectStyle(s)}" onclick="switchHwSubject('${esc(s)}')">${esc(subjectLabel(s))}</div>`
@@ -10249,9 +10334,9 @@ function renderHomework(){
   }
 
   // Apply subject filter + text search to all three sections
-  if(_hwSubjectFilter) classHw=classHw.filter(h=>h.subject===_hwSubjectFilter);
-  let pending=_hwSubjectFilter ? allPending.filter(h=>h.subject===_hwSubjectFilter) : allPending;
-  let wtHw=_hwSubjectFilter ? allWtHw.filter(h=>h.subject===_hwSubjectFilter) : allWtHw;
+  if(_hwSubjectFilter) classHw=classHw.filter(h=>_hwSameSubj(h.subject,_hwSubjectFilter));
+  let pending=_hwSubjectFilter ? allPending.filter(h=>_hwSameSubj(h.subject,_hwSubjectFilter)) : allPending;
+  let wtHw=_hwSubjectFilter ? allWtHw.filter(h=>_hwSameSubj(h.subject,_hwSubjectFilter)) : allWtHw;
 
   if (sq) {
     classHw = classHw.filter(h =>
@@ -10420,6 +10505,7 @@ const _hwLocalDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 // Subject names compared loosely: case, punctuation and spacing are ignored, and so are the
 // Hebrew letters that spellings add or drop ("מתמטיקה" / "מתימטיקה").
 const _hwSubjKey = x => String(x || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '').replace(/[יו]/g, '');
+const _hwSameSubj = (a, b) => _hwSubjKey(a) === _hwSubjKey(b);
 // Does a schedule cell (free text typed by a parent) hold this homework subject's lesson?
 function _hwLessonMatches(cell, subject) {
   const c = _hwSubjKey(cell);
@@ -10503,7 +10589,7 @@ function renderHwHistory(child) {
 
   const q = _hwSearch.toLowerCase();
   const filtered = allDone.filter(h=>{
-    if(_hwSubjectFilter&&h.subject!==_hwSubjectFilter)return false;
+    if(_hwSubjectFilter&&!_hwSameSubj(h.subject,_hwSubjectFilter))return false;
     if(!q)return true;
     return (h.desc||'').toLowerCase().includes(q)||subjectLabel(h.subject).toLowerCase().includes(q)||(h.context||'').toLowerCase().includes(q);
   });
@@ -10560,7 +10646,7 @@ function filterHwHistory(child) {
     .sort((a,b)=>(b._sortAt??b._doneAt??0)-(a._sortAt??a._doneAt??0));
   const q = _hwSearch.toLowerCase();
   const filtered = allDone.filter(h=>{
-    if(_hwSubjectFilter&&h.subject!==_hwSubjectFilter)return false;
+    if(_hwSubjectFilter&&!_hwSameSubj(h.subject,_hwSubjectFilter))return false;
     if(!q)return true;
     return (h.desc||'').toLowerCase().includes(q)||subjectLabel(h.subject).toLowerCase().includes(q);
   });
