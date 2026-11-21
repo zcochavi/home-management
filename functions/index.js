@@ -866,15 +866,36 @@ exports.getAnalytics = functions.https.onCall(async (data, context) => {
     throw new functions.https.HttpsError('permission-denied', 'Admins only');
   }
 
+  // Every read runs in parallel and fetches only the fields used here. (It used to read the
+  // whole families collection — homework, shopping history, photos — plus every session and
+  // admin-log entry ever, one after another, which made the dashboard slow and slower over time.)
+  const sixMonthsAgo = Date.now() - 180*24*3600*1000;
+  const lbConfigP = db.collection('appConfig').doc('leaderboard').get().catch(() => null);
+  const lbDaysP = lbConfigP.then(snap => (snap?.exists && snap.data().days) || 30);
+  // Sessions of the leaderboard period only — chained to the config read, so it runs alongside the rest
+  const sessionsP = lbDaysP.then(days => db.collection('sessions')
+    .where('startTime', '>=', admin.firestore.Timestamp.fromMillis(Date.now() - days * 24 * 3600 * 1000))
+    .select('durationMs', 'familyUid', 'memberName', 'familyName', 'startTime').get())
+    .catch(e => { console.error('[getAnalytics] sessions error:', e); return null; });
+  const [familiesSnap, classesSnap, logSnap, recentSnap, appsSnap, schoolsSnap, lbDays] = await Promise.all([
+    db.collection('families').select('members').get(),
+    db.collection('schoolClasses').select('schoolName', 'city', 'grade', 'classNum').get(),
+    db.collection('adminLog').select('action', 'actionAt', 'classId').get(),
+    db.collection('adminLog').orderBy('actionAt', 'desc').limit(10).get(),
+    db.collection('committeeApplications').select('status').get(),
+    db.collection('pendingSchools').select('status').get(),
+    lbDaysP,
+  ]);
+  const leaderboardDays = lbDays;
+  let topSchool = null, topCity = null, topUser = null;
+
   // Families & members
-  const familiesSnap = await db.collection('families').get();
   const families = familiesSnap.docs.map(d => ({ _id: d.id, ...d.data() }));
   const familyCount = families.length;
   const parentCount = families.reduce((n,f) => n + (f.members||[]).filter(m=>m.role==='parent').length, 0);
   const kidCount    = families.reduce((n,f) => n + (f.members||[]).filter(m=>m.role==='kid').length, 0);
 
   // Active classes
-  const classesSnap = await db.collection('schoolClasses').get();
   const classCount  = classesSnap.size;
   const classNames  = {};
   classesSnap.docs.forEach(d => {
@@ -883,15 +904,11 @@ exports.getAnalytics = functions.https.onCall(async (data, context) => {
   });
 
   // Admin log — events approved/rejected
-  const logSnap    = await db.collection('adminLog').get();
-  const logEntries = logSnap.docs.map(d => ({ id:d.id, ...d.data() }))
-    .sort((a,b) => (b.actionAt?.toMillis?.()??0) - (a.actionAt?.toMillis?.()??0));
-
+  const logEntries = logSnap.docs.map(d => d.data());
   const approvedCount  = logEntries.filter(e=>e.action==='approved').length;
   const rejectedCount  = logEntries.filter(e=>e.action==='rejected').length;
 
   // Events by month (last 6 months)
-  const sixMonthsAgo = Date.now() - 180*24*3600*1000;
   const byMonth = {};
   logEntries.forEach(e => {
     const ms = e.actionAt?.toMillis?.() || 0;
@@ -908,7 +925,7 @@ exports.getAnalytics = functions.https.onCall(async (data, context) => {
   const eventsByClass = Object.entries(byClass).sort((a,b)=>b[1]-a[1]).slice(0,8);
 
   // Recent log (last 10, with class name)
-  const recentLog = logEntries.slice(0,10).map(e => ({
+  const recentLog = recentSnap.docs.map(d => d.data()).map(e => ({
     action:     e.action,
     eventTitle: e.eventTitle || '',
     className:  classNames[e.classId] || e.classId || '',
@@ -916,34 +933,22 @@ exports.getAnalytics = functions.https.onCall(async (data, context) => {
   }));
 
   // Committee applications
-  const appsSnap  = await db.collection('committeeApplications').get();
   const apps = appsSnap.docs.map(d=>d.data());
   const appsPending  = apps.filter(a=>a.status==='pending').length;
   const appsApproved = apps.filter(a=>a.status==='approved').length;
   const appsDenied   = apps.filter(a=>a.status==='denied').length;
 
   // Pending schools
-  const schoolsSnap = await db.collection('pendingSchools').get();
   const schools = schoolsSnap.docs.map(d=>d.data());
   const schoolsPending  = schools.filter(s=>s.status==='pending').length;
   const schoolsApproved = schools.filter(s=>s.status==='approved').length;
   const schoolsDenied   = schools.filter(s=>s.status==='denied').length;
 
   // Leaderboard
-  let leaderboardDays = 30, topSchool = null, topCity = null, topUser = null;
   try {
-    const lbConfigSnap = await db.collection('appConfig').doc('leaderboard').get();
-    if (lbConfigSnap.exists) leaderboardDays = lbConfigSnap.data().days || 30;
-    const lbCutoffMs = Date.now() - leaderboardDays * 24 * 3600 * 1000;
-
     // Top city & school — from family members (kids)
-    const schoolToCity = {};
-    classesSnap.docs.forEach(d => {
-      const c = d.data();
-      if (c.schoolName && c.city) schoolToCity[c.schoolName] = c.city;
-    });
     const schoolCount = {}, cityCount = {};
-    families.forEach((fam, _, arr) => {
+    families.forEach(fam => {
       if (fam._id === ADMIN_UID) return; // exclude admin family
       (fam.members||[]).filter(m => m.role === 'kid').forEach(kid => {
         const school = (kid.school?.name || '').trim();
@@ -955,15 +960,13 @@ exports.getAnalytics = functions.https.onCall(async (data, context) => {
     topSchool = Object.entries(schoolCount).sort((a,b)=>b[1]-a[1])[0] || null;
     topCity   = Object.entries(cityCount).sort((a,b)=>b[1]-a[1])[0]   || null;
 
-    // Top user by session duration — fetch all, filter in-memory (no index needed)
-    const sessionsSnap = await db.collection('sessions').get();
+    // Top user by session duration in the period
+    const sessionsSnap = await sessionsP;
     const userDuration = {};
-    sessionsSnap.docs.forEach(d => {
+    (sessionsSnap?.docs || []).forEach(d => {
       const s = d.data();
       if (!s.durationMs) return;
       if (s.familyUid === ADMIN_UID) return; // exclude admin
-      const startMs = s.startTime?.toMillis?.() || 0;
-      if (startMs < lbCutoffMs) return;
       const key = (s.familyUid||'') + '_' + (s.memberName||'');
       if (!userDuration[key]) userDuration[key] = { memberName: s.memberName||'', familyName: s.familyName||'', durationMs: 0 };
       userDuration[key].durationMs += s.durationMs;
@@ -1839,7 +1842,9 @@ exports.getFamilyDetails = functions.https.onCall(async (data, context) => {
   const legacyComm = fd.committeeClasses || (fd.role === 'committee' ? ['*'] : []);
 
   const members = (fd.members || []).map(m => {
-    const base = { name: m.name, emoji: m.emoji || '👤', role: m.role || 'parent' };
+    // No saved role: shown with the parents but flagged (roleUnset), so the admin can tell
+    // real parents from members whose role is missing
+    const base = { name: m.name, emoji: m.emoji || '👤', role: m.role || 'parent', ...(m.role ? {} : { roleUnset: true }) };
     if (m.role === 'kid') {
       base.school = m.school || null;  // { city, name, grade, classNum }
       base.schoolPending = m.schoolPending || null;
