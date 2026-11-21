@@ -10235,9 +10235,11 @@ function renderHomework(){
     const allPersonal=S.child
       ? S.homework.filter(h=>(!h.scope||h.scope==='personal')&&h.child===S.child)
       : [];
-    const allSubjs=[...new Set([...classHw,...allPersonal,..._syncedHwForChild(S.child, _wtLive)].map(h=>h.subject).filter(Boolean))];
+    const _subjByKey=new Map();
+    [...classHw,...allPersonal,..._syncedHwForChild(S.child, _wtLive)].forEach(h=>{const k=_hwSubjKey(h.subject);if(k&&!_subjByKey.has(k))_subjByKey.set(k,String(h.subject).trim());});
+    const allSubjs=[..._subjByKey.values()];
     if(allSubjs.length>1){
-      if(_hwSubjectFilter&&!allSubjs.includes(_hwSubjectFilter))_hwSubjectFilter=null;
+      if(_hwSubjectFilter&&!_subjByKey.has(_hwSubjKey(_hwSubjectFilter)))_hwSubjectFilter=null;
       subjChipsEl.style.display='';
       subjChipsEl.innerHTML=allSubjs.map(s=>
         `<div class="hw-subj-chip${_hwSubjectFilter===s?' active':''}" style="${webtopSubjectStyle(s)}" onclick="switchHwSubject('${esc(s)}')">${esc(subjectLabel(s))}</div>`
@@ -10249,9 +10251,9 @@ function renderHomework(){
   }
 
   // Apply subject filter + text search to all three sections
-  if(_hwSubjectFilter) classHw=classHw.filter(h=>h.subject===_hwSubjectFilter);
-  let pending=_hwSubjectFilter ? allPending.filter(h=>h.subject===_hwSubjectFilter) : allPending;
-  let wtHw=_hwSubjectFilter ? allWtHw.filter(h=>h.subject===_hwSubjectFilter) : allWtHw;
+  if(_hwSubjectFilter) classHw=classHw.filter(h=>_hwSameSubj(h.subject,_hwSubjectFilter));
+  let pending=_hwSubjectFilter ? allPending.filter(h=>_hwSameSubj(h.subject,_hwSubjectFilter)) : allPending;
+  let wtHw=_hwSubjectFilter ? allWtHw.filter(h=>_hwSameSubj(h.subject,_hwSubjectFilter)) : allWtHw;
 
   if (sq) {
     classHw = classHw.filter(h =>
@@ -10420,6 +10422,7 @@ const _hwLocalDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 // Subject names compared loosely: case, punctuation and spacing are ignored, and so are the
 // Hebrew letters that spellings add or drop ("מתמטיקה" / "מתימטיקה").
 const _hwSubjKey = x => String(x || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '').replace(/[יו]/g, '');
+const _hwSameSubj = (a, b) => _hwSubjKey(a) === _hwSubjKey(b);
 // Does a schedule cell (free text typed by a parent) hold this homework subject's lesson?
 function _hwLessonMatches(cell, subject) {
   const c = _hwSubjKey(cell);
@@ -10503,7 +10506,7 @@ function renderHwHistory(child) {
 
   const q = _hwSearch.toLowerCase();
   const filtered = allDone.filter(h=>{
-    if(_hwSubjectFilter&&h.subject!==_hwSubjectFilter)return false;
+    if(_hwSubjectFilter&&!_hwSameSubj(h.subject,_hwSubjectFilter))return false;
     if(!q)return true;
     return (h.desc||'').toLowerCase().includes(q)||subjectLabel(h.subject).toLowerCase().includes(q)||(h.context||'').toLowerCase().includes(q);
   });
@@ -10560,7 +10563,7 @@ function filterHwHistory(child) {
     .sort((a,b)=>(b._sortAt??b._doneAt??0)-(a._sortAt??a._doneAt??0));
   const q = _hwSearch.toLowerCase();
   const filtered = allDone.filter(h=>{
-    if(_hwSubjectFilter&&h.subject!==_hwSubjectFilter)return false;
+    if(_hwSubjectFilter&&!_hwSameSubj(h.subject,_hwSubjectFilter))return false;
     if(!q)return true;
     return (h.desc||'').toLowerCase().includes(q)||subjectLabel(h.subject).toLowerCase().includes(q);
   });

@@ -2267,7 +2267,7 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .hw-webtop-item.hw-webtop-done { border-right-color: #d1d5db; opacity: 0.55; }
 .hw-webtop-item.hw-webtop-done .hw-desc-text { text-decoration: line-through; }
 .hw-webtop-icon { font-size: 14px; flex-shrink: 0; }
-.hw-webtop-context { font-size: 11px; color: var(--gray-400); margin: 3px 0 0 31px; line-height: 1.4; }
+.hw-webtop-context { font-size: 11px; color: var(--gray-400); margin: 3px 0 0; margin-inline-start: 31px; line-height: 1.4; }
 .hw-done-by { display: flex; gap: 5px; margin-top: 6px; margin-inline-start: 31px; flex-wrap: wrap; }
 .hw-done-pip { width: 22px; height: 22px; border-radius: 50%; background: var(--gray-100); color: var(--gray-500); font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; border: 1.5px solid transparent; transition: all var(--t-fast); }
 .hw-done-pip-done { background: var(--primary-100); color: var(--primary-600); border-color: var(--primary-300); }
