@@ -2548,8 +2548,10 @@ function subscribeToFamily(uid) {
     _mashovUpdatedAt = d.mashovUpdatedAt?.toDate?.() || null;
     // Once per family: bump sharedHwVersion so the server shares homework synced before
     // class sharing existed (onFamilySyncedHomework shares everything on a version change)
-    if ((d.sharedHwVersion || 0) < 1 && ((d.webtopHomework || []).length || (d.mashovHomework || []).length)) {
-      fbDb.collection('families').doc(uid).update({ sharedHwVersion: 1 }).catch(() => {});
+    // (2: also records classes the family is connected for — see the homework connect wizard)
+    if ((d.sharedHwVersion || 0) < 2 && (d.webtopLinkedAt || d.webtopStudents || d.mashovStudents
+        || (d.webtopHomework || []).length || (d.mashovHomework || []).length)) {
+      fbDb.collection('families').doc(uid).update({ sharedHwVersion: 2 }).catch(() => {});
     }
     _mashovAppAutoSync();
     S.stars        = d.stars        || {};
@@ -4674,6 +4676,7 @@ function subscribeToCommClass(cid) {
       .onSnapshot(snap => {
         if (!_commCache[cid]) return;
         _commCache[cid].schedule = _liveSchedule(snap.data()?.schedule);
+        _commCache[cid].syncConnected = !!snap.data()?.syncConnectedAt;
         rerender();
       }, e => console.warn('[community] schedule:', e.code))
   );
@@ -4845,6 +4848,7 @@ async function loadCommunityData(kidsWithSchool) {
         homework:      prevCache.homework      || [],
         syncedHw:      prevCache.syncedHw      || [],
         schedule:      _liveSchedule(classDocSnap?.data()?.schedule),
+        syncConnected: !!classDocSnap?.data()?.syncConnectedAt,
         loadedAt:      Date.now(),
       };
       syncCommAutoEvents();
@@ -10113,6 +10117,72 @@ function fmtDoneAt(ts) {
 
 function setHwSearch(val) { _hwSearch = val; renderHomework(); }
 
+// ── "Connect your class" wizard ──
+// One family's Webtop / Mashov connection syncs homework for the whole class (shared via
+// onFamilySyncedHomework). While no family in a kid's class has connected, parents see this
+// card on the homework tab; it goes away once anyone in the class connects — themselves included.
+const _hwWizardSnoozed = {}; // cid → true: "later" hides it until the app is reopened
+let _hwWizardPick = null;     // 'webtop' | 'mashov' once a system was chosen
+function _classSyncCovered(kidName) {
+  const m = getMembers().find(x => x.name === kidName);
+  const cid = m?.school ? classIdFor(m.school) : null;
+  if (!cid) return true;                       // no class to share with — nothing to offer
+  const c = _commCache[cid];
+  if (!c || c.loadedAt == null) return true;   // not loaded yet: don't flash the card
+  if (c.syncConnected || (c.syncedHw || []).length) return true;
+  const linked = !!(familyData?.webtopLinkedAt || Object.keys(familyData?.webtopStudents || {}).length
+    || Object.keys(familyData?.mashovStudents || {}).length);
+  return linked && !!_kidSyncCodeByName(kidName);
+}
+function _renderHwConnectWizard(kidName) {
+  const box = el('hwConnectWizard');
+  if (!box) return;
+  const m = kidName ? getMembers().find(x => x.name === kidName) : null;
+  const cid = m?.school ? classIdFor(m.school) : null;
+  const systems = [
+    featureOn('webtopConnection') && { key: 'webtop', icon: '📡', name: 'Webtop' },
+    featureOn('mashovConnection') && { key: 'mashov', icon: '📘', name: 'משו״ב' },
+  ].filter(Boolean);
+  const show = isParent() && cid && systems.length && !_hwWizardSnoozed[cid] && !_classSyncCovered(kidName);
+  box.style.display = show ? '' : 'none';
+  if (!show) { box.innerHTML = ''; return; }
+  const native = _isNativeApp();
+  const pick = systems.find(x => x.key === _hwWizardPick) || (systems.length === 1 ? systems[0] : null);
+  const cls = m.school.grade ? `כיתה ${esc(m.school.grade)}${m.school.classNum ? "'" + esc(m.school.classNum) : ''}` : 'הכיתה';
+  let step;
+  if (!pick) {
+    step = `<div class="hw-wiz-q">באיזו מערכת בית הספר משתמש?</div>
+      <div class="hw-wiz-choices">${systems.map(x =>
+        `<button class="hw-wiz-choice" onclick="_hwWizardChoose('${x.key}')">${x.icon} ${x.name}</button>`).join('')}</div>`;
+  } else {
+    const how = native
+      ? (pick.key === 'webtop'
+          ? 'נפתח את Webtop — התחברו כרגיל ופתחו את דף שיעורי הבית של כל ילד/ה פעם אחת.'
+          : 'נפתח את משו״ב — התחברו עם פרטי ההורה.')
+      : 'החיבור נעשה מאפליקציית FamilyHub לאנדרואיד, או מהמחשב עם תוסף FamilyHub ל-Chrome. פרטים בהגדרות.';
+    step = `<div class="hw-wiz-q">${pick.icon} חיבור ${pick.name}</div>
+      <div class="hw-wiz-how">${how}</div>
+      <div class="hw-wiz-choices">
+        <button class="hw-wiz-go" onclick="_hwWizardConnect('${pick.key}')">${native ? '🔗 התחברות' : '⚙️ להגדרות החיבור'}</button>
+        ${systems.length > 1 ? `<button class="hw-wiz-back" onclick="_hwWizardChoose(null)">החלפת מערכת</button>` : ''}
+      </div>`;
+  }
+  box.innerHTML = `<div class="card hw-wiz">
+    <div class="hw-wiz-title">🔗 חברו את ${cls} לשיעורי הבית של בית הספר</div>
+    <div class="hw-wiz-text">אף הורה ב${cls} של ${esc(kidName)} עוד לא חיבר את מערכת בית הספר. מספיק שהורה אחד יתחבר —
+      ושיעורי הבית יסונכרנו אוטומטית לכל המשפחות בכיתה, וכל משפחה מסמנת לעצמה.</div>
+    ${step}
+    <button class="hw-wiz-later" onclick="_hwWizardSnooze('${esc(cid)}')">אחר כך</button>
+  </div>`;
+}
+function _hwWizardChoose(key) { _hwWizardPick = key; _renderHwConnectWizard(S.child); }
+function _hwWizardSnooze(cid) { _hwWizardSnoozed[cid] = true; _renderHwConnectWizard(S.child); }
+function _hwWizardConnect(key) {
+  if (_isNativeApp()) return key === 'mashov' ? mashovAppConnect() : webtopAppConnect();
+  openMgmt();
+  setTimeout(() => el(key === 'mashov' ? 'mgmtMashovCard' : 'mgmtWebtopCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+}
+
 function renderHomework(){
   if (!isParent() && S.child !== S.user) { S.child = S.user; }
   const kids=isParent()?getKids():getKids().filter(k=>k===S.user);
@@ -10126,6 +10196,8 @@ function renderHomework(){
   const scopeAllowed = isParent() && !_classHwSynced(S.child);
   if (scopeEl) scopeEl.style.display = scopeAllowed ? '' : 'none';
   if (!scopeAllowed) _hwScope = 'personal';
+
+  _renderHwConnectWizard(S.child);
 
   // Search bar
   const searchBar = el('hwSearchBar');

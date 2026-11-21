@@ -384,11 +384,18 @@ exports.onFamilySyncedHomework = functions.firestore
     const after = change.after.data();
     // Most family writes (chores, lists, ...) don't touch synced homework or the kids' mapping
     const sig = d => JSON.stringify([d.sharedHwVersion || 0, d.webtopHomework || [], d.mashovHomework || [],
+      !!d.webtopLinkedAt, Object.keys(d.webtopStudents || {}).sort(), Object.keys(d.mashovStudents || {}).sort(),
       (d.members || []).map(m => [m.name, m.role, m.webtopClassCode || '', m.mashovChildId || '', m.school || null])]);
     if (sig(before) === sig(after)) return;
     // sharedHwVersion bumped (the app does it once per family): share everything, so homework
     // synced before class sharing existed reaches the class too
     const full = (before.sharedHwVersion || 0) !== (after.sharedHwVersion || 0);
+    // Mark classes this family newly connected (the app stops showing them the connect wizard)
+    const wasConnected = full ? new Set() : sharedHw.connectedClasses(before, classIdFor);
+    const newlyConnected = [...sharedHw.connectedClasses(after, classIdFor)].filter(c => !wasConnected.has(c));
+    await Promise.all(newlyConnected.map(cid => db.collection('schoolClasses').doc(cid)
+      .set({ syncConnectedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true })
+      .catch(e => console.warn(`onFamilySyncedHomework: mark ${cid} connected failed:`, e.message))));
     const items = full ? Object.values(sharedHw.sharedItems(after, classIdFor)) : sharedHw.changedItems(before, after, classIdFor);
     if (!items.length) return;
     for (let i = 0; i < items.length; i += 400) {
