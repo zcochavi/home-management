@@ -2653,12 +2653,56 @@ function _webtopFlatten(json, classCode) {
   return out;
 }
 
+// ── Finding the kids by ourselves (no need to open each kid's homework page) ──
+// After login, PupilCard/GetSettingsList returns the parent's children (each with the
+// session's encrypted id and class code), the current study year and the year's terms.
+// From those we build exactly the body Webtop's own site sends to
+// GetPupilLessonsAndHomework (learned from a diagnostic recording of the site, Nov 2026):
+// studentName is "<last> <first>", studyYearName the Hebrew year (2027 → תשפ״ז),
+// period = the current term, moduleID 11, viewType 0.
+const WT_API = 'https://webtopserver.smartschool.co.il/server/api/';
+function _hebrewYearName(gregorianStudyYear) {
+  let n = (Number(gregorianStudyYear) + 3760) % 1000;
+  if (!Number.isFinite(n) || n <= 0) return '';
+  const ones = ['', 'א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ז', 'ח', 'ט'];
+  const tens = ['', 'י', 'כ', 'ל', 'מ', 'נ', 'ס', 'ע', 'פ', 'צ'];
+  let r = '';
+  while (n >= 400) { r += 'ת'; n -= 400; }
+  for (const [v, l] of [[300, 'ש'], [200, 'ר'], [100, 'ק']]) if (n >= v) { r += l; n -= v; }
+  if (n === 15) r += 'טו'; else if (n === 16) r += 'טז'; else r += tens[Math.floor(n / 10)] + ones[n % 10];
+  return r.length > 1 ? r.slice(0, -1) + '״' + r.slice(-1) : r + '׳';
+}
+// Returns homework params for every child of the logged-in parent, or [] if Webtop doesn't
+// list children (a student's own login) or the call fails — then the captured params are used.
+async function _wtDiscoverStudents() {
+  try {
+    const r = await _wtPlugin().post({ url: WT_API + 'PupilCard/GetSettingsList', body: '{}' });
+    if (r.status !== 200) return [];
+    const d = JSON.parse(r.text)?.data || {};
+    const kids = (d.children || []).filter(c => c?.id && c.classCode != null);
+    if (!kids.length) return [];
+    const terms = d.divisionsList || [];
+    const term = terms.find(t => t.isCurrent === 1 || t.isCurrent === true) || terms[0] || {};
+    const year = d.currentStudyYear;
+    return kids.map(c => ({
+      weekIndex: 0, viewType: 0,
+      studyYear: year, studyYearName: _hebrewYearName(year),
+      studentID: c.id, studentName: [c.lastName, c.firstName].filter(Boolean).join(' '),
+      classCode: c.classCode,
+      periodID: term.division_id, periodName: term.division_name,
+      moduleID: 11,
+    }));
+  } catch (e) { console.warn('[webtop] discover failed:', e); return []; }
+}
+
 async function webtopAppConnect() {
   if (!_isNativeApp()) return;
   let students = [];
   try {
     const res = await _wtPlugin().open();
-    students = res?.students || [];
+    // Prefer finding the kids ourselves; fall back to params captured from opened pages
+    const found = await _wtDiscoverStudents();
+    students = found.length ? found : (res?.students || []);
     // Diagnostic recording of Webtop's own requests during this login (masked) — kept on the
     // device so the parent can copy it from the Webtop card (see assets/fh/webtop-trace.js)
     if ((res?.trace || []).length) { _wtSave('trace', { at: Date.now(), entries: res.trace }); renderWebtopAppBlock(); }
@@ -2667,7 +2711,7 @@ async function webtopAppConnect() {
     return;
   }
   if (!students.length) {
-    showToast('לא נמצאו ילדים — היכנסו ופתחו את דף שיעורי הבית של כל ילד/ה', 'error');
+    showToast('לא נמצאו ילדים — התחברו שוב ל-Webtop (ואם זה חשבון של תלמיד/ה, פתחו את דף שיעורי הבית)', 'error');
     renderWebtopAppBlock();
     return;
   }
