@@ -628,6 +628,8 @@ const FEATURE_FLAGS_DEF = [
   { key: 'webtopConnection', icon: '📡', labelHe: 'חיבור Webtop', descHe: 'כרטיס חיבור Webtop בהגדרות, שיעורי בית מסונכרנים ועדכון קהילה' },
   { key: 'mashovConnection', icon: '📘', labelHe: 'חיבור משו״ב', descHe: 'כרטיס חיבור משו״ב בהגדרות ושיעורי בית מסונכרנים ממשו״ב, לכל ילד/ה שמשויך/ת לילד/ה במשו״ב', defaultOff: true },
   { key: 'androidBeta', icon: '📱', labelHe: 'הזמנה לבודקי אנדרואיד', descHe: 'כרטיס בבית שמזמין הורים לבדוק את האפליקציה — באתר, באנדרואיד, כשיש קישור', defaultOff: true, urlField: 'androidBetaUrl' },
+  // appOnly: exists only in the Android app, so the switch is just off / on
+  { key: 'pushTestCard', icon: '🔔', labelHe: 'כרטיס בדיקת התראות', descHe: 'כרטיס "בדיקת התראות" בהגדרות המשפחה — באפליקציית אנדרואיד בלבד', appOnly: true },
 ];
 
 function subscribeToFeatureFlags() {
@@ -656,6 +658,7 @@ function subscribeToFeatureFlags() {
       if (S.tab === 'homework') renderHomework();
       renderMgmtWebtop && renderMgmtWebtop();
       if (el('adminSyncIntervals')?.offsetParent) renderAdminSyncIntervals();
+      if (el('mgmtScreen') && !el('mgmtScreen').classList.contains('hidden')) renderPushTestCard();
       if (S.tab === 'home') renderHome();
     }, () => { _featureFlags = {}; _ffServerKnown = {}; });
 }
@@ -2417,8 +2420,9 @@ async function initNativeFCM() {
 async function renderPushTestCard() {
   const card = el('mgmtPushTestCard');
   if (!card) return;
-  card.style.display = _isNativeApp() ? '' : 'none';
-  if (!_isNativeApp()) return;
+  const show = _isNativeApp() && featureOn('pushTestCard');
+  card.style.display = show ? '' : 'none';
+  if (!show) return;
   let perm = '';
   try { perm = (await _fmPlugin().checkPermissions()).receive; } catch (e) {}
   const permTxt = perm === 'granted' ? '✅ התראות מותרות במכשיר'
@@ -6756,9 +6760,11 @@ function _adminLogHtml(combined) {
 function renderAdminFeatureFlags() {
   const cont = el('adminFeatureFlags');
   if (!cont) return;
-  const opts = [['off', 'כבוי'], ['web', 'אתר בלבד'], ['on', 'פעיל לכולם']];
+  const opts3 = [['off', 'כבוי'], ['web', 'אתר בלבד'], ['on', 'פעיל לכולם']];
+  const opts2 = [['off', 'כבוי'], ['on', 'פעיל']];
   cont.innerHTML = FEATURE_FLAGS_DEF.map(f => {
-    const st = _ffState(_ffRaw(f.key));
+    const opts = f.appOnly ? opts2 : opts3;
+    const st = f.appOnly && _ffState(_ffRaw(f.key)) === 'web' ? 'off' : _ffState(_ffRaw(f.key));
     return `<div class="ff-row">
       <div class="ff-row-info">
         <span class="ff-icon">${f.icon}</span>
@@ -6818,6 +6824,7 @@ async function saveFeatureFlag(key, state) {
   renderAdminFeatureFlags();
   renderHome();
   if (S.tab === 'homework') renderHomework();
+  renderPushTestCard();
   const webtopCard = el('mgmtWebtopCard');
   if (webtopCard) webtopCard.style.display = isParent() && featureOn('webtopConnection') ? '' : 'none';
   const mashovCard = el('mgmtMashovCard');
