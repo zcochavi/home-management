@@ -658,6 +658,8 @@ function subscribeToFeatureFlags() {
       if (S.tab === 'homework') renderHomework();
       renderMgmtWebtop && renderMgmtWebtop();
       if (el('adminSyncIntervals')?.offsetParent) renderAdminSyncIntervals();
+      if (el('adminUndatedPosts')?.offsetParent) renderAdminUndatedPosts();
+      if (S.tab === 'community') renderCommunity();
       if (el('mgmtScreen') && !el('mgmtScreen').classList.contains('hidden')) renderPushTestCard();
       if (S.tab === 'home') renderHome();
     }, () => { _featureFlags = {}; _ffServerKnown = {}; });
@@ -4589,6 +4591,19 @@ function classLabelFor(school) {
   if (school.grade) parts.push('כיתה ' + school.grade + (school.classNum ? '\'' + school.classNum : ''));
   return parts.filter(Boolean).join(', ');
 }
+// Community posts without a date (announcements and the like) stay on the wall for an
+// admin-chosen time after they were posted (appConfig/featureFlags.undatedPostDays).
+const UNDATED_POST_DAY_OPTIONS = [{d:3,label:'3 ימים'},{d:7,label:'שבוע'},{d:14,label:'שבועיים'},{d:30,label:'חודש'},{d:90,label:'3 חודשים'}];
+const UNDATED_POST_DEFAULT_DAYS = 30;
+const _undatedPostDays = () => Number(_featureFlags?.undatedPostDays) || UNDATED_POST_DEFAULT_DAYS;
+// Is a community post still shown? Dated: its date hasn't passed. Undated: posted within the
+// admin's window (a post the server hasn't stamped yet — just published — counts as new).
+function postStillShown(ev) {
+  if (ev?.date) return isEventUpcoming(ev.date);
+  const c = ev?.createdAt;
+  const ms = c?.toMillis ? c.toMillis() : typeof c?.seconds === 'number' ? c.seconds * 1000 : typeof c === 'number' ? c : null;
+  return ms == null || Date.now() - ms < _undatedPostDays() * 864e5;
+}
 function isEventUpcoming(dateStr) {
   if (!dateStr) return true;
   const [y,m,d] = dateStr.split('-').map(Number);
@@ -5473,7 +5488,7 @@ function renderCommCard(kid) {
   const _cutoff = new Date(); _cutoff.setDate(_cutoff.getDate() - 14);
   const _today  = new Date().toISOString().slice(0,10);
   const upcoming = allEvs.filter(e => {
-    if (!e.date) return true;
+    if (!e.date) return postStillShown(e);
     const [ey,em,ed] = e.date.split('-').map(Number);
     return new Date(ey, em-1, ed) >= _cutoff;
   }).sort((a,b) => {
@@ -6784,12 +6799,39 @@ function renderAdminFeatureFlags() {
   }).join('');
 }
 
+function renderAdminUndatedPosts() {
+  const cont = el('adminUndatedPosts');
+  if (!cont) return;
+  const cur = _undatedPostDays();
+  cont.innerHTML = `<div class="ff-row ff-row-stack">
+    <div class="ff-row-info"><span class="ff-icon">📌</span>
+      <div><div class="ff-label">כמה זמן פוסט ללא תאריך נשאר על הקיר</div>
+      <div class="ff-desc">מרגע הפרסום. פוסטים עם תאריך יורדים אחרי התאריך שלהם, כמו קודם.</div></div></div>
+    <div class="sync-int-btns">${UNDATED_POST_DAY_OPTIONS.map(o =>
+      `<button type="button" class="${o.d === cur ? 'active' : ''}" onclick="saveUndatedPostDays(${o.d})">${o.label}</button>`).join('')}</div>
+  </div>`;
+}
+async function saveUndatedPostDays(days) {
+  const prev = _featureFlags.undatedPostDays;
+  _featureFlags.undatedPostDays = days;
+  renderAdminUndatedPosts();
+  if (S.tab === 'community') renderCommunity();
+  if (S.tab === 'home') renderHome();
+  try {
+    await fbDb.collection('appConfig').doc('featureFlags').set({ undatedPostDays: days }, { merge: true });
+    showToast('משך הצגת פוסטים ללא תאריך עודכן ✓', 'success');
+  } catch (e) {
+    _featureFlags.undatedPostDays = prev;
+    renderAdminUndatedPosts();
+    showToast('שגיאה בשמירה', 'error');
+  }
+}
 function renderAdminSyncIntervals() {
   const cont = el('adminSyncIntervals');
   if (!cont) return;
   const row = (sys, icon, name, note) => {
     const cur = _syncIntervalHours(sys);
-    return `<div class="ff-row">
+    return `<div class="ff-row ff-row-stack">
       <div class="ff-row-info"><span class="ff-icon">${icon}</span>
         <div><div class="ff-label">${name}</div><div class="ff-desc">${note}</div></div></div>
       <div class="sync-int-btns">${SYNC_INTERVAL_OPTIONS.map(o =>
@@ -6888,6 +6930,7 @@ function _applyAdminPanelCache(data, showLog) {
   safe('eventTypes', renderAdminEventTypes);
   safe('featureFlags', renderAdminFeatureFlags);
   safe('syncIntervals', renderAdminSyncIntervals);
+  safe('undatedPosts', renderAdminUndatedPosts);
 }
 
 function renderAdminEventTypes() {
@@ -8227,7 +8270,7 @@ function renderHomeUpcoming() {
     if (!cid || !_commCache[cid]) return;
     const cache = _commCache[cid];
     [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])].forEach(ev => {
-      if (isEventUpcoming(ev.date) && matchesGenderFilter(ev, name)) {
+      if (postStillShown(ev) && matchesGenderFilter(ev, name)) {
         const key = `${ev.id}_${name}`;
         if (!_seenHomeClassKeys.has(key)) { _seenHomeClassKeys.add(key); classEvs.push({ ...ev, _src: 'class', _kid: name }); }
       }
