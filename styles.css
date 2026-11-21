@@ -2461,3 +2461,9 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .guest-add-input:focus { border-color: var(--primary-500); }
 .guest-add-qty { flex: 0 0 64px; }
 .guest-add-btn { flex-shrink: 0; padding: 10px 14px; border: none; border-radius: 10px; background: var(--primary-500); color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+
+/* Member edit panel: disconnect devices */
+.mgmt-disconnect { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--gray-100); }
+.mgmt-disconnect-btn { background: #fff5f5; color: #c53030; border: 1px solid #fed7d7; border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.mgmt-disconnect-btn:disabled { opacity: 0.6; cursor: default; }
+.mgmt-disconnect-hint { font-size: 11px; color: var(--gray-400); font-weight: 600; margin-top: 4px; }
