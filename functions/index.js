@@ -1842,7 +1842,9 @@ exports.getFamilyDetails = functions.https.onCall(async (data, context) => {
   const legacyComm = fd.committeeClasses || (fd.role === 'committee' ? ['*'] : []);
 
   const members = (fd.members || []).map(m => {
-    const base = { name: m.name, emoji: m.emoji || '👤', role: m.role || 'parent' };
+    // No saved role: shown with the parents but flagged (roleUnset), so the admin can tell
+    // real parents from members whose role is missing
+    const base = { name: m.name, emoji: m.emoji || '👤', role: m.role || 'parent', ...(m.role ? {} : { roleUnset: true }) };
     if (m.role === 'kid') {
       base.school = m.school || null;  // { city, name, grade, classNum }
       base.schoolPending = m.schoolPending || null;

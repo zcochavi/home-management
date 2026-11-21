@@ -2498,3 +2498,7 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .analytics-updating { font-size: 12px; font-weight: 700; color: var(--primary-700); background: var(--primary-50); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
 .analytics-updating span { font-weight: 600; color: var(--gray-400); }
 .analytics-updating-error { color: #b45309; background: #fffbeb; }
+
+/* Admin family tree: a member with no saved role */
+.ftree-node-unset { border-style: dashed !important; border-color: #f59e0b !important; }
+.ftree-node-unset-badge { font-size: 9px; font-weight: 700; color: #b45309; background: #fffbeb; border-radius: 6px; padding: 1px 5px; margin-top: 2px; }

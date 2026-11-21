@@ -4044,6 +4044,13 @@ async function saveMgmtEdit(i, originalName) {
   const newEmoji = panel.dataset.emoji;
   if (!newName) return;
   const oldMember = getMembers().find(m => m.name === originalName);
+  // A family always keeps a parent: the only parent can't be turned into a kid
+  if (oldMember?.role === 'parent' && newRole === 'kid' && getParents().length <= 1) {
+    _alert(getLang() === 'he'
+      ? `${esc(originalName)} הוא/היא ההורה היחיד/ה במשפחה. כדי לשנות לילד/ה, הוסיפו קודם הורה נוסף.`
+      : `${esc(originalName)} is the family's only parent. Add another parent first, then change this one to a kid.`);
+    return;
+  }
   const oldSchool = oldMember?.school;
   const school = newRole === 'kid' ? {
     city:     (el(`mgmtEditCity_${i}`)?.value.trim()       || ''),
@@ -11551,9 +11558,10 @@ function renderFamilyDetails(data, familyUid, clickedMemberName) {
         }).join('')}
       </div>` : '';
 
-    return `<div class="ftree-node${isClicked ? ' highlighted' : ''}">
+    return `<div class="ftree-node${isClicked ? ' highlighted' : ''}${p.roleUnset ? ' ftree-node-unset' : ''}">
       <div class="ftree-node-emoji">${esc(p.emoji)}</div>
       <div class="ftree-node-name">${esc(p.name)}</div>
+      ${p.roleUnset ? `<span class="ftree-node-unset-badge" title="לחבר/ה הזה אין תפקיד שמור — לא הורה ולא ילד/ה">⚠️ תפקיד לא מוגדר</span>` : ''}
       ${anyComm ? `<span class="role-badge-committee" style="font-size:8px;padding:1px 5px;margin-top:1px">ועד</span>` : ''}
       ${committeeSection}
     </div>`;
