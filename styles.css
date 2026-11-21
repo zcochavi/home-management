@@ -2483,3 +2483,8 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 
 /* Family settings: pointer to Webtop / Mashov, which moved to "connected apps" */
 .mgmt-moved-hint { font-size: 13px; font-weight: 700; color: var(--primary-700); background: var(--primary-50); cursor: pointer; padding: 12px 14px; }
+
+/* Admin: homework sync interval buttons */
+.sync-int-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.sync-int-btns button { font: inherit; font-size: 11px; padding: 4px 10px; border-radius: 20px; border: 1.5px solid var(--gray-200); background: #fff; color: var(--gray-600, #4b5563); cursor: pointer; }
+.sync-int-btns button.active { border-color: var(--primary-500); background: var(--primary-500); color: #fff; font-weight: 700; }

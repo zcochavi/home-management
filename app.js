@@ -655,6 +655,7 @@ function subscribeToFeatureFlags() {
       // Re-render affected areas immediately
       if (S.tab === 'homework') renderHomework();
       renderMgmtWebtop && renderMgmtWebtop();
+      if (el('adminSyncIntervals')?.offsetParent) renderAdminSyncIntervals();
       if (S.tab === 'home') renderHome();
     }, () => { _featureFlags = {}; _ffServerKnown = {}; });
 }
@@ -2617,9 +2618,14 @@ function _applyWebtopAutoMatch() {
 // extension. None of this runs on the website (_isNativeApp() is false there).
 const WT_HW_URL  = 'https://webtopserver.smartschool.co.il/server/api/PupilCard/GetPupilLessonsAndHomework';
 const WT_FN_BASE = 'https://us-central1-familyhub-7fdd5.cloudfunctions.net';
-// The family's "automatic sync" setting (webtopSyncIntervalHours, default 6h as in
-// the card) sets how often the app syncs while open; never more than every 20 min.
-const _wtAutoSyncMs = () => Math.max(20 * 60 * 1000, (familyData?.webtopSyncIntervalHours || 6) * 3600 * 1000 - 60 * 1000);
+// Automatic sync intervals are an admin setting (Settings → admin → sync frequency), one
+// for Webtop and one for Mashov, stored on appConfig/featureFlags next to the feature
+// switches; the webtopSync function reads the Webtop one too. Never more than every 20 min.
+const SYNC_INTERVAL_DEFAULTS = { webtop: 6, mashov: 3 };
+const SYNC_INTERVAL_OPTIONS = [{h:0.334,label:'כל 20 דקות'},{h:1,label:'כל שעה'},{h:3,label:'כל 3 שעות'},{h:6,label:'כל 6 שעות'},{h:12,label:'כל 12 שעות'},{h:24,label:'פעם ביום'}];
+const _syncIntervalHours = sys => Number(_featureFlags?.[sys + 'SyncIntervalHours']) || SYNC_INTERVAL_DEFAULTS[sys];
+const _syncIntervalMs = sys => Math.max(20 * 60 * 1000, _syncIntervalHours(sys) * 3600 * 1000 - 60 * 1000);
+const _wtAutoSyncMs = () => _syncIntervalMs('webtop');
 const _wtPlugin = () => window.Capacitor.Plugins?.WebtopConnect || window.Capacitor.registerPlugin('WebtopConnect');
 const _wtKey  = (k) => `fh_webtop_app_${k}_${S.uid}`;
 const _wtLoad = (k, d) => { try { const v = JSON.parse(localStorage.getItem(_wtKey(k))); return v ?? d; } catch { return d; } };
@@ -2733,8 +2739,6 @@ function renderWebtopAppBlock() {
   box.style.display = native ? '' : 'none';
   const ext = el('mgmtWebtopExtension');
   if (ext) ext.style.display = native ? 'none' : '';
-  const note = el('mgmtWebtopIntervalAppNote');
-  if (note) note.style.display = native ? '' : 'none';
   if (!native) return;
   const students = Object.values(_wtLoad('students', {}));
   const last = _wtLoad('lastSync', 0);
@@ -2839,17 +2843,6 @@ function renderMgmtWebtop() {
     }
   }
 
-  // Sync interval buttons
-  const intervalRow = el('mgmtWebtopIntervalRow');
-  const intervalBtns = el('mgmtWebtopIntervalBtns');
-  if (intervalRow && intervalBtns) {
-    intervalRow.style.display = classEntries.length > 0 ? 'flex' : 'none';
-    const current = familyData?.webtopSyncIntervalHours || 6;
-    const options = [{h:0.334,label:'כל 20 דקות'},{h:1,label:'כל שעה'},{h:3,label:'כל 3 שעות'},{h:6,label:'כל 6 שעות'},{h:12,label:'כל 12 שעות'},{h:24,label:'פעם ביום'}];
-    intervalBtns.innerHTML = options.map(o => `
-      <button onclick="setWebtopSyncInterval(${o.h})" style="font-size:11px;padding:4px 10px;border-radius:20px;border:1.5px solid ${o.h===current?'#6366f1':'#e2e8f0'};background:${o.h===current?'#6366f1':'#fff'};color:${o.h===current?'#fff':'#4a5568'};cursor:pointer;font-weight:${o.h===current?'700':'400'}">${o.label}</button>
-    `).join('');
-  }
 }
 
 // ─── Synced homework: Webtop + Mashov ─────────────────────────────────────────
@@ -3009,7 +3002,7 @@ const _msPlugin = () => window.Capacitor.Plugins?.MashovConnect || window.Capaci
 const _msKey  = (k) => `fh_mashov_app_${k}_${S.uid}`;
 const _msLoad = (k, d) => { try { const v = JSON.parse(localStorage.getItem(_msKey(k))); return v ?? d; } catch { return d; } };
 const _msSave = (k, v) => { try { localStorage.setItem(_msKey(k), JSON.stringify(v)); } catch {} };
-const _msAutoSyncMs = 3 * 3600 * 1000;
+const _msAutoSyncMs = () => _syncIntervalMs('mashov');
 const _isoDaysAgo = (n) => { const d = new Date(Date.now() - n * 864e5); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
 const _msChildLabel = (c) => c.privateName || c.studentName || 'ילד/ה';
 let _msSyncing = false;
@@ -3120,7 +3113,7 @@ function renderMashovAppBlock() {
 function _mashovAppAutoSync() {
   if (!_isNativeApp() || !S.uid || !featureOn('mashovConnection')) return;
   if (_msLoad('expired', false) || !Object.keys(_msLoad('children', {})).length) return;
-  if (Date.now() - _msLoad('lastSync', 0) >= _msAutoSyncMs) mashovAppSync();
+  if (Date.now() - _msLoad('lastSync', 0) >= _msAutoSyncMs()) mashovAppSync();
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _mashovAppAutoSync(); });
 if (_isNativeApp()) setInterval(() => { if (document.visibilityState === 'visible') _mashovAppAutoSync(); }, 60 * 1000);
@@ -3728,12 +3721,6 @@ async function setWebtopKidClass(classCode, kidName) {
   renderHomework();
 }
 
-async function setWebtopSyncInterval(hours) {
-  if (!fbDb || !S.uid) return;
-  if (familyData) familyData.webtopSyncIntervalHours = hours;
-  await fbDb.collection('families').doc(S.uid).update({ webtopSyncIntervalHours: hours });
-  renderMgmtWebtop();
-}
 
 function copyWebtopCode() {
   const code = S.uid || '';
@@ -6791,6 +6778,37 @@ function renderAdminFeatureFlags() {
   }).join('');
 }
 
+function renderAdminSyncIntervals() {
+  const cont = el('adminSyncIntervals');
+  if (!cont) return;
+  const row = (sys, icon, name, note) => {
+    const cur = _syncIntervalHours(sys);
+    return `<div class="ff-row">
+      <div class="ff-row-info"><span class="ff-icon">${icon}</span>
+        <div><div class="ff-label">${name}</div><div class="ff-desc">${note}</div></div></div>
+      <div class="sync-int-btns">${SYNC_INTERVAL_OPTIONS.map(o =>
+        `<button type="button" class="${o.h === cur ? 'active' : ''}" onclick="saveSyncInterval('${sys}',${o.h})">${o.label}</button>`).join('')}</div>
+    </div>`;
+  };
+  cont.innerHTML = row('webtop', '📡', 'Webtop', 'לכל המשפחות: סנכרון מהשרת, ובאפליקציה כשהיא פתוחה')
+    + row('mashov', '📘', 'משו״ב', 'לכל המשפחות: באפליקציה כשהיא פתוחה')
+    + `<div class="ff-desc" style="margin:4px 2px 0">תוסף ה-Chrome מסנכרן בקצב קבוע משלו (כל שעתיים).</div>`;
+}
+async function saveSyncInterval(sys, hours) {
+  const key = sys + 'SyncIntervalHours';
+  const prev = _featureFlags[key];
+  _featureFlags[key] = hours;
+  renderAdminSyncIntervals();
+  try {
+    await fbDb.collection('appConfig').doc('featureFlags').set({ [key]: hours }, { merge: true });
+    showToast('תדירות הסנכרון עודכנה ✓', 'success');
+  } catch (e) {
+    _featureFlags[key] = prev;
+    renderAdminSyncIntervals();
+    showToast('שגיאה בשמירה', 'error');
+  }
+}
+
 async function saveFeatureFlag(key, state) {
   const value = state === 'off' ? false : state === 'web' ? 'web' : true;
   const prev = _featureFlags[key];
@@ -6862,6 +6880,7 @@ function _applyAdminPanelCache(data, showLog) {
   safe('maintenance', renderMaintenanceTools);
   safe('eventTypes', renderAdminEventTypes);
   safe('featureFlags', renderAdminFeatureFlags);
+  safe('syncIntervals', renderAdminSyncIntervals);
 }
 
 function renderAdminEventTypes() {
