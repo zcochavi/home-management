@@ -2300,6 +2300,32 @@ async function regenMemberCode(memberName) {
 }
 const regenSpouseCode = regenMemberCode; // older name
 
+// Sign out every device connected as this member (server: disconnectMemberDevices). Their
+// codes are revoked and a new one is issued, so the parent decides when to let them back in.
+async function disconnectMemberDevices(memberName) {
+  const ok = await _confirm(
+    `לנתק את כל המכשירים של ${esc(memberName)}?<br><br>` +
+    `<span style="font-size:13px;color:var(--gray-500)">כל טלפון שמחובר בתור ${esc(memberName)} יאבד גישה מיד. ` +
+    `הקודים הקיימים יבוטלו וייווצר קוד חדש — שלחו אותו כשתרצו לחבר מחדש.</span>`,
+    { danger: true, okLabel: 'נתק' });
+  if (!ok) return;
+  const btn = document.querySelector(`[data-disconnect="${CSS.escape(memberName)}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ מנתק...'; }
+  try {
+    const { data } = await fbFunctions.httpsCallable('disconnectMemberDevices')({ memberName });
+    if (familyData) familyData.members = getMembers().map(m => m.name === memberName ? { ...m, joinCode: data.code } : m);
+    renderMgmtMembers();
+    const n = data.disconnected || 0;
+    await _alert(
+      (n ? `נותקו ${n === 1 ? 'מכשיר אחד' : n + ' מכשירים'} של ${esc(memberName)}.` : `לא נמצאו מכשירים מחוברים של ${esc(memberName)}.`) +
+      `<br><br>הקוד החדש: <b dir="ltr">${esc(data.code)}</b><br><span style="font-size:13px;color:var(--gray-500)">הקודים הקודמים כבר לא עובדים.</span>`);
+  } catch (e) {
+    console.error('disconnectMemberDevices:', e);
+    if (btn) { btn.disabled = false; btn.textContent = `📵 ניתוק כל המכשירים של ${memberName}`; }
+    _alert('הניתוק נכשל: ' + esc(e.message || e.code || ''));
+  }
+}
+
 function shareSpouseCode(name, code) {
   const url  = _publicAppUrl() + '?join=' + code;
   const text = `הצטרפ/י כ-${name} למשפחת ${familyData?.familyName || ''} ב-FamilyHub!\nקוד כניסה אישי: ${code}\n${url}`;
@@ -3733,6 +3759,11 @@ function renderMgmtMembers() {
         <button class="auth-btn-main" style="padding:8px 16px;width:auto" onclick="saveMgmtEdit(${i},'${esc(m.name)}')">✓ שמור</button>
         <button class="auth-btn-back" onclick="toggleMgmtEdit(${i})">ביטול</button>
       </div>
+      ${isParent() && m.name !== S.user && m.joinCode ? `
+      <div class="mgmt-disconnect">
+        <button class="mgmt-disconnect-btn" data-disconnect="${esc(m.name)}" onclick="disconnectMemberDevices('${esc(m.name)}')">📵 ניתוק כל המכשירים של ${esc(m.name)}</button>
+        <div class="mgmt-disconnect-hint">כל טלפון שמחובר בתור ${esc(m.name)} יאבד גישה, והקוד יוחלף בקוד חדש</div>
+      </div>` : ''}
     </div>`;
   }).join('');
 
