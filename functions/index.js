@@ -2271,15 +2271,18 @@ const TLV_OPTS = { region: 'me-west1', serviceAccount: 'familyhub-7fdd5@appspot.
 exports.webtopRequestOtpTlv = onRequestV2(TLV_OPTS, _safeWebtop(_handleWebtopRequestOtp));
 exports.webtopVerifyOtpTlv  = onRequestV2(TLV_OPTS, _safeWebtop(_handleWebtopVerifyOtp));
 
-// ─── webtopSync — runs hourly, respects per-family webtopSyncIntervalHours ────
+// ─── webtopSync — runs every 20 min; syncs each family at the admin's Webtop interval ────
+// (appConfig/featureFlags.webtopSyncIntervalHours, set in the admin settings; default 6h)
 exports.webtopSync = functions.pubsub.schedule('*/20 * * * *').onRun(async () => {
+  const cfg = (await db.collection('appConfig').doc('featureFlags').get()).data() || {};
+  const intervalMs = Math.max(20 * 60 * 1000, (Number(cfg.webtopSyncIntervalHours) || 6) * 3600 * 1000 - 60 * 1000);
   const snapshot = await db.collection('families')
     .where('webtopStudents', '!=', null)
     .get();
   const now = Date.now();
   let synced = 0;
   const promises = snapshot.docs.map(async doc => {
-    const { webtopStudents, webtopUpdatedAt, webtopSyncIntervalHours } = doc.data();
+    const { webtopStudents, webtopUpdatedAt } = doc.data();
     if (!webtopStudents || typeof webtopStudents !== 'object') return;
     // Only entries that still carry a server-usable token. Entries written by
     // webtopIngest (the extension fetches in-browser) have none — skip those, so
@@ -2287,7 +2290,6 @@ exports.webtopSync = functions.pubsub.schedule('*/20 * * * *').onRun(async () =>
     const entries = Object.entries(webtopStudents).filter(([, e]) => e && e.token && e.syncParams);
     if (!entries.length) return;
     // Check if enough time has passed since last sync
-    const intervalMs = (webtopSyncIntervalHours || 1) * 3600 * 1000;
     const lastSync = webtopUpdatedAt?.toMillis?.() || 0;
     if (now - lastSync < intervalMs) return;
     try {
