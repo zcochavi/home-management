@@ -69,7 +69,10 @@ const STRINGS = {
     addToList:'+ רשימה', inList:'✓ ברשימה',
     toCart:'לעגלה ←', returnToList:'↩ חזור',
     stillNeed:'עוד לקחת', inCartLabel:'בעגלה',
-    doneShoppingConfirm: (bought, missed) => missed ? `קנית ${bought} פריטים.\nלא הבאת ${missed} פריטים — המשך?` : `קנית ${bought} פריטים. להסיים?`,
+    doneShoppingConfirm: (bought, missed) => {
+      const n = c => c === 1 ? 'פריט אחד' : `${c} פריטים`;
+      return missed ? `קנית ${n(bought)}.\nלא הבאת ${n(missed)} — להמשיך?` : `קנית ${n(bought)}. לסיים?`;
+    },
     doneShoppingMsg: (name, bought, missedNames) => missedNames.length ? `${name} סיים לקנות — לא הביא: ${missedNames.join(', ')}` : `${name} סיים לקנות (${bought} פריטים)`,
     shoppingList:'🛒 רשימת קניות', addItemPlaceholder:'הוסף פריט...',
     clearChecked:'🗑 נקה מסומנים', groceryEmpty:'🛒 הרשימה ריקה!',
