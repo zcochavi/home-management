@@ -10149,6 +10149,9 @@ let _hwScope = 'personal'; // 'personal' | 'class' — class only selectable whe
 let _hwAddOpen = false; // add-homework form is collapsed behind a FAB, like Lists/Community
 
 function hwFabClick() {
+  // The FAB shows ✕ while the add form is open: tapping it closes the form (both with and
+  // without the class/personal picker — it used to reopen the form when Webtop sync was on)
+  if (_hwAddOpen) { _hwAddOpen = false; _hwHidePicker(); renderHomework(); return; }
   if (!S.child || !(isParent() || S.child === S.user)) return;
   const scopeAllowed = isParent() && !_classHwSynced(S.child);
   if (!scopeAllowed) { _hwScopePick('personal'); _hwOpenAddForm(); return; }
