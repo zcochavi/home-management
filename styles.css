@@ -2489,3 +2489,7 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .sync-int-btns button { font: inherit; font-size: 11px; padding: 4px 10px; border-radius: 20px; border: 1.5px solid var(--gray-200); background: #fff; color: var(--gray-600, #4b5563); cursor: pointer; }
 .sync-int-btns button.active { border-color: var(--primary-500); background: var(--primary-500); color: #fff; font-weight: 700; }
 .ff-row.ff-row-stack { flex-direction: column; align-items: stretch; }
+
+/* List tiles: a long press shouldn't select the name or open Android's text / image menu */
+.list-tile, .list-tile * { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.list-tile img { -webkit-user-drag: none; }
