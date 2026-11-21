@@ -4044,6 +4044,13 @@ async function saveMgmtEdit(i, originalName) {
   const newEmoji = panel.dataset.emoji;
   if (!newName) return;
   const oldMember = getMembers().find(m => m.name === originalName);
+  // A family always keeps a parent: the only parent can't be turned into a kid
+  if (oldMember?.role === 'parent' && newRole === 'kid' && getParents().length <= 1) {
+    _alert(getLang() === 'he'
+      ? `${esc(originalName)} הוא/היא ההורה היחיד/ה במשפחה. כדי לשנות לילד/ה, הוסיפו קודם הורה נוסף.`
+      : `${esc(originalName)} is the family's only parent. Add another parent first, then change this one to a kid.`);
+    return;
+  }
   const oldSchool = oldMember?.school;
   const school = newRole === 'kid' ? {
     city:     (el(`mgmtEditCity_${i}`)?.value.trim()       || ''),
@@ -10149,6 +10156,9 @@ let _hwScope = 'personal'; // 'personal' | 'class' — class only selectable whe
 let _hwAddOpen = false; // add-homework form is collapsed behind a FAB, like Lists/Community
 
 function hwFabClick() {
+  // The FAB shows ✕ while the add form is open: tapping it closes the form (both with and
+  // without the class/personal picker — it used to reopen the form when Webtop sync was on)
+  if (_hwAddOpen) { _hwAddOpen = false; _hwHidePicker(); renderHomework(); return; }
   if (!S.child || !(isParent() || S.child === S.user)) return;
   const scopeAllowed = isParent() && !_classHwSynced(S.child);
   if (!scopeAllowed) { _hwScopePick('personal'); _hwOpenAddForm(); return; }
@@ -11548,9 +11558,10 @@ function renderFamilyDetails(data, familyUid, clickedMemberName) {
         }).join('')}
       </div>` : '';
 
-    return `<div class="ftree-node${isClicked ? ' highlighted' : ''}">
+    return `<div class="ftree-node${isClicked ? ' highlighted' : ''}${p.roleUnset ? ' ftree-node-unset' : ''}">
       <div class="ftree-node-emoji">${esc(p.emoji)}</div>
       <div class="ftree-node-name">${esc(p.name)}</div>
+      ${p.roleUnset ? `<span class="ftree-node-unset-badge" title="לחבר/ה הזה אין תפקיד שמור — לא הורה ולא ילד/ה">⚠️ תפקיד לא מוגדר</span>` : ''}
       ${anyComm ? `<span class="role-badge-committee" style="font-size:8px;padding:1px 5px;margin-top:1px">ועד</span>` : ''}
       ${committeeSection}
     </div>`;
@@ -11633,23 +11644,53 @@ async function renderAnalytics(forceRefresh) {
   const container = el('analyticsContent');
   if (!container) return;
 
-  container.innerHTML = `<div style="color:#a0aec0;text-align:center;padding:60px 0;font-size:14px;font-weight:700">טוען נתונים...</div>`;
-  _destroyCharts();
   if (_presenceRefreshTimer) { clearInterval(_presenceRefreshTimer); _presenceRefreshTimer = null; }
+  // Chart.js and the numbers load in parallel. Meanwhile the last result saved on this device
+  // is shown right away with an "updating" note, so the dashboard opens instantly.
+  const chartsP = _loadChartJs();
+  const dataP = firebase.functions().httpsCallable('getAnalytics')().then(r => r.data);
+  const cached = _analyticsCacheLoad();
+  let showingCached = false;
+  if (cached) {
+    try {
+      await chartsP;
+      _destroyCharts();
+      _renderAnalyticsUI(container, cached.d);
+      container.insertAdjacentHTML('afterbegin', `<div class="analytics-updating" id="analyticsUpdating">🔄 מעדכן נתונים… <span>(מוצג: ${new Date(cached.at).toLocaleString(t('locale'), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })})</span></div>`);
+      showingCached = true;
+    } catch (_) { /* fall through to the normal load */ }
+  }
+  if (!showingCached) {
+    container.innerHTML = `<div style="color:#a0aec0;text-align:center;padding:60px 0;font-size:14px;font-weight:700">טוען נתונים...</div>`;
+    _destroyCharts();
+  }
 
   try {
-    await _loadChartJs();
-    const fn = firebase.functions().httpsCallable('getAnalytics');
-    const result = await fn();
-    const d = result.data;
+    const [, d] = await Promise.all([chartsP, dataP]);
+    if (S.tab !== 'analytics') return; // left the dashboard meanwhile
+    _destroyCharts();
     _renderAnalyticsUI(container, d);
+    _analyticsCacheSave(d);
     // Load presence section and start auto-refresh every 30s
     await loadPresenceSection();
     _presenceRefreshTimer = setInterval(_refreshPresenceOnline, 30 * 1000);
   } catch(e) {
     console.error('renderAnalytics:', e);
-    container.innerHTML = `<div class="card" style="color:#e53e3e;padding:20px;text-align:center;font-size:13px;font-weight:700">שגיאה בטעינת נתונים: ${esc(e.message||String(e))}</div>`;
+    if (showingCached) {
+      const u = el('analyticsUpdating');
+      if (u) { u.classList.add('analytics-updating-error'); u.textContent = '⚠️ לא ניתן לעדכן — מוצגים הנתונים האחרונים ששמורים במכשיר'; }
+    } else {
+      container.innerHTML = `<div class="card" style="color:#e53e3e;padding:20px;text-align:center;font-size:13px;font-weight:700">שגיאה בטעינת נתונים: ${esc(e.message||String(e))}</div>`;
+    }
   }
+}
+// Last dashboard result on this device (admin only), shown instantly next time
+const _ANALYTICS_CACHE_KEY = 'familyhub_analytics_cache_v1';
+function _analyticsCacheLoad() {
+  try { const c = JSON.parse(localStorage.getItem(_ANALYTICS_CACHE_KEY) || 'null'); return c?.d && c.at ? c : null; } catch (_) { return null; }
+}
+function _analyticsCacheSave(d) {
+  try { localStorage.setItem(_ANALYTICS_CACHE_KEY, JSON.stringify({ at: Date.now(), d })); } catch (_) {}
 }
 
 function _renderAnalyticsUI(container, d) {
