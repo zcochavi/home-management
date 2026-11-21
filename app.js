@@ -10140,6 +10140,9 @@ function renderHomework(){
   const hwSchedule = classCid ? _commCache[classCid]?.schedule : null;
   classHw = _hwSmartSort(classHw, hwSchedule);
   pending = _hwSmartSort(pending, hwSchedule);
+  // Synced (Webtop / Mashov) homework: by the date it was given — the lesson date the school
+  // system reports — newest first. Not by when it was imported; same-day items keep their order.
+  wtHw = _hwSortByGiven(wtHw);
 
   // Webtop homework section
   const webtopSec=el('hwWebtopSection');
@@ -10321,6 +10324,12 @@ function _hwSmartSort(list, schedule) {
   return list
     .map(h => ({ h, day: _hwTargetDay(h, schedule), assumed: h.due ? 0 : 1, created: _hwCreatedMs(h) ?? Date.now() }))
     .sort((a, b) => a.day.localeCompare(b.day) || a.assumed - b.assumed || a.created - b.created)
+    .map(x => x.h);
+}
+const _hwGivenDay = h => String(h?.date || '').slice(0, 10);
+function _hwSortByGiven(list) {
+  return list.map((h, i) => ({ h, i, d: _hwGivenDay(h) }))
+    .sort((a, b) => (a.d === b.d ? a.i - b.i : !a.d ? 1 : !b.d ? -1 : b.d.localeCompare(a.d)))
     .map(x => x.h);
 }
 // Subject badge with the date the homework was added underneath
