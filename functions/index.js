@@ -280,6 +280,97 @@ exports.onShareEdit = functions.firestore
     }
   });
 
+// "Disconnect devices" for one family member (Settings → family members, by a parent).
+// Every account signed in as that member loses access at once: its uidToFamily mapping is
+// deleted (the rules need it for every family read) and its refresh tokens are revoked;
+// accounts made for a join code are deleted. All of the member's codes are revoked too —
+// otherwise a device that joined with a code would just re-map on its next start — and a
+// new code is issued so the parent can let the person back in. Notification tokens
+// registered for that member are removed.
+const memberDevices = require('./member-devices-helpers');
+exports.disconnectMemberDevices = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  const memberName = typeof data?.memberName === 'string' ? data.memberName : '';
+  if (!memberName) throw new functions.https.HttpsError('invalid-argument', 'memberName required');
+
+  // Caller's family and member
+  let familyUid = null, callerMap = null;
+  if ((await db.collection('families').doc(uid).get()).exists) familyUid = uid;
+  else {
+    callerMap = (await db.collection('uidToFamily').doc(uid).get()).data() || null;
+    familyUid = callerMap?.familyUid || null;
+  }
+  if (!familyUid) throw new functions.https.HttpsError('permission-denied', 'Not a member of a family');
+  const famRef = db.collection('families').doc(familyUid);
+  const members = (await famRef.get()).data()?.members || [];
+  const target = members.find(m => m.name === memberName);
+  if (!target) throw new functions.https.HttpsError('not-found', 'No such member');
+  if (uid !== familyUid) {
+    const callerUser = await admin.auth().getUser(uid).catch(() => null);
+    const callerName = memberDevices.memberOfAccount({ mapData: callerMap, authUser: callerUser });
+    const callerMember = members.find(m => m.name === callerName);
+    if (!callerMember || callerMember.role !== 'parent') throw new functions.https.HttpsError('permission-denied', 'Parents only');
+    if (callerName === memberName) throw new functions.https.HttpsError('failed-precondition', "Can't disconnect yourself");
+  }
+
+  // 1. Accounts signed in as the member
+  let disconnected = 0;
+  const maps = await db.collection('uidToFamily').where('familyUid', '==', familyUid).get();
+  for (const d of maps.docs) {
+    if (d.id === uid || d.id === familyUid) continue;
+    const authUser = await admin.auth().getUser(d.id).catch(() => null);
+    let codeDoc = null;
+    const code = memberDevices.codeOfInviteEmail(authUser?.email);
+    if (code && !d.data().memberName) codeDoc = (await db.collection('joinCodes').doc(code).get()).data() || null;
+    if (memberDevices.memberOfAccount({ mapData: d.data(), authUser, codeDoc }) !== memberName) continue;
+    await d.ref.delete();
+    if (authUser) {
+      if (memberDevices.isInviteEmail(authUser.email)) await admin.auth().deleteUser(d.id).catch(() => {});
+      else await admin.auth().revokeRefreshTokens(d.id).catch(() => {});
+    }
+    disconnected++;
+  }
+
+  // 2. Revoke all of the member's codes (current one + any older ones still on record)
+  const codes = new Set([target.joinCode].filter(Boolean));
+  (await db.collection('joinCodes').where('ownerUid', '==', familyUid).where('memberName', '==', memberName).get())
+    .docs.forEach(d => codes.add(d.id));
+  for (const code of codes) {
+    await db.collection('joinCodes').doc(code).delete().catch(() => {});
+    const inv = await admin.auth().getUserByEmail((code + memberDevices.INVITE_DOMAIN).toLowerCase()).catch(() => null);
+    if (inv) {
+      await db.collection('uidToFamily').doc(inv.uid).delete().catch(() => {});
+      await admin.auth().deleteUser(inv.uid).catch(() => {});
+    }
+  }
+
+  // 3. A new code, set up the way createMemberCode in app.js does it
+  let newCode = null;
+  for (let i = 0; i < 8 && !newCode; i++) {
+    const c = memberDevices.newJoinCode();
+    if ((await db.collection('joinCodes').doc(c).get()).exists) continue;
+    try {
+      await admin.auth().createUser({ email: (c + memberDevices.INVITE_DOMAIN).toLowerCase(), password: c, displayName: familyUid + '|' + memberName });
+      newCode = c;
+    } catch (e) { if (e?.code !== 'auth/email-already-exists') throw e; }
+  }
+  if (!newCode) throw new functions.https.HttpsError('internal', 'Could not create a new code');
+  await db.collection('joinCodes').doc(newCode).set({ ownerUid: familyUid, memberName });
+  await db.runTransaction(async tx => {
+    const snap = await tx.get(famRef);
+    const list = (snap.data()?.members || []).map(m => (m.name === memberName ? { ...m, joinCode: newCode } : m));
+    tx.update(famRef, { members: list });
+  });
+
+  // 4. Stop notifications to the member's devices (never the owner account's own device)
+  const toks = await famRef.collection('fcmTokens').where('memberName', '==', memberName).get();
+  await Promise.all(toks.docs.filter(t => t.data().isOwner !== true).map(t => t.ref.delete().catch(() => {})));
+
+  console.log(`disconnectMemberDevices: family=${familyUid} member=${memberName} accounts=${disconnected} codes=${codes.size}`);
+  return { disconnected, code: newCode };
+});
+
 exports.onSchoolEventCreated = functions.firestore
   .document('schools/{schoolId}/events/{eventId}')
   .onCreate(async (snap, ctx) => {

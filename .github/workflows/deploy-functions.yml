@@ -41,7 +41,17 @@ jobs:
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
 
-      - name: Deploy to Firebase
-        run: npx firebase-tools@latest deploy --only functions,firestore:rules,hosting --project familyhub-7fdd5
+      # Rules and hosting on their own, so a functions problem never holds them back
+      - name: Deploy Firestore rules & hosting
+        run: npx firebase-tools@latest deploy --only firestore:rules,hosting --project familyhub-7fdd5 --non-interactive
         env:
           GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+
+      # Functions in batches: all at once runs into Google Cloud's limit on function updates
+      - name: Deploy Cloud Functions (batched)
+        run: .github/scripts/deploy-functions-batched.sh
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: /tmp/sa.json
+          PROJECT: familyhub-7fdd5
+          BATCH_SIZE: '10'
+          PAUSE: '30'
