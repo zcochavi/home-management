@@ -29,7 +29,6 @@ if (FB_CONFIGURED) {
 // ════════════════════════════════════════
 const GOOGLE_CLIENT_ID = '34982320669-4sg8h4qmppd7v9jdtflqmoqretjsnffa.apps.googleusercontent.com';
 const GCAL_SCOPE       = 'https://www.googleapis.com/auth/calendar.events';
-const GCAL_DISCOVERY   = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
 
 // ════════════════════════════════════════
 //  STRINGS (i18n)
@@ -590,7 +589,7 @@ let S = {
   calYear:_now.getFullYear(), calMonth:_now.getMonth(), calSelected:today,
   lockedMember: null,
 };
-let gcal = { gapiReady:false, gisReady:false, tokenClient:null, accessToken:null, events:[], syncing:false };
+let gcal = { gapiReady:true, gisReady:false, tokenClient:null, accessToken:null, events:[], syncing:false };
 let fbUnsubscribe       = null;
 let _presenceInterval   = null;
 let _notifUnsubscribe   = null;
@@ -3231,17 +3230,19 @@ function afterLoad() {
 // ════════════════════════════════════════
 //  GOOGLE CALENDAR
 // ════════════════════════════════════════
-function gapiLoaded() {
-  gapi.load('client', async () => {
-    // If the discovery-doc fetch fails, init() rejects; without this catch gapiReady
-    // never flips and the calendar bar stays on "loading" forever.
-    try { await gapi.client.init({discoveryDocs:[GCAL_DISCOVERY]}); }
-    catch(e) {
-      console.error('gapi init failed, falling back to client.load', e);
-      try { await gapi.client.load('calendar','v3'); } catch(e2) { console.error(e2); }
-    }
-    gcal.gapiReady=true; renderGCalBar(); tryAutoConnectGCal();
+// Calendar data goes straight to Google Calendar's REST API with the access token. (It used
+// to go through Google's gapi library, which sometimes never loaded — in the Android app
+// especially — leaving the calendar bar on "loading" for good. gcal.gapiReady stays true.)
+const GCAL_EVENTS_URL = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
+async function _gcalApi(method, path = '', { query, body } = {}) {
+  const url = GCAL_EVENTS_URL + path + (query ? '?' + new URLSearchParams(query) : '');
+  const res = await fetch(url, {
+    method,
+    headers: { Authorization: 'Bearer ' + gcal.accessToken, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
   });
+  if (!res.ok) { const err = new Error('Google Calendar ' + res.status); err.status = res.status; throw err; }
+  return res.status === 204 ? null : res.json();
 }
 function gisLoaded() {
   if (_isNativeApp()) return; // not used in the app (see gcalReady)
@@ -3280,7 +3281,6 @@ function _gcalTokRestore() {
     const c = JSON.parse(localStorage.getItem(_gcalTokKey()) || 'null');
     if (!c?.t || c.exp - Date.now() < 60000) { _gcalTokClear(); return false; }
     gcal.accessToken = c.t;
-    gapi.client.setToken({ access_token: c.t });
     fetchGCalEvents();
     return true;
   } catch(e) { return false; }
@@ -3306,7 +3306,6 @@ async function _gcalServerRefresh() {
 async function _gcalApplyToken(accessToken, expiresIn) {
   gcal.accessToken = accessToken;
   gcal.lastErr = ''; // connected now — don't keep showing an earlier failure
-  try { gapi.client.setToken({ access_token: accessToken }); } catch(e) {}
   _gcalTokSave(accessToken, expiresIn);
   if (S.uid && S.user) localStorage.setItem('familyhub_gcal_' + S.uid + '_' + S.user, '1');
   await fetchGCalEvents(); renderGCalBar();
@@ -3374,13 +3373,12 @@ async function fetchGCalEvents() {
   if (!gcalConnected()) return;
   gcal.syncing=true; renderGCalBar();
   try {
-    const res = await gapi.client.calendar.events.list({
-      calendarId:'primary',
+    const data = await _gcalApi('GET', '', { query: {
       timeMin:new Date(_now.getTime()-30*864e5).toISOString(),
       timeMax:new Date(_now.getTime()+90*864e5).toISOString(),
-      maxResults:250,singleEvents:true,orderBy:'startTime',
-    });
-    gcal.events=(res.result.items||[]).map(ev=>({
+      maxResults:'250',singleEvents:'true',orderBy:'startTime',
+    } });
+    gcal.events=(data?.items||[]).map(ev=>({
       id:'gcal_'+ev.id, gcalId:ev.id,
       title:ev.summary||'(No title)',
       date:(ev.start.dateTime||ev.start.date).slice(0,10),
@@ -3392,7 +3390,6 @@ async function fetchGCalEvents() {
     // Cached/expired token rejected → drop it; the next tap reconnects silently
     if (e?.status === 401 || e?.result?.error?.code === 401) {
       gcal.accessToken = null; gcal.events = []; _gcalTokClear();
-      try { gapi.client.setToken(null); } catch(_) {}
       gcal.syncing = false; renderGCalBar(); renderCalendar(); tryAutoConnectGCal(); return;
     }
   }
@@ -3458,7 +3455,7 @@ function renderGCalBar() {
     bt.innerHTML=`<button class="gcal-btn gcal-btn-connect" onclick="location.reload()">${getLang()==='he' ? 'נסה שוב' : 'Retry'}</button>`;
     return;
   }
-  if (!gcalReady())   { st.textContent=t('gcalLoading')+` (gapi ${gcal.gapiReady?'✓':'✗'} gis ${gcal.gisReady?'✓':'✗'})`; bt.innerHTML=''; return; }
+  if (!gcalReady())   { st.textContent=t('gcalLoading'); bt.innerHTML=''; return; }
   if (gcal.syncing)   { st.textContent=t('gcalSyncing'); bt.innerHTML=''; return; }
   if (gcalConnected()) {
     st.innerHTML=`<span class="connected">${t('gcalConnected')}</span>`;
@@ -3484,17 +3481,17 @@ async function gcalCreateEvent(ev) {
   if (!gcalConnected()||!isParent()) return null;
   const tz=Intl.DateTimeFormat().resolvedOptions().timeZone;
   try {
-    const res=await gapi.client.calendar.events.insert({calendarId:'primary',resource:{
+    const res=await _gcalApi('POST', '', { body: {
       summary:ev.title,
       start:ev.time?{dateTime:`${ev.date}T${ev.time}:00`,timeZone:tz}:{date:ev.date},
       end:ev.time?{dateTime:`${ev.date}T${String(parseInt(ev.time)+1).padStart(2,'0')}:${ev.time.slice(3)}:00`,timeZone:tz}:{date:ev.date},
-    }});
-    return res.result.id;
+    } });
+    return res?.id || null;
   } catch(e){console.error(e);return null;}
 }
 async function gcalDeleteEvent(gcalId) {
   if (!gcalConnected()||!gcalId) return;
-  try { await gapi.client.calendar.events.delete({calendarId:'primary',eventId:gcalId}); } catch(e){}
+  try { await _gcalApi('DELETE', '/' + encodeURIComponent(gcalId)); } catch(e){}
 }
 
 // ════════════════════════════════════════
@@ -10319,10 +10316,10 @@ function renderHomework(){
       ? S.homework.filter(h=>(!h.scope||h.scope==='personal')&&h.child===S.child)
       : [];
     const _subjByKey=new Map();
-    [...classHw,...allPersonal,..._syncedHwForChild(S.child, _wtLive)].forEach(h=>{const k=_hwSubjKey(h.subject);if(k&&!_subjByKey.has(k))_subjByKey.set(k,String(h.subject).trim());});
+    [...classHw,...allPersonal,..._syncedHwForChild(S.child, _wtLive)].forEach(h=>{const k=_hwSubjShownKey(h.subject);if(k&&!_subjByKey.has(k))_subjByKey.set(k,String(h.subject).trim());});
     const allSubjs=[..._subjByKey.values()];
     if(allSubjs.length>1){
-      if(_hwSubjectFilter&&!_subjByKey.has(_hwSubjKey(_hwSubjectFilter)))_hwSubjectFilter=null;
+      if(_hwSubjectFilter&&!_subjByKey.has(_hwSubjShownKey(_hwSubjectFilter)))_hwSubjectFilter=null;
       subjChipsEl.style.display='';
       subjChipsEl.innerHTML=allSubjs.map(s=>
         `<div class="hw-subj-chip${_hwSubjectFilter===s?' active':''}" style="${webtopSubjectStyle(s)}" onclick="switchHwSubject('${esc(s)}')">${esc(subjectLabel(s))}</div>`
@@ -10505,7 +10502,8 @@ const _hwLocalDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 // Subject names compared loosely: case, punctuation and spacing are ignored, and so are the
 // Hebrew letters that spellings add or drop ("מתמטיקה" / "מתימטיקה").
 const _hwSubjKey = x => String(x || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '').replace(/[יו]/g, '');
-const _hwSameSubj = (a, b) => _hwSubjKey(a) === _hwSubjKey(b);
+const _hwSubjShownKey = x => _hwSubjKey(subjectLabel(String(x || '').trim()));
+const _hwSameSubj = (a, b) => _hwSubjShownKey(a) === _hwSubjShownKey(b);
 // Does a schedule cell (free text typed by a parent) hold this homework subject's lesson?
 function _hwLessonMatches(cell, subject) {
   const c = _hwSubjKey(cell);
