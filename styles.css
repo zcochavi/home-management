@@ -2480,3 +2480,6 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .hw-wiz-go { background: var(--primary-500); color: #fff; border: none; }
 .hw-wiz-back { background: none; border: none; color: var(--primary-600); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; text-decoration: underline; }
 .hw-wiz-later { display: block; margin: 10px auto 0; background: none; border: none; color: var(--gray-400); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+
+/* Family settings: pointer to Webtop / Mashov, which moved to "connected apps" */
+.mgmt-moved-hint { font-size: 13px; font-weight: 700; color: var(--primary-700); background: var(--primary-50); cursor: pointer; padding: 12px 14px; }

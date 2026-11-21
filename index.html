@@ -284,6 +284,64 @@
     <div class="mgmt-header-title" id="connectedAppsTitle">🔗 אפליקציות מחוברות</div>
   </div>
   <div id="connectedAppsBody" style="padding:16px;max-width:520px;margin:0 auto"></div>
+  <!-- School systems (parents only). Static cards, so they live outside connectedAppsBody,
+       which _renderConnectedApps rewrites; filled by renderSchoolAppCards(). -->
+  <div id="connectedAppsSchool" style="padding:0 16px 16px;max-width:520px;margin:0 auto">
+  <!-- ── Webtop Integration ── -->
+  <div class="card" id="mgmtWebtopCard">
+    <div class="card-title">📡 חיבור Webtop</div>
+    <div id="mgmtWebtopExtension">
+    <div class="mgmt-section-hint">התקן את תוסף FamilyHub ב-Chrome והזן את קוד המשפחה כדי לסנכרן שיעורי בית אוטומטית.</div>
+    <div style="margin:10px 0 6px;font-size:12px;font-weight:700;color:#4a5568">קוד המשפחה שלך</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <div id="mgmtWebtopCode" style="flex:1;font-family:monospace;font-size:13px;background:#f1f5f9;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;color:#1a1a2e;word-break:break-all;direction:ltr"></div>
+      <button class="mgmt-add-btn" onclick="copyWebtopCode()" title="העתק">⎘</button>
+    </div>
+    </div>
+    <!-- Android app only (shown by renderWebtopAppBlock): connect Webtop from the phone -->
+    <div id="mgmtWebtopApp" style="display:none">
+      <div class="mgmt-section-hint">התחברו ל-Webtop כרגיל ופתחו את דף שיעורי הבית של כל ילד/ה פעם אחת — מכאן שיעורי הבית יסונכרנו מהטלפון אוטומטית.</div>
+      <div id="mgmtWebtopAppStatus" style="margin:10px 0 8px;font-size:12px;font-weight:600"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="mgmt-add-btn" id="mgmtWebtopAppConnect" style="flex:1;padding:10px" onclick="webtopAppConnect()">🔗 התחברות ל-Webtop</button>
+        <button class="mgmt-add-btn" id="mgmtWebtopAppSync" style="flex:1;padding:10px;display:none" onclick="webtopAppSync({manual:true})">🔄 סנכרן עכשיו</button>
+      </div>
+      <button id="mgmtWebtopAppDisconnect" style="display:none;margin-top:8px;background:none;border:0;color:#9ca3af;font-size:12px;text-decoration:underline;cursor:pointer" onclick="webtopAppDisconnect()">ניתוק Webtop במכשיר הזה</button>
+    </div>
+    <div id="mgmtWebtopStatus" style="margin-top:8px;font-size:12px;font-weight:600">לא מחובר עדיין</div>
+    <div id="mgmtWebtopMapping" style="display:none;margin-top:12px"></div>
+    <div id="mgmtWebtopIntervalRow" style="margin-top:12px;display:none;align-items:center;gap:8px;flex-wrap:wrap">
+      <span style="font-size:12px;font-weight:600;color:#4a5568">סנכרן אוטומטית:</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap" id="mgmtWebtopIntervalBtns"></div>
+      <div id="mgmtWebtopIntervalAppNote" style="display:none;flex-basis:100%;font-size:11px;color:#9ca3af">בטלפון: הסנכרון רץ לפי התדירות הזו כשהאפליקציה פתוחה או נפתחת (לא כשהיא סגורה לגמרי).</div>
+    </div>
+  </div>
+
+  <!-- ── Mashov Integration (for kids whose school uses Mashov instead of Webtop) ── -->
+  <div class="card" id="mgmtMashovCard" style="display:none">
+    <div class="card-title">📘 חיבור משו״ב</div>
+    <div id="mgmtMashovExtension">
+      <div class="mgmt-section-hint">לילדים שבית הספר שלהם עובד עם משו״ב: התקינו את תוסף FamilyHub ב-Chrome (אותו תוסף של Webtop), הזינו בו את קוד המשפחה, והיכנסו למשו״ב עם פרטי ההורה — שיעורי הבית יסונכרנו אוטומטית.</div>
+      <div style="margin:10px 0 6px;font-size:12px;font-weight:700;color:#4a5568">קוד המשפחה שלך</div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div id="mgmtMashovCode" style="flex:1;font-family:monospace;font-size:13px;background:#f1f5f9;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;color:#1a1a2e;word-break:break-all;direction:ltr"></div>
+        <button class="mgmt-add-btn" onclick="copyFamilyCode(this)" title="העתק">⎘</button>
+      </div>
+    </div>
+    <!-- Android app only (shown by renderMashovAppBlock): connect Mashov from the phone -->
+    <div id="mgmtMashovApp" style="display:none">
+      <div class="mgmt-section-hint">היכנסו למשו״ב כרגיל עם פרטי ההורה (סיסמה או הזדהות משרד החינוך) ולחצו 'סיום' — מכאן שיעורי הבית של כל הילדים יסונכרנו מהטלפון אוטומטית.</div>
+      <div id="mgmtMashovAppStatus" style="margin:10px 0 8px;font-size:12px;font-weight:600"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="mgmt-add-btn" id="mgmtMashovAppConnect" style="flex:1;padding:10px" onclick="mashovAppConnect()">🔗 התחברות למשו״ב</button>
+        <button class="mgmt-add-btn" id="mgmtMashovAppSync" style="flex:1;padding:10px;display:none" onclick="mashovAppSync({manual:true})">🔄 סנכרן עכשיו</button>
+      </div>
+      <button id="mgmtMashovAppDisconnect" style="display:none;margin-top:8px;background:none;border:0;color:#9ca3af;font-size:12px;text-decoration:underline;cursor:pointer" onclick="mashovAppDisconnect()">ניתוק משו״ב במכשיר הזה</button>
+    </div>
+    <div id="mgmtMashovStatus" style="margin-top:8px;font-size:12px;font-weight:600">לא מחובר עדיין</div>
+    <div id="mgmtMashovMapping" style="display:none;margin-top:12px"></div>
+  </div>
+  </div>
 </div>
 
 <div id="feedbackPanel" class="hidden">
@@ -380,59 +438,9 @@
       <div id="mgmtCommunityList"></div>
     </div>
 
-    <!-- ── Webtop Integration ── -->
-    <div class="card" id="mgmtWebtopCard">
-      <div class="card-title">📡 חיבור Webtop</div>
-      <div id="mgmtWebtopExtension">
-      <div class="mgmt-section-hint">התקן את תוסף FamilyHub ב-Chrome והזן את קוד המשפחה כדי לסנכרן שיעורי בית אוטומטית.</div>
-      <div style="margin:10px 0 6px;font-size:12px;font-weight:700;color:#4a5568">קוד המשפחה שלך</div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <div id="mgmtWebtopCode" style="flex:1;font-family:monospace;font-size:13px;background:#f1f5f9;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;color:#1a1a2e;word-break:break-all;direction:ltr"></div>
-        <button class="mgmt-add-btn" onclick="copyWebtopCode()" title="העתק">⎘</button>
-      </div>
-      </div>
-      <!-- Android app only (shown by renderWebtopAppBlock): connect Webtop from the phone -->
-      <div id="mgmtWebtopApp" style="display:none">
-        <div class="mgmt-section-hint">התחברו ל-Webtop כרגיל ופתחו את דף שיעורי הבית של כל ילד/ה פעם אחת — מכאן שיעורי הבית יסונכרנו מהטלפון אוטומטית.</div>
-        <div id="mgmtWebtopAppStatus" style="margin:10px 0 8px;font-size:12px;font-weight:600"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="mgmt-add-btn" id="mgmtWebtopAppConnect" style="flex:1;padding:10px" onclick="webtopAppConnect()">🔗 התחברות ל-Webtop</button>
-          <button class="mgmt-add-btn" id="mgmtWebtopAppSync" style="flex:1;padding:10px;display:none" onclick="webtopAppSync({manual:true})">🔄 סנכרן עכשיו</button>
-        </div>
-        <button id="mgmtWebtopAppDisconnect" style="display:none;margin-top:8px;background:none;border:0;color:#9ca3af;font-size:12px;text-decoration:underline;cursor:pointer" onclick="webtopAppDisconnect()">ניתוק Webtop במכשיר הזה</button>
-      </div>
-      <div id="mgmtWebtopStatus" style="margin-top:8px;font-size:12px;font-weight:600">לא מחובר עדיין</div>
-      <div id="mgmtWebtopMapping" style="display:none;margin-top:12px"></div>
-      <div id="mgmtWebtopIntervalRow" style="margin-top:12px;display:none;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:12px;font-weight:600;color:#4a5568">סנכרן אוטומטית:</span>
-        <div style="display:flex;gap:6px;flex-wrap:wrap" id="mgmtWebtopIntervalBtns"></div>
-        <div id="mgmtWebtopIntervalAppNote" style="display:none;flex-basis:100%;font-size:11px;color:#9ca3af">בטלפון: הסנכרון רץ לפי התדירות הזו כשהאפליקציה פתוחה או נפתחת (לא כשהיא סגורה לגמרי).</div>
-      </div>
-    </div>
-
-    <!-- ── Mashov Integration (for kids whose school uses Mashov instead of Webtop) ── -->
-    <div class="card" id="mgmtMashovCard" style="display:none">
-      <div class="card-title">📘 חיבור משו״ב</div>
-      <div id="mgmtMashovExtension">
-        <div class="mgmt-section-hint">לילדים שבית הספר שלהם עובד עם משו״ב: התקינו את תוסף FamilyHub ב-Chrome (אותו תוסף של Webtop), הזינו בו את קוד המשפחה, והיכנסו למשו״ב עם פרטי ההורה — שיעורי הבית יסונכרנו אוטומטית.</div>
-        <div style="margin:10px 0 6px;font-size:12px;font-weight:700;color:#4a5568">קוד המשפחה שלך</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <div id="mgmtMashovCode" style="flex:1;font-family:monospace;font-size:13px;background:#f1f5f9;border:1.5px solid #e2e8f0;border-radius:8px;padding:8px 10px;color:#1a1a2e;word-break:break-all;direction:ltr"></div>
-          <button class="mgmt-add-btn" onclick="copyFamilyCode(this)" title="העתק">⎘</button>
-        </div>
-      </div>
-      <!-- Android app only (shown by renderMashovAppBlock): connect Mashov from the phone -->
-      <div id="mgmtMashovApp" style="display:none">
-        <div class="mgmt-section-hint">היכנסו למשו״ב כרגיל עם פרטי ההורה (סיסמה או הזדהות משרד החינוך) ולחצו 'סיום' — מכאן שיעורי הבית של כל הילדים יסונכרנו מהטלפון אוטומטית.</div>
-        <div id="mgmtMashovAppStatus" style="margin:10px 0 8px;font-size:12px;font-weight:600"></div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="mgmt-add-btn" id="mgmtMashovAppConnect" style="flex:1;padding:10px" onclick="mashovAppConnect()">🔗 התחברות למשו״ב</button>
-          <button class="mgmt-add-btn" id="mgmtMashovAppSync" style="flex:1;padding:10px;display:none" onclick="mashovAppSync({manual:true})">🔄 סנכרן עכשיו</button>
-        </div>
-        <button id="mgmtMashovAppDisconnect" style="display:none;margin-top:8px;background:none;border:0;color:#9ca3af;font-size:12px;text-decoration:underline;cursor:pointer" onclick="mashovAppDisconnect()">ניתוק משו״ב במכשיר הזה</button>
-      </div>
-      <div id="mgmtMashovStatus" style="margin-top:8px;font-size:12px;font-weight:600">לא מחובר עדיין</div>
-      <div id="mgmtMashovMapping" style="display:none;margin-top:12px"></div>
+    <!-- ── Webtop / Mashov moved to "connected apps" ── -->
+    <div class="card mgmt-moved-hint" id="mgmtSchoolAppsHint" style="display:none" onclick="closeMgmt();openConnectedApps('school')">
+      🔗 החיבור ל-Webtop ולמשו״ב עבר ל<b>אפליקציות מחוברות</b> ›
     </div>
 
     <!-- ── Notification test (Android app only; shown by renderPushTestCard) ── -->

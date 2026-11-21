@@ -3711,21 +3711,9 @@ function renderMgmt() {
   const appUpdateCard = el('mgmtAppUpdateCard');
   if (appUpdateCard) appUpdateCard.style.display = _isNativeApp() ? 'none' : '';
   renderPushTestCard(); // app only
-  // Webtop card — parents only
-  const webtopCard = el('mgmtWebtopCard');
-  if (webtopCard) {
-    webtopCard.style.display = isParent() && featureOn('webtopConnection') ? '' : 'none';
-    const codeEl = el('mgmtWebtopCode');
-    if (codeEl) codeEl.textContent = S.uid || '';
-    renderMgmtWebtop();
-  }
-  const mashovCard = el('mgmtMashovCard');
-  if (mashovCard) {
-    mashovCard.style.display = isParent() && featureOn('mashovConnection') ? '' : 'none';
-    const codeEl = el('mgmtMashovCode');
-    if (codeEl) codeEl.textContent = S.uid || '';
-    renderMgmtMashov();
-  }
+  // Webtop / Mashov now live in "connected apps"; family settings keeps a pointer to them
+  const schoolHint = el('mgmtSchoolAppsHint');
+  if (schoolHint) schoolHint.style.display = isParent() && _anySyncEnabled() ? '' : 'none';
 }
 
 async function setWebtopKidClass(classCode, kidName) {
@@ -7753,10 +7741,35 @@ async function _connectorCall(path, data = {}) {
   return body;
 }
 
-function openConnectedApps() {
+// focus 'webtop' | 'mashov' | 'school' scrolls to that card (from the homework wizard or the
+// pointer left in family settings)
+function openConnectedApps(focus) {
   el('connectedAppsPanel').classList.remove('hidden');
   _renderConnectedApps();
+  renderSchoolAppCards();
   if (isParent()) _loadConnections();
+  if (focus) {
+    const id = focus === 'mashov' ? 'mgmtMashovCard' : focus === 'webtop' ? 'mgmtWebtopCard'
+      : (el('mgmtWebtopCard')?.offsetParent ? 'mgmtWebtopCard' : 'mgmtMashovCard');
+    setTimeout(() => el(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+  }
+}
+// Webtop / Mashov cards in "connected apps" — parents only, each behind its feature switch
+function renderSchoolAppCards() {
+  const webtopCard = el('mgmtWebtopCard');
+  if (webtopCard) {
+    webtopCard.style.display = isParent() && featureOn('webtopConnection') ? '' : 'none';
+    const codeEl = el('mgmtWebtopCode');
+    if (codeEl) codeEl.textContent = S.uid || '';
+    renderMgmtWebtop();
+  }
+  const mashovCard = el('mgmtMashovCard');
+  if (mashovCard) {
+    mashovCard.style.display = isParent() && featureOn('mashovConnection') ? '' : 'none';
+    const codeEl = el('mgmtMashovCode');
+    if (codeEl) codeEl.textContent = S.uid || '';
+    renderMgmtMashov();
+  }
 }
 function closeConnectedApps() { el('connectedAppsPanel').classList.add('hidden'); }
 function _cappsRefresh() {
@@ -10159,11 +10172,11 @@ function _renderHwConnectWizard(kidName) {
       ? (pick.key === 'webtop'
           ? 'נפתח את Webtop — התחברו כרגיל ופתחו את דף שיעורי הבית של כל ילד/ה פעם אחת.'
           : 'נפתח את משו״ב — התחברו עם פרטי ההורה.')
-      : 'החיבור נעשה מאפליקציית FamilyHub לאנדרואיד, או מהמחשב עם תוסף FamilyHub ל-Chrome. פרטים בהגדרות.';
+      : 'החיבור נעשה מאפליקציית FamilyHub לאנדרואיד, או מהמחשב עם תוסף FamilyHub ל-Chrome. פרטים באפליקציות מחוברות.';
     step = `<div class="hw-wiz-q">${pick.icon} חיבור ${pick.name}</div>
       <div class="hw-wiz-how">${how}</div>
       <div class="hw-wiz-choices">
-        <button class="hw-wiz-go" onclick="_hwWizardConnect('${pick.key}')">${native ? '🔗 התחברות' : '⚙️ להגדרות החיבור'}</button>
+        <button class="hw-wiz-go" onclick="_hwWizardConnect('${pick.key}')">${native ? '🔗 התחברות' : '🔗 לאפליקציות מחוברות'}</button>
         ${systems.length > 1 ? `<button class="hw-wiz-back" onclick="_hwWizardChoose(null)">החלפת מערכת</button>` : ''}
       </div>`;
   }
@@ -10179,8 +10192,7 @@ function _hwWizardChoose(key) { _hwWizardPick = key; _renderHwConnectWizard(S.ch
 function _hwWizardSnooze(cid) { _hwWizardSnoozed[cid] = true; _renderHwConnectWizard(S.child); }
 function _hwWizardConnect(key) {
   if (_isNativeApp()) return key === 'mashov' ? mashovAppConnect() : webtopAppConnect();
-  openMgmt();
-  setTimeout(() => el(key === 'mashov' ? 'mgmtMashovCard' : 'mgmtWebtopCard')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+  openConnectedApps(key);
 }
 
 function renderHomework(){
