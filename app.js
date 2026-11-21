@@ -2546,6 +2546,11 @@ function subscribeToFamily(uid) {
     _webtopUpdatedAt = d.webtopUpdatedAt?.toDate?.() || null;
     _mashovHomework = d.mashovHomework || [];
     _mashovUpdatedAt = d.mashovUpdatedAt?.toDate?.() || null;
+    // Once per family: bump sharedHwVersion so the server shares homework synced before
+    // class sharing existed (onFamilySyncedHomework shares everything on a version change)
+    if ((d.sharedHwVersion || 0) < 1 && ((d.webtopHomework || []).length || (d.mashovHomework || []).length)) {
+      fbDb.collection('families').doc(uid).update({ sharedHwVersion: 1 }).catch(() => {});
+    }
     _mashovAppAutoSync();
     S.stars        = d.stars        || {};
     S.groceryPool      = d.groceryPool      || [];
@@ -2852,15 +2857,47 @@ function renderMgmtWebtop() {
 // classCode 'mashov_<childGuid>', so the rendering and done-state code
 // (webtopHomeworkDone, keyed classCode|date|subject) serve both.
 const _MASHOV_PREFIX = 'mashov_';
-const _isMashovItem = (h) => String(h?.classCode || '').startsWith(_MASHOV_PREFIX);
+const _isMashovItem = (h) => h?.source ? h.source === 'mashov' : String(h?.classCode || '').startsWith(_MASHOV_PREFIX);
 function _syncedHw() {
   return [
     ...(featureOn('webtopConnection') ? _webtopHomework : []),
     ...(featureOn('mashovConnection') ? _mashovHomework : []),
   ];
 }
-// The synced items that belong to `child` (all of them for the parent's all-kids view).
+// ── Class-wide synced homework ──
+// Each family's sync is also copied (by the onFamilySyncedHomework function) to the kid's
+// class at schoolClasses/{cid}/syncedHomework, so one parent's import serves the whole
+// class. Items are keyed by content — _hwSyncId must match syncId in
+// functions/shared-homework-helpers.js — so the same homework from several families is one item.
+const _hwNorm = v => String(v == null ? '' : v).trim().replace(/\s+/g, ' ');
+function _hwFnv(str, seed) {
+  let h = seed >>> 0;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return h.toString(16).padStart(8, '0');
+}
+function _hwSyncId(h) {
+  if (h._syncId) return h._syncId;
+  const key = [_hwNorm(h.subject), String(h.date || '').slice(0, 10), _hwNorm(h.text)].join('|');
+  return _hwFnv(key, 0x811c9dc5) + _hwFnv(key, 0x01234567);
+}
+// The class's shared synced items for one kid (only sources whose feature is on)
+function _classSyncedForKid(kidName) {
+  const m = getMembers().find(x => x.name === kidName);
+  const cid = m?.school ? classIdFor(m.school) : null;
+  if (!cid) return [];
+  return (_commCache[cid]?.syncedHw || [])
+    .filter(d => featureOn(d.source === 'mashov' ? 'mashovConnection' : 'webtopConnection') && !_classHwExpired(d))
+    .map(d => ({ ...d, classCode: 'class_' + cid, _cid: cid, _syncId: d.id, _shared: true, _kid: kidName }));
+}
+// The synced items that belong to `child` — this family's own sync plus the class's shared
+// copy, without duplicates (own copy wins). No child: the parent's all-kids view.
 function _syncedHwForChild(child, list = _syncedHw()) {
+  const own = _ownSyncedForChild(child, list);
+  const shared = (child ? [child] : getKids()).flatMap(_classSyncedForKid);
+  const seen = new Set();
+  return [...own, ...shared].filter(h => { const id = _hwSyncId(h); if (seen.has(id)) return false; seen.add(id); return true; });
+}
+function _ownSyncedForChild(child, list) {
   if (!child) return list;
   const code = _kidSyncCodeByName(child);
   const anyMapped = getKids().some(k => _kidSyncCodeByName(k));
@@ -2874,14 +2911,27 @@ function _syncedHwForChild(child, list = _syncedHw()) {
   return anyMapped ? [] : webtopOnly;       // unmapped kid: all only while nobody is mapped
 }
 // A synced item's check lives on the checking family's own doc (webtopHomeworkDone), never
-// on anything shared — so another family's checks don't affect yours. Value: when it was
-// checked (ms), or true for checks made before that was recorded.
-const _syncedDoneKey = h => `${h.classCode}|${h.date}|${h.subject}`;
+// on anything shared — so another family's checks don't affect yours. Keyed by the item's
+// content id ("hw:<id>"); checks made before class sharing used classCode|date|subject and
+// still count. Value: when it was checked (ms), or true for older checks.
+const _syncedDoneKey = h => 'hw:' + _hwSyncId(h);
+const _syncedLegacyKey = h => `${h.classCode}|${h.date}|${h.subject}`;
+function _syncedDoneVal(h) {
+  const done = familyData?.webtopHomeworkDone || {};
+  return done[_syncedDoneKey(h)] || (h._shared ? undefined : done[_syncedLegacyKey(h)]);
+}
+// Kids check only their own class's items; parents any
+function _canToggleSynced(h) {
+  if (isParent()) return true;
+  if (!isKid()) return false;
+  if (h._shared) return classIdFor(getMembers().find(m => m.name === S.user)?.school) === h._cid;
+  return _kidSyncCodeByName(S.user) === h.classCode;
+}
+const _syncedToggleCall = h => `toggleWebtopDone('${esc(_syncedDoneKey(h))}','${esc(_syncedLegacyKey(h))}')`;
 // This family's checked synced items for `child`, shaped for the "done homework" section
 function _syncedDoneForChild(child) {
-  const done = familyData?.webtopHomeworkDone || {};
-  return _syncedHwForChild(child).filter(h => done[_syncedDoneKey(h)]).map(h => {
-    const v = done[_syncedDoneKey(h)];
+  return _syncedHwForChild(child).filter(h => _syncedDoneVal(h)).map(h => {
+    const v = _syncedDoneVal(h);
     const given = _hwGivenDay(h);
     return { ...h, id: _syncedDoneKey(h), desc: h.text || '', _isSynced: true, _doneKey: _syncedDoneKey(h),
       _doneAt: typeof v === 'number' ? v : null,
@@ -4639,6 +4689,18 @@ function subscribeToCommClass(cid) {
       }, e => console.warn('[community] events:', e.code))
   );
 
+  // Live: the class's shared synced homework (Webtop / Mashov imports by any family in the class)
+  const _syncedSince = new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10);
+  _commListeners[cid].push(
+    fbDb.collection('schoolClasses').doc(cid).collection('syncedHomework').where('date', '>=', _syncedSince)
+      .onSnapshot(snap => {
+        if (!_commCache[cid]) return;
+        _commCache[cid].syncedHw = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (S.tab === 'homework') renderHomework();
+        if (S.tab === 'home') renderHome();
+      }, e => console.warn('[community] syncedHomework:', e.code))
+  );
+
   // Live: pending events (committee / admin)
   if (isCommitteeFor(cid)) {
     _commListeners[cid].push(
@@ -4781,6 +4843,7 @@ async function loadCommunityData(kidsWithSchool) {
         pendingEvents: prevCache.pendingEvents  || [],
         applications:  prevCache.applications  || [],
         homework:      prevCache.homework      || [],
+        syncedHw:      prevCache.syncedHw      || [],
         schedule:      _liveSchedule(classDocSnap?.data()?.schedule),
         loadedAt:      Date.now(),
       };
@@ -8553,20 +8616,10 @@ function renderHome() {
   }
 
   // Add synced homework — Webtop and Mashov (undone items for the relevant child/class)
-  const _wtDoneMap = familyData?.webtopHomeworkDone || {};
-  let wtHomeHw = _syncedHw().filter(h => {
-    const key = `${h.classCode}|${h.date}|${h.subject}`;
-    return !_wtDoneMap[key] && !_classHwExpired(h);
-  });
-  if (isKid()) {
-    const myCode = _kidSyncCodeByName(S.user);
-    if (myCode) wtHomeHw = wtHomeHw.filter(h => h.classCode === myCode);
-    else wtHomeHw = wtHomeHw.filter(h => !_isMashovItem(h)); // Mashov items are per child — never a sibling's
-  } else if (S.filter !== 'All' && getKids().includes(S.filter)) {
-    const kidCode = _kidSyncCodeByName(S.filter);
-    if (kidCode) wtHomeHw = wtHomeHw.filter(h => h.classCode === kidCode);
-    else wtHomeHw = wtHomeHw.filter(h => !_isMashovItem(h));
-  }
+  // Own sync + the class's shared copy (see _syncedHwForChild), minus this family's checks
+  const homeKid = isKid() ? S.user : (S.filter !== 'All' && getKids().includes(S.filter) ? S.filter : null);
+  let wtHomeHw = _syncedHwForChild(homeKid, _syncedHw().filter(h => !_classHwExpired(h)))
+    .filter(h => !_syncedDoneVal(h));
 
   // Merge: when webtop is off only show personal homework
   const combined = [
@@ -8603,15 +8656,14 @@ function renderHome() {
         if (h._type === 'wt') {
           const parts = [];
           if (isParent()) {
-            const kid = _wtCodeToKid[h.classCode];
+            const kid = h._kid || _wtCodeToKid[h.classCode];
             if (kid && S.filter !== kid) parts.push(esc(kid));
           }
           if (h.subject) parts.push(`<span style="${webtopSubjectStyle(h.subject)};padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700">${esc(h.subject)}</span>`);
           if (h.date) parts.push(fmtDate(h.date.slice(0,10)));
-          const doneKey = `${h.classCode}|${h.date}|${h.subject}`;
-          const canToggle = isParent() || (isKid() && _kidSyncCodeByName(S.user) === h.classCode);
+          const canToggle = _canToggleSynced(h);
           return `<div class="task-row home-task-row">
-            <div class="check-box ${canToggle?'':'readonly'}" ${canToggle?`onclick="toggleWebtopDone('${esc(doneKey)}')"`:''}></div>
+            <div class="check-box ${canToggle?'':'readonly'}" ${canToggle?`onclick="${_syncedToggleCall(h)}"`:''}></div>
             <div class="task-body">
               <div class="task-text">${esc(h.text)}</div>
               ${parts.length ? `<div class="task-sub">${parts.join(' · ')}</div>` : ''}
@@ -10103,8 +10155,7 @@ function renderHomework(){
   const childOnMashov = String(childClassCode || '').startsWith(_MASHOV_PREFIX);
   const anyMapped = getKids().some(k => _kidSyncCodeByName(k));
   // This family's checks: done synced items move to the "done homework" section
-  const _wtDone = familyData?.webtopHomeworkDone || {};
-  const allWtHw = _syncedHwForChild(S.child, _wtLive).filter(h => !_wtDone[_syncedDoneKey(h)]);
+  const allWtHw = _syncedHwForChild(S.child, _wtLive).filter(h => !_syncedDoneVal(h));
 
   // Subject filter chips — union of subjects across active AND history (all three sections)
   const subjChipsEl=el('hwSubjectChips');
@@ -10197,16 +10248,13 @@ function renderHomework(){
         if(syncTimeEl&&_syncAt){
           syncTimeEl.textContent=_syncAt.toLocaleString(t('locale'),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
         }
-        const doneMap = familyData?.webtopHomeworkDone || {};
         webtopListEl.innerHTML=wtHw.map(h=>{
-          const doneKey = `${h.classCode}|${h.date}|${h.subject}`;
-          const isDone = !!doneMap[doneKey];
-          const canToggle = isParent() ||
-            (isKid() && _kidSyncCodeByName(S.user) === h.classCode);
+          const isDone = !!_syncedDoneVal(h);
+          const canToggle = _canToggleSynced(h);
           return `<div class="hw-item hw-webtop-item${isDone?' hw-webtop-done':''}">
             <div class="hw-head">
               ${canToggle
-                ? `<div class="check-box${isDone?' done':''}" onclick="toggleWebtopDone('${esc(doneKey)}')"></div>`
+                ? `<div class="check-box${isDone?' done':''}" onclick="${_syncedToggleCall(h)}"></div>`
                 : `<span class="hw-webtop-icon">${_isMashovItem(h)?'📘':'📡'}</span>`}
               <div class="hw-desc-text${isDone?' done':''}">${esc(h.text)}</div>
               ${h.subject?`<span class="badge" style="${webtopSubjectStyle(h.subject)}">${esc(h.subject)}</span>`:''}
@@ -10404,7 +10452,7 @@ function hwHistListHTML(filtered) {
   return filtered.length ? filtered.map(h=>{
     const canDeleteClass = h._isClass && isParent() && (isAdmin() || h.createdBy?.familyUid === S.uid);
     if (h._isSynced) {
-      const canUndo = isParent() || (isKid() && _kidSyncCodeByName(S.user) === h.classCode);
+      const canUndo = _canToggleSynced(h);
       const when = h._doneAt ? fmtDoneAt(h._doneAt) : (h.date ? fmtDate(_hwGivenDay(h)) : '');
       return `
     <div class="hw-hist-item">
@@ -10412,7 +10460,7 @@ function hwHistListHTML(filtered) {
       <div class="hw-hist-desc">${esc(h.desc)}</div>
       ${h.subject ? `<span class="badge" style="${webtopSubjectStyle(h.subject)}">${esc(h.subject)}</span>` : ''}
       <span class="hw-hist-ts">${when}</span>
-      ${canUndo ? `<button class="del-btn" title="בטל סימון" onclick="toggleWebtopDone('${esc(h._doneKey)}')">${_ico.undo}</button>` : ''}
+      ${canUndo ? `<button class="del-btn" title="בטל סימון" onclick="${_syncedToggleCall(h)}">${_ico.undo}</button>` : ''}
     </div>`;
     }
     return `
@@ -10466,19 +10514,22 @@ function _hwScopePick(val) {
   if (hwDescEl) hwDescEl.placeholder = val === 'class' ? 'שיעור בית לכל הכיתה...' : t('hwPlaceholder');
 }
 
-async function toggleWebtopDone(doneKey) {
+// doneKey: "hw:<content id>"; legacyKey: the pre-sharing classCode|date|subject key, which
+// still marks an item done and is cleared on undo
+async function toggleWebtopDone(doneKey, legacyKey) {
   if (!fbDb || !S.uid) return;
-  const isDone = !!(familyData?.webtopHomeworkDone?.[doneKey]);
+  if (!familyData.webtopHomeworkDone) familyData.webtopHomeworkDone = {};
+  const map = familyData.webtopHomeworkDone;
+  const isDone = !!(map[doneKey] || (legacyKey && map[legacyKey]));
   const update = {};
   if (isDone) {
-    update[`webtopHomeworkDone.${doneKey}`] = firebase.firestore.FieldValue.delete();
+    for (const k of [doneKey, legacyKey].filter(Boolean)) {
+      update[`webtopHomeworkDone.${k}`] = firebase.firestore.FieldValue.delete();
+      delete map[k];
+    }
   } else {
-    if (!familyData.webtopHomeworkDone) familyData.webtopHomeworkDone = {};
-    familyData.webtopHomeworkDone[doneKey] = Date.now();
-    update[`webtopHomeworkDone.${doneKey}`] = familyData.webtopHomeworkDone[doneKey];
-  }
-  if (isDone && familyData?.webtopHomeworkDone) {
-    delete familyData.webtopHomeworkDone[doneKey];
+    map[doneKey] = Date.now();
+    update[`webtopHomeworkDone.${doneKey}`] = map[doneKey];
   }
   renderHomework();
   await fbDb.collection('families').doc(S.uid).update(update);

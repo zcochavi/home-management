@@ -371,6 +371,40 @@ exports.disconnectMemberDevices = functions.https.onCall(async (data, context) =
   return { disconnected, code: newCode };
 });
 
+// Class-wide synced homework: when a family's Webtop / Mashov homework (or its kids' class
+// mapping) changes, copy new or changed items to each kid's class so the whole class sees
+// one parent's import. Items are keyed by content (same id from any family), so several
+// families syncing the same class don't duplicate them. See shared-homework-helpers.js.
+const sharedHw = require('./shared-homework-helpers');
+exports.onFamilySyncedHomework = functions.firestore
+  .document('families/{familyUid}')
+  .onWrite(async (change, ctx) => {
+    if (!change.after.exists) return;
+    const before = change.before.exists ? change.before.data() : {};
+    const after = change.after.data();
+    // Most family writes (chores, lists, ...) don't touch synced homework or the kids' mapping
+    const sig = d => JSON.stringify([d.sharedHwVersion || 0, d.webtopHomework || [], d.mashovHomework || [],
+      (d.members || []).map(m => [m.name, m.role, m.webtopClassCode || '', m.mashovChildId || '', m.school || null])]);
+    if (sig(before) === sig(after)) return;
+    // sharedHwVersion bumped (the app does it once per family): share everything, so homework
+    // synced before class sharing existed reaches the class too
+    const full = (before.sharedHwVersion || 0) !== (after.sharedHwVersion || 0);
+    const items = full ? Object.values(sharedHw.sharedItems(after, classIdFor)) : sharedHw.changedItems(before, after, classIdFor);
+    if (!items.length) return;
+    for (let i = 0; i < items.length; i += 400) {
+      const batch = db.batch();
+      items.slice(i, i + 400).forEach(({ cid, id, data }) => {
+        batch.set(db.collection('schoolClasses').doc(cid).collection('syncedHomework').doc(id), {
+          ...data,
+          importedBy: ctx.params.familyUid,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+      });
+      await batch.commit();
+    }
+    console.log(`onFamilySyncedHomework: family=${ctx.params.familyUid} shared ${items.length} item(s)`);
+  });
+
 exports.onSchoolEventCreated = functions.firestore
   .document('schools/{schoolId}/events/{eventId}')
   .onCreate(async (snap, ctx) => {
