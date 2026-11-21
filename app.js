@@ -8708,16 +8708,18 @@ function renderHome() {
     .filter(h => !_syncedDoneVal(h));
 
   // Merge: when webtop is off only show personal homework
-  const combined = [
+  // Personal / class homework by due date (soonest first, undated last), then synced
+  // homework by the date it was given, newest first — the same order as the homework tab
+  const byDue = [
     ...hw.map(h => ({ _type:'hw', _due: h.due||'', ...h })),
     ...classHw.map(h => ({ _type:'class', _due: h.due||'', ...h })),
-    ...wtHomeHw.map(h => ({ _type:'wt', _due: h.date||'', ...h })),
   ].sort((a,b) => {
     if (!a._due && !b._due) return 0;
     if (!a._due) return 1;
     if (!b._due) return -1;
     return a._due.localeCompare(b._due);
   });
+  const combined = [...byDue, ..._hwSortByGiven(wtHomeHw).map(h => ({ _type:'wt', _due: h.date||'', ...h }))];
 
   // Build a reliable classCode→kid map for the "All" parent view.
   // Primary: kid.webtopClassCode === h.classCode (exact match).
