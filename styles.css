@@ -232,25 +232,6 @@ body {
   position: relative; width: 100%; max-width: 380px;
   display: flex; flex-direction: column; align-items: center; text-align: center;
 }
-.aw-bubbles { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
-.aw-bubbles span {
-  position: absolute; bottom: -60px; font-size: 26px; opacity: 0;
-  animation: aw-float 11s linear infinite;
-}
-.aw-bubbles span:nth-child(1) { left: 8%;  animation-delay: 0s;   font-size: 24px; }
-.aw-bubbles span:nth-child(2) { left: 26%; animation-delay: 3.5s; font-size: 20px; }
-.aw-bubbles span:nth-child(3) { left: 46%; animation-delay: 7s;   font-size: 28px; }
-.aw-bubbles span:nth-child(4) { left: 64%; animation-delay: 1.8s; font-size: 22px; }
-.aw-bubbles span:nth-child(5) { left: 80%; animation-delay: 5.2s; font-size: 18px; }
-.aw-bubbles span:nth-child(6) { left: 92%; animation-delay: 8.6s; font-size: 22px; }
-@keyframes aw-float {
-  0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
-  10%  { opacity: .55; }
-  85%  { opacity: .35; }
-  100% { transform: translateY(-110vh) rotate(25deg); opacity: 0; }
-}
-.auth-welcome > *:not(.aw-bubbles) { position: relative; z-index: 1; }
-
 /* Logo: the roof draws itself, the family pops in one by one, then the house gently breathes */
 .aw-logo { display: block; overflow: visible; margin-bottom: 6px; filter: drop-shadow(0 10px 24px rgba(0,0,0,.18));
   animation: aw-breathe 3.2s ease-in-out 1.8s infinite; transform-origin: 50% 90%; }
@@ -312,7 +293,6 @@ body {
 .auth-card-title { font-size: 17px; font-weight: 800; color: var(--gray-900); }
 
 @media (prefers-reduced-motion: reduce) {
-  .aw-bubbles { display: none; }
   .aw-logo, .aw-roof, .aw-p, .aw-p2, .aw-title, .aw-sub, .aw-btn, .aw-legal, .auth-form-in { animation: none !important; }
   .aw-roof { stroke-dashoffset: 0; }
   .aw-p { transform: none; }
