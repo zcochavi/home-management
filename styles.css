@@ -319,6 +319,11 @@ body {
   .aw-title, .aw-sub, .aw-btn, .aw-legal { opacity: 1; }
 }
 
+/* Buttons with a forward arrow icon: text and arrow centred on one line */
+button:has(> .btn-arr) { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-arr { flex-shrink: 0; display: block; }
+.login-signout:has(> .btn-arr) { display: inline-flex; }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }

@@ -792,7 +792,7 @@ function _enterSu2SelfMode() {
   el('su2RoleRow').style.display     = 'none';
   el('mbName').placeholder           = 'השם שלך';
   el('su2AddBtn').className          = 'auth-btn-main su2-self-btn';
-  el('su2AddBtn').textContent        = 'הוסף את עצמי ←';
+  el('su2AddBtn').innerHTML          = '<span>הוסף את עצמי</span>' + BTN_ARROW;
   el('su2MoreDivider').style.display = 'none';
   el('su2CreateRow').style.display   = 'none';
   el('su2BackLink').style.display    = '';
@@ -918,6 +918,10 @@ function renderMemberPreview() {
     </div>`;
   }).join('');
 }
+
+// Forward arrow for buttons (an icon, so it sits in the middle of the line — the ← character
+// sits low in Hebrew fonts). Points left: forward in right-to-left.
+const BTN_ARROW = '<svg class="btn-arr" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5M11 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 // Signed-out screens: 'welcome' (three choices: sign in / join / new family) or one of the forms
 const AUTH_TITLES = { signin: '🔑 כניסה', join: '🤝 הצטרפות למשפחה קיימת', signup: '✨ יצירת משפחה חדשה' };
