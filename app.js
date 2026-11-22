@@ -2976,11 +2976,11 @@ function _ownSyncedForChild(child, list) {
   // Mashov items are per child, so they never fall back to another kid's list
   const webtopOnly = list.filter(h => !_isMashovItem(h));
   if (String(code || '').startsWith(_MASHOV_PREFIX)) return list.filter(h => h.classCode === code);
-  if (code) {
-    const mine = list.filter(h => h.classCode === code);
-    return mine.length ? mine : webtopOnly; // stale classCode from older syncs → all Webtop items
-  }
-  return anyMapped ? [] : webtopOnly;       // unmapped kid: all only while nobody is mapped
+  // A kid sees only their own items — none if they have none. (A fallback used to show all
+  // the family's Webtop items when a kid's code matched nothing, so a kid with no homework
+  // showed a sibling's.) Unmapped: everything only in a one-kid family that nobody's mapped in.
+  if (code) return list.filter(h => h.classCode === code);
+  return (!anyMapped && getKids().length === 1) ? webtopOnly : [];
 }
 // A synced item's check lives on the checking family's own doc (webtopHomeworkDone), never
 // on anything shared — so another family's checks don't affect yours. Keyed by the item's
