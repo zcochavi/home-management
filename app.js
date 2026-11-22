@@ -940,6 +940,8 @@ function setAuthMode(mode) {
   el('signupPanel1').style.display  = mode==='signup' ? '' : 'none';
   el('signupPanel2').style.display  = 'none';
   el('joinPanel').style.display     = mode==='join'   ? '' : 'none';
+  el('signupVerifyPanel').style.display = 'none';
+  el('authCardHead').style.display = '';
   // Only clear errors for panels being hidden — never wipe the active panel's error
   if (mode !== 'join') { const e=el('joinError'); if(e) e.textContent=''; }
   if (mode !== 'signin' && mode !== 'signup') {
@@ -1143,7 +1145,13 @@ async function doForgotPassword() {
   }
   setAuthLoading(true);
   try {
-    await fbAuth.sendPasswordResetEmail(email);
+    // Hebrew email, and a "continue" button back to FamilyHub after the new password is saved
+    try { fbAuth.languageCode = 'he'; } catch (e) {}
+    try { await fbAuth.sendPasswordResetEmail(email, { url: PUBLIC_APP_URL }); }
+    catch (e) {
+      if (e.code !== 'auth/unauthorized-continue-uri' && e.code !== 'auth/invalid-continue-uri') throw e;
+      await fbAuth.sendPasswordResetEmail(email); // the continue address isn't allowed — plain link
+    }
     setAuthLoading(false);
     el('siError').style.color = 'var(--success, #4CAF84)';
     el('siError').textContent = 'נשלח! בדוק את תיבת הדואר שלך לקישור לאיפוס סיסמה';
@@ -1179,11 +1187,26 @@ async function doSignUp() {
   const pwd        = el('suPwd').value;
   setAuthLoading(true);
   _registering = true;
+  if (_googlePending) return _createFamily(_googlePending.uid, familyName, email, members);
+  // Email + password: create the account, then the email must be verified (Firebase link)
+  // before the family is created. The draft is kept on this device in case the page reloads.
   try {
-    // 1. Create owner account (Firebase auto-signs in as owner), or reuse the signed-in Google account
-    const ownerUid = _googlePending
-      ? _googlePending.uid
-      : (await fbAuth.createUserWithEmailAndPassword(email, pwd)).user.uid;
+    const user = (await fbAuth.createUserWithEmailAndPassword(email, pwd)).user;
+    _svSaveDraft(user.uid, { familyName, email, members });
+    await _svSend(user);
+    _svShow(user);
+  } catch(e) {
+    _registering = false;
+    setAuthLoading(false);
+    el('su2Error').textContent = getAuthError(e.code);
+  }
+}
+
+// Writes the new family (the owner account exists and is signed in)
+async function _createFamily(ownerUid, familyName, email, members) {
+  setAuthLoading(true);
+  _registering = true;
+  try {
     // 2. Generate family code + create invite account via secondary app instance
     const code = generateFamilyCode();
     const inviteEmail = code + '@' + JOIN_DOMAIN;
@@ -1213,6 +1236,7 @@ async function doSignUp() {
     }
     _registering = false;
     _googlePending = null; _googleFlow = false;
+    _svClearDraft(ownerUid);
     // 4. Manually kick off subscription (onAuthStateChanged was suppressed)
     S.uid = ownerUid;
     el('authScreen').classList.add('hidden');
@@ -1221,8 +1245,78 @@ async function doSignUp() {
   } catch(e) {
     _registering = false;
     setAuthLoading(false);
-    el('su2Error').textContent = getAuthError(e.code);
+    const err = getAuthError(e.code);
+    if (_backOpen('signupVerifyPanel')) el('svError').textContent = err; else el('su2Error').textContent = err;
   }
+}
+
+// ── New family: verify the email before the family is created ──
+// Firebase emails a verification link; this screen checks every few seconds (and on
+// "I verified") whether it was clicked, then creates the family. Only sign-ups started on
+// this device are held here — existing accounts (verified or not) sign in as before.
+const _svKey = uid => 'familyhub_pending_signup_' + uid;
+let _svTimer = null, _svResentAt = 0;
+function _svSaveDraft(uid, d) { try { localStorage.setItem(_svKey(uid), JSON.stringify(d)); } catch (e) {} }
+function _svDraft(uid) { try { return JSON.parse(localStorage.getItem(_svKey(uid)) || 'null'); } catch (e) { return null; } }
+function _svClearDraft(uid) { try { localStorage.removeItem(_svKey(uid)); } catch (e) {} }
+async function _svSend(user) {
+  try { fbAuth.languageCode = 'he'; } catch (e) {}
+  try { await user.sendEmailVerification({ url: PUBLIC_APP_URL }); }
+  catch (e) {
+    if (e.code === 'auth/too-many-requests') throw e;
+    await user.sendEmailVerification(); // e.g. the continue address isn't allowed — send a plain link
+  }
+}
+function _svShow(user) {
+  setAuthLoading(false);
+  el('authScreen').classList.remove('hidden');
+  el('loadingScreen').classList.add('hidden');
+  el('authWelcome').style.display = 'none';
+  el('authFormWrap').style.display = '';
+  ['signinPanel','signupPanel1','signupPanel2','joinPanel'].forEach(id => el(id).style.display = 'none');
+  el('authCardHead').style.display = 'none';
+  el('signupVerifyPanel').style.display = '';
+  el('svEmail').textContent = user.email || '';
+  el('svError').textContent = '';
+  _svResentAt = Date.now(); // the first email was just sent
+  clearInterval(_svTimer);
+  _svTimer = setInterval(() => _svPoll(false), 4000);
+}
+async function _svPoll(manual) {
+  const user = fbAuth.currentUser;
+  if (!user) { clearInterval(_svTimer); return; }
+  try { await user.reload(); } catch (e) { return; }
+  if (!fbAuth.currentUser?.emailVerified) {
+    if (manual) el('svError').textContent = 'עדיין לא רואים אימות — לחצו על הקישור במייל ונסו שוב';
+    return;
+  }
+  clearInterval(_svTimer);
+  const d = _svDraft(user.uid);
+  if (!d) { _registering = false; return _enterApp(user); }
+  showToast('✓ האימייל אומת');
+  await _createFamily(user.uid, d.familyName, d.email, d.members);
+}
+function _svCheckNow() { el('svError').textContent = ''; return _svPoll(true); }
+async function _svResend() {
+  const user = fbAuth.currentUser;
+  if (!user) return;
+  if (Date.now() - _svResentAt < 30000) { el('svError').textContent = 'רגע… אפשר לשלוח שוב בעוד חצי דקה'; return; }
+  _svResentAt = Date.now();
+  try { await _svSend(user); el('svError').textContent = ''; showToast('📬 שלחנו שוב'); }
+  catch (e) { el('svError').textContent = getAuthError(e.code); }
+}
+// Wrong email: remove the unverified account and go back to the form (details kept)
+async function _svCancel() {
+  clearInterval(_svTimer);
+  const user = fbAuth.currentUser;
+  const d = user ? _svDraft(user.uid) : null;
+  if (user) { _svClearDraft(user.uid); await user.delete().catch(() => {}); }
+  await fbAuth.signOut().catch(() => {});
+  setTimeout(() => { _registering = false; }, 300); // after Firebase's sign-out callback
+  setAuthMode('signup');
+  if (d) { el('suFamily').value = d.familyName || ''; el('suEmail').value = d.email || ''; }
+  el('suPwd').value = ''; el('suPwd2').value = ''; _suPwdCheck();
+  el('suEmail').focus();
 }
 
 async function doJoin() {
@@ -1567,7 +1661,7 @@ async function doJoinWithGoogle() {
 
 function setAuthLoading(on) {
   el('authLoadingOverlay').style.display = on ? '' : 'none';
-  ['signinPanel','signupPanel1','signupPanel2','joinPanel'].forEach(id => {
+  ['signinPanel','signupPanel1','signupPanel2','joinPanel','signupVerifyPanel'].forEach(id => {
     const e = el(id); if (e) e.style.pointerEvents = on ? 'none' : '';
   });
   // Hide secondary action links while a request is in flight
@@ -1582,7 +1676,8 @@ function getAuthError(code) {
     'auth/invalid-login-credentials':  'אימייל או סיסמה שגויים — בדוק ונסה שוב',
     'auth/email-already-in-use':   'כתובת האימייל כבר רשומה במערכת',
     'auth/invalid-email':          'כתובת אימייל לא תקינה',
-    'auth/weak-password':          'הסיסמה קצרה מדי — נדרשים לפחות 6 תווים',
+    'auth/weak-password':          'הסיסמה חלשה מדי — נדרשים לפחות 8 תווים, עם אות ומספר',
+    'auth/password-does-not-meet-requirements': 'הסיסמה לא עומדת בדרישות — לפחות 8 תווים, עם אות ומספר',
     'auth/network-request-failed': 'בעיית חיבור לרשת — בדוק את האינטרנט ונסה שוב',
     'auth/too-many-requests':      'יותר מדי ניסיונות כושלים — נסה שוב עוד כמה דקות',
     'permission-denied':           'אין הרשאה לגשת למסד הנתונים — יש לעדכן את חוקי האבטחה ב-Firebase Console',
@@ -8049,7 +8144,9 @@ function _fhBackStep(dry) {
   if (el('hwFabPicker')?.classList.contains('open')) return go(_hwHidePicker);
   if (el('commFabPicker')?.classList.contains('open')) return go(_commHidePicker);
   if (S.tab === 'homework' && _hwAddOpen) return go(hwFabClick);
-  // 5. A sign-in form → the welcome screen (sign-up step 2 → step 1 first)
+  // 5. Waiting for email verification: stay (its own "wrong email" button cancels the sign-up)
+  if (_backOpen('signupVerifyPanel')) return false;
+  // 5b. A sign-in form → the welcome screen (sign-up step 2 → step 1 first)
   if (_backOpen('authScreen') && !_backOpen('authWelcome')) {
     return go(() => { if (_backOpen('signupPanel2')) signupBack(); else setAuthMode('welcome'); });
   }
@@ -13298,6 +13395,12 @@ if (!FB_CONFIGURED) {
       if (_registering || _joining || _googleFlow) return;
       if (user && user.isAnonymous) { await fbAuth.signOut().catch(() => {}); return; }
       if (user) {
+        if (_svDraft(user.uid)) {
+          // A sign-up started on this device that still waits for the email to be verified
+          _registering = true;
+          if (user.emailVerified) { const d = _svDraft(user.uid); return _createFamily(user.uid, d.familyName, d.email, d.members); }
+          return _svShow(user);
+        }
         await _maybeJoinFromLink(user);
         await _enterApp(user);
       } else {
