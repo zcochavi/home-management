@@ -35,7 +35,9 @@ function buildPushMessage(token, title, body, strData = {}) {
     notification: { title, body },
     data: strData,
     webpush: {
-      notification: { title, body, requireInteraction: false },
+      // Shown by Firebase in the browser (the service worker doesn't show a second copy);
+      // `tag` makes a newer notification about the same thing replace the older one
+      notification: { title, body, requireInteraction: false, ...(strData.tag ? { tag: strData.tag } : {}) },
       fcmOptions: { link: 'https://zcochavi.github.io/home-management/' },
     },
     // Android app: its notification channel, icon and accent color; `tag` makes a

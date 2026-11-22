@@ -13,6 +13,10 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(payload => {
+  // Messages with a notification payload (all of ours) are already shown by Firebase itself;
+  // showing them here too produced two identical notifications. Only data-only messages
+  // need showing by hand.
+  if (payload.notification) return;
   const title = payload.notification?.title || 'FamilyHub';
   const body  = payload.notification?.body  || '';
   self.registration.showNotification(title, {
