@@ -60,6 +60,9 @@ public class WebtopLoginActivity extends AppCompatActivity {
     // Diagnostic recording of Webtop's own API requests (masked; see assets/fh/webtop-trace.js)
     private final JSONArray trace = new JSONArray();
     private String traceJs = null;
+    // Closes the screen once Webtop lists the parent's children (assets/fh/webtop-login-watch.js)
+    private String watchJs = null;
+    private boolean closing = false;
     private WebView webView;
     private TextView statusView;
 
@@ -84,7 +87,7 @@ public class WebtopLoginActivity extends AppCompatActivity {
         statusView = new TextView(this);
         statusView.setTextColor(Color.WHITE);
         statusView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        statusView.setText("היכנסו ל-Webtop ופתחו את דף שיעורי הבית של כל ילד/ה");
+        statusView.setText("היכנסו ל-Webtop — הילדים יימצאו אוטומטית");
         bar.addView(statusView, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         Button done = new Button(this);
@@ -108,11 +111,14 @@ public class WebtopLoginActivity extends AppCompatActivity {
 
         webView.addJavascriptInterface(new Bridge(), "FHWebtop");
         traceJs = readAsset("fh/webtop-trace.js");
+        watchJs = readAsset("fh/webtop-login-watch.js");
         boolean docStart = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT);
         if (docStart) {
             WebViewCompat.addDocumentStartJavaScript(webView, CAPTURE_JS,
                 Collections.singleton("https://webtop.smartschool.co.il"));
             if (traceJs != null) WebViewCompat.addDocumentStartJavaScript(webView, traceJs,
+                Collections.singleton("https://webtop.smartschool.co.il"));
+            if (watchJs != null) WebViewCompat.addDocumentStartJavaScript(webView, watchJs,
                 Collections.singleton("https://webtop.smartschool.co.il"));
         }
         webView.setWebViewClient(new WebViewClient() {
@@ -122,6 +128,7 @@ public class WebtopLoginActivity extends AppCompatActivity {
                 if (!docStart && url != null && url.startsWith(WEBTOP_URL)) {
                     view.evaluateJavascript(CAPTURE_JS, null);
                     if (traceJs != null) view.evaluateJavascript(traceJs, null);
+                    if (watchJs != null) view.evaluateJavascript(watchJs, null);
                 }
                 CookieManager.getInstance().flush();
             }
@@ -147,6 +154,17 @@ public class WebtopLoginActivity extends AppCompatActivity {
     }
 
     private class Bridge {
+        // Logged in and Webtop listed the children: the app takes it from here
+        @JavascriptInterface
+        public void onKidsListed(int count) {
+            runOnUiThread(() -> {
+                if (closing) return;
+                closing = true;
+                statusView.setText("✓ נמצאו " + count + " ילדים — מסנכרן…");
+                statusView.postDelayed(WebtopLoginActivity.this::finishWithResult, 1200);
+            });
+        }
+
         @JavascriptInterface
         public void onTrace(String json) {
             try {
@@ -162,13 +180,14 @@ public class WebtopLoginActivity extends AppCompatActivity {
                 String key = p.optString("studentName", "") + "|" + p.opt("classCode");
                 runOnUiThread(() -> {
                     students.put(key, p);
-                    statusView.setText("✓ נמצאו " + students.size() + " ילדים — פתחו ילד/ה נוסף/ת או לחצו 'סיום'");
+                    if (!closing) statusView.setText("✓ נמצאו " + students.size() + " ילדים — פתחו ילד/ה נוסף/ת או לחצו 'סיום'");
                 });
             } catch (Exception ignored) {}
         }
     }
 
     private void finishWithResult() {
+        if (isFinishing()) return;
         CookieManager.getInstance().flush();
         JSONArray arr = new JSONArray();
         for (JSONObject p : students.values()) arr.put(p);
