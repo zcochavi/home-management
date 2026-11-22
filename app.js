@@ -1145,7 +1145,13 @@ async function doForgotPassword() {
   }
   setAuthLoading(true);
   try {
-    await fbAuth.sendPasswordResetEmail(email);
+    // Hebrew email, and a "continue" button back to FamilyHub after the new password is saved
+    try { fbAuth.languageCode = 'he'; } catch (e) {}
+    try { await fbAuth.sendPasswordResetEmail(email, { url: PUBLIC_APP_URL }); }
+    catch (e) {
+      if (e.code !== 'auth/unauthorized-continue-uri' && e.code !== 'auth/invalid-continue-uri') throw e;
+      await fbAuth.sendPasswordResetEmail(email); // the continue address isn't allowed — plain link
+    }
     setAuthLoading(false);
     el('siError').style.color = 'var(--success, #4CAF84)';
     el('siError').textContent = 'נשלח! בדוק את תיבת הדואר שלך לקישור לאיפוס סיסמה';
