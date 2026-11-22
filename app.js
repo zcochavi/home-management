@@ -7821,6 +7821,45 @@ function openMenu() {
   el('menuOverlay').classList.add('open');
 }
 
+// ── Android Back button ──
+// The app is one page whose screens are overlays, so the WebView has no history and Back
+// used to leave the app. MainActivity asks fhBack() first: it closes the topmost thing that's
+// open and returns true; false means nothing is left to close and the app goes to the background.
+// Most nested screens first (e.g. family details opens over admin, terms over settings).
+const _BACK_SCREENS = [
+  ['listDetailPanel', () => closeListDetail()], ['listWizardPanel', () => closeListWizard()],
+  ['familyDetailsPanel', () => closeFamilyDetails()], ['pendingPanel', () => closePendingPanel()],
+  ['termsScreen', () => closeTerms()], ['privacyScreen', () => closePrivacy()],
+  ['feedbackPanel', () => closeFeedback()], ['connectedAppsPanel', () => closeConnectedApps()],
+  ['grocerySettingsPanel', () => closeGrocerySettings()], ['homeworkSettingsPanel', () => closeHomeworkSettings()],
+  ['messageCenterPanel', () => closeMessageCenter()], ['adminPanel', () => closeAdminPanel()],
+  ['tabEditorScreen', () => closeTabEditor()], ['homeEditorScreen', () => closeHomeEditor()],
+  ['mgmtScreen', () => closeMgmt()],
+];
+function _backOpen(id) {
+  const e = el(id);
+  return !!e && !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none';
+}
+window.fhBack = function () {
+  try {
+    // 1. A dialog
+    const ov = el('_cmodalOverlay');
+    if (ov && ov.classList.contains('cmodal-visible')) { _cmodalClose(null); return true; }
+    // 2. The side menu
+    if (_menuOpen) { closeMenu(); return true; }
+    // 3. The topmost open screen
+    for (const [id, close] of _BACK_SCREENS) if (_backOpen(id)) { close(); return true; }
+    // 4. Open "add" forms / FAB pickers on the current tab
+    if (el('hwFabPicker')?.classList.contains('open')) { _hwHidePicker(); return true; }
+    if (el('commFabPicker')?.classList.contains('open')) { _commHidePicker(); return true; }
+    if (S.tab === 'homework' && _hwAddOpen) { hwFabClick(); return true; }
+    // 5. Another tab → home (only inside the app, not on the login screens)
+    const inApp = !_backOpen('authScreen') && !_backOpen('loginScreen') && !_backOpen('loadingScreen');
+    if (inApp && S.tab && S.tab !== 'home') { switchTab('home'); return true; }
+  } catch (e) { console.warn('[back]', e); }
+  return false;
+};
+
 function closeMenu() {
   _menuOpen = false;
   const dd = el('menuDropdown');
