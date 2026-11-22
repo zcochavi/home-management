@@ -287,10 +287,11 @@
     <button class="mgmt-back-btn" onclick="closeConnectedApps()" aria-label="סגירה">×</button>
     <div class="mgmt-header-title" id="connectedAppsTitle">🔗 אפליקציות מחוברות</div>
   </div>
-  <div id="connectedAppsBody" style="padding:16px;max-width:520px;margin:0 auto"></div>
+  <!-- A pending connection request from Claude stays on top (filled by _renderConnectedApps) -->
+  <div id="connectedAppsRequest" style="padding:0 16px;max-width:520px;margin:0 auto"></div>
   <!-- School systems (parents only). Static cards, so they live outside connectedAppsBody,
        which _renderConnectedApps rewrites; filled by renderSchoolAppCards(). -->
-  <div id="connectedAppsSchool" style="padding:0 16px 16px;max-width:520px;margin:0 auto">
+  <div id="connectedAppsSchool" style="padding:16px 16px 0;max-width:520px;margin:0 auto">
   <!-- ── Webtop Integration ── -->
   <div class="card" id="mgmtWebtopCard">
     <div class="card-title">📡 חיבור Webtop</div>
@@ -311,7 +312,6 @@
         <button class="mgmt-add-btn" id="mgmtWebtopAppSync" style="flex:1;padding:10px;display:none" onclick="webtopAppSync({manual:true})">🔄 סנכרן עכשיו</button>
       </div>
       <button id="mgmtWebtopAppDisconnect" style="display:none;margin-top:8px;background:none;border:0;color:#9ca3af;font-size:12px;text-decoration:underline;cursor:pointer" onclick="webtopAppDisconnect()">ניתוק Webtop במכשיר הזה</button>
-      <div id="mgmtWebtopDiag" style="margin-top:10px"></div>
     </div>
     <div id="mgmtWebtopStatus" style="margin-top:8px;font-size:12px;font-weight:600">לא מחובר עדיין</div>
     <div id="mgmtWebtopMapping" style="display:none;margin-top:12px"></div>
@@ -342,6 +342,8 @@
     <div id="mgmtMashovMapping" style="display:none;margin-top:12px"></div>
   </div>
   </div>
+  <div id="connectedAppsBody" style="padding:16px;max-width:520px;margin:0 auto"></div>
+
 </div>
 
 <div id="feedbackPanel" class="hidden">

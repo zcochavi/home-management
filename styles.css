@@ -2503,6 +2503,3 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .ftree-node-unset { border-style: dashed !important; border-color: #f59e0b !important; }
 .ftree-node-unset-badge { font-size: 9px; font-weight: 700; color: #b45309; background: #fffbeb; border-radius: 6px; padding: 1px 5px; margin-top: 2px; }
 
-/* Webtop card (app): copy the diagnostic recording */
-.wt-diag-btn { width: 100%; padding: 9px; font-size: 12px; background: var(--gray-100) !important; color: var(--gray-700) !important; }
-.wt-diag-hint { font-size: 11px; color: var(--gray-400); margin-top: 4px; line-height: 1.4; }

@@ -2703,9 +2703,6 @@ async function webtopAppConnect() {
     // Prefer finding the kids ourselves; fall back to params captured from opened pages
     const found = await _wtDiscoverStudents();
     students = found.length ? found : (res?.students || []);
-    // Diagnostic recording of Webtop's own requests during this login (masked) — kept on the
-    // device so the parent can copy it from the Webtop card (see assets/fh/webtop-trace.js)
-    if ((res?.trace || []).length) { _wtSave('trace', { at: Date.now(), entries: res.trace }); renderWebtopAppBlock(); }
   } catch (e) {
     showToast('שגיאה בפתיחת Webtop', 'error');
     return;
@@ -2785,29 +2782,9 @@ async function webtopAppDisconnect() {
 
 // In the app the Webtop card shows the in-app connection instead of the
 // extension instructions. On the website it stays exactly as it was.
-// "Copy diagnostic report": the masked recording of Webtop's requests from the last login
-function _wtRenderDiag() {
-  const box = el('mgmtWebtopDiag');
-  if (!box) return;
-  const tr = _isNativeApp() ? _wtLoad('trace', null) : null;
-  if (!tr?.entries?.length) { box.innerHTML = ''; return; }
-  const when = new Date(tr.at).toLocaleString(t('locale'), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  box.innerHTML = `<button class="mgmt-add-btn wt-diag-btn" onclick="_wtCopyDiag()">🧪 העתקת דוח אבחון (${tr.entries.length} בקשות · ${when})</button>
-    <div class="wt-diag-hint">רשימת הבקשות ש-Webtop שלח בזמן ההתחברות, בלי שמות ומספרים מזהים — להדבקה בשיחה עם Claude.</div>`;
-}
-async function _wtCopyDiag() {
-  const tr = _wtLoad('trace', null);
-  if (!tr?.entries?.length) return;
-  const text = 'FamilyHub Webtop trace ' + new Date(tr.at).toISOString() + '\n' + tr.entries.map(e => JSON.stringify(e)).join('\n');
-  try { await navigator.clipboard.writeText(text); showToast('הדוח הועתק ✓ — הדביקו אותו בשיחה', 'success'); }
-  catch (_) {
-    const ov = _cmodalEl();
-    ov.innerHTML = `<div class="cmodal-box" onclick="event.stopPropagation()"><div class="cmodal-msg">סמנו הכל והעתיקו:</div>
-      <textarea readonly style="width:100%;height:220px;font-size:10px;direction:ltr" onclick="this.select()">${esc(text)}</textarea>
-      <div class="cmodal-btns"><button class="cmodal-btn cmodal-cancel" onclick="_cmodalClose(null)">סגור</button></div></div>`;
-    requestAnimationFrame(() => ov.classList.add('cmodal-visible'));
-  }
-}
+// The diagnostic recording (assets/fh/webtop-trace.js) served its purpose — finding how Webtop
+// lists a parent's kids — and is no longer kept or shown; clear a copy saved by older versions.
+function _wtRenderDiag() { try { localStorage.removeItem(_wtKey('trace')); } catch (_) {} }
 function renderWebtopAppBlock() {
   const box = el('mgmtWebtopApp');
   if (!box) return;
@@ -8033,6 +8010,10 @@ function _renderConnectedApps() {
       <div class="capps-foot">${T('לאחר ההחלטה תחזרו אל', 'Afterwards you return to')} <bdi dir="ltr">${esc(req.returnsTo || 'claude.ai')}</bdi></div>
     </div>`;
   }
+
+  // The request card has its own slot above Webtop / Mashov; the rest goes below them
+  const reqSlot = el('connectedAppsRequest');
+  if (reqSlot) { reqSlot.innerHTML = h ? `<div style="padding-top:16px">${h}</div>` : ''; h = ''; }
 
   // ── Google Calendar ──
   let gStatus, gBtns = '';
