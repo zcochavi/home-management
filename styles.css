@@ -232,25 +232,6 @@ body {
   position: relative; width: 100%; max-width: 380px;
   display: flex; flex-direction: column; align-items: center; text-align: center;
 }
-.aw-bubbles { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
-.aw-bubbles span {
-  position: absolute; bottom: -60px; font-size: 26px; opacity: 0;
-  animation: aw-float 11s linear infinite;
-}
-.aw-bubbles span:nth-child(1) { left: 8%;  animation-delay: 0s;   font-size: 24px; }
-.aw-bubbles span:nth-child(2) { left: 26%; animation-delay: 3.5s; font-size: 20px; }
-.aw-bubbles span:nth-child(3) { left: 46%; animation-delay: 7s;   font-size: 28px; }
-.aw-bubbles span:nth-child(4) { left: 64%; animation-delay: 1.8s; font-size: 22px; }
-.aw-bubbles span:nth-child(5) { left: 80%; animation-delay: 5.2s; font-size: 18px; }
-.aw-bubbles span:nth-child(6) { left: 92%; animation-delay: 8.6s; font-size: 22px; }
-@keyframes aw-float {
-  0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
-  10%  { opacity: .55; }
-  85%  { opacity: .35; }
-  100% { transform: translateY(-110vh) rotate(25deg); opacity: 0; }
-}
-.auth-welcome > *:not(.aw-bubbles) { position: relative; z-index: 1; }
-
 /* Logo: the roof draws itself, the family pops in one by one, then the house gently breathes */
 .aw-logo { display: block; overflow: visible; margin-bottom: 6px; filter: drop-shadow(0 10px 24px rgba(0,0,0,.18));
   animation: aw-breathe 3.2s ease-in-out 1.8s infinite; transform-origin: 50% 90%; }
@@ -312,12 +293,34 @@ body {
 .auth-card-title { font-size: 17px; font-weight: 800; color: var(--gray-900); }
 
 @media (prefers-reduced-motion: reduce) {
-  .aw-bubbles { display: none; }
   .aw-logo, .aw-roof, .aw-p, .aw-p2, .aw-title, .aw-sub, .aw-btn, .aw-legal, .auth-form-in { animation: none !important; }
   .aw-roof { stroke-dashoffset: 0; }
   .aw-p { transform: none; }
   .aw-title, .aw-sub, .aw-btn, .aw-legal { opacity: 1; }
 }
+
+/* Buttons with a forward arrow icon: text and arrow centred on one line */
+button:has(> .btn-arr) { display: flex; align-items: center; justify-content: center; gap: 6px; }
+.btn-arr { flex-shrink: 0; display: block; }
+.login-signout:has(> .btn-arr) { display: inline-flex; }
+
+/* New-family password: show/hide, strength meter, rules, match */
+.pwd-wrap { position: relative; }
+.pwd-wrap .auth-input { padding-left: 46px; }
+.pwd-eye { position: absolute; left: 6px; top: 50%; transform: translateY(calc(-50% - 5px)); width: 36px; height: 36px;
+  border: none; background: none; cursor: pointer; font-size: 17px; border-radius: 50%; line-height: 1; }
+.pwd-eye:hover { background: var(--gray-100); }
+.pwd-meter { height: 5px; border-radius: 3px; background: var(--gray-100); overflow: hidden; margin: -4px 2px 6px; }
+.pwd-meter span { display: block; height: 100%; width: 0; border-radius: 3px; transition: width .25s, background-color .25s; }
+.pwd-meter[data-score="1"] span { width: 25%;  background: #E5484D; }
+.pwd-meter[data-score="2"] span { width: 50%;  background: #F5A524; }
+.pwd-meter[data-score="3"] span { width: 75%;  background: #7CC35A; }
+.pwd-meter[data-score="4"] span { width: 100%; background: #2EAD64; }
+.pwd-rules { display: flex; gap: 14px; justify-content: flex-start; direction: rtl; font-size: 12px; font-weight: 700; color: var(--gray-400); margin: 0 4px 10px; }
+.pwd-rules .ok { color: #2EAD64; }
+.pwd-match { font-size: 12px; font-weight: 700; min-height: 14px; margin: -4px 4px 6px; direction: rtl; text-align: right; }
+.pwd-match.ok { color: #2EAD64; }
+.pwd-match.bad { color: var(--error); }
 
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
