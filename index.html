@@ -46,12 +46,43 @@
 
 <!-- AUTH SCREEN -->
 <div id="authScreen" class="hidden">
-  <div class="auth-logo"><img src="logo-mark.svg" alt="" width="64" height="62"></div>
-  <div class="auth-title" style="color:white;margin-bottom:20px">FamilyHub</div>
+  <!-- Welcome: the first screen a signed-out visitor sees — three clear choices -->
+  <div id="authWelcome" class="auth-welcome">
+    <div class="aw-bubbles" aria-hidden="true"><span>🏠</span><span>📚</span><span>🛒</span><span>📅</span><span>⭐</span><span>💛</span></div>
+    <svg class="aw-logo" viewBox="96 104 320 310" width="132" height="128" aria-hidden="true">
+      <path class="aw-roof" d="M104 244 L256 122 L408 244" fill="none" stroke="#fff" stroke-width="34" stroke-linecap="round" stroke-linejoin="round"/>
+      <g class="aw-p aw-p1"><circle cx="190" cy="290" r="28" fill="#fff"/><path d="M148 400 a42 42 0 0 1 84 0Z" fill="#fff"/></g>
+      <g class="aw-p aw-p3"><circle cx="322" cy="290" r="28" fill="#fff"/><path d="M280 400 a42 42 0 0 1 84 0Z" fill="#fff"/></g>
+      <g class="aw-p aw-p2"><circle cx="256" cy="268" r="34" fill="#FFD166"/><path d="M212 400 a44 44 0 0 1 88 0Z" fill="#FFD166"/></g>
+    </svg>
+    <div class="aw-title">FamilyHub</div>
+    <div class="aw-sub">כל הבית במקום אחד — שיעורי בית, קניות, משימות ולוח שנה 💛</div>
+    <div class="aw-btns">
+      <button class="aw-btn aw-btn-signin" onclick="setAuthMode('signin')">
+        <span class="aw-btn-ico">🔑</span><span class="aw-btn-txt"><b>כניסה</b><small>כבר יש לי חשבון</small></span>
+      </button>
+      <button class="aw-btn aw-btn-join" onclick="setAuthMode('join')">
+        <span class="aw-btn-ico">🤝</span><span class="aw-btn-txt"><b>הצטרפות למשפחה קיימת</b><small>קיבלתי קוד מבן/בת משפחה</small></span>
+      </button>
+      <button class="aw-btn aw-btn-new" onclick="setAuthMode('signup')">
+        <span class="aw-btn-ico">✨</span><span class="aw-btn-txt"><b>יצירת משפחה חדשה</b><small>אני הראשון/ה מהמשפחה כאן</small></span>
+      </button>
+    </div>
+    <div class="aw-legal">
+      בהמשך השימוש הנך מאשר/ת את
+      <a href="javascript:void(0)" onclick="openTerms()">תנאי השימוש</a>
+      ואת
+      <a href="javascript:void(0)" onclick="openPrivacy()">מדיניות הפרטיות</a>
+    </div>
+  </div>
+
+  <div id="authFormWrap" class="auth-form-wrap" style="display:none">
+  <div class="auth-logo"><img src="logo-mark.svg" alt="" width="56" height="54"></div>
+  <div class="auth-title" style="color:white;margin-bottom:16px">FamilyHub</div>
   <div class="auth-card">
-    <div class="auth-tabs">
-      <div class="auth-tab active" id="authTabSignin" onclick="setAuthMode('signin')">כניסה</div>
-      <div class="auth-tab"       id="authTabJoin"   onclick="setAuthMode('join')">הצטרף</div>
+    <div class="auth-card-head">
+      <button class="auth-back" onclick="setAuthMode('welcome')" aria-label="חזרה">›</button>
+      <div class="auth-card-title" id="authCardTitle"></div>
     </div>
 
     <!-- Sign In -->
@@ -66,7 +97,6 @@
         <span>המשך עם Google</span>
       </button>
       <button class="auth-link-btn" onclick="doForgotPassword()" style="direction:rtl">שכחתי סיסמה</button>
-      <button class="auth-link-btn" onclick="setAuthMode('signup')" style="direction:rtl">צור משפחה חדשה ←</button>
     </div>
 
     <!-- Join with family code -->
@@ -99,7 +129,7 @@
       <input class="auth-input" id="suPwd"    type="password" placeholder="סיסמה (לפחות 6 תווים)" dir="ltr" autocomplete="new-password">
       <div id="su1Error" class="auth-error"></div>
       <button class="auth-btn-main" onclick="signupNext()">הבא ←</button>
-      <button class="auth-link-btn" onclick="setAuthMode('signin')" style="margin-top:4px">‹ חזרה להתחברות</button>
+      <button class="auth-link-btn" onclick="setAuthMode('signin')" style="margin-top:4px">כבר יש לנו משפחה? כניסה</button>
     </div>
 
     <!-- Sign Up step 2: member builder -->
@@ -145,6 +175,7 @@
       ואת
       <a href="javascript:void(0)" onclick="openPrivacy()" style="color:var(--gray-400);text-decoration:underline">מדיניות הפרטיות</a>
     </div>
+  </div>
   </div>
 </div>
 
@@ -287,10 +318,11 @@
     <button class="mgmt-back-btn" onclick="closeConnectedApps()" aria-label="סגירה">×</button>
     <div class="mgmt-header-title" id="connectedAppsTitle">🔗 אפליקציות מחוברות</div>
   </div>
-  <div id="connectedAppsBody" style="padding:16px;max-width:520px;margin:0 auto"></div>
+  <!-- A pending connection request from Claude stays on top (filled by _renderConnectedApps) -->
+  <div id="connectedAppsRequest" style="padding:0 16px;max-width:520px;margin:0 auto"></div>
   <!-- School systems (parents only). Static cards, so they live outside connectedAppsBody,
        which _renderConnectedApps rewrites; filled by renderSchoolAppCards(). -->
-  <div id="connectedAppsSchool" style="padding:0 16px 16px;max-width:520px;margin:0 auto">
+  <div id="connectedAppsSchool" style="padding:16px 16px 0;max-width:520px;margin:0 auto">
   <!-- ── Webtop Integration ── -->
   <div class="card" id="mgmtWebtopCard">
     <div class="card-title">📡 חיבור Webtop</div>
@@ -311,7 +343,6 @@
         <button class="mgmt-add-btn" id="mgmtWebtopAppSync" style="flex:1;padding:10px;display:none" onclick="webtopAppSync({manual:true})">🔄 סנכרן עכשיו</button>
       </div>
       <button id="mgmtWebtopAppDisconnect" style="display:none;margin-top:8px;background:none;border:0;color:#9ca3af;font-size:12px;text-decoration:underline;cursor:pointer" onclick="webtopAppDisconnect()">ניתוק Webtop במכשיר הזה</button>
-      <div id="mgmtWebtopDiag" style="margin-top:10px"></div>
     </div>
     <div id="mgmtWebtopStatus" style="margin-top:8px;font-size:12px;font-weight:600">לא מחובר עדיין</div>
     <div id="mgmtWebtopMapping" style="display:none;margin-top:12px"></div>
@@ -342,6 +373,8 @@
     <div id="mgmtMashovMapping" style="display:none;margin-top:12px"></div>
   </div>
   </div>
+  <div id="connectedAppsBody" style="padding:16px;max-width:520px;margin:0 auto"></div>
+
 </div>
 
 <div id="feedbackPanel" class="hidden">
@@ -449,6 +482,14 @@
       <div class="mgmt-section-hint">שולח התראה אמיתית למכשיר הזה בלבד. אחרי הלחיצה עברו למסך הבית — ההתראה תגיע תוך כ-5 שניות.</div>
       <div id="pushTestStatus" style="margin:10px 0 8px;font-size:12px;font-weight:600;line-height:1.8"></div>
       <button class="mgmt-add-btn" id="pushTestBtn" style="width:100%;padding:10px" onclick="sendTestPush()">🔔 שלח לי התראת בדיקה</button>
+    </div>
+
+    <!-- ── Fingerprint protection of the parent's profile (renderFingerprintCard) ── -->
+    <div class="card" id="mgmtFingerprintCard" style="display:none">
+      <div class="card-title">🫆 הגנה בטביעת אצבע</div>
+      <div class="mgmt-section-hint">במכשיר משותף: מעבר לפרופיל שלך יחייב את טביעת האצבע שלך, כדי שהילדים לא ייכנסו למסכי ההורים. ההגדרה חלה רק על המכשיר הזה.</div>
+      <div id="fpStatus" style="margin:10px 0 8px;font-size:12px;font-weight:600;line-height:1.8"></div>
+      <button class="mgmt-add-btn" id="fpToggleBtn" style="width:100%;padding:10px" onclick="toggleFingerprintLock()"></button>
     </div>
 
     <!-- ── App Update ── -->
