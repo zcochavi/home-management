@@ -919,14 +919,23 @@ function renderMemberPreview() {
   }).join('');
 }
 
+// Signed-out screens: 'welcome' (three choices: sign in / join / new family) or one of the forms
+const AUTH_TITLES = { signin: '🔑 כניסה', join: '🤝 הצטרפות למשפחה קיימת', signup: '✨ יצירת משפחה חדשה' };
 function setAuthMode(mode) {
   if (_googlePending && mode !== 'signup') _cancelGoogleSignup();
+  const welcome = mode === 'welcome';
+  el('authWelcome').style.display  = welcome ? '' : 'none';
+  el('authFormWrap').style.display = welcome ? 'none' : '';
+  el('authScreen').classList.toggle('auth-at-welcome', welcome);
+  if (!welcome) {
+    el('authCardTitle').textContent = AUTH_TITLES[mode] || '';
+    const wrap = el('authFormWrap');
+    wrap.classList.remove('auth-form-in'); void wrap.offsetWidth; wrap.classList.add('auth-form-in');
+  }
   el('signinPanel').style.display   = mode==='signin' ? '' : 'none';
   el('signupPanel1').style.display  = mode==='signup' ? '' : 'none';
   el('signupPanel2').style.display  = 'none';
   el('joinPanel').style.display     = mode==='join'   ? '' : 'none';
-  el('authTabSignin').classList.toggle('active', mode==='signin' || mode==='signup');
-  el('authTabJoin').classList.toggle('active',   mode==='join');
   // Only clear errors for panels being hidden — never wipe the active panel's error
   if (mode !== 'join') { const e=el('joinError'); if(e) e.textContent=''; }
   if (mode !== 'signin' && mode !== 'signup') {
@@ -2231,7 +2240,7 @@ async function authSignOut() {
   el('loginScreen').classList.add('hidden');
   el('app').classList.remove('visible');
   el('authScreen').classList.remove('hidden');
-  setAuthMode('signin');
+  setAuthMode('welcome');
   setAuthLoading(false);
 }
 
@@ -7989,7 +7998,12 @@ window.fhBack = function () {
     if (el('hwFabPicker')?.classList.contains('open')) { _hwHidePicker(); return true; }
     if (el('commFabPicker')?.classList.contains('open')) { _commHidePicker(); return true; }
     if (S.tab === 'homework' && _hwAddOpen) { hwFabClick(); return true; }
-    // 5. Another tab → home (only inside the app, not on the login screens)
+    // 5. A sign-in form → the welcome screen (sign-up step 2 → step 1 first)
+    if (_backOpen('authScreen') && !_backOpen('authWelcome')) {
+      if (_backOpen('signupPanel2')) signupBack(); else setAuthMode('welcome');
+      return true;
+    }
+    // 6. Another tab → home (only inside the app, not on the login screens)
     const inApp = !_backOpen('authScreen') && !_backOpen('loginScreen') && !_backOpen('loadingScreen');
     if (inApp && S.tab && S.tab !== 'home') { switchTab('home'); return true; }
   } catch (e) { console.warn('[back]', e); }
@@ -13219,7 +13233,7 @@ if (!FB_CONFIGURED) {
           setAuthMode('join');
           el('joinCode').value = joinParam.toUpperCase();
         } else {
-          setAuthMode('signin');
+          setAuthMode('welcome');
         }
       }
     });
