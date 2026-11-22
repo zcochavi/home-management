@@ -322,6 +322,20 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
 .pwd-match.ok { color: #2EAD64; }
 .pwd-match.bad { color: var(--error); }
 
+/* New family: waiting for email verification */
+#signupVerifyPanel { text-align: center; }
+.sv-ico { font-size: 54px; line-height: 1; margin: 4px 0 10px; animation: sv-bob 2.4s ease-in-out infinite; }
+@keyframes sv-bob { 0%,100% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-6px) rotate(-4deg); } }
+.sv-title { font-size: 17px; font-weight: 800; color: var(--gray-900); margin-bottom: 8px; }
+.sv-text { font-size: 13px; font-weight: 600; color: var(--gray-600, #555); line-height: 1.8; margin-bottom: 12px; }
+.sv-text b { color: var(--gray-900); word-break: break-all; }
+.sv-wait { font-size: 12px; font-weight: 700; color: var(--primary-500); margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 4px; direction: rtl; }
+.sv-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--primary-500); animation: sv-blink 1.2s infinite; }
+.sv-dot:nth-child(2) { animation-delay: .2s; } .sv-dot:nth-child(3) { animation-delay: .4s; }
+@keyframes sv-blink { 0%,80%,100% { opacity: .25; } 40% { opacity: 1; } }
+.sv-hint { font-size: 11px; color: var(--gray-400); font-weight: 600; margin-top: 2px; }
+@media (prefers-reduced-motion: reduce) { .sv-ico, .sv-dot { animation: none; } }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }

@@ -79,7 +79,7 @@
   <div class="auth-logo"><img src="logo-mark.svg" alt="" width="56" height="54"></div>
   <div class="auth-title" style="color:white;margin-bottom:16px">FamilyHub</div>
   <div class="auth-card">
-    <div class="auth-card-head">
+    <div class="auth-card-head" id="authCardHead">
       <button class="auth-back" onclick="setAuthMode('welcome')" aria-label="חזרה"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
       <div class="auth-card-title" id="authCardTitle"></div>
     </div>
@@ -177,6 +177,19 @@
         <button class="auth-btn-main auth-btn-create" onclick="doSignUp()">✓ צור חשבון</button>
       </div>
       <button class="auth-link-btn" id="su2BackLink" onclick="signupBack()" style="margin-top:4px">‹ חזור</button>
+    </div>
+
+    <!-- Sign Up: verify the email (new family with email + password) -->
+    <div id="signupVerifyPanel" style="display:none">
+      <div class="sv-ico">📬</div>
+      <div class="sv-title">כמעט סיימנו! נשאר רק לאמת את האימייל</div>
+      <div class="sv-text">שלחנו קישור אימות אל<br><b id="svEmail" dir="ltr"></b><br>פתחו את המייל ולחצו על הקישור — המשפחה תיווצר כאן אוטומטית.</div>
+      <div class="sv-wait" id="svWait"><span class="sv-dot"></span><span class="sv-dot"></span><span class="sv-dot"></span> ממתינים לאימות…</div>
+      <div id="svError" class="auth-error" style="text-align:center"></div>
+      <button class="auth-btn-main" onclick="_svCheckNow()">✓ אימתתי</button>
+      <button class="auth-link-btn" id="svResendBtn" onclick="_svResend()">לא הגיע? שלחו שוב</button>
+      <div class="sv-hint">כדאי לבדוק גם בתיקיית הספאם / קידומי מכירות</div>
+      <button class="auth-link-btn" onclick="_svCancel()" style="margin-top:4px">טעיתי באימייל — חזרה</button>
     </div>
 
     <div id="authLoadingOverlay" style="display:none" class="auth-loading">⏳ טוען...</div>
