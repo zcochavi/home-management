@@ -227,6 +227,98 @@ body {
 }
 .auth-link-btn:hover { color: var(--primary-700); }
 
+/* ── Auth welcome (first screen when signed out) ── */
+.auth-welcome {
+  position: relative; width: 100%; max-width: 380px;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+}
+.aw-bubbles { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.aw-bubbles span {
+  position: absolute; bottom: -60px; font-size: 26px; opacity: 0;
+  animation: aw-float 11s linear infinite;
+}
+.aw-bubbles span:nth-child(1) { left: 8%;  animation-delay: 0s;   font-size: 24px; }
+.aw-bubbles span:nth-child(2) { left: 26%; animation-delay: 3.5s; font-size: 20px; }
+.aw-bubbles span:nth-child(3) { left: 46%; animation-delay: 7s;   font-size: 28px; }
+.aw-bubbles span:nth-child(4) { left: 64%; animation-delay: 1.8s; font-size: 22px; }
+.aw-bubbles span:nth-child(5) { left: 80%; animation-delay: 5.2s; font-size: 18px; }
+.aw-bubbles span:nth-child(6) { left: 92%; animation-delay: 8.6s; font-size: 22px; }
+@keyframes aw-float {
+  0%   { transform: translateY(0) rotate(0deg); opacity: 0; }
+  10%  { opacity: .55; }
+  85%  { opacity: .35; }
+  100% { transform: translateY(-110vh) rotate(25deg); opacity: 0; }
+}
+.auth-welcome > *:not(.aw-bubbles) { position: relative; z-index: 1; }
+
+/* Logo: the roof draws itself, the family pops in one by one, then the house gently breathes */
+.aw-logo { display: block; overflow: visible; margin-bottom: 6px; filter: drop-shadow(0 10px 24px rgba(0,0,0,.18));
+  animation: aw-breathe 3.2s ease-in-out 1.8s infinite; transform-origin: 50% 90%; }
+.aw-roof { stroke-dasharray: 420; stroke-dashoffset: 420; animation: aw-draw .8s cubic-bezier(.6,.1,.3,1) .15s forwards; }
+.aw-p { transform-box: fill-box; transform-origin: 50% 100%; transform: scale(0); animation: aw-pop .55s cubic-bezier(.3,1.6,.5,1) forwards; }
+.aw-p1 { animation-delay: .75s; }
+.aw-p3 { animation-delay: .95s; }
+.aw-p2 { animation: aw-pop .6s cubic-bezier(.3,1.6,.5,1) 1.15s forwards, aw-wave 2.6s ease-in-out 2.2s infinite; }
+@keyframes aw-draw { to { stroke-dashoffset: 0; } }
+@keyframes aw-pop  { 0% { transform: scale(0); } 100% { transform: scale(1); } }
+@keyframes aw-wave { 0%,70%,100% { transform: scale(1) rotate(0); } 78% { transform: scale(1.08) rotate(-6deg); } 86% { transform: scale(1.08) rotate(6deg); } }
+@keyframes aw-breathe { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+
+.aw-title { font-size: 34px; font-weight: 900; color: #fff; letter-spacing: .5px;
+  opacity: 0; animation: aw-rise .5s ease-out 1.25s forwards; }
+.aw-sub { font-size: 14px; font-weight: 600; color: rgba(255,255,255,.88); line-height: 1.6; margin: 4px 12px 26px;
+  opacity: 0; animation: aw-rise .5s ease-out 1.4s forwards; }
+.aw-btns { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+.aw-btn {
+  width: 100%; display: flex; align-items: center; gap: 14px; text-align: right; direction: rtl;
+  padding: 14px 16px; border: none; border-radius: 20px; cursor: pointer; font-family: inherit;
+  background: var(--surface); color: var(--gray-900);
+  box-shadow: 0 10px 26px rgba(30,40,110,.22);
+  opacity: 0; animation: aw-rise .5s cubic-bezier(.3,1.4,.5,1) forwards;
+  transition: transform var(--t-fast), box-shadow var(--t-fast);
+}
+.aw-btn:nth-child(1) { animation-delay: 1.55s; }
+.aw-btn:nth-child(2) { animation-delay: 1.68s; }
+.aw-btn:nth-child(3) { animation-delay: 1.81s; }
+.aw-btn:hover  { transform: translateY(-2px); box-shadow: 0 14px 30px rgba(30,40,110,.28); }
+.aw-btn:active { transform: scale(.97); }
+.aw-btn-ico {
+  flex-shrink: 0; width: 46px; height: 46px; border-radius: 14px; font-size: 24px;
+  display: flex; align-items: center; justify-content: center; background: var(--primary-50);
+}
+.aw-btn-join .aw-btn-ico { background: #FFF4D6; }
+.aw-btn-new  .aw-btn-ico { background: #E6F7EE; }
+.aw-btn-txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.aw-btn-txt b { font-size: 16px; font-weight: 800; }
+.aw-btn-txt small { font-size: 12px; font-weight: 600; color: var(--gray-500); }
+.aw-btn-new { background: #FFD166; }
+.aw-btn-new .aw-btn-ico { background: rgba(255,255,255,.6); }
+.aw-btn-new .aw-btn-txt b, .aw-btn-new .aw-btn-txt small { color: #3a2c00; }
+.aw-legal { margin-top: 22px; font-size: 11px; color: rgba(255,255,255,.75); line-height: 1.7;
+  opacity: 0; animation: aw-rise .5s ease-out 2s forwards; }
+.aw-legal a { color: inherit; text-decoration: underline; }
+@keyframes aw-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+/* The form card, opened from one of the welcome buttons */
+.auth-form-wrap { width: 100%; max-width: 360px; }
+.auth-form-in { animation: aw-rise .35s ease-out; }
+.auth-card-head { display: flex; align-items: center; gap: 8px; margin: -6px 0 18px; direction: rtl; }
+.auth-back {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--gray-100); color: var(--gray-700); font-size: 22px; font-weight: 800; line-height: 1;
+  display: flex; align-items: center; justify-content: center; font-family: inherit;
+}
+.auth-back:hover { background: var(--gray-200); }
+.auth-card-title { font-size: 17px; font-weight: 800; color: var(--gray-900); }
+
+@media (prefers-reduced-motion: reduce) {
+  .aw-bubbles { display: none; }
+  .aw-logo, .aw-roof, .aw-p, .aw-p2, .aw-title, .aw-sub, .aw-btn, .aw-legal, .auth-form-in { animation: none !important; }
+  .aw-roof { stroke-dashoffset: 0; }
+  .aw-p { transform: none; }
+  .aw-title, .aw-sub, .aw-btn, .aw-legal { opacity: 1; }
+}
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }
@@ -2503,6 +2595,3 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .ftree-node-unset { border-style: dashed !important; border-color: #f59e0b !important; }
 .ftree-node-unset-badge { font-size: 9px; font-weight: 700; color: #b45309; background: #fffbeb; border-radius: 6px; padding: 1px 5px; margin-top: 2px; }
 
-/* Webtop card (app): copy the diagnostic recording */
-.wt-diag-btn { width: 100%; padding: 9px; font-size: 12px; background: var(--gray-100) !important; color: var(--gray-700) !important; }
-.wt-diag-hint { font-size: 11px; color: var(--gray-400); margin-top: 4px; line-height: 1.4; }
