@@ -71,6 +71,10 @@ public class MashovLoginActivity extends AppCompatActivity {
 
     private final Map<String, JSONObject> children = new LinkedHashMap<>();
     private String csrf = "";
+    // Closes by itself once the login response listed the kids and the CSRF token is known —
+    // that's all the app needs; the parent doesn't have to tap 'Done'
+    private boolean sawKidList = false;
+    private boolean closing = false;
     private WebView webView;
     private TextView statusView;
 
@@ -94,7 +98,7 @@ public class MashovLoginActivity extends AppCompatActivity {
         statusView = new TextView(this);
         statusView.setTextColor(Color.WHITE);
         statusView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        statusView.setText("היכנסו למשו״ב עם פרטי ההורה");
+        statusView.setText("היכנסו למשו״ב עם פרטי ההורה — הילדים יזוהו אוטומטית");
         bar.addView(statusView, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
 
         Button done = new Button(this);
@@ -150,7 +154,9 @@ public class MashovLoginActivity extends AppCompatActivity {
                     JSONObject prev = children.get(guid);
                     // An id seen in a URL must not replace the named entry from the login response.
                     if (prev == null || !c.optString("privateName", "").isEmpty()) children.put(guid, c);
-                    statusView.setText("✓ זוהו " + children.size() + " ילדים — לחצו 'סיום'");
+                    if (c.has("privateName")) sawKidList = true; // from the login response's list
+                    if (!closing) statusView.setText("✓ זוהו " + children.size() + " ילדים — לחצו 'סיום'");
+                    maybeAutoClose();
                 });
             } catch (Exception ignored) {}
         }
@@ -158,11 +164,22 @@ public class MashovLoginActivity extends AppCompatActivity {
         @JavascriptInterface
         public void onCsrf(String token) {
             if (token == null || token.isEmpty() || token.length() > 500) return;
-            runOnUiThread(() -> csrf = token);
+            runOnUiThread(() -> { csrf = token; maybeAutoClose(); });
         }
     }
 
+    private void maybeAutoClose() {
+        if (closing || !sawKidList || children.isEmpty() || csrf.isEmpty()) return;
+        closing = true;
+        // A moment for the rest of the list (reported one child at a time) to arrive
+        statusView.postDelayed(() -> {
+            statusView.setText("✓ זוהו " + children.size() + " ילדים — מסנכרן…");
+            statusView.postDelayed(this::finishWithResult, 800);
+        }, 400);
+    }
+
     private void finishWithResult() {
+        if (isFinishing()) return;
         CookieManager.getInstance().flush();
         JSONArray arr = new JSONArray();
         for (JSONObject c : children.values()) arr.put(c);
