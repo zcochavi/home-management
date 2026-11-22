@@ -304,6 +304,24 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
 .btn-arr { flex-shrink: 0; display: block; }
 .login-signout:has(> .btn-arr) { display: inline-flex; }
 
+/* New-family password: show/hide, strength meter, rules, match */
+.pwd-wrap { position: relative; }
+.pwd-wrap .auth-input { padding-left: 46px; }
+.pwd-eye { position: absolute; left: 6px; top: 50%; transform: translateY(calc(-50% - 5px)); width: 36px; height: 36px;
+  border: none; background: none; cursor: pointer; font-size: 17px; border-radius: 50%; line-height: 1; }
+.pwd-eye:hover { background: var(--gray-100); }
+.pwd-meter { height: 5px; border-radius: 3px; background: var(--gray-100); overflow: hidden; margin: -4px 2px 6px; }
+.pwd-meter span { display: block; height: 100%; width: 0; border-radius: 3px; transition: width .25s, background-color .25s; }
+.pwd-meter[data-score="1"] span { width: 25%;  background: #E5484D; }
+.pwd-meter[data-score="2"] span { width: 50%;  background: #F5A524; }
+.pwd-meter[data-score="3"] span { width: 75%;  background: #7CC35A; }
+.pwd-meter[data-score="4"] span { width: 100%; background: #2EAD64; }
+.pwd-rules { display: flex; gap: 14px; justify-content: flex-start; direction: rtl; font-size: 12px; font-weight: 700; color: var(--gray-400); margin: 0 4px 10px; }
+.pwd-rules .ok { color: #2EAD64; }
+.pwd-match { font-size: 12px; font-weight: 700; min-height: 14px; margin: -4px 4px 6px; direction: rtl; text-align: right; }
+.pwd-match.ok { color: #2EAD64; }
+.pwd-match.bad { color: var(--error); }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }

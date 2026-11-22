@@ -947,6 +947,46 @@ function setAuthMode(mode) {
   }
 }
 
+// ── New-family password: rules, strength meter, typed twice ──
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+function _pwdRules(p) {
+  return { len: p.length >= 8, mix: /[A-Za-z֐-׿]/.test(p) && /\d/.test(p) };
+}
+// 0–4: length, upper+lower, digit, symbol, 12+ chars
+function _pwdScore(p) {
+  if (!p) return 0;
+  let sc = 0;
+  if (p.length >= 8) sc++;
+  if (p.length >= 12) sc++;
+  if (/[a-z]/.test(p) && /[A-Z]/.test(p)) sc++;
+  if (/\d/.test(p) && /[^A-Za-z0-9]/.test(p)) sc++;
+  return Math.max(1, Math.min(4, sc));
+}
+// showMismatch: say "don't match" even while the second field is still being typed
+function _suPwdCheck(showMismatch) {
+  const p = el('suPwd').value, p2 = el('suPwd2').value;
+  if (!showMismatch) el('su1Error').textContent = ''; // an old error is out of date once they type
+  const r = _pwdRules(p);
+  const rule = (id, ok, txt) => { const e = el(id); e.textContent = (ok ? '✓ ' : '○ ') + txt; e.classList.toggle('ok', ok); };
+  rule('suRuleLen', r.len, 'לפחות 8 תווים');
+  rule('suRuleMix', r.mix, 'אות ומספר');
+  const sc = _pwdScore(p), bar = el('suPwdMeter');
+  bar.dataset.score = p ? sc : 0;
+  bar.title = ['', 'חלשה', 'בינונית', 'טובה', 'חזקה'][p ? sc : 0];
+  const m = el('suPwdMatch');
+  if (!p2) { m.textContent = ''; m.className = 'pwd-match'; return; }
+  const same = p === p2;
+  const typing = !showMismatch && !same && p.startsWith(p2);
+  m.textContent = same ? '✓ הסיסמאות תואמות' : (typing ? '' : '✗ הסיסמאות לא תואמות');
+  m.className = 'pwd-match' + (same ? ' ok' : (typing ? '' : ' bad'));
+}
+function _suPwdToggle() {
+  const show = el('suPwd').type === 'password';
+  el('suPwd').type = el('suPwd2').type = show ? 'text' : 'password';
+  el('suPwdEye').textContent = show ? '🙈' : '👁️';
+  el('suPwdEye').setAttribute('aria-label', show ? 'הסתר סיסמה' : 'הצג סיסמה');
+}
+
 function signupNext() {
   const familyName = el('suFamily').value.trim();
   const email      = el('suEmail').value.trim();
@@ -954,7 +994,13 @@ function signupNext() {
   el('su1Error').textContent = '';
   if (!familyName) { el('su1Error').textContent = 'נדרש שם משפחה'; return; }
   if (!email)      { el('su1Error').textContent = 'נדרש אימייל';   return; }
-  if (!_googlePending && pwd.length < 6) { el('su1Error').textContent = 'הסיסמה חייבת להיות לפחות 6 תווים'; return; }
+  if (!EMAIL_RE.test(email)) { el('su1Error').textContent = 'כתובת האימייל לא נראית תקינה — בדוק/י שוב'; return; }
+  if (!_googlePending) {
+    const pc = _pwdRules(pwd);
+    if (!pc.len) { el('su1Error').textContent = 'הסיסמה חייבת להיות לפחות 8 תווים'; return; }
+    if (!pc.mix) { el('su1Error').textContent = 'הסיסמה צריכה לכלול לפחות אות אחת ומספר אחד'; return; }
+    if (pwd !== el('suPwd2').value) { el('su1Error').textContent = 'הסיסמאות לא תואמות — הקלד/י את אותה סיסמה פעמיים'; _suPwdCheck(true); return; }
+  }
   el('signupPanel1').style.display = 'none';
   el('signupPanel2').style.display = '';
   _draftMembers   = [];
@@ -1063,7 +1109,7 @@ async function doGoogleSignIn() {
     setAuthMode('signup');
     el('suEmail').value    = user.email || '';
     el('suEmail').readOnly = true;
-    el('suPwd').style.display = 'none';
+    el('suPwdBox').style.display = 'none';
     el('suFamily').focus();
   } catch(e) {
     _googleFlow = false;
@@ -1080,7 +1126,7 @@ function _cancelGoogleSignup() {
   _googleFlow = false;
   el('suEmail').readOnly = false;
   el('suEmail').value = '';
-  el('suPwd').style.display = '';
+  el('suPwdBox').style.display = '';
   fbAuth.signOut().catch(() => {});
 }
 
