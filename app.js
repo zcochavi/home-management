@@ -7985,30 +7985,56 @@ function _backOpen(id) {
   const e = el(id);
   return !!e && !e.classList.contains('hidden') && getComputedStyle(e).display !== 'none';
 }
-window.fhBack = function () {
-  try {
-    // 1. A dialog
-    const ov = el('_cmodalOverlay');
-    if (ov && ov.classList.contains('cmodal-visible')) { _cmodalClose(null); return true; }
-    // 2. The side menu
-    if (_menuOpen) { closeMenu(); return true; }
-    // 3. The topmost open screen
-    for (const [id, close] of _BACK_SCREENS) if (_backOpen(id)) { close(); return true; }
-    // 4. Open "add" forms / FAB pickers on the current tab
-    if (el('hwFabPicker')?.classList.contains('open')) { _hwHidePicker(); return true; }
-    if (el('commFabPicker')?.classList.contains('open')) { _commHidePicker(); return true; }
-    if (S.tab === 'homework' && _hwAddOpen) { hwFabClick(); return true; }
-    // 5. A sign-in form → the welcome screen (sign-up step 2 → step 1 first)
-    if (_backOpen('authScreen') && !_backOpen('authWelcome')) {
-      if (_backOpen('signupPanel2')) signupBack(); else setAuthMode('welcome');
-      return true;
-    }
-    // 6. Another tab → home (only inside the app, not on the login screens)
-    const inApp = !_backOpen('authScreen') && !_backOpen('loginScreen') && !_backOpen('loadingScreen');
-    if (inApp && S.tab && S.tab !== 'home') { switchTab('home'); return true; }
-  } catch (e) { console.warn('[back]', e); }
+// One step back. dry=true only reports whether there is something to close.
+function _fhBackStep(dry) {
+  const go = fn => { if (!dry) fn(); return true; };
+  // 1. A dialog
+  const ov = el('_cmodalOverlay');
+  if (ov && ov.classList.contains('cmodal-visible')) return go(() => _cmodalClose(null));
+  // 2. The side menu
+  if (_menuOpen) return go(closeMenu);
+  // 3. The topmost open screen
+  for (const [id, close] of _BACK_SCREENS) if (_backOpen(id)) return go(close);
+  // 4. Open "add" forms / FAB pickers on the current tab
+  if (el('hwFabPicker')?.classList.contains('open')) return go(_hwHidePicker);
+  if (el('commFabPicker')?.classList.contains('open')) return go(_commHidePicker);
+  if (S.tab === 'homework' && _hwAddOpen) return go(hwFabClick);
+  // 5. A sign-in form → the welcome screen (sign-up step 2 → step 1 first)
+  if (_backOpen('authScreen') && !_backOpen('authWelcome')) {
+    return go(() => { if (_backOpen('signupPanel2')) signupBack(); else setAuthMode('welcome'); });
+  }
+  // 6. Another tab → home (only inside the app, not on the login screens)
+  const inApp = !_backOpen('authScreen') && !_backOpen('loginScreen') && !_backOpen('loadingScreen');
+  if (inApp && S.tab && S.tab !== 'home') return go(() => switchTab('home'));
   return false;
+}
+window.fhBack = function () {
+  try { return _fhBackStep(false); } catch (e) { console.warn('[back]', e); return false; }
 };
+
+// Website (a phone's Back button or gesture, or the browser's back): while something in the
+// app can be closed, one extra history entry is kept; Back pops it, and we close the topmost
+// thing instead of leaving the site. With nothing left to close, Back goes on as normal.
+// The Android app doesn't need this — MainActivity calls fhBack directly.
+let _backArmed = false;
+function _armBack() {
+  if (_backArmed || _isNativeApp()) return;
+  let can = false;
+  try { can = _fhBackStep(true); } catch (e) {}
+  if (!can) return;
+  history.pushState({ fhBack: 1 }, '', location.href);
+  _backArmed = true;
+}
+if (!_isNativeApp()) {
+  // Something opens after a tap (menus, screens, forms, dialogs) — check right after it
+  document.addEventListener('click', () => setTimeout(_armBack, 0), true);
+  window.addEventListener('popstate', () => {
+    if (!_backArmed) return;
+    _backArmed = false;
+    if (window.fhBack()) setTimeout(_armBack, 0); // more left to close → keep the guard
+    else history.back();                           // closed already by its own button → really go back
+  });
+}
 
 function closeMenu() {
   _menuOpen = false;
