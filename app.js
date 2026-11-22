@@ -2225,6 +2225,7 @@ async function authSignOut() {
   if (firebaseUid) localStorage.removeItem('familyhub_family_uid_' + firebaseUid);
   if (firebaseUid) localStorage.removeItem('familyhub_locked_member_' + firebaseUid);
   if (firebaseUid) localStorage.removeItem('familyhub_map_checked_' + firebaseUid);
+  if (S.uid) _fpClearAll(S.uid);
   S.user = null; S.uid = null; familyData = null;
   if (fbAuth) fbAuth.signOut();
   el('loginScreen').classList.add('hidden');
@@ -3267,8 +3268,14 @@ function afterLoad() {
     renderAll(); tryAutoConnectGCal(); initPresence(); initNotifBanners(); _applyAdminUI(); _initHeaderCollapse(); loadWeather();
   } else {
     const saved = localStorage.getItem('familyhub_member_' + S.uid);
-    if (saved && getAllMemberNames().includes(saved)) {
+    if (saved && getAllMemberNames().includes(saved) && !_fpProtected(saved)) {
       login(saved);
+    } else if (saved && getAllMemberNames().includes(saved)) {
+      // Protected parent profile: show the picker behind the fingerprint prompt, so a
+      // cancelled or failed check leaves the device on the picker, not in the profile
+      renderLoginScreen();
+      el('loginScreen').classList.remove('hidden');
+      pickMember(saved);
     } else {
       renderLoginScreen();
       el('loginScreen').classList.remove('hidden');
@@ -3606,7 +3613,7 @@ function renderLoginScreen() {
     }
   }
   el('loginGrid').innerHTML = visibleMembers.map((m, i) => `
-    <div class="login-card${i===visibleMembers.length-1&&visibleMembers.length%2!==0?' login-card-solo':''}" onclick="login('${esc(m.name)}')">
+    <div class="login-card${i===visibleMembers.length-1&&visibleMembers.length%2!==0?' login-card-solo':''}" onclick="pickMember('${esc(m.name)}')">
       <div class="login-card-emoji">${getAvatar(m.name)}</div>
       <div class="login-card-name">${esc(m.name)}</div>
       <div class="login-card-role">${roleBadgeHtml(m.role, m.role==='parent' && !!ADMIN_UID && S.uid===ADMIN_UID && m.name===(familyData?.ownerMemberName||null) ? S.uid : null)}</div>
@@ -3652,6 +3659,134 @@ async function switchUser() {
   document.documentElement.lang = 'he';
   document.documentElement.dir  = 'rtl';
   switchTab('home');
+}
+
+// ════════════════════════════════════════
+//  FINGERPRINT PROTECTION FOR PARENT PROFILES
+// ════════════════════════════════════════
+// A parent can protect their profile on a shared device: switching to it (or opening the
+// app while it's the saved profile) asks for their fingerprint, so kids can't open parent
+// screens. The setting is per device and per parent, kept in this device's storage:
+//   'native'   → Android app, the phone's biometric prompt (BiometricLock plugin)
+//   'wa:<id>'  → website, a WebAuthn platform credential (fingerprint / face / Windows Hello)
+// Nothing biometric leaves the device; the app only learns "confirmed" or not.
+// Signing out of the account clears it (recovery if the fingerprint stops working).
+const _fpKey = (name, uid = S.uid) => 'familyhub_fp_' + uid + '_' + name;
+function _fpGet(name) { try { return localStorage.getItem(_fpKey(name)) || ''; } catch (e) { return ''; } }
+function _fpProtected(name) { return !!_fpGet(name) && getParents().includes(name); }
+function _fpClearAll(uid) {
+  try {
+    const pre = 'familyhub_fp_' + uid + '_';
+    Object.keys(localStorage).filter(k => k.startsWith(pre)).forEach(k => localStorage.removeItem(k));
+  } catch (e) {}
+}
+const _bioPlugin = () => window.Capacitor?.Plugins?.BiometricLock || window.Capacitor.registerPlugin('BiometricLock');
+const _b64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const _unb64u = str => Uint8Array.from(atob(str.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+const _rand = n => crypto.getRandomValues(new Uint8Array(n));
+
+// Can this device check a fingerprint? → 'native' | 'webauthn' | ''
+async function _fpSupport() {
+  if (_isNativeApp()) {
+    try { const r = await _bioPlugin().isAvailable(); return r?.available ? 'native' : ''; } catch (e) { return ''; }
+  }
+  try {
+    if (window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()) return 'webauthn';
+  } catch (e) {}
+  return '';
+}
+
+// The WebAuthn response is checked for the "user verified" flag (byte 32 of authenticatorData, bit 2)
+const _waVerified = authData => { try { return (new Uint8Array(authData)[32] & 0x04) !== 0; } catch (e) { return false; } };
+
+// Ask for the fingerprint. stored: the setting's value ('native' / 'wa:<id>'). → true when confirmed
+async function _fpCheck(stored, name) {
+  if (stored === 'native') {
+    try {
+      const r = await _bioPlugin().authenticate({ title: '🫆 ' + name, subtitle: 'אימות טביעת אצבע לפרופיל ההורה', cancel: 'ביטול' });
+      return !!r?.ok;
+    } catch (e) { return false; }
+  }
+  if (stored.startsWith('wa:')) {
+    try {
+      const cred = await navigator.credentials.get({ publicKey: {
+        challenge: _rand(32),
+        allowCredentials: [{ type: 'public-key', id: _unb64u(stored.slice(3)), transports: ['internal'] }],
+        userVerification: 'required', timeout: 60000,
+      } });
+      return !!cred && _waVerified(cred.response.authenticatorData);
+    } catch (e) { return false; }
+  }
+  return false;
+}
+
+let _fpBusy = false;
+// Profile picker → member. A protected parent needs their fingerprint first.
+async function pickMember(name) {
+  if (!_fpProtected(name)) return login(name);
+  if (_fpBusy) return;
+  _fpBusy = true;
+  try {
+    if (await _fpCheck(_fpGet(name), name)) login(name);
+    else showToast('🫆 טביעת האצבע לא אומתה');
+  } finally { _fpBusy = false; }
+}
+
+// Settings card: "protect my profile on this device" (parents only, devices with a fingerprint reader)
+async function renderFingerprintCard() {
+  const card = el('mgmtFingerprintCard');
+  if (!card) return;
+  const me = S.user;
+  const support = (me && getParents().includes(me)) ? await _fpSupport() : '';
+  const on = !!me && _fpProtected(me);
+  card.style.display = (support || on) ? '' : 'none';
+  if (!support && !on) return;
+  el('fpStatus').textContent = on
+    ? '✅ מופעל — מעבר לפרופיל שלך במכשיר הזה דורש טביעת אצבע'
+    : 'כבוי — כל מי שמשתמש במכשיר יכול לעבור לפרופיל שלך';
+  const btn = el('fpToggleBtn');
+  btn.textContent = on ? 'כבה הגנה' : '🫆 הפעל הגנה בטביעת אצבע';
+}
+
+async function toggleFingerprintLock() {
+  const me = S.user;
+  if (!me || !getParents().includes(me) || _fpBusy) return;
+  _fpBusy = true;
+  try {
+    if (_fpProtected(me)) {
+      // Turning it off also needs the fingerprint, so a kid in an open parent profile can't
+      if (!await _fpCheck(_fpGet(me), me)) { showToast('🫆 טביעת האצבע לא אומתה'); return; }
+      localStorage.removeItem(_fpKey(me));
+      showToast('ההגנה בטביעת אצבע כובתה');
+      return;
+    }
+    const support = await _fpSupport();
+    let stored = '';
+    if (support === 'native') {
+      if (await _fpCheck('native', me)) stored = 'native';
+    } else if (support === 'webauthn') {
+      try {
+        const cred = await navigator.credentials.create({ publicKey: {
+          challenge: _rand(32),
+          rp: { name: 'FamilyHub' },
+          user: { id: _rand(16), name: me, displayName: me },
+          pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+          authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+          timeout: 60000, attestation: 'none',
+        } });
+        if (cred) stored = 'wa:' + _b64u(cred.rawId);
+      } catch (e) {}
+    } else {
+      showToast('אין במכשיר הזה קורא טביעת אצבע זמין');
+      return;
+    }
+    if (!stored) { showToast('🫆 טביעת האצבע לא אומתה — ההגנה לא הופעלה'); return; }
+    localStorage.setItem(_fpKey(me), stored);
+    showToast('🫆 ההגנה הופעלה במכשיר הזה');
+  } finally {
+    _fpBusy = false;
+    renderFingerprintCard();
+  }
 }
 
 // ════════════════════════════════════════
@@ -3756,6 +3891,7 @@ function renderMgmt() {
   const appUpdateCard = el('mgmtAppUpdateCard');
   if (appUpdateCard) appUpdateCard.style.display = _isNativeApp() ? 'none' : '';
   renderPushTestCard(); // app only
+  renderFingerprintCard();
   // Webtop / Mashov now live in "connected apps"; family settings keeps a pointer to them
   const schoolHint = el('mgmtSchoolAppsHint');
   if (schoolHint) schoolHint.style.display = isParent() && _anySyncEnabled() ? '' : 'none';

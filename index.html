@@ -453,6 +453,14 @@
       <button class="mgmt-add-btn" id="pushTestBtn" style="width:100%;padding:10px" onclick="sendTestPush()">🔔 שלח לי התראת בדיקה</button>
     </div>
 
+    <!-- ── Fingerprint protection of the parent's profile (renderFingerprintCard) ── -->
+    <div class="card" id="mgmtFingerprintCard" style="display:none">
+      <div class="card-title">🫆 הגנה בטביעת אצבע</div>
+      <div class="mgmt-section-hint">במכשיר משותף: מעבר לפרופיל שלך יחייב את טביעת האצבע שלך, כדי שהילדים לא ייכנסו למסכי ההורים. ההגדרה חלה רק על המכשיר הזה.</div>
+      <div id="fpStatus" style="margin:10px 0 8px;font-size:12px;font-weight:600;line-height:1.8"></div>
+      <button class="mgmt-add-btn" id="fpToggleBtn" style="width:100%;padding:10px" onclick="toggleFingerprintLock()"></button>
+    </div>
+
     <!-- ── App Update ── -->
     <div class="card" id="mgmtAppUpdateCard">
       <div class="card-title">🔄 עדכון גרסה</div>

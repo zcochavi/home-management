@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(WebtopConnectPlugin.class);
         registerPlugin(MashovConnectPlugin.class);
         registerPlugin(GoogleCalendarAuthPlugin.class);
+        registerPlugin(BiometricLockPlugin.class);
         super.onCreate(savedInstanceState);
 
         // Back: the web app's screens are overlays on one page (no WebView history), so ask it
