@@ -351,6 +351,13 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
   font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
 .hw-resync-btn:active { transform: scale(.97); }
 
+/* Homework tab: the kid's school details, from the school system */
+.hw-school-sugg { background: var(--primary-50); border: 1px solid var(--primary-100); border-radius: 16px; padding: 12px 14px; margin-bottom: 12px; direction: rtl; }
+.hw-school-sugg-txt { font-size: 13px; font-weight: 700; color: var(--gray-900); line-height: 1.6; }
+.hw-school-sugg-sub { font-size: 12px; font-weight: 600; color: var(--gray-500); margin: 2px 0 10px; line-height: 1.6; }
+.hw-school-sugg-btns { display: flex; gap: 8px; align-items: center; }
+.hw-school-sugg-btns .hw-wiz-later { margin: 0; }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }

@@ -58,8 +58,9 @@ public class MashovLoginActivity extends AppCompatActivity {
         "if(u.indexOf('/api/')<0||!j)return;try{if(typeof j==='string')j=JSON.parse(j);}catch(e){return;}" +
         "var a=j&&j.accessToken;if(!a||!Array.isArray(a.children))return;" +
         "var sn=(a.schoolOptions&&a.schoolOptions.schoolName)||(a.schoolSettings&&a.schoolSettings.schoolName)||'';" +
+        "var cr=j.credential||{};var sm=cr.semel||a.semel||(a.schoolOptions&&a.schoolOptions.semel)||(a.schoolSettings&&a.schoolSettings.semel)||'';" +
         "a.children.forEach(function(c){if(c&&c.childGuid)child({childGuid:c.childGuid,privateName:c.privateName||'',familyName:c.familyName||''," +
-        "classCode:c.classCode||'',classNum:c.classNum==null?'':String(c.classNum),schoolName:sn});});}" +
+        "classCode:c.classCode||'',classNum:c.classNum==null?'':String(c.classNum),schoolName:sn,semel:sm?String(sm):''});});}" +
         "var oo=XMLHttpRequest.prototype.open,os=XMLHttpRequest.prototype.send,oh=XMLHttpRequest.prototype.setRequestHeader;" +
         "XMLHttpRequest.prototype.open=function(m,u){this.__fhUrl=String(u||'');return oo.apply(this,arguments);};" +
         "XMLHttpRequest.prototype.setRequestHeader=function(n,v){if(String(n).toLowerCase()==='x-csrf-token')csrf(v);return oh.apply(this,arguments);};" +
