@@ -1079,10 +1079,12 @@ async function _googleSignIn(auth) {
   return uc;
 }
 
-async function doGoogleSignIn() {
+// from: 'signup' when started from the "new family" form (errors show there)
+async function doGoogleSignIn(from) {
   if (!FB_CONFIGURED) return;
-  el('siError').textContent = '';
-  el('siError').style.color = '';
+  const errId = from === 'signup' ? 'su1Error' : 'siError';
+  el(errId).textContent = '';
+  el(errId).style.color = '';
   _googleFlow = true;
   setAuthLoading(true);
   try {
@@ -1102,6 +1104,7 @@ async function doGoogleSignIn() {
         if (d.memberName) localStorage.setItem('familyhub_locked_member_' + user.uid, d.memberName);
       }
       _googleFlow = false;
+      if (from === 'signup') showToast('לחשבון הזה כבר יש משפחה — נכנסים אליה');
       await _enterApp(user);
       return;
     }
@@ -1112,12 +1115,13 @@ async function doGoogleSignIn() {
     el('suEmail').value    = user.email || '';
     el('suEmail').readOnly = true;
     el('suPwdBox').style.display = 'none';
+    el('suGoogleBox').style.display = 'none'; // already signed in with Google
     el('suFamily').focus();
   } catch(e) {
     _googleFlow = false;
     setAuthLoading(false);
     if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
-    el('siError').textContent = e.code === 'auth/popup-blocked'
+    el(errId).textContent = e.code === 'auth/popup-blocked'
       ? 'הדפדפן חסם את חלון ההתחברות — אפשר חלונות קופצים ונסה שוב'
       : getAuthError(e.code);
   }
@@ -1129,6 +1133,7 @@ function _cancelGoogleSignup() {
   el('suEmail').readOnly = false;
   el('suEmail').value = '';
   el('suPwdBox').style.display = '';
+  el('suGoogleBox').style.display = '';
   fbAuth.signOut().catch(() => {});
 }
 
