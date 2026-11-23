@@ -1328,7 +1328,7 @@ async function doJoin() {
   if (!FB_CONFIGURED) return;
   const code = el('joinCode').value.trim().toUpperCase();
   el('joinError').textContent = '';
-  if (code.length < 4) { el('joinError').textContent = 'הזן קוד הצטרפות תקין'; return; }
+  if (code.length < 4) return _joinNeedCode(false);
   setAuthLoading(true);
   _joining = true;
 
@@ -1550,7 +1550,7 @@ async function doJoinWithEmail() {
   const email = el('joinEmail').value.trim();
   const pwd   = el('joinPwd').value;
   el('joinError').textContent = '';
-  if (code.length < 4) { el('joinError').textContent = 'הזן קוד הצטרפות תקין'; return; }
+  if (code.length < 4) return _joinNeedCode(true);
   if (!email || !pwd)  { el('joinError').textContent = 'נדרשים אימייל וסיסמה'; return; }
   if (pwd.length < 6)  { el('joinError').textContent = 'הסיסמה חייבת להיות לפחות 6 תווים'; return; }
   _googleFlow = true; // suppress onAuthStateChanged while the join is resolved
@@ -1616,11 +1616,22 @@ async function _maybeJoinFromLink(user) {
 // Join a family with a join code, but as the user's own Google account instead of the code's
 // shared invite account. The Google uid is mapped to the family (uidToFamily), so from then on
 // "המשך עם Google" on any device lands in this family without the code.
+// The join code is always needed: it says which family (and which member) to join.
+// A Google / email account is optional on top of it, for signing in later without the code.
+function _joinNeedCode(forAccount) {
+  el('joinError').textContent = forAccount
+    ? 'קודם מזינים את קוד ההצטרפות — דרכו החשבון מתחבר למשפחה'
+    : 'הזן קוד הצטרפות תקין';
+  const c = el('joinCode');
+  c.classList.add('input-error'); c.focus();
+  c.addEventListener('input', () => c.classList.remove('input-error'), { once: true });
+}
+
 async function doJoinWithGoogle() {
   if (!FB_CONFIGURED) return;
   const code = el('joinCode').value.trim().toUpperCase();
   el('joinError').textContent = '';
-  if (code.length < 4) { el('joinError').textContent = 'הזן קוד הצטרפות תקין'; return; }
+  if (code.length < 4) return _joinNeedCode(true);
   _googleFlow = true;
   setAuthLoading(true);
 
