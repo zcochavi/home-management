@@ -34,3 +34,19 @@ test('indexEntries: every school under its city, no duplicates', () => {
   assert.ok(schools[dir.cityKey(city)].names.includes(name));
   for (const v of Object.values(schools)) assert.strictEqual(new Set(v.names).size, v.names.length);
 });
+
+test('nameKey: quote marks, dashes and spaces don\'t count', () => {
+  assert.strictEqual(dir.nameKey('שש שנתי ע״ש יצחק שמיר'), dir.nameKey('שש שנתי ע"ש יצחק  שמיר '));
+  assert.strictEqual(dir.nameKey("ביה״ס ג׳"), dir.nameKey("ביה\"ס ג'"));
+  assert.strictEqual(dir.nameKey('תל אביב - יפו'), dir.nameKey('תל אביב-יפו'));
+  assert.notStrictEqual(dir.nameKey('אורט'), dir.nameKey('אורט חיפה'));
+});
+
+test('mergeNames: one spelling per name, the existing one first', () => {
+  assert.deepStrictEqual(
+    dir.mergeNames(['שש שנתי ע״ש יצחק שמיר', 'בית ספר', 'בית  ספר'], ['שש שנתי ע"ש יצחק שמיר', 'אורט']),
+    ['שש שנתי ע״ש יצחק שמיר', 'בית ספר', 'אורט']);
+  assert.deepStrictEqual(dir.mergeNames(null, ['א', '', 'א']), ['א']);
+  assert.strictEqual(dir.findName(['ע״ש'], 'ע"ש'), 'ע״ש');
+  assert.strictEqual(dir.findName(['א'], 'ב'), null);
+});
