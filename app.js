@@ -2866,6 +2866,20 @@ async function _wtDiscoverStudents() {
   } catch (e) { console.warn('[webtop] discover failed:', e); return []; }
 }
 
+// The school's Ministry code and each kid's grade / class number, for filling in the kid's
+// school details (see _renderHwSchoolSuggest). Webtop lists them on its dashboard.
+async function _wtDiscoverSchool() {
+  try {
+    const r = await _wtPlugin().post({ url: WT_API + 'dashboard/InitDashboard', body: '{}' });
+    if (r.status !== 200) return;
+    const d = JSON.parse(r.text)?.data || {};
+    const semel = (d.shortcuts || []).map(x => x?.institutionCode).find(Boolean);
+    const classes = {};
+    (d.childrens || d.children || []).forEach(c => { if (c?.classCode != null) classes[c.classCode] = { classNum: c.classNum ?? '' }; });
+    _wtSave('school', { semel: semel ? String(semel) : '', classes });
+  } catch (e) { console.warn('[webtop] school info failed:', e); }
+}
+
 async function webtopAppConnect() {
   if (!_isNativeApp()) return;
   let students = [];
@@ -2874,6 +2888,7 @@ async function webtopAppConnect() {
     // Prefer finding the kids ourselves; fall back to params captured from opened pages
     const found = await _wtDiscoverStudents();
     students = found.length ? found : (res?.students || []);
+    await _wtDiscoverSchool();
   } catch (e) {
     showToast('שגיאה בפתיחת Webtop', 'error');
     return;
@@ -6847,8 +6862,27 @@ async function sendReplyToFeedback(id, btn) {
   }
 }
 
+async function adminSeedSchoolIndex() {
+  const btn = el('seedSchoolsBtn'), out = el('seedSchoolsResult');
+  btn.disabled = true; out.style.color = ''; out.textContent = '⏳ טוען…';
+  try {
+    const r = (await fbFunctions.httpsCallable('seedSchoolIndex')()).data || {};
+    out.style.color = '#276749';
+    out.textContent = `✓ נוספו ${r.cities} ערים ו-${r.schools} בתי ספר לבחירה`;
+    _cachedCities = null; _cachedSchools = {};
+  } catch (e) {
+    out.style.color = 'var(--error)'; out.textContent = 'הטעינה נכשלה: ' + (e.message || e);
+  } finally { btn.disabled = false; }
+}
+
 function renderMaintenanceTools() {
   el('adminMaintenance').innerHTML = `
+    <div class="card" style="margin-bottom:12px;padding:12px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px">🏫 רשימת בתי הספר הרשמית</div>
+      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוסיף את כל הערים ובתי הספר מרשימת משרד החינוך (data.gov.il) לבחירה באפליקציה — בלי צורך באישור. שמות קיימים נשארים.</div>
+      <button class="admin-btn" id="seedSchoolsBtn" onclick="adminSeedSchoolIndex()" style="width:100%;padding:9px;font-size:13px">טעינת הרשימה ◀</button>
+      <div id="seedSchoolsResult" style="font-size:12px;margin-top:8px"></div>
+    </div>
     <div class="card" style="margin-bottom:12px;padding:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:8px">🔑 קודים אישיים לילדים</div>
       <div style="font-size:13px;color:#4a5568;margin-bottom:10px">הפק קודי הצטרפות אישיים לכל ילד שעדיין אין לו קוד (משפחות קיימות).</div>
@@ -10665,6 +10699,98 @@ function _kidSystem(kidName) {
   return src && _sysOn(src) ? src : null;
 }
 
+// ── Kid's school details from the school system ──
+// After a Webtop / Mashov sync (Android app), the kid's school is known by its Ministry code,
+// and their grade and class number come with it. The server turns the code into the official
+// school name and city (resolveSchoolCode — which also adds them to the pickers with no approval);
+// when that differs from the kid's school details, the parent gets a one-tap card to update them.
+const _schoolByCode = {};   // semel → {name, city} | null (not in the official list)
+function _kidSyncedSchool(kidName) {
+  if (!_isNativeApp()) return null;
+  const m = getMembers().find(x => x.name === kidName);
+  const sys = m && _kidSystem(kidName);
+  let semel = '', grade = null, classNum = '';
+  if (sys === 'mashov' && m.mashovChildId) {
+    const c = _msLoad('children', {})[String(m.mashovChildId).toLowerCase()];
+    if (!c) return null;
+    semel = c.semel || ''; grade = _gradeToNum(c.classCode); classNum = c.classNum || '';
+  } else if (sys === 'webtop' && m.webtopClassCode) {
+    const w = _wtLoad('school', {});
+    semel = w.semel || ''; grade = _gradeToNum(m.webtopClassCode); classNum = w.classes?.[m.webtopClassCode]?.classNum ?? '';
+  }
+  if (!semel) return null;
+  return { sys, semel: String(semel), grade: grade ? GRADE_OPTIONS[grade] || '' : '', classNum: String(classNum || '') };
+}
+async function _resolveSchoolCode(semel, extra) {
+  const r = (await fbFunctions.httpsCallable('resolveSchoolCode')({ semel, ...(extra || {}) })).data || {};
+  _schoolByCode[semel] = r.found ? { name: r.name, city: r.city } : null;
+  return _schoolByCode[semel];
+}
+const _schoolSuggestKey = kidName => `familyhub_schoolsugg_${S.uid}_${kidName}`;
+function _renderHwSchoolSuggest(kidName) {
+  const box = el('hwSchoolSuggest');
+  if (!box) return;
+  const hide = () => { box.style.display = 'none'; box.innerHTML = ''; };
+  const sync = isParent() && kidName ? _kidSyncedSchool(kidName) : null;
+  if (!sync) return hide();
+  if (!(sync.semel in _schoolByCode)) {
+    hide();
+    _resolveSchoolCode(sync.semel).then(() => { if (S.child === kidName) _renderHwSchoolSuggest(kidName); }).catch(() => {});
+    return;
+  }
+  const off = _schoolByCode[sync.semel];
+  if (!off) return hide();
+  const m = getMembers().find(x => x.name === kidName);
+  const cur = m?.school || {};
+  const next = { city: off.city, name: off.name, grade: sync.grade || cur.grade || '', classNum: sync.classNum || cur.classNum || '' };
+  const same = cur.city === next.city && cur.name === next.name && (cur.grade || '') === next.grade && (cur.classNum || '') === next.classNum;
+  const sig = [sync.semel, next.grade, next.classNum].join('|');
+  let dismissed = '';
+  try { dismissed = localStorage.getItem(_schoolSuggestKey(kidName)) || ''; } catch (e) {}
+  if ((same && !m?.schoolPending) || dismissed === sig) return hide();
+  const cls = next.grade ? ` · כיתה ${esc(next.grade)}${next.classNum ? "'" + esc(next.classNum) : ''}` : '';
+  box.style.display = '';
+  box.innerHTML = `<div class="hw-school-sugg">
+    <div class="hw-school-sugg-txt">🏫 לפי ${_SYS[sync.sys].name}, ${esc(kidName)} לומד/ת ב<b>${esc(next.name)}</b>, ${esc(next.city)}${cls}</div>
+    <div class="hw-school-sugg-sub">${cur.city ? 'זה שונה ממה שרשום אצלנו — לעדכן?' : `לעדכן את פרטי בית הספר? כך ${esc(kidName)} מצטרף/ת לכיתה ב-FamilyHub.`}</div>
+    <div class="hw-school-sugg-btns">
+      <button class="hw-resync-btn" onclick="_applySyncedSchool('${esc(kidName)}')">✓ עדכון</button>
+      <button class="hw-wiz-later" onclick="_dismissSchoolSuggest('${esc(kidName)}','${esc(sig)}')">לא עכשיו</button>
+    </div>
+  </div>`;
+}
+function _dismissSchoolSuggest(kidName, sig) {
+  try { localStorage.setItem(_schoolSuggestKey(kidName), sig); } catch (e) {}
+  _renderHwSchoolSuggest(kidName);
+}
+async function _applySyncedSchool(kidName) {
+  const sync = _kidSyncedSchool(kidName);
+  const old = getMembers().find(x => x.name === kidName);
+  if (!sync || !old) return;
+  try {
+    const off = await _resolveSchoolCode(sync.semel, old.schoolPending ? { dropPendingId: old.schoolPending, kidName } : null);
+    if (!off) return;
+    const oldSchool = old.school;
+    const school = { city: off.city, name: off.name, grade: sync.grade || oldSchool?.grade || '', classNum: sync.classNum || oldSchool?.classNum || '' };
+    const members = getMembers().map(m => {
+      if (m.name !== kidName) return m;
+      const u = { ...m, school, schoolSemel: sync.semel };
+      delete u.schoolPending;
+      return u;
+    });
+    const hwPurgeExtra = _classChanged(oldSchool, school) ? purgeKidHomework(kidName, members, old.webtopClassCode) : {};
+    if (familyData) familyData.members = members;
+    await fbDb.collection('families').doc(S.uid).update({ members, homework: S.homework, ...hwPurgeExtra });
+    _cachedCities = null; _cachedSchools = {}; // the official school was just added to the pickers
+    await syncKidClass(kidName, school, oldSchool, 'kid');
+    showToast(`✓ פרטי בית הספר של ${kidName} עודכנו`, 'success');
+    renderMgmtMembers(); renderAll();
+  } catch (e) {
+    console.error('applySyncedSchool:', e);
+    showToast('העדכון נכשל — נסו שוב', 'error');
+  }
+}
+
 // ── "Homework isn't syncing" banner ──
 // For a kid whose family is connected to their school system: when the connection has expired
 // (Android app) or nothing new came in for a while, offer to reconnect — to that kid's system.
@@ -10796,6 +10922,7 @@ function renderHomework(){
 
   _renderHwConnectWizard(S.child);
   _renderHwResync(S.child);
+  _renderHwSchoolSuggest(S.child);
 
   // Search bar
   const searchBar = el('hwSearchBar');

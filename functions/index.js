@@ -1167,6 +1167,13 @@ exports.approveSchoolRequest = functions.https.onCall(async (data, context) => {
   if (req.type === 'city' && (req.cityStatus || 'pending') === 'pending')
     throw new functions.https.HttpsError('failed-precondition', 'City must be approved before the school');
 
+  await finishSchoolApproval(id, req, { approvedBy: adminName || 'admin' });
+  return { ok: true };
+});
+
+// Approves a pending city / school request: registers each waiting family's kid in the class,
+// clears their pending flag, notifies them and marks the request approved.
+async function finishSchoolApproval(id, req, extra) {
   // Register each waiting family's kid in class & clear pending flag
   for (const pf of (req.pendingFamilies || [])) {
     try {
@@ -1190,10 +1197,76 @@ exports.approveSchoolRequest = functions.https.onCall(async (data, context) => {
 
   await db.collection('pendingSchools').doc(id).update({
     status: 'approved',
-    approvedBy: adminName || 'admin',
+    ...extra,
     approvedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
-  return { ok: true };
+}
+
+// ── Official school list (Ministry of Education) ──
+const schoolDir = require('./school-directory');
+const schoolsDocId = city => 'schools__' + schoolDir.cityKey(city);
+
+// Admin: add every school and city from the official list to the city / school pickers
+// (schoolIndex). Adds only — names already there, including ones typed by families, stay.
+exports.seedSchoolIndex = functions.runWith({ timeoutSeconds: 300, memory: '512MB' }).https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const { cities, schools } = schoolDir.indexEntries();
+  const idx = db.collection('schoolIndex');
+  await idx.doc('cities_list').set({ cities: admin.firestore.FieldValue.arrayUnion(...cities) }, { merge: true });
+  const entries = Object.values(schools);
+  let n = 0;
+  for (let i = 0; i < entries.length; i += 400) {
+    const batch = db.batch();
+    for (const { city, names } of entries.slice(i, i + 400)) {
+      batch.set(idx.doc(schoolsDocId(city)), { schools: admin.firestore.FieldValue.arrayUnion(...names) }, { merge: true });
+      n += names.length;
+    }
+    await batch.commit();
+  }
+  await idx.doc('official').set({ ...schoolDir.meta(), loadedAt: admin.firestore.FieldValue.serverTimestamp() });
+  return { ok: true, cities: cities.length, schools: n };
+});
+
+// A school code (סמל מוסד) from a parent's Webtop / Mashov sync → the school's official name
+// and city. Being official, the school and city go straight into the pickers with no approval,
+// and requests waiting for exactly that school are approved. With dropPendingId, this family's
+// kid leaves an older hand-typed request (the parent took the synced school instead).
+exports.resolveSchoolCode = functions.https.onCall(async (data, context) => {
+  const uid = context.auth?.uid;
+  if (!uid) throw new functions.https.HttpsError('unauthenticated', 'Login required');
+  const s = schoolDir.lookup(data?.semel);
+  if (!s) return { found: false };
+
+  const idx = db.collection('schoolIndex');
+  await idx.doc('cities_list').set({ cities: admin.firestore.FieldValue.arrayUnion(s.city) }, { merge: true });
+  await idx.doc(schoolsDocId(s.city)).set({ schools: admin.firestore.FieldValue.arrayUnion(s.name) }, { merge: true });
+
+  const waiting = await db.collection('pendingSchools')
+    .where('city', '==', s.city).where('schoolName', '==', s.name).where('status', '==', 'pending').get();
+  for (const doc of waiting.docs) {
+    try {
+      await doc.ref.update({ cityStatus: 'approved', schoolStatus: 'approved' });
+      await finishSchoolApproval(doc.id, doc.data(), { approvedBy: 'auto (Ministry code ' + s.semel + ')' });
+    } catch (e) { console.error('resolveSchoolCode approve:', e); }
+  }
+
+  const dropId = typeof data?.dropPendingId === 'string' ? data.dropPendingId : '';
+  if (dropId) {
+    let familyUid = null;
+    if ((await db.collection('families').doc(uid).get()).exists) familyUid = uid;
+    else familyUid = (await db.collection('uidToFamily').doc(uid).get()).data()?.familyUid || null;
+    const ref = db.collection('pendingSchools').doc(dropId);
+    const req = familyUid ? (await ref.get()).data() : null;
+    if (req && req.status === 'pending') {
+      const kid = String(data?.kidName || '');
+      const rest = (req.pendingFamilies || []).filter(pf => !(pf.familyUid === familyUid && pf.kidName === kid));
+      if (rest.length !== (req.pendingFamilies || []).length) {
+        await ref.update(rest.length ? { pendingFamilies: rest } : { pendingFamilies: rest, status: 'superseded' });
+      }
+    }
+  }
+  return { found: true, semel: s.semel, name: s.name, city: s.city };
 });
 
 exports.denySchoolRequest = functions.https.onCall(async (data, context) => {
