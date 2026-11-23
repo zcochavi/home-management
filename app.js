@@ -3452,10 +3452,21 @@ function afterLoad() {
   } else if (S.user && getAllMemberNames().includes(S.user)) {
     renderAll(); tryAutoConnectGCal(); initPresence(); initNotifBanners(); _applyAdminUI(); _initHeaderCollapse(); loadWeather();
   } else {
-    const saved = localStorage.getItem('familyhub_member_' + S.uid);
-    if (saved && getAllMemberNames().includes(saved) && !_fpProtected(saved)) {
+    // Who to open as, without asking "מי אתה?": the profile last used on this device, else the
+    // signed-in account's own member (the family owner, or a code / personal account tied to a
+    // member), else the family owner's only parent. The picker stays for devices that joined with
+    // the general family code, and for "switch member" in the menu.
+    const names = getAllMemberNames();
+    let saved = localStorage.getItem('familyhub_member_' + S.uid);
+    if (!saved || !names.includes(saved)) {
+      const mine = _authMemberName();
+      const parents = getParents();
+      saved = (mine && names.includes(mine)) ? mine
+        : (fbAuth.currentUser?.uid === S.uid && parents.length === 1) ? parents[0] : null;
+    }
+    if (saved && names.includes(saved) && !_fpProtected(saved)) {
       login(saved);
-    } else if (saved && getAllMemberNames().includes(saved)) {
+    } else if (saved && names.includes(saved)) {
       // Protected parent profile: show the picker behind the fingerprint prompt, so a
       // cancelled or failed check leaves the device on the picker, not in the profile
       renderLoginScreen();
