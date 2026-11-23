@@ -19,6 +19,10 @@ import android.widget.TextView;
 
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
@@ -102,6 +106,19 @@ public class WebtopLoginActivity extends AppCompatActivity {
         webView = new WebView(this);
         root.addView(webView, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         setContentView(root);
+
+        // Android 15+ draws apps edge to edge: keep the bar below the phone's status bar (time,
+        // battery) — its colour still fills the space behind it — and the page above the
+        // navigation bar and the keyboard.
+        WindowCompat.getInsetsController(getWindow(), root).setAppearanceLightStatusBars(false); // white icons on the blue bar
+        final int barTop = bar.getPaddingTop();
+        ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
+            Insets sys = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            bar.setPadding(bar.getPaddingLeft(), barTop + sys.top, bar.getPaddingRight(), bar.getPaddingBottom());
+            v.setPadding(sys.left, 0, sys.right, Math.max(sys.bottom, ime.bottom));
+            return WindowInsetsCompat.CONSUMED;
+        });
 
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
