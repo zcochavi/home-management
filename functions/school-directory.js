@@ -34,4 +34,24 @@ function indexEntries() {
 
 const meta = () => data().meta;
 
-module.exports = { lookup, indexEntries, cityKey, meta };
+// Two spellings of the same name: Hebrew and plain quote marks (ע״ש / ע"ש, ג׳ / ג'), spacing
+// around dashes and repeated spaces don't count.
+const nameKey = s => String(s || '')
+  .replace(/[\u05F4\u201C\u201D\u201E"]/g, '"').replace(/[\u05F3\u2018\u2019`']/g, "'")
+  .replace(/\s*[-\u2013\u2014\u05BE]\s*/g, '-').replace(/\s+/g, ' ').trim().toLowerCase();
+
+// existing + incoming without a second spelling of a name: the first spelling wins (one already
+// in use by families keeps its place, so their class ids — built from the name — stay the same)
+function mergeNames(existing, incoming = []) {
+  const seen = new Set(), out = [];
+  for (const n of [...(existing || []), ...incoming]) {
+    const t = String(n || '').trim(), k = nameKey(t);
+    if (!k || seen.has(k)) continue;
+    seen.add(k); out.push(t);
+  }
+  return out;
+}
+// The spelling of `name` already in `list`, if any
+const findName = (list, name) => (list || []).find(n => nameKey(n) === nameKey(name)) || null;
+
+module.exports = { lookup, indexEntries, cityKey, meta, nameKey, mergeNames, findName };
