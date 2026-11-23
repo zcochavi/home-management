@@ -9143,10 +9143,11 @@ function renderHome() {
     .filter(h => !_syncedDoneVal(h));
 
   // Merge: when webtop is off only show personal homework
-  // Personal / class homework by due date (soonest first, undated last), then synced
-  // homework by the date it was given, newest first — the same order as the homework tab
+  // Class homework by due date (soonest first, undated last); then personal homework, newest
+  // added first, and synced homework by the date it was given, newest first — as in the homework tab
+  const isPersonal = h => !h.scope || h.scope === 'personal';
   const byDue = [
-    ...hw.map(h => ({ _type:'hw', _due: h.due||'', ...h })),
+    ...hw.filter(h => !isPersonal(h)).map(h => ({ _type:'hw', _due: h.due||'', ...h })),
     ...classHw.map(h => ({ _type:'class', _due: h.due||'', ...h })),
   ].sort((a,b) => {
     if (!a._due && !b._due) return 0;
@@ -9154,7 +9155,9 @@ function renderHome() {
     if (!b._due) return -1;
     return a._due.localeCompare(b._due);
   });
-  const combined = [...byDue, ..._hwSortByGiven(wtHomeHw).map(h => ({ _type:'wt', _due: h.date||'', ...h }))];
+  const combined = [...byDue,
+    ..._hwSortByAdded(hw.filter(isPersonal)).map(h => ({ _type:'hw', _due: h.due||'', ...h })),
+    ..._hwSortByGiven(wtHomeHw).map(h => ({ _type:'wt', _due: h.date||'', ...h }))];
 
   // Build a reliable classCode→kid map for the "All" parent view.
   // Primary: kid.webtopClassCode === h.classCode (exact match).
@@ -10639,12 +10642,81 @@ function fmtDoneAt(ts) {
 
 function setHwSearch(val) { _hwSearch = val; renderHomework(); }
 
+// ── Each kid's school system ──
+// Which system (Webtop / Mashov) a kid's homework comes from: their own mapping; else a
+// sibling at the same school whose system is known; else what the kid's class syncs from.
+const _SYS = {
+  webtop: { icon: '📡', name: 'Webtop', from: 'מ-Webtop', to: 'ל-Webtop' },
+  mashov: { icon: '📘', name: 'משו״ב', from: 'ממשו״ב', to: 'למשו״ב' },
+};
+const _sysOn = sys => featureOn(sys === 'mashov' ? 'mashovConnection' : 'webtopConnection');
+function _kidSystem(kidName) {
+  const m = getMembers().find(x => x.name === kidName);
+  if (!m) return null;
+  const own = x => (x.mashovChildId && _sysOn('mashov')) ? 'mashov' : (x.webtopClassCode && _sysOn('webtop')) ? 'webtop' : null;
+  if (own(m)) return own(m);
+  const norm = v => String(v || '').trim().replace(/\s+/g, ' ');
+  const sameSchool = x => x !== m && x.role === 'kid' && x.school && m.school
+    && norm(x.school.city) === norm(m.school.city) && norm(x.school.name) && norm(x.school.name) === norm(m.school.name);
+  const sib = getMembers().find(x => sameSchool(x) && own(x));
+  if (sib) return own(sib);
+  const cid = m.school ? classIdFor(m.school) : null;
+  const src = (_commCache[cid]?.syncedHw || []).map(h => h.source).find(x => x === 'mashov' || x === 'webtop');
+  return src && _sysOn(src) ? src : null;
+}
+
+// ── "Homework isn't syncing" banner ──
+// For a kid whose family is connected to their school system: when the connection has expired
+// (Android app) or nothing new came in for a while, offer to reconnect — to that kid's system.
+const HW_STALE_HOURS = 48;
+function _kidSyncProblem(kidName) {
+  const m = getMembers().find(x => x.name === kidName);
+  const sys = m && _kidSystem(kidName);
+  if (!sys) return null;
+  const linked = sys === 'mashov'
+    ? !!(m.mashovChildId && familyData?.mashovStudents?.[m.mashovChildId])
+    : !!(m.webtopClassCode && (familyData?.webtopLinkedAt || Object.keys(familyData?.webtopStudents || {}).length));
+  if (!linked) return null; // not connected at all — the "connect your class" card covers that
+  const expired = _isNativeApp() && (sys === 'mashov' ? _msLoad('expired', false) : _wtLoad('expired', false));
+  const at = sys === 'mashov' ? _mashovUpdatedAt : _webtopUpdatedAt;
+  const stale = !at || Date.now() - at.getTime() > HW_STALE_HOURS * 3600e3;
+  return (expired || stale) ? { sys, expired, at } : null;
+}
+function _renderHwResync(kidName) {
+  const box = el('hwResyncBanner');
+  if (!box) return;
+  const p = isParent() && kidName ? _kidSyncProblem(kidName) : null;
+  box.style.display = p ? '' : 'none';
+  if (!p) { box.innerHTML = ''; return; }
+  const S_ = _SYS[p.sys];
+  const when = p.at ? p.at.toLocaleString(t('locale'), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  const msg = p.expired
+    ? `ההתחברות ${S_.to} פגה — שיעורי הבית של ${esc(kidName)} לא מתעדכנים`
+    : when ? `שיעורי הבית של ${esc(kidName)} ${S_.from} לא סונכרנו מאז ${when}`
+    : `שיעורי הבית של ${esc(kidName)} ${S_.from} עוד לא סונכרנו`;
+  box.innerHTML = `<div class="hw-resync">
+    <div class="hw-resync-txt">⚠️ ${msg}</div>
+    <button class="hw-resync-btn" onclick="_hwResync('${p.sys}')">${_isNativeApp() ? '🔄' : '🔗'} התחברות מחדש ${S_.to}</button>
+  </div>`;
+}
+// Android app: try a sync with the saved login first; open the login screen if it has expired.
+// Website: the connection is made from the app or the Chrome extension — open connected apps.
+async function _hwResync(sys) {
+  if (!_isNativeApp()) return openConnectedApps(sys);
+  const ms = sys === 'mashov', load = ms ? _msLoad : _wtLoad;
+  const known = Object.keys(load(ms ? 'children' : 'students', {})).length > 0;
+  if (known && !load('expired', false)) await (ms ? mashovAppSync({ manual: true }) : webtopAppSync({ manual: true }));
+  if (!known || load('expired', false)) await (ms ? mashovAppConnect() : webtopAppConnect());
+  renderHomework();
+}
+
 // ── "Connect your class" wizard ──
 // One family's Webtop / Mashov connection syncs homework for the whole class (shared via
 // onFamilySyncedHomework). While no family in a kid's class has connected, parents see this
 // card on the homework tab; it goes away once anyone in the class connects — themselves included.
 const _hwWizardSnoozed = {}; // cid → true: "later" hides it until the app is reopened
-let _hwWizardPick = null;     // 'webtop' | 'mashov' once a system was chosen
+let _hwWizardPick = null;     // 'webtop' | 'mashov' once a system was chosen, 'ask' to choose again
+let _hwWizardKid = null;      // the pick belongs to this kid
 function _classSyncCovered(kidName) {
   const m = getMembers().find(x => x.name === kidName);
   const cid = m?.school ? classIdFor(m.school) : null;
@@ -10659,6 +10731,7 @@ function _classSyncCovered(kidName) {
 function _renderHwConnectWizard(kidName) {
   const box = el('hwConnectWizard');
   if (!box) return;
+  if (kidName !== _hwWizardKid) { _hwWizardKid = kidName; _hwWizardPick = null; } // each kid has their own system
   const m = kidName ? getMembers().find(x => x.name === kidName) : null;
   const cid = m?.school ? classIdFor(m.school) : null;
   const systems = [
@@ -10669,7 +10742,10 @@ function _renderHwConnectWizard(kidName) {
   box.style.display = show ? '' : 'none';
   if (!show) { box.innerHTML = ''; return; }
   const native = _isNativeApp();
-  const pick = systems.find(x => x.key === _hwWizardPick) || (systems.length === 1 ? systems[0] : null);
+  // The kid's own school system when known (e.g. a sibling at the same school is on Mashov)
+  const pick = systems.find(x => x.key === _hwWizardPick)
+    || (_hwWizardPick === null && systems.find(x => x.key === _kidSystem(kidName)))
+    || (systems.length === 1 ? systems[0] : null);
   const cls = m.school.grade ? `כיתה ${esc(m.school.grade)}${m.school.classNum ? "'" + esc(m.school.classNum) : ''}` : 'הכיתה';
   let step;
   if (!pick) {
@@ -10697,7 +10773,7 @@ function _renderHwConnectWizard(kidName) {
     <button class="hw-wiz-later" onclick="_hwWizardSnooze('${esc(cid)}')">אחר כך</button>
   </div>`;
 }
-function _hwWizardChoose(key) { _hwWizardPick = key; _renderHwConnectWizard(S.child); }
+function _hwWizardChoose(key) { _hwWizardPick = key || 'ask'; _renderHwConnectWizard(S.child); }
 function _hwWizardSnooze(cid) { _hwWizardSnoozed[cid] = true; _renderHwConnectWizard(S.child); }
 function _hwWizardConnect(key) {
   if (_isNativeApp()) return key === 'mashov' ? mashovAppConnect() : webtopAppConnect();
@@ -10719,6 +10795,7 @@ function renderHomework(){
   if (!scopeAllowed) _hwScope = 'personal';
 
   _renderHwConnectWizard(S.child);
+  _renderHwResync(S.child);
 
   // Search bar
   const searchBar = el('hwSearchBar');
@@ -10802,7 +10879,8 @@ function renderHomework(){
   // Undated homework is assumed due at the subject's next lesson in this kid's class schedule
   const hwSchedule = classCid ? _commCache[classCid]?.schedule : null;
   classHw = _hwSmartSort(classHw, hwSchedule);
-  pending = _hwSmartSort(pending, hwSchedule);
+  // Personal homework: like the synced list — newest first, by the day it was added
+  pending = _hwSortByAdded(pending);
   // Synced (Webtop / Mashov) homework: by the date it was given — the lesson date the school
   // system reports — newest first. Not by when it was imported; same-day items keep their order.
   wtHw = _hwSortByGiven(wtHw);
@@ -10989,6 +11067,12 @@ function _hwSmartSort(list, schedule) {
     .map(x => x.h);
 }
 const _hwGivenDay = h => String(h?.date || '').slice(0, 10);
+// Personal homework, newest first by when it was added (its id is its creation time)
+function _hwSortByAdded(list) {
+  return list.map((h, i) => ({ h, i, t: _hwCreatedMs(h) }))
+    .sort((a, b) => (a.t === b.t ? a.i - b.i : a.t == null ? -1 : b.t == null ? 1 : b.t - a.t))
+    .map(x => x.h);
+}
 function _hwSortByGiven(list) {
   return list.map((h, i) => ({ h, i, d: _hwGivenDay(h) }))
     .sort((a, b) => (a.d === b.d ? a.i - b.i : !a.d ? 1 : !b.d ? -1 : b.d.localeCompare(a.d)))
