@@ -6906,6 +6906,15 @@ function renderMaintenanceTools() {
       <div id="seedSchoolsResult" style="font-size:12px;margin-top:8px"></div>
     </div>
     <div class="card" style="margin-bottom:12px;padding:12px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px">🔀 איחוד בתי ספר כפולים</div>
+      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">שני שמות לאותו בית ספר (למשל "אריק אינשטיין" / "אריק איינשטיין"): השם השני יוסר, הילדים הרשומים בו יעברו לשם שנשאר, והרשימה הרשמית לא תחזיר אותו.</div>
+      <input class="auth-input" id="mergeSchoolCity" placeholder="עיר" style="margin-bottom:8px;text-align:right">
+      <input class="auth-input" id="mergeSchoolKeep" placeholder="השם שנשאר" style="margin-bottom:8px;text-align:right">
+      <input class="auth-input" id="mergeSchoolMerge" placeholder="השם שיוסר" style="margin-bottom:8px;text-align:right">
+      <button class="admin-btn" id="mergeSchoolBtn" onclick="adminMergeSchools()" style="width:100%;padding:9px;font-size:13px">איחוד ◀</button>
+      <div id="mergeSchoolResult" style="font-size:12px;margin-top:8px"></div>
+    </div>
+    <div class="card" style="margin-bottom:12px;padding:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:8px">🔑 קודים אישיים לילדים</div>
       <div style="font-size:13px;color:#4a5568;margin-bottom:10px">הפק קודי הצטרפות אישיים לכל ילד שעדיין אין לו קוד (משפחות קיימות).</div>
       <button class="admin-btn" id="migrateKidCodesBtn" onclick="migrateKidCodes()" style="width:100%;padding:9px;font-size:13px">הפק קודים חסרים ◀</button>
@@ -7021,6 +7030,23 @@ async function adminDeleteCity() {
   } finally { btn.disabled = false; }
 }
 
+async function adminMergeSchools() {
+  const city = el('mergeSchoolCity').value.trim(), keep = el('mergeSchoolKeep').value.trim(), merge = el('mergeSchoolMerge').value.trim();
+  const res = el('mergeSchoolResult'), btn = el('mergeSchoolBtn');
+  if (!city || !keep || !merge) { res.style.color = 'var(--error)'; res.textContent = 'יש להזין עיר ושני שמות'; return; }
+  if (!await _confirm(`לאחד את "${merge}" לתוך "${keep}" (${city})?\n\n"${merge}" יוסר מהרשימה, ילדים הרשומים בו יעברו ל"${keep}", ורענון רשימת משרד החינוך לא יחזיר אותו.`, { okLabel: 'איחוד' })) return;
+  btn.disabled = true; res.style.color = '#718096'; res.textContent = 'מאחד...';
+  try {
+    const r = (await fbFunctions.httpsCallable('adminMergeSchools')({ city, keep, merge })).data || {};
+    _cachedCities = null; _cachedSchools = {};
+    res.style.color = '#276749';
+    res.textContent = `✓ אוחד לתוך "${r.keep}" — ${r.kidsMoved} ילדים הועברו`;
+    ['mergeSchoolMerge'].forEach(id => el(id).value = '');
+  } catch (e) {
+    res.style.color = 'var(--error)'; res.textContent = 'שגיאה: ' + (e?.details?.message || e?.message || String(e));
+  } finally { btn.disabled = false; }
+}
+
 async function adminDeleteSchool() {
   const city       = el('deleteSchoolCityInput').value.trim();
   const schoolName = el('deleteSchoolNameInput').value.trim();
@@ -7031,6 +7057,7 @@ async function adminDeleteSchool() {
   btn.disabled = true; res.style.color = '#718096'; res.textContent = 'מוחק...';
   try {
     const r = await fbFunctions.httpsCallable('adminDeleteSchool')({ city, schoolName });
+    _cachedCities = null; _cachedSchools = {}; // the pickers re-read the list
     res.style.color = '#276749';
     res.textContent = `✓ "${schoolName}" נמחק — ${r.data.classesDeleted} כיתות, ${r.data.kidsUnlinked} ילדים שוחררו`;
     el('deleteSchoolCityInput').value = ''; el('deleteSchoolNameInput').value = '';

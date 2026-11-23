@@ -1221,6 +1221,29 @@ async function officialSchools() {
   return schools;
 }
 
+// Admin decisions about official names, kept at schoolIndex/overrides so a refresh doesn't undo
+// them: schools["<cityKey>|<nameKey>"] = the name to use instead ("" = deleted, don't add);
+// cities["<nameKey of city>"] = "" for a deleted city.
+async function schoolOverrides() {
+  const d = (await db.collection('schoolIndex').doc('overrides').get()).data() || {};
+  return { schools: d.schools || {}, cities: d.cities || {} };
+}
+const overrideKey = (city, name) => schoolDir.cityKey(city) + '|' + schoolDir.nameKey(name);
+async function setSchoolOverride(kind, key, value) {
+  const ref = db.collection('schoolIndex').doc('overrides');
+  await db.runTransaction(async tx => {
+    const d = (await tx.get(ref)).data() || {};
+    tx.set(ref, { ...d, [kind]: { ...(d[kind] || {}), [key]: value } });
+  });
+}
+// An official school after admin decisions: {city, name} with the name to use, or null if deleted
+function applyOverride(ov, city, name) {
+  if (ov.cities[schoolDir.nameKey(city)] === '') return null;
+  const o = ov.schools[overrideKey(city, name)];
+  if (o === '') return null;
+  return { city, name: o || name };
+}
+
 // Downloads a fresh list (falling back to the saved / bundled one), then adds every school and
 // city to the city / school pickers (schoolIndex) and merges second spellings of the same name
 // (ע״ש / ע"ש) in every city's list, including names typed by families. Of two spellings the one
@@ -1245,7 +1268,14 @@ async function refreshSchoolIndex(by) {
     source = 'saved';
   }
 
-  const { cities, schools } = schoolDir.indexEntries(list);
+  // Admin decisions first: merged-away names map to the kept one, deleted ones are left out
+  const ov = await schoolOverrides();
+  const effective = {};
+  for (const [semel, [name, city]] of Object.entries(list)) {
+    const e = applyOverride(ov, city, name);
+    if (e) effective[semel] = [e.name, e.city];
+  }
+  const { cities, schools } = schoolDir.indexEntries(effective);
   const docs = {};
   (await idx.get()).docs.forEach(d => { docs[d.id] = d.data(); });
   const cityBefore = docs.cities_list?.cities || [];
@@ -1302,8 +1332,10 @@ exports.refreshSchoolIndexMonthly = functions.runWith({ timeoutSeconds: 300, mem
 exports.resolveSchoolCode = functions.https.onCall(async (data, context) => {
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError('unauthenticated', 'Login required');
-  const s = schoolDir.lookup(data?.semel, await officialSchools());
-  if (!s) return { found: false };
+  const off = schoolDir.lookup(data?.semel, await officialSchools());
+  const eff = off && applyOverride(await schoolOverrides(), off.city, off.name);
+  if (!eff) return { found: false };
+  const s = { ...off, ...eff };
 
   // Use the spelling already in the pickers when there is one (e.g. ע״ש for the official ע"ש):
   // families' class ids are built from it, so a synced kid joins the same class.
@@ -1703,10 +1735,11 @@ exports.adminDeleteCity = functions.https.onCall(async (data, context) => {
 
   const result = await deleteClassesWithPrefix(cityNorm);
 
-  // Remove from school index
+  // Remove from school index, and remember the deletion (see adminDeleteSchool)
   await db.collection('schoolIndex').doc('cities_list')
     .update({ cities: admin.firestore.FieldValue.arrayRemove(city) }).catch(() => {});
   await db.collection('schoolIndex').doc('schools__' + normCityId(city)).delete().catch(() => {});
+  await setSchoolOverride('cities', schoolDir.nameKey(city), '');
 
   // Delete grade-level and school-level event collections for this city
   const gradePrefix = cityNorm + '~~';
@@ -1739,9 +1772,13 @@ exports.adminDeleteSchool = functions.https.onCall(async (data, context) => {
 
   const result = await deleteClassesWithPrefix(prefix);
 
-  // Remove school from index
-  await db.collection('schoolIndex').doc('schools__' + normCityId(city))
-    .update({ schools: admin.firestore.FieldValue.arrayRemove(schoolName) }).catch(() => {});
+  // Remove school from index (any spelling of the name), and remember the deletion so the
+  // monthly refresh of the official list doesn't add it back
+  const idxRef = db.collection('schoolIndex').doc('schools__' + normCityId(city));
+  const listNow = (await idxRef.get()).data()?.schools || [];
+  const kept = listNow.filter(x => schoolDir.nameKey(x) !== schoolDir.nameKey(schoolName));
+  if (kept.length !== listNow.length) await idxRef.set({ schools: kept }, { merge: true });
+  await setSchoolOverride('schools', overrideKey(city, schoolName), '');
 
   // Delete school-level event collection
   const schoolDocId = n(city) + '~~' + n(schoolName);
@@ -1752,6 +1789,59 @@ exports.adminDeleteSchool = functions.https.onCall(async (data, context) => {
 
   console.log(`adminDeleteSchool: deleted school "${schoolName}" in "${city}": ${JSON.stringify(result)}`);
   return { ok: true, ...result };
+});
+
+// Admin: two names for one school (e.g. אריק אינשטיין / אריק איינשטיין) → keep one. The other
+// leaves the picker, is remembered (the official list and synced school codes then use the kept
+// name), and kids registered under it move to the kept name's classes.
+exports.adminMergeSchools = functions.runWith({ timeoutSeconds: 300 }).https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const city = String(data?.city || '').trim(), keep = String(data?.keep || '').trim(), merge = String(data?.merge || '').trim();
+  if (!city || !keep || !merge) throw new functions.https.HttpsError('invalid-argument', 'Missing city or names');
+  if (schoolDir.nameKey(keep) === schoolDir.nameKey(merge)) throw new functions.https.HttpsError('invalid-argument', 'Same school');
+
+  const idxRef = db.collection('schoolIndex').doc('schools__' + normCityId(city));
+  const list = (await idxRef.get()).data()?.schools || [];
+  const keepName = schoolDir.findName(list, keep) || keep;
+  const next = schoolDir.mergeNames(list.filter(x => schoolDir.nameKey(x) !== schoolDir.nameKey(merge)), [keepName]);
+  await idxRef.set({ schools: next }, { merge: true });
+  await setSchoolOverride('schools', overrideKey(city, merge), keepName);
+
+  // Kids registered under the merged name: same grade / class under the kept name
+  const sameCity = c => schoolDir.nameKey(c) === schoolDir.nameKey(city);
+  const isMerged = sc => sc && sameCity(sc.city) && schoolDir.nameKey(sc.name) === schoolDir.nameKey(merge);
+  let kidsMoved = 0;
+  const fams = await db.collection('families').get();
+  for (const fam of fams.docs) {
+    const members = fam.data().members || [];
+    if (!members.some(m => m.role === 'kid' && isMerged(m.school))) continue;
+    const moved = [];
+    const updated = members.map(m => {
+      if (m.role !== 'kid' || !isMerged(m.school)) return m;
+      moved.push(m);
+      return { ...m, school: { ...m.school, name: keepName } };
+    });
+    await fam.ref.update({ members: updated });
+    for (const m of moved) {
+      try {
+        await registerKidInClass({ familyUid: fam.id, kidName: m.name }, { ...m.school, name: keepName }, fam.data().familyName, m.gender, m.dob);
+        kidsMoved++;
+      } catch (e) { console.error('adminMergeSchools register:', e); }
+    }
+  }
+  // The merged name's classes lose their member list (the kids were just registered under the
+  // kept name); anything else in them (events, schedule) is left in place, not deleted.
+  const n = x => (x||'').trim().replace(/\s+/g,' ').replace(/\//g,'-').replace(/~/g,'');
+  const classes = await db.collection('schoolClasses').get();
+  let classesEmptied = 0;
+  for (const c of classes.docs.filter(d => d.id.startsWith(n(city) + '~~' + n(merge) + '~~'))) {
+    const ss = await c.ref.collection('members').get();
+    await Promise.all(ss.docs.map(d => d.ref.delete()));
+    classesEmptied++;
+  }
+  console.log(`adminMergeSchools: "${merge}" → "${keepName}" in "${city}": ${kidsMoved} kids moved, ${classesEmptied} classes emptied`);
+  return { ok: true, keep: keepName, kidsMoved, classesEmptied };
 });
 
 exports.getAdminMessages = functions.https.onCall(async (data, context) => {
