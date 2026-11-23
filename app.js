@@ -6886,8 +6886,11 @@ async function adminSeedSchoolIndex() {
   btn.disabled = true; out.style.color = ''; out.textContent = '⏳ טוען…';
   try {
     const r = (await fbFunctions.httpsCallable('seedSchoolIndex')()).data || {};
-    out.style.color = '#276749';
-    out.textContent = `✓ נוספו ${r.cities} ערים ו-${r.schools} בתי ספר לבחירה`;
+    out.style.color = r.source === 'live' ? '#276749' : '#975a16';
+    out.textContent = (r.source === 'live'
+        ? `✓ הורדה רשימה עדכנית (${r.official} בתי ספר)`
+        : `⚠️ data.gov.il לא זמין (${r.fetchError || ''}) — נטענה הרשימה השמורה`)
+      + ` · נוספו ${r.added} בתי ספר ו-${r.citiesAdded} ערים · אוחדו ${r.merged} כפילויות · סה״כ ${r.schools} בתי ספר ב-${r.cities} ערים`;
     _cachedCities = null; _cachedSchools = {};
   } catch (e) {
     out.style.color = 'var(--error)'; out.textContent = 'הטעינה נכשלה: ' + (e.message || e);
@@ -6898,8 +6901,8 @@ function renderMaintenanceTools() {
   el('adminMaintenance').innerHTML = `
     <div class="card" style="margin-bottom:12px;padding:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:8px">🏫 רשימת בתי הספר הרשמית</div>
-      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוסיף את כל הערים ובתי הספר מרשימת משרד החינוך (data.gov.il) לבחירה באפליקציה — בלי צורך באישור. שמות קיימים נשארים.</div>
-      <button class="admin-btn" id="seedSchoolsBtn" onclick="adminSeedSchoolIndex()" style="width:100%;padding:9px;font-size:13px">טעינת הרשימה ◀</button>
+      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוריד את הרשימה העדכנית של משרד החינוך (data.gov.il), מוסיף ערים ובתי ספר חדשים לבחירה ומאחד כפילויות — בלי צורך באישור. שמות קיימים נשארים. מתבצע גם אוטומטית ב-1 בכל חודש.</div>
+      <button class="admin-btn" id="seedSchoolsBtn" onclick="adminSeedSchoolIndex()" style="width:100%;padding:9px;font-size:13px">עדכון הרשימה עכשיו ◀</button>
       <div id="seedSchoolsResult" style="font-size:12px;margin-top:8px"></div>
     </div>
     <div class="card" style="margin-bottom:12px;padding:12px">
