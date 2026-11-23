@@ -4512,10 +4512,19 @@ let _cachedSchools = {}; // { [normCityId]: string[] }
 function normCityId(city) {
   return (city||'').trim().toLowerCase().replace(/\s+/g,'_').replace(/[^\w\u0590-\u05FF]/g,'');
 }
+// Two spellings of one name (ע״ש / ע"ש, spacing around dashes) count as the same — as nameKey
+// in functions/school-directory.js. Pickers show the first spelling only.
+const _placeKey = s => String(s || '')
+  .replace(/[\u05F4\u201C\u201D\u201E"]/g, '"').replace(/[\u05F3\u2018\u2019`']/g, "'")
+  .replace(/\s*[-\u2013\u2014\u05BE]\s*/g, '-').replace(/\s+/g, ' ').trim().toLowerCase();
+function _uniqPlaces(list) {
+  const seen = new Set();
+  return (list || []).filter(n => { const k = _placeKey(n); if (!k || seen.has(k)) return false; seen.add(k); return true; });
+}
 async function loadCities() {
   try {
     const snap = await fbDb.collection('schoolIndex').doc('cities_list').get();
-    _cachedCities = snap.exists ? (snap.data().cities||[]) : [];
+    _cachedCities = _uniqPlaces(snap.exists ? (snap.data().cities||[]) : []);
   } catch(e) { _cachedCities = []; }
 }
 async function loadSchoolsFor(city) {
@@ -4524,21 +4533,21 @@ async function loadSchoolsFor(city) {
   if (_cachedSchools[key]) return;
   try {
     const snap = await fbDb.collection('schoolIndex').doc('schools__'+key).get();
-    _cachedSchools[key] = snap.exists ? (snap.data().schools||[]) : [];
+    _cachedSchools[key] = _uniqPlaces(snap.exists ? (snap.data().schools||[]) : []);
   } catch(e) { _cachedSchools[key] = []; }
 }
 function isNewCity(city) {
   if (!city?.trim() || !_cachedCities) return false;
-  const norm = city.trim().toLowerCase();
-  return !_cachedCities.some(c => c.trim().toLowerCase() === norm);
+  const norm = _placeKey(city);
+  return !_cachedCities.some(c => _placeKey(c) === norm);
 }
 function isNewSchool(city, schoolName) {
   if (!city?.trim() || !schoolName?.trim()) return false;
   const key = normCityId(city);
   const list = _cachedSchools[key];
   if (!list) return true; // not loaded yet = treat as new
-  const norm = schoolName.trim().toLowerCase();
-  return !list.some(s => s.trim().toLowerCase() === norm);
+  const norm = _placeKey(schoolName);
+  return !list.some(s => _placeKey(s) === norm);
 }
 
 async function requestNewSchool(kidName, school, requestType) {
@@ -4837,7 +4846,17 @@ async function syncKidClass(kidName, newSchool, oldSchool, newRole) {
   // A parent can change school name without grade being re-entered.
   if (newRole === 'kid' && newSchool?.city) {
     if (!_cachedCities) await loadCities();
-    await loadSchoolsFor(newSchool.city);
+    // Typed with another spelling of a listed city / school (ע"ש for ע״ש)? Use the listed one,
+    // so the kid lands in the same class as everyone else there.
+    const city = _cachedCities.find(c => _placeKey(c) === _placeKey(newSchool.city)) || newSchool.city;
+    await loadSchoolsFor(city);
+    const name = newSchool.name ? ((_cachedSchools[normCityId(city)] || []).find(n => _placeKey(n) === _placeKey(newSchool.name)) || newSchool.name) : newSchool.name;
+    if (city !== newSchool.city || name !== newSchool.name) {
+      newSchool = { ...newSchool, city, name };
+      const members = getMembers().map(m => m.name === kidName ? { ...m, school: newSchool } : m);
+      if (familyData) familyData.members = members;
+      await fbDb.collection('families').doc(S.uid).update({ members }).catch(() => {});
+    }
 
     const cityNew   = isNewCity(newSchool.city);
     const schoolNew = newSchool.name && !cityNew && isNewSchool(newSchool.city, newSchool.name);
@@ -9337,7 +9356,7 @@ function renderChores() {
       </div>
     </div>`;
   }).join('') : `<div class="chore-empty-cta" onclick="el('newChoreText').focus()">
-    <div class="chore-empty-title">${S.filter==='All' ? 'אין משימות' : `אין משימות ל${S.filter}`} 🎉</div>
+    <div class="chore-empty-title">${S.filter==='All' ? 'אין משימות' : S.filter===S.user ? 'אין לך משימות' : `אין משימות ל${S.filter}`} 🎉</div>
     <div class="chore-empty-sub">${t('noChores')}</div>
   </div>`;
   el('choresContent').innerHTML = `<div class="chore-list">${inner}</div>`;
@@ -9765,8 +9784,12 @@ function _updateChoreFormAssignee() {
       lbl.style.display = 'none';
     }
   }
-  if (inp) inp.placeholder = name ? `הוסף משימה ל${name}...` : t('chorePlaceholder');
+  // Addressed to whoever is typing: "הוסיפי" / "הוסף"; for their own list without "ל<name>"
+  const add = _isFemaleMember(S.user) ? 'הוסיפי' : 'הוסף';
+  if (inp) inp.placeholder = !name ? t('chorePlaceholder')
+    : name === S.user ? `${add} משימה...` : `${add} משימה ל${name}...`;
 }
+const _isFemaleMember = name => ['female', 'girl'].includes(getMembers().find(m => m.name === name)?.gender);
 
 function choreFabClick() {
   if (!isParent() || S.filter !== 'All') {

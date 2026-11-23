@@ -1207,25 +1207,42 @@ const schoolDir = require('./school-directory');
 const schoolsDocId = city => 'schools__' + schoolDir.cityKey(city);
 
 // Admin: add every school and city from the official list to the city / school pickers
-// (schoolIndex). Adds only — names already there, including ones typed by families, stay.
+// (schoolIndex), and merge second spellings of the same name (ע״ש / ע"ש) — in every city's list,
+// including names typed by families. Of two spellings the one already there stays, since kids'
+// class ids are built from it. Safe to run again.
 exports.seedSchoolIndex = functions.runWith({ timeoutSeconds: 300, memory: '512MB' }).https.onCall(async (data, context) => {
   if (context.auth?.uid !== ADMIN_UID)
     throw new functions.https.HttpsError('permission-denied', 'Admins only');
   const { cities, schools } = schoolDir.indexEntries();
   const idx = db.collection('schoolIndex');
-  await idx.doc('cities_list').set({ cities: admin.firestore.FieldValue.arrayUnion(...cities) }, { merge: true });
-  const entries = Object.values(schools);
-  let n = 0;
-  for (let i = 0; i < entries.length; i += 400) {
+  const all = await idx.get();
+  const docs = {};
+  all.docs.forEach(d => { docs[d.id] = d.data(); });
+
+  const cityList = schoolDir.mergeNames(docs.cities_list?.cities, cities);
+  const writes = [[idx.doc('cities_list'), { cities: cityList }]];
+  // An official city spelled differently in the list goes under that spelling's key
+  const official = {};
+  for (const { city, names } of Object.values(schools)) {
+    const id = schoolsDocId(schoolDir.findName(cityList, city) || city);
+    official[id] = (official[id] || []).concat(names);
+  }
+  const ids = new Set([...Object.keys(official), ...Object.keys(docs).filter(id => id.startsWith('schools__'))]);
+  let n = 0, merged = 0;
+  for (const id of ids) {
+    const before = docs[id]?.schools || [];
+    const list = schoolDir.mergeNames(before, official[id] || []);
+    n += list.length;
+    merged += before.length - schoolDir.mergeNames(before).length;
+    if (list.length !== before.length || list.some((x, i) => x !== before[i])) writes.push([idx.doc(id), { schools: list }]);
+  }
+  for (let i = 0; i < writes.length; i += 400) {
     const batch = db.batch();
-    for (const { city, names } of entries.slice(i, i + 400)) {
-      batch.set(idx.doc(schoolsDocId(city)), { schools: admin.firestore.FieldValue.arrayUnion(...names) }, { merge: true });
-      n += names.length;
-    }
+    writes.slice(i, i + 400).forEach(([ref, val]) => batch.set(ref, val, { merge: true }));
     await batch.commit();
   }
   await idx.doc('official').set({ ...schoolDir.meta(), loadedAt: admin.firestore.FieldValue.serverTimestamp() });
-  return { ok: true, cities: cities.length, schools: n };
+  return { ok: true, cities: cityList.length, schools: n, merged };
 });
 
 // A school code (סמל מוסד) from a parent's Webtop / Mashov sync → the school's official name
@@ -1238,13 +1255,19 @@ exports.resolveSchoolCode = functions.https.onCall(async (data, context) => {
   const s = schoolDir.lookup(data?.semel);
   if (!s) return { found: false };
 
+  // Use the spelling already in the pickers when there is one (e.g. ע״ש for the official ע"ש):
+  // families' class ids are built from it, so a synced kid joins the same class.
   const idx = db.collection('schoolIndex');
-  await idx.doc('cities_list').set({ cities: admin.firestore.FieldValue.arrayUnion(s.city) }, { merge: true });
-  await idx.doc(schoolsDocId(s.city)).set({ schools: admin.firestore.FieldValue.arrayUnion(s.name) }, { merge: true });
+  const cityList = (await idx.doc('cities_list').get()).data()?.cities || [];
+  const city = schoolDir.findName(cityList, s.city) || s.city;
+  const schoolList = (await idx.doc(schoolsDocId(city)).get()).data()?.schools || [];
+  const name = schoolDir.findName(schoolList, s.name) || s.name;
+  if (city === s.city && !cityList.includes(city)) await idx.doc('cities_list').set({ cities: admin.firestore.FieldValue.arrayUnion(city) }, { merge: true });
+  if (!schoolList.includes(name)) await idx.doc(schoolsDocId(city)).set({ schools: admin.firestore.FieldValue.arrayUnion(name) }, { merge: true });
 
-  const waiting = await db.collection('pendingSchools')
-    .where('city', '==', s.city).where('schoolName', '==', s.name).where('status', '==', 'pending').get();
-  for (const doc of waiting.docs) {
+  const waiting = (await db.collection('pendingSchools').where('status', '==', 'pending').get()).docs
+    .filter(d => schoolDir.nameKey(d.data().city) === schoolDir.nameKey(city) && schoolDir.nameKey(d.data().schoolName) === schoolDir.nameKey(name));
+  for (const doc of waiting) {
     try {
       await doc.ref.update({ cityStatus: 'approved', schoolStatus: 'approved' });
       await finishSchoolApproval(doc.id, doc.data(), { approvedBy: 'auto (Ministry code ' + s.semel + ')' });
@@ -1266,7 +1289,7 @@ exports.resolveSchoolCode = functions.https.onCall(async (data, context) => {
       }
     }
   }
-  return { found: true, semel: s.semel, name: s.name, city: s.city };
+  return { found: true, semel: s.semel, name, city };
 });
 
 exports.denySchoolRequest = functions.https.onCall(async (data, context) => {
