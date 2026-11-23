@@ -343,6 +343,14 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
 .join-acct-title { font-size: 13px; font-weight: 800; color: var(--gray-700); text-align: center; margin-bottom: 4px; }
 .join-acct-sub { font-size: 12px; font-weight: 600; color: var(--gray-500); text-align: center; line-height: 1.6; margin-bottom: 12px; }
 
+/* Homework tab: the kid's school-system sync stopped — reconnect */
+.hw-resync { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; background: #FFF7E6; border: 1px solid #F5D08A;
+  border-radius: 16px; padding: 12px 14px; margin-bottom: 12px; direction: rtl; }
+.hw-resync-txt { flex: 1 1 180px; font-size: 13px; font-weight: 700; color: #7A4B00; line-height: 1.6; }
+.hw-resync-btn { flex-shrink: 0; border: none; border-radius: 12px; padding: 9px 14px; background: var(--primary-500); color: #fff;
+  font: inherit; font-size: 13px; font-weight: 800; cursor: pointer; }
+.hw-resync-btn:active { transform: scale(.97); }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }
