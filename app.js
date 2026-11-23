@@ -9337,7 +9337,7 @@ function renderChores() {
       </div>
     </div>`;
   }).join('') : `<div class="chore-empty-cta" onclick="el('newChoreText').focus()">
-    <div class="chore-empty-title">${S.filter==='All' ? 'אין משימות' : `אין משימות ל${S.filter}`} 🎉</div>
+    <div class="chore-empty-title">${S.filter==='All' ? 'אין משימות' : S.filter===S.user ? 'אין לך משימות' : `אין משימות ל${S.filter}`} 🎉</div>
     <div class="chore-empty-sub">${t('noChores')}</div>
   </div>`;
   el('choresContent').innerHTML = `<div class="chore-list">${inner}</div>`;
@@ -9765,8 +9765,12 @@ function _updateChoreFormAssignee() {
       lbl.style.display = 'none';
     }
   }
-  if (inp) inp.placeholder = name ? `הוסף משימה ל${name}...` : t('chorePlaceholder');
+  // Addressed to whoever is typing: "הוסיפי" / "הוסף"; for their own list without "ל<name>"
+  const add = _isFemaleMember(S.user) ? 'הוסיפי' : 'הוסף';
+  if (inp) inp.placeholder = !name ? t('chorePlaceholder')
+    : name === S.user ? `${add} משימה...` : `${add} משימה ל${name}...`;
 }
+const _isFemaleMember = name => ['female', 'girl'].includes(getMembers().find(m => m.name === name)?.gender);
 
 function choreFabClick() {
   if (!isParent() || S.filter !== 'All') {
