@@ -9143,10 +9143,11 @@ function renderHome() {
     .filter(h => !_syncedDoneVal(h));
 
   // Merge: when webtop is off only show personal homework
-  // Personal / class homework by due date (soonest first, undated last), then synced
-  // homework by the date it was given, newest first — the same order as the homework tab
+  // Class homework by due date (soonest first, undated last); then personal homework, newest
+  // added first, and synced homework by the date it was given, newest first — as in the homework tab
+  const isPersonal = h => !h.scope || h.scope === 'personal';
   const byDue = [
-    ...hw.map(h => ({ _type:'hw', _due: h.due||'', ...h })),
+    ...hw.filter(h => !isPersonal(h)).map(h => ({ _type:'hw', _due: h.due||'', ...h })),
     ...classHw.map(h => ({ _type:'class', _due: h.due||'', ...h })),
   ].sort((a,b) => {
     if (!a._due && !b._due) return 0;
@@ -9154,7 +9155,9 @@ function renderHome() {
     if (!b._due) return -1;
     return a._due.localeCompare(b._due);
   });
-  const combined = [...byDue, ..._hwSortByGiven(wtHomeHw).map(h => ({ _type:'wt', _due: h.date||'', ...h }))];
+  const combined = [...byDue,
+    ..._hwSortByAdded(hw.filter(isPersonal)).map(h => ({ _type:'hw', _due: h.due||'', ...h })),
+    ..._hwSortByGiven(wtHomeHw).map(h => ({ _type:'wt', _due: h.date||'', ...h }))];
 
   // Build a reliable classCode→kid map for the "All" parent view.
   // Primary: kid.webtopClassCode === h.classCode (exact match).
@@ -10802,7 +10805,8 @@ function renderHomework(){
   // Undated homework is assumed due at the subject's next lesson in this kid's class schedule
   const hwSchedule = classCid ? _commCache[classCid]?.schedule : null;
   classHw = _hwSmartSort(classHw, hwSchedule);
-  pending = _hwSmartSort(pending, hwSchedule);
+  // Personal homework: like the synced list — newest first, by the day it was added
+  pending = _hwSortByAdded(pending);
   // Synced (Webtop / Mashov) homework: by the date it was given — the lesson date the school
   // system reports — newest first. Not by when it was imported; same-day items keep their order.
   wtHw = _hwSortByGiven(wtHw);
@@ -10989,6 +10993,12 @@ function _hwSmartSort(list, schedule) {
     .map(x => x.h);
 }
 const _hwGivenDay = h => String(h?.date || '').slice(0, 10);
+// Personal homework, newest first by when it was added (its id is its creation time)
+function _hwSortByAdded(list) {
+  return list.map((h, i) => ({ h, i, t: _hwCreatedMs(h) }))
+    .sort((a, b) => (a.t === b.t ? a.i - b.i : a.t == null ? -1 : b.t == null ? 1 : b.t - a.t))
+    .map(x => x.h);
+}
 function _hwSortByGiven(list) {
   return list.map((h, i) => ({ h, i, d: _hwGivenDay(h) }))
     .sort((a, b) => (a.d === b.d ? a.i - b.i : !a.d ? 1 : !b.d ? -1 : b.d.localeCompare(a.d)))
