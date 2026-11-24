@@ -1844,6 +1844,41 @@ exports.adminMergeSchools = functions.runWith({ timeoutSeconds: 300 }).https.onC
   return { ok: true, keep: keepName, kidsMoved, classesEmptied };
 });
 
+// Admin: retire the general family code (one code per family, not tied to a member). Its join
+// code and hidden login account are deleted, and devices / accounts that joined with it lose
+// their link to the family — they join again with a member's personal code. The family owner and
+// everyone tied to a member are untouched. dryRun: only count.
+exports.retireFamilyCodes = functions.runWith({ timeoutSeconds: 300 }).https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const codes = (await db.collection('joinCodes').get()).docs.filter(d => !d.data().memberName);
+  const maps = (await db.collection('uidToFamily').get()).docs
+    .filter(d => !d.data().memberName && d.data().familyUid && d.data().familyUid !== d.id);
+  const families = new Set([...codes.map(d => d.data().ownerUid), ...maps.map(d => d.data().familyUid)].filter(Boolean));
+  const summary = { codes: codes.length, devices: maps.length, families: families.size };
+  if (data?.dryRun) return { ok: true, dryRun: true, ...summary };
+
+  for (const d of codes) {
+    const email = (d.id + memberDevices.INVITE_DOMAIN).toLowerCase();
+    const u = await admin.auth().getUserByEmail(email).catch(() => null);
+    if (u) await admin.auth().deleteUser(u.uid).catch(e => console.warn('retireFamilyCodes user:', e.message));
+    await d.ref.delete();
+    const owner = d.data().ownerUid;
+    if (owner) await db.collection('families').doc(owner)
+      .update({ familyCode: admin.firestore.FieldValue.delete() }).catch(() => {});
+  }
+  for (const d of maps) {
+    await d.ref.delete();
+    // A hidden code account (CODE@fh.familyhub) with no member goes too; personal accounts stay
+    const u = await admin.auth().getUser(d.id).catch(() => null);
+    if (u && memberDevices.isInviteEmail(u.email) && !memberDevices.memberOfAccount({ authUser: u })) {
+      await admin.auth().deleteUser(u.uid).catch(() => {});
+    }
+  }
+  console.log('retireFamilyCodes:', JSON.stringify(summary));
+  return { ok: true, ...summary };
+});
+
 exports.getAdminMessages = functions.https.onCall(async (data, context) => {
   if (context.auth?.uid !== ADMIN_UID)
     throw new functions.https.HttpsError('permission-denied', 'Admins only');
