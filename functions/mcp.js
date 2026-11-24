@@ -258,6 +258,17 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
   const clients = db.collection('mcpClients');
   const codes   = db.collection('mcpAuthCodes');
   const tokens  = db.collection('mcpTokens');
+  const grantUse = db.collection('mcpGrants'); // {grantId}: {lastUsedAt} — shown in "Connected apps"
+  const USE_WRITE_MS = 5 * 60 * 1000;          // record use at most every 5 minutes per connection
+  const _usedAt = new Map();
+
+  // Where a connection was approved from, by the address Claude asked to return to
+  function sourceOf(redirectUri) {
+    let host = '';
+    try { host = new URL(redirectUri).hostname; } catch (e) { return ''; }
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return 'local';
+    return host;
+  }
 
   function baseUrlOf(req) {
     if (fixedBase) return fixedBase;
@@ -462,9 +473,18 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
     const grants = await liveGrants(decoded.uid);
     json(res, 200, {
       url: baseUrlOf(req) + '/mcp',
-      connections: grants
-        .map(g => ({ id: g.grantId, app: g.clientName || 'Claude', memberName: g.memberName, connectedAt: g.connectedAt || g.createdAt }))
-        .sort((a, b) => b.connectedAt - a.connectedAt),
+      connections: (await Promise.all(grants.map(async g => {
+        const use = g.grantId ? (await grantUse.doc(g.grantId).get()).data() : null;
+        // Connections made before the source was recorded: the client's registered return address
+        if (!g.source && g.clientId) {
+          const c = (await clients.doc(g.clientId).get()).data();
+          g.source = sourceOf((c?.redirectUris || [])[0]);
+        }
+        return {
+          id: g.grantId, app: g.clientName || 'Claude', memberName: g.memberName,
+          connectedAt: g.connectedAt || g.createdAt, source: g.source || '', lastUsedAt: use?.lastUsedAt || null,
+        };
+      }))).sort((a, b) => b.connectedAt - a.connectedAt),
     });
   }
 
@@ -473,7 +493,9 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
     const grantId = req.body?.grantId;
     if (typeof grantId !== 'string' || !grantId) throw new HttpError(400, 'invalid_request');
     const all = await tokens.where('grantId', '==', grantId).get();
-    await Promise.all(all.docs.filter(d => d.data().uid === decoded.uid).map(d => d.ref.delete()));
+    const mine = all.docs.filter(d => d.data().uid === decoded.uid);
+    await Promise.all(mine.map(d => d.ref.delete()));
+    if (mine.length) await grantUse.doc(grantId).delete().catch(() => {});
     json(res, 200, {});
   }
 
@@ -484,7 +506,7 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
     const base = {
       clientId: grant.clientId, uid: grant.uid, familyUid: grant.familyUid, isOwner: !!grant.isOwner,
       memberName: grant.memberName, grantId: grant.grantId, clientName: grant.clientName || '',
-      connectedAt: grant.connectedAt, createdAt: now(),
+      source: grant.source ?? sourceOf(grant.redirectUri), connectedAt: grant.connectedAt, createdAt: now(),
     };
     await Promise.all([
       tokens.doc(sha256hex(access)).set({ ...base, kind: 'access', expiresAt: now() + ACCESS_TTL_MS }),
@@ -571,6 +593,12 @@ function createHandler({ db, auth, FieldValue, adminUid, baseUrl: fixedBase, now
     if (!identity) {
       res.set('WWW-Authenticate', `Bearer resource_metadata="${baseUrlOf(req)}/.well-known/oauth-protected-resource", scope="${SCOPE}"`);
       return json(res, 401, { error: 'invalid_token', error_description: 'Sign in to FamilyHub to use this connector.' });
+    }
+    // Note when this connection was last used (throttled: Claude makes several calls per request)
+    const gid = identity.grantId;
+    if (gid && now() - (_usedAt.get(gid) || 0) > USE_WRITE_MS) {
+      _usedAt.set(gid, now());
+      grantUse.doc(gid).set({ lastUsedAt: now(), uid: identity.uid }, { merge: true }).catch(() => {});
     }
     if (req.method !== 'POST') {
       res.set('Allow', 'POST');

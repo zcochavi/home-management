@@ -384,6 +384,16 @@ exports.onFamilySyncedHomework = functions.firestore
     if (!change.after.exists) return;
     const before = change.before.exists ? change.before.data() : {};
     const after = change.after.data();
+    // A sync ran (Webtop / Mashov): stamp the family's connected classes, new homework or not.
+    // Every parent in a class sees when it was last synced — whoever notices it stopped can
+    // reconnect (the homework tab's banner), so a class doesn't depend on one family.
+    const ms = t => (t && typeof t.toMillis === 'function') ? t.toMillis() : 0;
+    const synced = ms(after.webtopUpdatedAt) > ms(before.webtopUpdatedAt) || ms(after.mashovUpdatedAt) > ms(before.mashovUpdatedAt);
+    if (synced) {
+      await Promise.all([...sharedHw.connectedClasses(after, classIdFor)].map(cid => db.collection('schoolClasses').doc(cid)
+        .set({ lastSyncAt: admin.firestore.FieldValue.serverTimestamp(), lastSyncBy: ctx.params.familyUid }, { merge: true })
+        .catch(e => console.warn(`onFamilySyncedHomework: stamp ${cid} failed:`, e.message))));
+    }
     // Most family writes (chores, lists, ...) don't touch synced homework or the kids' mapping
     const sig = d => JSON.stringify([d.sharedHwVersion || 0, d.webtopHomework || [], d.mashovHomework || [],
       !!d.webtopLinkedAt, Object.keys(d.webtopStudents || {}).sort(), Object.keys(d.mashovStudents || {}).sort(),
@@ -1317,11 +1327,16 @@ exports.seedSchoolIndex = functions.runWith({ timeoutSeconds: 300, memory: '512M
   return { ok: true, ...(await refreshSchoolIndex('admin')) };
 });
 
-// The same, by itself: the 1st of every month, 04:17 Israel time
+// The same, by itself: the 1st of every month, 04:17 Israel time. Also retires any general
+// family codes made since (by older Android app versions) — see retireGeneralFamilyCodes.
 exports.refreshSchoolIndexMonthly = functions.runWith({ timeoutSeconds: 300, memory: '512MB' })
   .pubsub.schedule('17 4 1 * *').timeZone('Asia/Jerusalem').onRun(async () => {
-    const r = await refreshSchoolIndex('monthly');
-    console.log('refreshSchoolIndexMonthly:', JSON.stringify(r));
+    try {
+      console.log('refreshSchoolIndexMonthly:', JSON.stringify(await refreshSchoolIndex('monthly')));
+    } catch (e) { console.error('refreshSchoolIndexMonthly schools:', e); }
+    try {
+      console.log('refreshSchoolIndexMonthly family codes:', JSON.stringify(await retireGeneralFamilyCodes(false)));
+    } catch (e) { console.error('refreshSchoolIndexMonthly family codes:', e); }
     return null;
   });
 
@@ -1848,15 +1863,20 @@ exports.adminMergeSchools = functions.runWith({ timeoutSeconds: 300 }).https.onC
 // code and hidden login account are deleted, and devices / accounts that joined with it lose
 // their link to the family — they join again with a member's personal code. The family owner and
 // everyone tied to a member are untouched. dryRun: only count.
+// Runs every month with the school list refresh (refreshSchoolIndexMonthly): older Android app
+// versions still create / join with general family codes until they update.
 exports.retireFamilyCodes = functions.runWith({ timeoutSeconds: 300 }).https.onCall(async (data, context) => {
   if (context.auth?.uid !== ADMIN_UID)
     throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  return retireGeneralFamilyCodes(!!data?.dryRun);
+});
+async function retireGeneralFamilyCodes(dryRun) {
   const codes = (await db.collection('joinCodes').get()).docs.filter(d => !d.data().memberName);
   const maps = (await db.collection('uidToFamily').get()).docs
     .filter(d => !d.data().memberName && d.data().familyUid && d.data().familyUid !== d.id);
   const families = new Set([...codes.map(d => d.data().ownerUid), ...maps.map(d => d.data().familyUid)].filter(Boolean));
   const summary = { codes: codes.length, devices: maps.length, families: families.size };
-  if (data?.dryRun) return { ok: true, dryRun: true, ...summary };
+  if (dryRun) return { ok: true, dryRun: true, ...summary };
 
   for (const d of codes) {
     const email = (d.id + memberDevices.INVITE_DOMAIN).toLowerCase();
@@ -1877,7 +1897,7 @@ exports.retireFamilyCodes = functions.runWith({ timeoutSeconds: 300 }).https.onC
   }
   console.log('retireFamilyCodes:', JSON.stringify(summary));
   return { ok: true, ...summary };
-});
+}
 
 exports.getAdminMessages = functions.https.onCall(async (data, context) => {
   if (context.auth?.uid !== ADMIN_UID)

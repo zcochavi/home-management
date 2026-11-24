@@ -596,3 +596,32 @@ test('expired registrations, codes and tokens are cleaned up', async (t) => {
   const left = [...s.db.store.keys()].filter(k => k.startsWith('mcp'));
   assert.equal(left.length, 1, 'only the newest registration remains: ' + left.join(', '));
 });
+
+test('connections: where each was made from, and when it was last used', async (t) => {
+  const s = await setup(); t.after(s.srv.close);
+  const list = async () => (await (await s.post('/authorize/connections', { idToken: 'owner-token' })).json()).connections;
+  const a = await s.connect({ memberName: 'דנה' });
+  let [c] = await list();
+  assert.equal(c.source, new URL(CLAUDE_CB).hostname);
+  assert.equal(c.lastUsedAt, null, 'not used yet');
+
+  s.clock.t += 60 * 1000;
+  const usedAt = s.clock.t;
+  assert.equal((await s.rpc(a.access_token, 'ping')).status, 200);
+  await new Promise(r => setTimeout(r, 20)); // the use is recorded without holding up the answer
+  [c] = await list();
+  assert.equal(c.lastUsedAt, usedAt);
+
+  // Several calls close together are recorded once; a later one updates it
+  s.clock.t += 60 * 1000;
+  await s.rpc(a.access_token, 'ping'); await new Promise(r => setTimeout(r, 20));
+  assert.equal((await list())[0].lastUsedAt, usedAt);
+  s.clock.t += 10 * 60 * 1000;
+  await s.rpc(a.access_token, 'ping'); await new Promise(r => setTimeout(r, 20));
+  assert.equal((await list())[0].lastUsedAt, s.clock.t);
+
+  // Survives token refresh (same connection)
+  const a2 = await (await s.form('/token', { grant_type: 'refresh_token', refresh_token: a.refresh_token, client_id: a.client_id })).json();
+  assert.ok(a2.access_token);
+  assert.equal((await list())[0].source, new URL(CLAUDE_CB).hostname);
+});
