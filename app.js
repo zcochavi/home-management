@@ -2878,32 +2878,63 @@ async function _wtDiscoverSchool() {
   } catch (e) { console.warn('[webtop] school info failed:', e); }
 }
 
+// ── Connecting / syncing a school system: a loader instead of buttons ──
+// Back from the Webtop / Mashov login screen, finding the kids, linking and the first sync take a
+// few seconds. Meanwhile a loader covers the screen with what's happening, and the card's buttons
+// make way for the same loader. The quiet automatic sync shows neither.
+const _schoolBusy = { webtop: '', mashov: '' };
+function _setSchoolBusy(sys, text) {
+  _schoolBusy[sys] = text || '';
+  const ov = el('schoolSyncLoader');
+  const busy = Object.entries(_schoolBusy).find(([, v]) => v);
+  if (ov) {
+    ov.classList.toggle('hidden', !busy);
+    if (busy) {
+      el('schoolSyncLoaderTitle').textContent = busy[0] === 'mashov' ? '📘 משו״ב' : '📡 Webtop';
+      el('schoolSyncLoaderText').textContent = busy[1];
+    }
+  }
+  if (sys === 'mashov') renderMashovAppBlock(); else renderWebtopAppBlock();
+}
+// The card: buttons, or the loader while busy
+function _schoolCardBusy(prefix, text) {
+  const ld = el(prefix + 'Loader'), row = el(prefix + 'Buttons');
+  if (ld) { ld.style.display = text ? '' : 'none'; const tx = ld.querySelector('.school-loader-txt'); if (tx) tx.textContent = text || ''; }
+  if (row) row.style.display = text ? 'none' : '';
+  if (text) { const dc = el(prefix + 'Disconnect'); if (dc) dc.style.display = 'none'; }
+}
+
 async function webtopAppConnect() {
   if (!_isNativeApp()) return;
   let students = [];
   try {
     const res = await _wtPlugin().open();
+    _setSchoolBusy('webtop', 'מאתרים את הילדים…');
     // Prefer finding the kids ourselves; fall back to params captured from opened pages
     const found = await _wtDiscoverStudents();
     students = found.length ? found : (res?.students || []);
     await _wtDiscoverSchool();
   } catch (e) {
+    _setSchoolBusy('webtop', '');
     showToast('שגיאה בפתיחת Webtop', 'error');
     return;
   }
   if (!students.length) {
+    _setSchoolBusy('webtop', '');
     showToast('לא נמצאו ילדים — התחברו שוב ל-Webtop (ואם זה חשבון של תלמיד/ה, פתחו את דף שיעורי הבית)', 'error');
-    renderWebtopAppBlock();
     return;
   }
+  try {
   // Params carry a session-bound studentID, so a new login replaces the old set.
   const map = {};
   for (const p of students) map[_wtStudentKey(p)] = p;
   _wtSave('students', map);
   _wtSave('expired', false);
   // webtopIngest only accepts families that went through webtopLink.
+  _setSchoolBusy('webtop', `נמצאו ${students.length} ילדים — מחברים את המשפחה…`);
   await fetch(`${WT_FN_BASE}/webtopLink`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ familyId: S.uid }) }).catch(() => {});
   await webtopAppSync({ manual: true });
+  } finally { _setSchoolBusy('webtop', ''); }
 }
 
 async function webtopAppSync({ manual = false } = {}) {
@@ -2911,6 +2942,7 @@ async function webtopAppSync({ manual = false } = {}) {
   const students = Object.values(_wtLoad('students', {}));
   if (!students.length) { if (manual) showToast('יש להתחבר ל-Webtop קודם', 'error'); return; }
   _wtSyncing = true;
+  if (manual) _setSchoolBusy('webtop', 'מסנכרנים שיעורי בית…');
   renderWebtopAppBlock();
   const full = _wtLoad('fullSync', {});
   let items = 0, kidsOk = 0, authFail = 0, otherFail = 0;
@@ -2952,6 +2984,7 @@ async function webtopAppSync({ manual = false } = {}) {
     }
   } finally {
     _wtSyncing = false;
+    if (manual) _setSchoolBusy('webtop', '');
     renderMgmtWebtop();
   }
 }
@@ -2997,6 +3030,7 @@ function renderWebtopAppBlock() {
   el('mgmtWebtopAppSync').style.display = students.length ? '' : 'none';
   el('mgmtWebtopAppSync').disabled = _wtSyncing;
   el('mgmtWebtopAppDisconnect').style.display = students.length ? '' : 'none';
+  _schoolCardBusy('mgmtWebtopApp', _schoolBusy.webtop);
 }
 
 // Sync quietly when the app opens or comes back to the foreground (at most every 2h).
@@ -3255,6 +3289,8 @@ async function mashovAppConnect() {
     renderMashovAppBlock();
     return;
   }
+  try {
+  _setSchoolBusy('mashov', `נמצאו ${children.length} ילדים — מחברים את המשפחה…`);
   const map = {};
   for (const c of children) map[c.childGuid.toLowerCase()] = c;
   _msSave('children', map);
@@ -3262,6 +3298,7 @@ async function mashovAppConnect() {
   _msSave('expired', false);
   await fetch(`${WT_FN_BASE}/mashovLink`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ familyId: S.uid }) }).catch(() => {});
   await mashovAppSync({ manual: true });
+  } finally { _setSchoolBusy('mashov', ''); }
 }
 
 async function mashovAppSync({ manual = false } = {}) {
@@ -3269,6 +3306,7 @@ async function mashovAppSync({ manual = false } = {}) {
   const children = Object.values(_msLoad('children', {}));
   if (!children.length) { if (manual) showToast('יש להתחבר למשו״ב קודם', 'error'); return; }
   _msSyncing = true;
+  if (manual) _setSchoolBusy('mashov', 'מסנכרנים שיעורי בית…');
   renderMashovAppBlock();
   const full = _msLoad('fullSync', {});
   let items = 0, kidsOk = 0, authFail = 0, otherFail = 0;
@@ -3308,6 +3346,7 @@ async function mashovAppSync({ manual = false } = {}) {
     }
   } finally {
     _msSyncing = false;
+    if (manual) _setSchoolBusy('mashov', '');
     renderMgmtMashov();
   }
 }
@@ -3345,6 +3384,7 @@ function renderMashovAppBlock() {
   el('mgmtMashovAppSync').style.display = children.length ? '' : 'none';
   el('mgmtMashovAppSync').disabled = _msSyncing;
   el('mgmtMashovAppDisconnect').style.display = children.length ? '' : 'none';
+  _schoolCardBusy('mgmtMashovApp', _schoolBusy.mashov);
 }
 
 // Sync quietly when the app opens / returns to the foreground, at most every 3h.

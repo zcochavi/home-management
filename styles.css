@@ -358,6 +358,22 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
 .hw-school-sugg-btns { display: flex; gap: 8px; align-items: center; }
 .hw-school-sugg-btns .hw-wiz-later { margin: 0; }
 
+/* Connecting / syncing Webtop or Mashov */
+.school-spinner { display: inline-block; width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+  border: 2.5px solid var(--primary-100); border-top-color: var(--primary-500); animation: ssl-spin .8s linear infinite; }
+@keyframes ssl-spin { to { transform: rotate(360deg); } }
+.school-loader { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 12px; border-radius: 12px;
+  background: var(--primary-50); color: var(--primary-500); font-size: 13px; font-weight: 700; direction: rtl; }
+#schoolSyncLoader { position: fixed; inset: 0; z-index: 1600; background: rgba(15, 23, 42, .35);
+  display: flex; align-items: center; justify-content: center; padding: 24px; }
+#schoolSyncLoader.hidden { display: none; }
+.ssl-card { background: var(--surface); border-radius: 22px; padding: 26px 24px; width: 100%; max-width: 300px; text-align: center;
+  box-shadow: 0 20px 50px rgba(0,0,0,.2); direction: rtl; }
+.ssl-spinner { width: 42px; height: 42px; border-width: 4px; margin-bottom: 14px; }
+.ssl-title { font-size: 16px; font-weight: 800; color: var(--gray-900); margin-bottom: 6px; }
+.ssl-text { font-size: 13px; font-weight: 600; color: var(--gray-500); line-height: 1.6; min-height: 21px; }
+@media (prefers-reduced-motion: reduce) { .school-spinner { animation-duration: 2.4s; } }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }
