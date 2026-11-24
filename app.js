@@ -5122,6 +5122,7 @@ function subscribeToCommClass(cid) {
         if (!_commCache[cid]) return;
         _commCache[cid].schedule = _liveSchedule(snap.data()?.schedule);
         _commCache[cid].syncConnected = !!snap.data()?.syncConnectedAt;
+        _commCache[cid].lastSyncAt = snap.data()?.lastSyncAt?.toMillis?.() || null;
         rerender();
       }, e => console.warn('[community] schedule:', e.code))
   );
@@ -5294,6 +5295,7 @@ async function loadCommunityData(kidsWithSchool) {
         syncedHw:      prevCache.syncedHw      || [],
         schedule:      _liveSchedule(classDocSnap?.data()?.schedule),
         syncConnected: !!classDocSnap?.data()?.syncConnectedAt,
+        lastSyncAt:    classDocSnap?.data()?.lastSyncAt?.toMillis?.() || null,
         loadedAt:      Date.now(),
       };
       syncCommAutoEvents();
@@ -10903,8 +10905,11 @@ async function _applySyncedSchool(kidName) {
 }
 
 // ── "Homework isn't syncing" banner ──
-// For a kid whose family is connected to their school system: when the connection has expired
-// (Android app) or nothing new came in for a while, offer to reconnect — to that kid's system.
+// A class's synced homework doesn't depend on one family: the server stamps the class whenever any
+// family in it syncs (lastSyncAt). When that's older than HW_STALE_HOURS, every parent of a kid in
+// the class sees this banner, and whoever notices can connect their own Webtop / Mashov login and
+// carry on syncing for the whole class. Also when this phone's own login expired (Android app).
+// Kids without a class (no school details) fall back to the family's own last sync.
 const HW_STALE_HOURS = 48;
 function _kidSyncProblem(kidName) {
   const m = getMembers().find(x => x.name === kidName);
@@ -10913,11 +10918,20 @@ function _kidSyncProblem(kidName) {
   const linked = sys === 'mashov'
     ? !!(m.mashovChildId && familyData?.mashovStudents?.[m.mashovChildId])
     : !!(m.webtopClassCode && (familyData?.webtopLinkedAt || Object.keys(familyData?.webtopStudents || {}).length));
+  const stale = t => !t || Date.now() - t > HW_STALE_HOURS * 3600e3;
+  const expired = linked && _isNativeApp() && (sys === 'mashov' ? _msLoad('expired', false) : _wtLoad('expired', false));
+  const own = (sys === 'mashov' ? _mashovUpdatedAt : _webtopUpdatedAt)?.getTime?.() || null;
+  const cid = m.school ? classIdFor(m.school) : null;
+  const c = cid ? _commCache[cid] : null;
+  if (c && c.loadedAt != null && (c.syncConnected || (c.syncedHw || []).length)) {
+    // The class syncs: judge by the class (newest of its stamp and this family's own sync)
+    const at = Math.max(c.lastSyncAt || 0, linked ? (own || 0) : 0) || null;
+    if (!at && !linked) return null; // no stamp yet (before this was tracked) — don't guess
+    if (expired || stale(at)) return { sys, expired, at: at ? new Date(at) : null, linked, cls: true };
+    return null;
+  }
   if (!linked) return null; // not connected at all — the "connect your class" card covers that
-  const expired = _isNativeApp() && (sys === 'mashov' ? _msLoad('expired', false) : _wtLoad('expired', false));
-  const at = sys === 'mashov' ? _mashovUpdatedAt : _webtopUpdatedAt;
-  const stale = !at || Date.now() - at.getTime() > HW_STALE_HOURS * 3600e3;
-  return (expired || stale) ? { sys, expired, at } : null;
+  return (expired || stale(own)) ? { sys, expired, at: own ? new Date(own) : null, linked, cls: false } : null;
 }
 function _renderHwResync(kidName) {
   const box = el('hwResyncBanner');
@@ -10929,11 +10943,14 @@ function _renderHwResync(kidName) {
   const when = p.at ? p.at.toLocaleString(t('locale'), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
   const msg = p.expired
     ? `ההתחברות ${S_.to} פגה — שיעורי הבית של ${esc(kidName)} לא מתעדכנים`
+    : p.cls
+      ? `שיעורי הבית של הכיתה של ${esc(kidName)} ${S_.from} לא התעדכנו${when ? ' מאז ' + when : ''}. אפשר להתחבר ולהמשיך את הסנכרון לכל הכיתה.`
     : when ? `שיעורי הבית של ${esc(kidName)} ${S_.from} לא סונכרנו מאז ${when}`
     : `שיעורי הבית של ${esc(kidName)} ${S_.from} עוד לא סונכרנו`;
+  const btn = p.linked ? `התחברות מחדש ${S_.to}` : `התחברות ${S_.to}`;
   box.innerHTML = `<div class="hw-resync">
     <div class="hw-resync-txt">⚠️ ${msg}</div>
-    <button class="hw-resync-btn" onclick="_hwResync('${p.sys}')">${_isNativeApp() ? '🔄' : '🔗'} התחברות מחדש ${S_.to}</button>
+    <button class="hw-resync-btn" onclick="_hwResync('${p.sys}')">${_isNativeApp() ? '🔄' : '🔗'} ${btn}</button>
   </div>`;
 }
 // Android app: try a sync with the saved login first; open the login screen if it has expired.

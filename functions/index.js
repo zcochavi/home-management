@@ -384,6 +384,16 @@ exports.onFamilySyncedHomework = functions.firestore
     if (!change.after.exists) return;
     const before = change.before.exists ? change.before.data() : {};
     const after = change.after.data();
+    // A sync ran (Webtop / Mashov): stamp the family's connected classes, new homework or not.
+    // Every parent in a class sees when it was last synced — whoever notices it stopped can
+    // reconnect (the homework tab's banner), so a class doesn't depend on one family.
+    const ms = t => (t && typeof t.toMillis === 'function') ? t.toMillis() : 0;
+    const synced = ms(after.webtopUpdatedAt) > ms(before.webtopUpdatedAt) || ms(after.mashovUpdatedAt) > ms(before.mashovUpdatedAt);
+    if (synced) {
+      await Promise.all([...sharedHw.connectedClasses(after, classIdFor)].map(cid => db.collection('schoolClasses').doc(cid)
+        .set({ lastSyncAt: admin.firestore.FieldValue.serverTimestamp(), lastSyncBy: ctx.params.familyUid }, { merge: true })
+        .catch(e => console.warn(`onFamilySyncedHomework: stamp ${cid} failed:`, e.message))));
+    }
     // Most family writes (chores, lists, ...) don't touch synced homework or the kids' mapping
     const sig = d => JSON.stringify([d.sharedHwVersion || 0, d.webtopHomework || [], d.mashovHomework || [],
       !!d.webtopLinkedAt, Object.keys(d.webtopStudents || {}).sort(), Object.keys(d.mashovStudents || {}).sort(),
