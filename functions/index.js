@@ -1206,20 +1206,80 @@ async function finishSchoolApproval(id, req, extra) {
 const schoolDir = require('./school-directory');
 const schoolsDocId = city => 'schools__' + schoolDir.cityKey(city);
 
-// Admin: add every school and city from the official list to the city / school pickers
-// (schoolIndex), and merge second spellings of the same name (ע״ש / ע"ש) — in every city's list,
-// including names typed by families. Of two spellings the one already there stays, since kids'
-// class ids are built from it. Safe to run again.
-exports.seedSchoolIndex = functions.runWith({ timeoutSeconds: 300, memory: '512MB' }).https.onCall(async (data, context) => {
-  if (context.auth?.uid !== ADMIN_UID)
-    throw new functions.https.HttpsError('permission-denied', 'Admins only');
-  const { cities, schools } = schoolDir.indexEntries();
-  const idx = db.collection('schoolIndex');
-  const all = await idx.get();
-  const docs = {};
-  all.docs.forEach(d => { docs[d.id] = d.data(); });
+// The official list: downloaded from data.gov.il and kept at schoolIndex/official_list (as one
+// JSON string), so code lookups use the latest copy; the copy bundled in the code is the fallback.
+let _officialCache = null; // {schools, at}
+async function officialSchools() {
+  if (_officialCache && Date.now() - _officialCache.at < 3600e3) return _officialCache.schools;
+  let schools = null;
+  try {
+    const json = (await db.collection('schoolIndex').doc('official_list').get()).data()?.json;
+    if (json) schools = JSON.parse(json);
+  } catch (e) { console.warn('officialSchools:', e.message); }
+  schools ||= schoolDir.bundled();
+  _officialCache = { schools, at: Date.now() };
+  return schools;
+}
 
-  const cityList = schoolDir.mergeNames(docs.cities_list?.cities, cities);
+// Admin decisions about official names, kept at schoolIndex/overrides so a refresh doesn't undo
+// them: schools["<cityKey>|<nameKey>"] = the name to use instead ("" = deleted, don't add);
+// cities["<nameKey of city>"] = "" for a deleted city.
+async function schoolOverrides() {
+  const d = (await db.collection('schoolIndex').doc('overrides').get()).data() || {};
+  return { schools: d.schools || {}, cities: d.cities || {} };
+}
+const overrideKey = (city, name) => schoolDir.cityKey(city) + '|' + schoolDir.nameKey(name);
+async function setSchoolOverride(kind, key, value) {
+  const ref = db.collection('schoolIndex').doc('overrides');
+  await db.runTransaction(async tx => {
+    const d = (await tx.get(ref)).data() || {};
+    tx.set(ref, { ...d, [kind]: { ...(d[kind] || {}), [key]: value } });
+  });
+}
+// An official school after admin decisions: {city, name} with the name to use, or null if deleted
+function applyOverride(ov, city, name) {
+  if (ov.cities[schoolDir.nameKey(city)] === '') return null;
+  const o = ov.schools[overrideKey(city, name)];
+  if (o === '') return null;
+  return { city, name: o || name };
+}
+
+// Downloads a fresh list (falling back to the saved / bundled one), then adds every school and
+// city to the city / school pickers (schoolIndex) and merges second spellings of the same name
+// (ע״ש / ע"ש) in every city's list, including names typed by families. Of two spellings the one
+// already there stays, since kids' class ids are built from it. Nothing is removed: a school that
+// closed stays, so no family's class disappears. Safe to run again.
+async function refreshSchoolIndex(by) {
+  const idx = db.collection('schoolIndex');
+  let list, source = 'live', fetchError = null;
+  try {
+    list = await schoolDir.download();
+    await idx.doc('official_list').set({
+      json: JSON.stringify(list), count: Object.keys(list).length, by,
+      source: 'data.gov.il resource ' + schoolDir.SOURCE_RESOURCE,
+      downloadedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    _officialCache = { schools: list, at: Date.now() };
+  } catch (e) {
+    fetchError = String(e.message || e);
+    console.warn('refreshSchoolIndex: download failed, using the saved list:', fetchError);
+    _officialCache = null;
+    list = await officialSchools();
+    source = 'saved';
+  }
+
+  // Admin decisions first: merged-away names map to the kept one, deleted ones are left out
+  const ov = await schoolOverrides();
+  const effective = {};
+  for (const [semel, [name, city]] of Object.entries(list)) {
+    const e = applyOverride(ov, city, name);
+    if (e) effective[semel] = [e.name, e.city];
+  }
+  const { cities, schools } = schoolDir.indexEntries(effective);
+  const docs = {};
+  (await idx.get()).docs.forEach(d => { docs[d.id] = d.data(); });
+  const cityBefore = docs.cities_list?.cities || [];
+  const cityList = schoolDir.mergeNames(cityBefore, cities);
   const writes = [[idx.doc('cities_list'), { cities: cityList }]];
   // An official city spelled differently in the list goes under that spelling's key
   const official = {};
@@ -1228,22 +1288,42 @@ exports.seedSchoolIndex = functions.runWith({ timeoutSeconds: 300, memory: '512M
     official[id] = (official[id] || []).concat(names);
   }
   const ids = new Set([...Object.keys(official), ...Object.keys(docs).filter(id => id.startsWith('schools__'))]);
-  let n = 0, merged = 0;
+  let total = 0, added = 0, merged = 0;
   for (const id of ids) {
     const before = docs[id]?.schools || [];
-    const list = schoolDir.mergeNames(before, official[id] || []);
-    n += list.length;
-    merged += before.length - schoolDir.mergeNames(before).length;
-    if (list.length !== before.length || list.some((x, i) => x !== before[i])) writes.push([idx.doc(id), { schools: list }]);
+    const uniq = schoolDir.mergeNames(before);
+    const list2 = schoolDir.mergeNames(before, official[id] || []);
+    total += list2.length; added += list2.length - uniq.length; merged += before.length - uniq.length;
+    if (list2.length !== before.length || list2.some((x, i) => x !== before[i])) writes.push([idx.doc(id), { schools: list2 }]);
   }
   for (let i = 0; i < writes.length; i += 400) {
     const batch = db.batch();
     writes.slice(i, i + 400).forEach(([ref, val]) => batch.set(ref, val, { merge: true }));
     await batch.commit();
   }
-  await idx.doc('official').set({ ...schoolDir.meta(), loadedAt: admin.firestore.FieldValue.serverTimestamp() });
-  return { ok: true, cities: cityList.length, schools: n, merged };
+  const result = {
+    source, fetchError, official: Object.keys(list).length,
+    cities: cityList.length, citiesAdded: cityList.length - schoolDir.mergeNames(cityBefore).length,
+    schools: total, added, merged,
+  };
+  await idx.doc('official').set({ ...result, by, loadedAt: admin.firestore.FieldValue.serverTimestamp() });
+  return result;
+}
+
+// Admin button: download and merge now
+exports.seedSchoolIndex = functions.runWith({ timeoutSeconds: 300, memory: '512MB' }).https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  return { ok: true, ...(await refreshSchoolIndex('admin')) };
 });
+
+// The same, by itself: the 1st of every month, 04:17 Israel time
+exports.refreshSchoolIndexMonthly = functions.runWith({ timeoutSeconds: 300, memory: '512MB' })
+  .pubsub.schedule('17 4 1 * *').timeZone('Asia/Jerusalem').onRun(async () => {
+    const r = await refreshSchoolIndex('monthly');
+    console.log('refreshSchoolIndexMonthly:', JSON.stringify(r));
+    return null;
+  });
 
 // A school code (סמל מוסד) from a parent's Webtop / Mashov sync → the school's official name
 // and city. Being official, the school and city go straight into the pickers with no approval,
@@ -1252,8 +1332,10 @@ exports.seedSchoolIndex = functions.runWith({ timeoutSeconds: 300, memory: '512M
 exports.resolveSchoolCode = functions.https.onCall(async (data, context) => {
   const uid = context.auth?.uid;
   if (!uid) throw new functions.https.HttpsError('unauthenticated', 'Login required');
-  const s = schoolDir.lookup(data?.semel);
-  if (!s) return { found: false };
+  const off = schoolDir.lookup(data?.semel, await officialSchools());
+  const eff = off && applyOverride(await schoolOverrides(), off.city, off.name);
+  if (!eff) return { found: false };
+  const s = { ...off, ...eff };
 
   // Use the spelling already in the pickers when there is one (e.g. ע״ש for the official ע"ש):
   // families' class ids are built from it, so a synced kid joins the same class.
@@ -1653,10 +1735,11 @@ exports.adminDeleteCity = functions.https.onCall(async (data, context) => {
 
   const result = await deleteClassesWithPrefix(cityNorm);
 
-  // Remove from school index
+  // Remove from school index, and remember the deletion (see adminDeleteSchool)
   await db.collection('schoolIndex').doc('cities_list')
     .update({ cities: admin.firestore.FieldValue.arrayRemove(city) }).catch(() => {});
   await db.collection('schoolIndex').doc('schools__' + normCityId(city)).delete().catch(() => {});
+  await setSchoolOverride('cities', schoolDir.nameKey(city), '');
 
   // Delete grade-level and school-level event collections for this city
   const gradePrefix = cityNorm + '~~';
@@ -1689,9 +1772,13 @@ exports.adminDeleteSchool = functions.https.onCall(async (data, context) => {
 
   const result = await deleteClassesWithPrefix(prefix);
 
-  // Remove school from index
-  await db.collection('schoolIndex').doc('schools__' + normCityId(city))
-    .update({ schools: admin.firestore.FieldValue.arrayRemove(schoolName) }).catch(() => {});
+  // Remove school from index (any spelling of the name), and remember the deletion so the
+  // monthly refresh of the official list doesn't add it back
+  const idxRef = db.collection('schoolIndex').doc('schools__' + normCityId(city));
+  const listNow = (await idxRef.get()).data()?.schools || [];
+  const kept = listNow.filter(x => schoolDir.nameKey(x) !== schoolDir.nameKey(schoolName));
+  if (kept.length !== listNow.length) await idxRef.set({ schools: kept }, { merge: true });
+  await setSchoolOverride('schools', overrideKey(city, schoolName), '');
 
   // Delete school-level event collection
   const schoolDocId = n(city) + '~~' + n(schoolName);
@@ -1702,6 +1789,94 @@ exports.adminDeleteSchool = functions.https.onCall(async (data, context) => {
 
   console.log(`adminDeleteSchool: deleted school "${schoolName}" in "${city}": ${JSON.stringify(result)}`);
   return { ok: true, ...result };
+});
+
+// Admin: two names for one school (e.g. אריק אינשטיין / אריק איינשטיין) → keep one. The other
+// leaves the picker, is remembered (the official list and synced school codes then use the kept
+// name), and kids registered under it move to the kept name's classes.
+exports.adminMergeSchools = functions.runWith({ timeoutSeconds: 300 }).https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const city = String(data?.city || '').trim(), keep = String(data?.keep || '').trim(), merge = String(data?.merge || '').trim();
+  if (!city || !keep || !merge) throw new functions.https.HttpsError('invalid-argument', 'Missing city or names');
+  if (schoolDir.nameKey(keep) === schoolDir.nameKey(merge)) throw new functions.https.HttpsError('invalid-argument', 'Same school');
+
+  const idxRef = db.collection('schoolIndex').doc('schools__' + normCityId(city));
+  const list = (await idxRef.get()).data()?.schools || [];
+  const keepName = schoolDir.findName(list, keep) || keep;
+  const next = schoolDir.mergeNames(list.filter(x => schoolDir.nameKey(x) !== schoolDir.nameKey(merge)), [keepName]);
+  await idxRef.set({ schools: next }, { merge: true });
+  await setSchoolOverride('schools', overrideKey(city, merge), keepName);
+
+  // Kids registered under the merged name: same grade / class under the kept name
+  const sameCity = c => schoolDir.nameKey(c) === schoolDir.nameKey(city);
+  const isMerged = sc => sc && sameCity(sc.city) && schoolDir.nameKey(sc.name) === schoolDir.nameKey(merge);
+  let kidsMoved = 0;
+  const fams = await db.collection('families').get();
+  for (const fam of fams.docs) {
+    const members = fam.data().members || [];
+    if (!members.some(m => m.role === 'kid' && isMerged(m.school))) continue;
+    const moved = [];
+    const updated = members.map(m => {
+      if (m.role !== 'kid' || !isMerged(m.school)) return m;
+      moved.push(m);
+      return { ...m, school: { ...m.school, name: keepName } };
+    });
+    await fam.ref.update({ members: updated });
+    for (const m of moved) {
+      try {
+        await registerKidInClass({ familyUid: fam.id, kidName: m.name }, { ...m.school, name: keepName }, fam.data().familyName, m.gender, m.dob);
+        kidsMoved++;
+      } catch (e) { console.error('adminMergeSchools register:', e); }
+    }
+  }
+  // The merged name's classes lose their member list (the kids were just registered under the
+  // kept name); anything else in them (events, schedule) is left in place, not deleted.
+  const n = x => (x||'').trim().replace(/\s+/g,' ').replace(/\//g,'-').replace(/~/g,'');
+  const classes = await db.collection('schoolClasses').get();
+  let classesEmptied = 0;
+  for (const c of classes.docs.filter(d => d.id.startsWith(n(city) + '~~' + n(merge) + '~~'))) {
+    const ss = await c.ref.collection('members').get();
+    await Promise.all(ss.docs.map(d => d.ref.delete()));
+    classesEmptied++;
+  }
+  console.log(`adminMergeSchools: "${merge}" → "${keepName}" in "${city}": ${kidsMoved} kids moved, ${classesEmptied} classes emptied`);
+  return { ok: true, keep: keepName, kidsMoved, classesEmptied };
+});
+
+// Admin: retire the general family code (one code per family, not tied to a member). Its join
+// code and hidden login account are deleted, and devices / accounts that joined with it lose
+// their link to the family — they join again with a member's personal code. The family owner and
+// everyone tied to a member are untouched. dryRun: only count.
+exports.retireFamilyCodes = functions.runWith({ timeoutSeconds: 300 }).https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const codes = (await db.collection('joinCodes').get()).docs.filter(d => !d.data().memberName);
+  const maps = (await db.collection('uidToFamily').get()).docs
+    .filter(d => !d.data().memberName && d.data().familyUid && d.data().familyUid !== d.id);
+  const families = new Set([...codes.map(d => d.data().ownerUid), ...maps.map(d => d.data().familyUid)].filter(Boolean));
+  const summary = { codes: codes.length, devices: maps.length, families: families.size };
+  if (data?.dryRun) return { ok: true, dryRun: true, ...summary };
+
+  for (const d of codes) {
+    const email = (d.id + memberDevices.INVITE_DOMAIN).toLowerCase();
+    const u = await admin.auth().getUserByEmail(email).catch(() => null);
+    if (u) await admin.auth().deleteUser(u.uid).catch(e => console.warn('retireFamilyCodes user:', e.message));
+    await d.ref.delete();
+    const owner = d.data().ownerUid;
+    if (owner) await db.collection('families').doc(owner)
+      .update({ familyCode: admin.firestore.FieldValue.delete() }).catch(() => {});
+  }
+  for (const d of maps) {
+    await d.ref.delete();
+    // A hidden code account (CODE@fh.familyhub) with no member goes too; personal accounts stay
+    const u = await admin.auth().getUser(d.id).catch(() => null);
+    if (u && memberDevices.isInviteEmail(u.email) && !memberDevices.memberOfAccount({ authUser: u })) {
+      await admin.auth().deleteUser(u.uid).catch(() => {});
+    }
+  }
+  console.log('retireFamilyCodes:', JSON.stringify(summary));
+  return { ok: true, ...summary };
 });
 
 exports.getAdminMessages = functions.https.onCall(async (data, context) => {

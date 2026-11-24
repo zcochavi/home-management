@@ -50,3 +50,36 @@ test('mergeNames: one spelling per name, the existing one first', () => {
   assert.strictEqual(dir.findName(['ע״ש'], 'ע"ש'), 'ע״ש');
   assert.strictEqual(dir.findName(['א'], 'ב'), null);
 });
+
+test('filterRecords: schools only, by Ministry code', () => {
+  const rec = (semel, name, city, kind, stage) => ({ SEMEL_MOSAD: semel, SHEM_MOSAD: name, ISV_SHEM_ISHUV: city, TEUR_TAT_SUG_MISGERET: kind, TEUR_SHLAV_HINUH: stage });
+  assert.deepStrictEqual(dir.filterRecords([
+    rec(310123, ' אורט  חיפה ', 'חיפה', 'בית ספר', 'עליונה בלבד'),
+    rec(1, 'גן דוריס', 'כפר סבא', 'גן ילדים', 'גן ילדים בלבד'),
+    rec(2, 'מתי"א', 'חיפה', 'מתי"א', 'יסודי בלבד'),
+    rec(3, 'בלי עיר', '', 'בית ספר', 'יסודי בלבד'),
+    rec(4, 'ישיבה', 'בני ברק', 'ישיבה קטנה', 'חט"ב + עליונה'),
+  ]), { '310123': ['אורט חיפה', 'חיפה'], '4': ['ישיבה', 'בני ברק'] });
+});
+
+test('download: pages through data.gov.il; refuses a too-short answer', async () => {
+  const many = n => Array.from({ length: n }, (_, i) => ({ SEMEL_MOSAD: 100000 + i, SHEM_MOSAD: 'בי"ס ' + i, ISV_SHEM_ISHUV: 'עיר ' + (i % 50), TEUR_TAT_SUG_MISGERET: 'בית ספר', TEUR_SHLAV_HINUH: 'יסודי בלבד' }));
+  const all = many(12000), urls = [];
+  const fake = async url => {
+    urls.push(url);
+    const off = Number(/offset=(\d+)/.exec(url)[1]);
+    return { ok: true, json: async () => ({ success: true, result: { records: all.slice(off, off + 10000) } }) };
+  };
+  const got = await dir.download(fake);
+  assert.strictEqual(Object.keys(got).length, 12000);
+  assert.strictEqual(urls.length, 2);
+  assert.ok(urls[0].includes(dir.SOURCE_RESOURCE));
+  await assert.rejects(dir.download(async () => ({ ok: true, json: async () => ({ success: true, result: { records: many(10) } }) })), /only 10 schools/);
+  await assert.rejects(dir.download(async () => ({ ok: false, status: 503 })), /503/);
+});
+
+test('lookup / indexEntries on a given list', () => {
+  const list = { '5': ['אורט', 'חיפה'] };
+  assert.deepStrictEqual(dir.lookup('5', list), { semel: '5', name: 'אורט', city: 'חיפה' });
+  assert.deepStrictEqual(dir.indexEntries(list).cities, ['חיפה']);
+});
