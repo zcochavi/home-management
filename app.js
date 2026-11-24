@@ -4723,13 +4723,8 @@ function showAc(inputEl, options) {
   const exactSlice = exact.slice(0, 8);
   _acOptions = [...exactSlice, ...fuzzy];
 
-  const r = inputEl.getBoundingClientRect();
-  Object.assign(dd.style, {
-    display:'block', position:'fixed', zIndex:'1100',
-    top: (r.bottom + 3) + 'px',
-    left: r.left + 'px',
-    width: r.width + 'px',
-  });
+  Object.assign(dd.style, { display:'block', position:'fixed', zIndex:'1100' });
+  _acPlace();
 
   const isHe = getLang() === 'he';
   const didYouMean = isHe ? 'האם התכוונת ל...' : 'Did you mean…';
@@ -4747,6 +4742,19 @@ function hideAc() {
   el('acDropdown').style.display = 'none';
   _acInput = null;
 }
+// The list is fixed on screen, so it follows its field: placed under it again whenever the page
+// (or any scrolling panel) scrolls or resizes, and closed once the field scrolls out of view.
+function _acPlace() {
+  const dd = el('acDropdown');
+  if (!_acInput || dd.style.display === 'none') return;
+  const r = _acInput.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > window.innerHeight || !_acInput.isConnected) { hideAc(); return; }
+  dd.style.top = (r.bottom + 3) + 'px';
+  dd.style.left = r.left + 'px';
+  dd.style.width = r.width + 'px';
+}
+document.addEventListener('scroll', e => { if (e.target !== el('acDropdown')) _acPlace(); }, true);
+window.addEventListener('resize', _acPlace);
 function scheduleHideAc() {
   _acHideTimer = setTimeout(hideAc, 150);
 }
