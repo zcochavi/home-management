@@ -6910,15 +6910,9 @@ function renderMaintenanceTools() {
   el('adminMaintenance').innerHTML = `
     <div class="card" style="margin-bottom:12px;padding:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:8px">🏫 רשימת בתי הספר הרשמית</div>
-      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוריד את הרשימה העדכנית של משרד החינוך (data.gov.il), מוסיף ערים ובתי ספר חדשים לבחירה ומאחד כפילויות — בלי צורך באישור. שמות קיימים נשארים. מתבצע גם אוטומטית ב-1 בכל חודש.</div>
+      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוריד את הרשימה העדכנית של משרד החינוך (data.gov.il), מוסיף ערים ובתי ספר חדשים לבחירה ומאחד כפילויות — בלי צורך באישור. שמות קיימים נשארים. מתבצע גם אוטומטית ב-1 בכל חודש (יחד עם ביטול קודים משפחתיים כלליים שנוצרו בגרסאות ישנות של האפליקציה).</div>
       <button class="admin-btn" id="seedSchoolsBtn" onclick="adminSeedSchoolIndex()" style="width:100%;padding:9px;font-size:13px">עדכון הרשימה עכשיו ◀</button>
       <div id="seedSchoolsResult" style="font-size:12px;margin-top:8px"></div>
-    </div>
-    <div class="card" style="margin-bottom:12px;padding:12px">
-      <div style="font-weight:700;font-size:14px;margin-bottom:8px">🔒 ביטול הקוד המשפחתי הכללי</div>
-      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוחק את הקודים המשפחתיים הכלליים (שאינם של בן משפחה מסוים). מכשירים שהצטרפו איתם יצטרכו להצטרף מחדש עם קוד אישי. לפני הביצוע תוצג הספירה לאישור.</div>
-      <button class="admin-btn" id="retireCodesBtn" onclick="adminRetireFamilyCodes()" style="width:100%;padding:9px;font-size:13px">בדיקה וביטול ◀</button>
-      <div id="retireCodesResult" style="font-size:12px;margin-top:8px"></div>
     </div>
     <div class="card" style="margin-bottom:12px;padding:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:8px">🔀 איחוד בתי ספר כפולים</div>
@@ -7042,24 +7036,6 @@ async function adminDeleteCity() {
   } catch(e) {
     res.style.color = 'var(--error)';
     res.textContent = 'שגיאה: ' + (e?.details?.message || e?.message || String(e));
-  } finally { btn.disabled = false; }
-}
-
-async function adminRetireFamilyCodes() {
-  const res = el('retireCodesResult'), btn = el('retireCodesBtn');
-  btn.disabled = true; res.style.color = '#718096'; res.textContent = 'בודק...';
-  try {
-    const call = fbFunctions.httpsCallable('retireFamilyCodes');
-    const c = (await call({ dryRun: true })).data || {};
-    if (!c.codes && !c.devices) { res.style.color = '#276749'; res.textContent = '✓ אין קודים משפחתיים כלליים פעילים'; return; }
-    res.textContent = '';
-    if (!await _confirm(`לבטל ${c.codes} קודים משפחתיים כלליים?\n\n${c.devices} מכשירים/חשבונות ב-${c.families} משפחות הצטרפו איתם — הם יצטרכו להצטרף מחדש עם קוד אישי. בעלי המשפחות ומי שמחובר עם קוד אישי לא מושפעים.`, { danger: true, okLabel: 'ביטול הקודים' })) return;
-    res.textContent = 'מבטל...';
-    const r = (await call({})).data || {};
-    res.style.color = '#276749';
-    res.textContent = `✓ בוטלו ${r.codes} קודים · ${r.devices} מכשירים נותקו`;
-  } catch (e) {
-    res.style.color = 'var(--error)'; res.textContent = 'שגיאה: ' + (e?.details?.message || e?.message || String(e));
   } finally { btn.disabled = false; }
 }
 
