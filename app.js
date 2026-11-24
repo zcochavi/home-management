@@ -2393,7 +2393,6 @@ async function authSignOut() {
   if (firebaseUid) localStorage.removeItem('familyhub_family_uid_' + firebaseUid);
   if (firebaseUid) localStorage.removeItem('familyhub_locked_member_' + firebaseUid);
   if (firebaseUid) localStorage.removeItem('familyhub_map_checked_' + firebaseUid);
-  if (S.uid) _fpClearAll(S.uid);
   S.user = null; S.uid = null; familyData = null;
   if (fbAuth) fbAuth.signOut();
   el('loginScreen').classList.add('hidden');
@@ -2878,32 +2877,63 @@ async function _wtDiscoverSchool() {
   } catch (e) { console.warn('[webtop] school info failed:', e); }
 }
 
+// ── Connecting / syncing a school system: a loader instead of buttons ──
+// Back from the Webtop / Mashov login screen, finding the kids, linking and the first sync take a
+// few seconds. Meanwhile a loader covers the screen with what's happening, and the card's buttons
+// make way for the same loader. The quiet automatic sync shows neither.
+const _schoolBusy = { webtop: '', mashov: '' };
+function _setSchoolBusy(sys, text) {
+  _schoolBusy[sys] = text || '';
+  const ov = el('schoolSyncLoader');
+  const busy = Object.entries(_schoolBusy).find(([, v]) => v);
+  if (ov) {
+    ov.classList.toggle('hidden', !busy);
+    if (busy) {
+      el('schoolSyncLoaderTitle').textContent = busy[0] === 'mashov' ? '📘 משו״ב' : '📡 Webtop';
+      el('schoolSyncLoaderText').textContent = busy[1];
+    }
+  }
+  if (sys === 'mashov') renderMashovAppBlock(); else renderWebtopAppBlock();
+}
+// The card: buttons, or the loader while busy
+function _schoolCardBusy(prefix, text) {
+  const ld = el(prefix + 'Loader'), row = el(prefix + 'Buttons');
+  if (ld) { ld.style.display = text ? '' : 'none'; const tx = ld.querySelector('.school-loader-txt'); if (tx) tx.textContent = text || ''; }
+  if (row) row.style.display = text ? 'none' : '';
+  if (text) { const dc = el(prefix + 'Disconnect'); if (dc) dc.style.display = 'none'; }
+}
+
 async function webtopAppConnect() {
   if (!_isNativeApp()) return;
   let students = [];
   try {
     const res = await _wtPlugin().open();
+    _setSchoolBusy('webtop', 'מאתרים את הילדים…');
     // Prefer finding the kids ourselves; fall back to params captured from opened pages
     const found = await _wtDiscoverStudents();
     students = found.length ? found : (res?.students || []);
     await _wtDiscoverSchool();
   } catch (e) {
+    _setSchoolBusy('webtop', '');
     showToast('שגיאה בפתיחת Webtop', 'error');
     return;
   }
   if (!students.length) {
+    _setSchoolBusy('webtop', '');
     showToast('לא נמצאו ילדים — התחברו שוב ל-Webtop (ואם זה חשבון של תלמיד/ה, פתחו את דף שיעורי הבית)', 'error');
-    renderWebtopAppBlock();
     return;
   }
+  try {
   // Params carry a session-bound studentID, so a new login replaces the old set.
   const map = {};
   for (const p of students) map[_wtStudentKey(p)] = p;
   _wtSave('students', map);
   _wtSave('expired', false);
   // webtopIngest only accepts families that went through webtopLink.
+  _setSchoolBusy('webtop', `נמצאו ${students.length} ילדים — מחברים את המשפחה…`);
   await fetch(`${WT_FN_BASE}/webtopLink`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ familyId: S.uid }) }).catch(() => {});
   await webtopAppSync({ manual: true });
+  } finally { _setSchoolBusy('webtop', ''); }
 }
 
 async function webtopAppSync({ manual = false } = {}) {
@@ -2911,6 +2941,7 @@ async function webtopAppSync({ manual = false } = {}) {
   const students = Object.values(_wtLoad('students', {}));
   if (!students.length) { if (manual) showToast('יש להתחבר ל-Webtop קודם', 'error'); return; }
   _wtSyncing = true;
+  if (manual) _setSchoolBusy('webtop', 'מסנכרנים שיעורי בית…');
   renderWebtopAppBlock();
   const full = _wtLoad('fullSync', {});
   let items = 0, kidsOk = 0, authFail = 0, otherFail = 0;
@@ -2952,6 +2983,7 @@ async function webtopAppSync({ manual = false } = {}) {
     }
   } finally {
     _wtSyncing = false;
+    if (manual) _setSchoolBusy('webtop', '');
     renderMgmtWebtop();
   }
 }
@@ -2997,6 +3029,7 @@ function renderWebtopAppBlock() {
   el('mgmtWebtopAppSync').style.display = students.length ? '' : 'none';
   el('mgmtWebtopAppSync').disabled = _wtSyncing;
   el('mgmtWebtopAppDisconnect').style.display = students.length ? '' : 'none';
+  _schoolCardBusy('mgmtWebtopApp', _schoolBusy.webtop);
 }
 
 // Sync quietly when the app opens or comes back to the foreground (at most every 2h).
@@ -3255,6 +3288,8 @@ async function mashovAppConnect() {
     renderMashovAppBlock();
     return;
   }
+  try {
+  _setSchoolBusy('mashov', `נמצאו ${children.length} ילדים — מחברים את המשפחה…`);
   const map = {};
   for (const c of children) map[c.childGuid.toLowerCase()] = c;
   _msSave('children', map);
@@ -3262,6 +3297,7 @@ async function mashovAppConnect() {
   _msSave('expired', false);
   await fetch(`${WT_FN_BASE}/mashovLink`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ familyId: S.uid }) }).catch(() => {});
   await mashovAppSync({ manual: true });
+  } finally { _setSchoolBusy('mashov', ''); }
 }
 
 async function mashovAppSync({ manual = false } = {}) {
@@ -3269,6 +3305,7 @@ async function mashovAppSync({ manual = false } = {}) {
   const children = Object.values(_msLoad('children', {}));
   if (!children.length) { if (manual) showToast('יש להתחבר למשו״ב קודם', 'error'); return; }
   _msSyncing = true;
+  if (manual) _setSchoolBusy('mashov', 'מסנכרנים שיעורי בית…');
   renderMashovAppBlock();
   const full = _msLoad('fullSync', {});
   let items = 0, kidsOk = 0, authFail = 0, otherFail = 0;
@@ -3308,6 +3345,7 @@ async function mashovAppSync({ manual = false } = {}) {
     }
   } finally {
     _msSyncing = false;
+    if (manual) _setSchoolBusy('mashov', '');
     renderMgmtMashov();
   }
 }
@@ -3345,6 +3383,7 @@ function renderMashovAppBlock() {
   el('mgmtMashovAppSync').style.display = children.length ? '' : 'none';
   el('mgmtMashovAppSync').disabled = _msSyncing;
   el('mgmtMashovAppDisconnect').style.display = children.length ? '' : 'none';
+  _schoolCardBusy('mgmtMashovApp', _schoolBusy.mashov);
 }
 
 // Sync quietly when the app opens / returns to the foreground, at most every 3h.
@@ -3864,7 +3903,9 @@ async function switchUser() {
 //   'native'   → Android app, the phone's biometric prompt (BiometricLock plugin)
 //   'wa:<id>'  → website, a WebAuthn platform credential (fingerprint / face / Windows Hello)
 // Nothing biometric leaves the device; the app only learns "confirmed" or not.
-// Signing out of the account clears it (recovery if the fingerprint stops working).
+// It stays through signing out and in. Recovery if the fingerprint stops working: "can't verify?"
+// on the failed check signs out, and the next successful sign-in to the account (its password or
+// Google) turns protection off on this device — a kid can start that, but can't finish it.
 const _fpKey = (name, uid = S.uid) => 'familyhub_fp_' + uid + '_' + name;
 function _fpGet(name) { try { return localStorage.getItem(_fpKey(name)) || ''; } catch (e) { return ''; } }
 function _fpProtected(name) { return !!_fpGet(name) && getParents().includes(name); }
@@ -3922,8 +3963,16 @@ async function pickMember(name) {
   _fpBusy = true;
   try {
     if (await _fpCheck(_fpGet(name), name)) login(name);
-    else showToast('🫆 טביעת האצבע לא אומתה');
+    else _fpFailed(name);
   } finally { _fpBusy = false; }
+}
+const _fpResetKey = uid => 'familyhub_fp_reset_' + uid;
+async function _fpFailed(name) {
+  const ok = await _confirm(`🫆 טביעת האצבע של ${esc(name)} לא אומתה.<br><br>טביעת האצבע לא עובדת יותר? אפשר לבטל את ההגנה במכשיר הזה: מתנתקים ומתחברים שוב לחשבון (עם הסיסמה או Google).`,
+    { okLabel: 'התנתקות וביטול ההגנה', cancelLabel: 'נסו שוב' });
+  if (!ok) return;
+  try { localStorage.setItem(_fpResetKey(S.uid), '1'); } catch (e) {}
+  authSignOut();
 }
 
 // Settings card: "protect my profile on this device" (parents only, devices with a fingerprint reader)
@@ -5073,6 +5122,7 @@ function subscribeToCommClass(cid) {
         if (!_commCache[cid]) return;
         _commCache[cid].schedule = _liveSchedule(snap.data()?.schedule);
         _commCache[cid].syncConnected = !!snap.data()?.syncConnectedAt;
+        _commCache[cid].lastSyncAt = snap.data()?.lastSyncAt?.toMillis?.() || null;
         rerender();
       }, e => console.warn('[community] schedule:', e.code))
   );
@@ -5245,6 +5295,7 @@ async function loadCommunityData(kidsWithSchool) {
         syncedHw:      prevCache.syncedHw      || [],
         schedule:      _liveSchedule(classDocSnap?.data()?.schedule),
         syncConnected: !!classDocSnap?.data()?.syncConnectedAt,
+        lastSyncAt:    classDocSnap?.data()?.lastSyncAt?.toMillis?.() || null,
         loadedAt:      Date.now(),
       };
       syncCommAutoEvents();
@@ -6910,15 +6961,9 @@ function renderMaintenanceTools() {
   el('adminMaintenance').innerHTML = `
     <div class="card" style="margin-bottom:12px;padding:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:8px">🏫 רשימת בתי הספר הרשמית</div>
-      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוריד את הרשימה העדכנית של משרד החינוך (data.gov.il), מוסיף ערים ובתי ספר חדשים לבחירה ומאחד כפילויות — בלי צורך באישור. שמות קיימים נשארים. מתבצע גם אוטומטית ב-1 בכל חודש.</div>
+      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוריד את הרשימה העדכנית של משרד החינוך (data.gov.il), מוסיף ערים ובתי ספר חדשים לבחירה ומאחד כפילויות — בלי צורך באישור. שמות קיימים נשארים. מתבצע גם אוטומטית ב-1 בכל חודש (יחד עם ביטול קודים משפחתיים כלליים שנוצרו בגרסאות ישנות של האפליקציה).</div>
       <button class="admin-btn" id="seedSchoolsBtn" onclick="adminSeedSchoolIndex()" style="width:100%;padding:9px;font-size:13px">עדכון הרשימה עכשיו ◀</button>
       <div id="seedSchoolsResult" style="font-size:12px;margin-top:8px"></div>
-    </div>
-    <div class="card" style="margin-bottom:12px;padding:12px">
-      <div style="font-weight:700;font-size:14px;margin-bottom:8px">🔒 ביטול הקוד המשפחתי הכללי</div>
-      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוחק את הקודים המשפחתיים הכלליים (שאינם של בן משפחה מסוים). מכשירים שהצטרפו איתם יצטרכו להצטרף מחדש עם קוד אישי. לפני הביצוע תוצג הספירה לאישור.</div>
-      <button class="admin-btn" id="retireCodesBtn" onclick="adminRetireFamilyCodes()" style="width:100%;padding:9px;font-size:13px">בדיקה וביטול ◀</button>
-      <div id="retireCodesResult" style="font-size:12px;margin-top:8px"></div>
     </div>
     <div class="card" style="margin-bottom:12px;padding:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:8px">🔀 איחוד בתי ספר כפולים</div>
@@ -7042,24 +7087,6 @@ async function adminDeleteCity() {
   } catch(e) {
     res.style.color = 'var(--error)';
     res.textContent = 'שגיאה: ' + (e?.details?.message || e?.message || String(e));
-  } finally { btn.disabled = false; }
-}
-
-async function adminRetireFamilyCodes() {
-  const res = el('retireCodesResult'), btn = el('retireCodesBtn');
-  btn.disabled = true; res.style.color = '#718096'; res.textContent = 'בודק...';
-  try {
-    const call = fbFunctions.httpsCallable('retireFamilyCodes');
-    const c = (await call({ dryRun: true })).data || {};
-    if (!c.codes && !c.devices) { res.style.color = '#276749'; res.textContent = '✓ אין קודים משפחתיים כלליים פעילים'; return; }
-    res.textContent = '';
-    if (!await _confirm(`לבטל ${c.codes} קודים משפחתיים כלליים?\n\n${c.devices} מכשירים/חשבונות ב-${c.families} משפחות הצטרפו איתם — הם יצטרכו להצטרף מחדש עם קוד אישי. בעלי המשפחות ומי שמחובר עם קוד אישי לא מושפעים.`, { danger: true, okLabel: 'ביטול הקודים' })) return;
-    res.textContent = 'מבטל...';
-    const r = (await call({})).data || {};
-    res.style.color = '#276749';
-    res.textContent = `✓ בוטלו ${r.codes} קודים · ${r.devices} מכשירים נותקו`;
-  } catch (e) {
-    res.style.color = 'var(--error)'; res.textContent = 'שגיאה: ' + (e?.details?.message || e?.message || String(e));
   } finally { btn.disabled = false; }
 }
 
@@ -8412,6 +8439,23 @@ function _checkConnectRequest() {
 }
 function _clearConnectRequest() { try { sessionStorage.removeItem(_CONNECT_REQ_KEY); } catch (_) {} }
 
+// Where a Claude connection was approved from (see sourceOf in functions/mcp.js)
+function _cappsSource(src) {
+  const isHe = (S.lang || 'he') === 'he';
+  if (!src) return '';
+  if (src === 'local') return isHe ? 'מהמחשב (Claude Code / Claude לשולחן העבודה)' : 'from a computer (Claude Code / desktop)';
+  if (/(^|\.)claude\.(ai|com)$/.test(src)) return isHe ? 'מ-Claude (אתר ואפליקציה)' : 'from Claude (web & app)';
+  return (isHe ? 'מ-' : 'from ') + src;
+}
+function _cappsWhen(ms) {
+  const d = new Date(ms), now = new Date();
+  const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  const days = Math.floor((new Date(now.toDateString()) - new Date(d.toDateString())) / 864e5);
+  if (days === 0) return 'היום, ' + time;
+  if (days === 1) return 'אתמול, ' + time;
+  return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' }) + ', ' + time;
+}
+
 async function _loadConnections() {
   try {
     const r = await _connectorCall('connections');
@@ -8541,7 +8585,10 @@ function _renderConnectedApps() {
     else list = conns.map(c => `<div class="capps-conn">
         <div class="capps-conn-info">
           <div class="capps-conn-title">${T('על שם', 'As')} ${esc(c.memberName)}</div>
-          <div class="capps-conn-sub">${T('חובר ב‑', 'Connected ')}${fmt(c.connectedAt)}</div>
+          <div class="capps-conn-sub">${T('חובר ב‑', 'Connected ')}${fmt(c.connectedAt)}${_cappsSource(c.source) ? ' · ' + _cappsSource(c.source) : ''}</div>
+          <div class="capps-conn-sub">${c.lastUsedAt
+            ? T('בשימוש לאחרונה: ', 'Last used: ') + _cappsWhen(c.lastUsedAt)
+            : T('לא היה בשימוש מאז שהתחלנו לעקוב (24.11)', 'Not used since tracking began (Nov 24)')}</div>
         </div>
         <button class="btn btn-outline capps-danger" onclick="cappsDisconnect('${esc(c.id)}')">${T('נתק', 'Disconnect')}</button>
       </div>`).join('');
@@ -10760,6 +10807,29 @@ function fmtDoneAt(ts) {
   return d.toLocaleDateString(t('locale'), {month:'short', day:'numeric'});
 }
 
+// Synced homework that arrived while the homework tab is open (another parent's sync reaches the
+// class, or this phone's own sync) emerges: an animation, a "חדש" tag for a minute, and a toast.
+// The first render of a kid's list only records what's there.
+const _hwSyncedSeen = {};   // kid → Set of sync ids already shown
+const _hwSyncedNewAt = {};  // sync id → when it emerged
+function _hwFreshSynced(kid, list) {
+  const ids = list.map(_hwSyncId);
+  const seen = _hwSyncedSeen[kid];
+  const now = Date.now();
+  let added = [];
+  if (seen) {
+    added = ids.filter(id => !seen.has(id));
+    added.forEach(id => { _hwSyncedNewAt[id] = now; seen.add(id); });
+    if (added.length && S.tab === 'homework') {
+      showToast(added.length === 1 ? '📥 נוסף שיעור בית חדש' : `📥 נוספו ${added.length} שיעורי בית חדשים`, 'success');
+    }
+  } else {
+    _hwSyncedSeen[kid] = new Set(ids);
+  }
+  // emerge: animate now (this render only); tagged: "חדש" for a minute (re-renders keep it, still)
+  return { emerge: new Set(added), tagged: new Set(ids.filter(id => now - (_hwSyncedNewAt[id] || 0) < 60000)) };
+}
+
 function setHwSearch(val) { _hwSearch = val; renderHomework(); }
 
 // ── Each kid's school system ──
@@ -10878,8 +10948,11 @@ async function _applySyncedSchool(kidName) {
 }
 
 // ── "Homework isn't syncing" banner ──
-// For a kid whose family is connected to their school system: when the connection has expired
-// (Android app) or nothing new came in for a while, offer to reconnect — to that kid's system.
+// A class's synced homework doesn't depend on one family: the server stamps the class whenever any
+// family in it syncs (lastSyncAt). When that's older than HW_STALE_HOURS, every parent of a kid in
+// the class sees this banner, and whoever notices can connect their own Webtop / Mashov login and
+// carry on syncing for the whole class. Also when this phone's own login expired (Android app).
+// Kids without a class (no school details) fall back to the family's own last sync.
 const HW_STALE_HOURS = 48;
 function _kidSyncProblem(kidName) {
   const m = getMembers().find(x => x.name === kidName);
@@ -10888,11 +10961,20 @@ function _kidSyncProblem(kidName) {
   const linked = sys === 'mashov'
     ? !!(m.mashovChildId && familyData?.mashovStudents?.[m.mashovChildId])
     : !!(m.webtopClassCode && (familyData?.webtopLinkedAt || Object.keys(familyData?.webtopStudents || {}).length));
+  const stale = t => !t || Date.now() - t > HW_STALE_HOURS * 3600e3;
+  const expired = linked && _isNativeApp() && (sys === 'mashov' ? _msLoad('expired', false) : _wtLoad('expired', false));
+  const own = (sys === 'mashov' ? _mashovUpdatedAt : _webtopUpdatedAt)?.getTime?.() || null;
+  const cid = m.school ? classIdFor(m.school) : null;
+  const c = cid ? _commCache[cid] : null;
+  if (c && c.loadedAt != null && (c.syncConnected || (c.syncedHw || []).length)) {
+    // The class syncs: judge by the class (newest of its stamp and this family's own sync)
+    const at = Math.max(c.lastSyncAt || 0, linked ? (own || 0) : 0) || null;
+    if (!at && !linked) return null; // no stamp yet (before this was tracked) — don't guess
+    if (expired || stale(at)) return { sys, expired, at: at ? new Date(at) : null, linked, cls: true };
+    return null;
+  }
   if (!linked) return null; // not connected at all — the "connect your class" card covers that
-  const expired = _isNativeApp() && (sys === 'mashov' ? _msLoad('expired', false) : _wtLoad('expired', false));
-  const at = sys === 'mashov' ? _mashovUpdatedAt : _webtopUpdatedAt;
-  const stale = !at || Date.now() - at.getTime() > HW_STALE_HOURS * 3600e3;
-  return (expired || stale) ? { sys, expired, at } : null;
+  return (expired || stale(own)) ? { sys, expired, at: own ? new Date(own) : null, linked, cls: false } : null;
 }
 function _renderHwResync(kidName) {
   const box = el('hwResyncBanner');
@@ -10904,11 +10986,14 @@ function _renderHwResync(kidName) {
   const when = p.at ? p.at.toLocaleString(t('locale'), { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
   const msg = p.expired
     ? `ההתחברות ${S_.to} פגה — שיעורי הבית של ${esc(kidName)} לא מתעדכנים`
+    : p.cls
+      ? `שיעורי הבית של הכיתה של ${esc(kidName)} ${S_.from} לא התעדכנו${when ? ' מאז ' + when : ''}. אפשר להתחבר ולהמשיך את הסנכרון לכל הכיתה.`
     : when ? `שיעורי הבית של ${esc(kidName)} ${S_.from} לא סונכרנו מאז ${when}`
     : `שיעורי הבית של ${esc(kidName)} ${S_.from} עוד לא סונכרנו`;
+  const btn = p.linked ? `התחברות מחדש ${S_.to}` : `התחברות ${S_.to}`;
   box.innerHTML = `<div class="hw-resync">
     <div class="hw-resync-txt">⚠️ ${msg}</div>
-    <button class="hw-resync-btn" onclick="_hwResync('${p.sys}')">${_isNativeApp() ? '🔄' : '🔗'} התחברות מחדש ${S_.to}</button>
+    <button class="hw-resync-btn" onclick="_hwResync('${p.sys}')">${_isNativeApp() ? '🔄' : '🔗'} ${btn}</button>
   </div>`;
 }
 // Android app: try a sync with the saved login first; open the login screen if it has expired.
@@ -11134,15 +11219,18 @@ function renderHomework(){
         if(syncTimeEl&&_syncAt){
           syncTimeEl.textContent=_syncAt.toLocaleString(t('locale'),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
         }
+        // Items that arrived while this list was on screen (e.g. another parent's sync) emerge
+        const fresh = _hwFreshSynced(S.child, wtHw);
         webtopListEl.innerHTML=wtHw.map(h=>{
           const isDone = !!_syncedDoneVal(h);
           const canToggle = _canToggleSynced(h);
-          return `<div class="hw-item hw-webtop-item${isDone?' hw-webtop-done':''}">
+          const sid = _hwSyncId(h), isNew = fresh.tagged.has(sid);
+          return `<div class="hw-item hw-webtop-item${isDone?' hw-webtop-done':''}${fresh.emerge.has(sid)?' hw-emerge':''}">
             <div class="hw-head">
               ${canToggle
                 ? `<div class="check-box${isDone?' done':''}" onclick="${_syncedToggleCall(h)}"></div>`
                 : `<span class="hw-webtop-icon">${_isMashovItem(h)?'📘':'📡'}</span>`}
-              <div class="hw-desc-text${isDone?' done':''}">${esc(h.text)}</div>
+              <div class="hw-desc-text${isDone?' done':''}">${isNew?'<span class="hw-new-tag">חדש</span>':''}${esc(h.text)}</div>
               ${h.subject?`<span class="badge" style="${webtopSubjectStyle(h.subject)}">${esc(h.subject)}</span>`:''}
             </div>
             ${h.context?`<div class="hw-webtop-context">${esc(h.context)}</div>`:''}
@@ -13674,6 +13762,14 @@ async function _restoreFamilyMapping(user) {
 async function _enterApp(user) {
   await _restoreFamilyMapping(user);
   const familyUid = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
+  // Signed in again after "can't verify the fingerprint": protection off on this device
+  try {
+    if (localStorage.getItem(_fpResetKey(familyUid))) {
+      localStorage.removeItem(_fpResetKey(familyUid));
+      _fpClearAll(familyUid);
+      setTimeout(() => showToast('🫆 ההגנה בטביעת אצבע בוטלה במכשיר הזה — אפשר להפעיל אותה מחדש בהגדרות'), 1500);
+    }
+  } catch (e) {}
   // Joined with the retired general family code: in the family, but not as any member
   if (familyUid !== user.uid && !localStorage.getItem('familyhub_locked_member_' + user.uid)) {
     const dn = user.displayName || '', pipe = dn.indexOf('|');
