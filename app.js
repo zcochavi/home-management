@@ -8439,6 +8439,23 @@ function _checkConnectRequest() {
 }
 function _clearConnectRequest() { try { sessionStorage.removeItem(_CONNECT_REQ_KEY); } catch (_) {} }
 
+// Where a Claude connection was approved from (see sourceOf in functions/mcp.js)
+function _cappsSource(src) {
+  const isHe = (S.lang || 'he') === 'he';
+  if (!src) return '';
+  if (src === 'local') return isHe ? 'מהמחשב (Claude Code / Claude לשולחן העבודה)' : 'from a computer (Claude Code / desktop)';
+  if (/(^|\.)claude\.(ai|com)$/.test(src)) return isHe ? 'מ-Claude (אתר ואפליקציה)' : 'from Claude (web & app)';
+  return (isHe ? 'מ-' : 'from ') + src;
+}
+function _cappsWhen(ms) {
+  const d = new Date(ms), now = new Date();
+  const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+  const days = Math.floor((new Date(now.toDateString()) - new Date(d.toDateString())) / 864e5);
+  if (days === 0) return 'היום, ' + time;
+  if (days === 1) return 'אתמול, ' + time;
+  return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' }) + ', ' + time;
+}
+
 async function _loadConnections() {
   try {
     const r = await _connectorCall('connections');
@@ -8568,7 +8585,10 @@ function _renderConnectedApps() {
     else list = conns.map(c => `<div class="capps-conn">
         <div class="capps-conn-info">
           <div class="capps-conn-title">${T('על שם', 'As')} ${esc(c.memberName)}</div>
-          <div class="capps-conn-sub">${T('חובר ב‑', 'Connected ')}${fmt(c.connectedAt)}</div>
+          <div class="capps-conn-sub">${T('חובר ב‑', 'Connected ')}${fmt(c.connectedAt)}${_cappsSource(c.source) ? ' · ' + _cappsSource(c.source) : ''}</div>
+          <div class="capps-conn-sub">${c.lastUsedAt
+            ? T('בשימוש לאחרונה: ', 'Last used: ') + _cappsWhen(c.lastUsedAt)
+            : T('לא היה בשימוש מאז שהתחלנו לעקוב (24.11)', 'Not used since tracking began (Nov 24)')}</div>
         </div>
         <button class="btn btn-outline capps-danger" onclick="cappsDisconnect('${esc(c.id)}')">${T('נתק', 'Disconnect')}</button>
       </div>`).join('');
