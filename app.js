@@ -10787,6 +10787,29 @@ function fmtDoneAt(ts) {
   return d.toLocaleDateString(t('locale'), {month:'short', day:'numeric'});
 }
 
+// Synced homework that arrived while the homework tab is open (another parent's sync reaches the
+// class, or this phone's own sync) emerges: an animation, a "חדש" tag for a minute, and a toast.
+// The first render of a kid's list only records what's there.
+const _hwSyncedSeen = {};   // kid → Set of sync ids already shown
+const _hwSyncedNewAt = {};  // sync id → when it emerged
+function _hwFreshSynced(kid, list) {
+  const ids = list.map(_hwSyncId);
+  const seen = _hwSyncedSeen[kid];
+  const now = Date.now();
+  let added = [];
+  if (seen) {
+    added = ids.filter(id => !seen.has(id));
+    added.forEach(id => { _hwSyncedNewAt[id] = now; seen.add(id); });
+    if (added.length && S.tab === 'homework') {
+      showToast(added.length === 1 ? '📥 נוסף שיעור בית חדש' : `📥 נוספו ${added.length} שיעורי בית חדשים`, 'success');
+    }
+  } else {
+    _hwSyncedSeen[kid] = new Set(ids);
+  }
+  // emerge: animate now (this render only); tagged: "חדש" for a minute (re-renders keep it, still)
+  return { emerge: new Set(added), tagged: new Set(ids.filter(id => now - (_hwSyncedNewAt[id] || 0) < 60000)) };
+}
+
 function setHwSearch(val) { _hwSearch = val; renderHomework(); }
 
 // ── Each kid's school system ──
@@ -11176,15 +11199,18 @@ function renderHomework(){
         if(syncTimeEl&&_syncAt){
           syncTimeEl.textContent=_syncAt.toLocaleString(t('locale'),{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
         }
+        // Items that arrived while this list was on screen (e.g. another parent's sync) emerge
+        const fresh = _hwFreshSynced(S.child, wtHw);
         webtopListEl.innerHTML=wtHw.map(h=>{
           const isDone = !!_syncedDoneVal(h);
           const canToggle = _canToggleSynced(h);
-          return `<div class="hw-item hw-webtop-item${isDone?' hw-webtop-done':''}">
+          const sid = _hwSyncId(h), isNew = fresh.tagged.has(sid);
+          return `<div class="hw-item hw-webtop-item${isDone?' hw-webtop-done':''}${fresh.emerge.has(sid)?' hw-emerge':''}">
             <div class="hw-head">
               ${canToggle
                 ? `<div class="check-box${isDone?' done':''}" onclick="${_syncedToggleCall(h)}"></div>`
                 : `<span class="hw-webtop-icon">${_isMashovItem(h)?'📘':'📡'}</span>`}
-              <div class="hw-desc-text${isDone?' done':''}">${esc(h.text)}</div>
+              <div class="hw-desc-text${isDone?' done':''}">${isNew?'<span class="hw-new-tag">חדש</span>':''}${esc(h.text)}</div>
               ${h.subject?`<span class="badge" style="${webtopSubjectStyle(h.subject)}">${esc(h.subject)}</span>`:''}
             </div>
             ${h.context?`<div class="hw-webtop-context">${esc(h.context)}</div>`:''}
