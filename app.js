@@ -2393,7 +2393,6 @@ async function authSignOut() {
   if (firebaseUid) localStorage.removeItem('familyhub_family_uid_' + firebaseUid);
   if (firebaseUid) localStorage.removeItem('familyhub_locked_member_' + firebaseUid);
   if (firebaseUid) localStorage.removeItem('familyhub_map_checked_' + firebaseUid);
-  if (S.uid) _fpClearAll(S.uid);
   S.user = null; S.uid = null; familyData = null;
   if (fbAuth) fbAuth.signOut();
   el('loginScreen').classList.add('hidden');
@@ -3904,7 +3903,9 @@ async function switchUser() {
 //   'native'   → Android app, the phone's biometric prompt (BiometricLock plugin)
 //   'wa:<id>'  → website, a WebAuthn platform credential (fingerprint / face / Windows Hello)
 // Nothing biometric leaves the device; the app only learns "confirmed" or not.
-// Signing out of the account clears it (recovery if the fingerprint stops working).
+// It stays through signing out and in. Recovery if the fingerprint stops working: "can't verify?"
+// on the failed check signs out, and the next successful sign-in to the account (its password or
+// Google) turns protection off on this device — a kid can start that, but can't finish it.
 const _fpKey = (name, uid = S.uid) => 'familyhub_fp_' + uid + '_' + name;
 function _fpGet(name) { try { return localStorage.getItem(_fpKey(name)) || ''; } catch (e) { return ''; } }
 function _fpProtected(name) { return !!_fpGet(name) && getParents().includes(name); }
@@ -3962,8 +3963,16 @@ async function pickMember(name) {
   _fpBusy = true;
   try {
     if (await _fpCheck(_fpGet(name), name)) login(name);
-    else showToast('🫆 טביעת האצבע לא אומתה');
+    else _fpFailed(name);
   } finally { _fpBusy = false; }
+}
+const _fpResetKey = uid => 'familyhub_fp_reset_' + uid;
+async function _fpFailed(name) {
+  const ok = await _confirm(`🫆 טביעת האצבע של ${esc(name)} לא אומתה.<br><br>טביעת האצבע לא עובדת יותר? אפשר לבטל את ההגנה במכשיר הזה: מתנתקים ומתחברים שוב לחשבון (עם הסיסמה או Google).`,
+    { okLabel: 'התנתקות וביטול ההגנה', cancelLabel: 'נסו שוב' });
+  if (!ok) return;
+  try { localStorage.setItem(_fpResetKey(S.uid), '1'); } catch (e) {}
+  authSignOut();
 }
 
 // Settings card: "protect my profile on this device" (parents only, devices with a fingerprint reader)
@@ -13690,6 +13699,14 @@ async function _restoreFamilyMapping(user) {
 async function _enterApp(user) {
   await _restoreFamilyMapping(user);
   const familyUid = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
+  // Signed in again after "can't verify the fingerprint": protection off on this device
+  try {
+    if (localStorage.getItem(_fpResetKey(familyUid))) {
+      localStorage.removeItem(_fpResetKey(familyUid));
+      _fpClearAll(familyUid);
+      setTimeout(() => showToast('🫆 ההגנה בטביעת אצבע בוטלה במכשיר הזה — אפשר להפעיל אותה מחדש בהגדרות'), 1500);
+    }
+  } catch (e) {}
   // Joined with the retired general family code: in the family, but not as any member
   if (familyUid !== user.uid && !localStorage.getItem('familyhub_locked_member_' + user.uid)) {
     const dn = user.displayName || '', pipe = dn.indexOf('|');
