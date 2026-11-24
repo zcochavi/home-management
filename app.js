@@ -1212,23 +1212,13 @@ async function _createFamily(ownerUid, familyName, email, members) {
   setAuthLoading(true);
   _registering = true;
   try {
-    // 2. Generate family code + create invite account via secondary app instance
-    const code = generateFamilyCode();
-    const inviteEmail = code + '@' + JOIN_DOMAIN;
-    const secondaryApp = firebase.initializeApp(FIREBASE_CONFIG, 'inv_' + Date.now());
-    try {
-      await secondaryApp.auth().createUserWithEmailAndPassword(inviteEmail, code);
-    } finally {
-      await secondaryApp.delete();
-    }
-    // 3. Write family doc + join code lookup
+    // 2. Write the family doc. (No general family code any more — each member gets a personal one.)
     await fbDb.collection('families').doc(ownerUid).set({
-      familyName, email, members, familyCode: code,
+      familyName, email, members,
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       chores: [], grocery: [], homework: [], events: [], stars: {},
       groceryPool: DEFAULT_GROCERY_POOL, shoppingList: [], inCart: [], shoppingHistory: [],
     });
-    await fbDb.collection('joinCodes').doc(code).set({ ownerUid });
     // Generate personal codes for each kid
     const updatedMembers = [...members];
     for (let i = 0; i < updatedMembers.length; i++) {
@@ -1386,6 +1376,7 @@ async function doJoin() {
       await _failJoin('קוד לא נמצא או פג תוקפו. בקש קוד חדש ממי שהזמין אותך.');
       return;
     }
+    if (!memberName) { await _failJoin(RETIRED_FAMILY_CODE_MSG); return; }
     // A replaced code's joinCodes doc is deleted (regenMemberCode); without it the rules won't
     // map this device to the family, so say so now instead of failing on the data load later
     try {
@@ -1432,6 +1423,10 @@ async function doJoin() {
 
 // Resolves a join code to the family (and member) it belongs to, without signing the main
 // auth instance in as the code's invite account.
+// The general family code (one code for the whole family, not tied to a person) is retired:
+// joining needs a member's personal code, so the app knows who joined.
+const RETIRED_FAMILY_CODE_MSG = 'זה קוד משפחתי כללי, שכבר לא בשימוש. בקשו מההורה את הקוד האישי שלכם — הוא מופיע בהגדרות, ליד השם שלכם ברשימת בני המשפחה.';
+
 async function _resolveJoinCode(code) {
   try {
     const snap = await fbDb.collection('joinCodes').doc(code).get();
@@ -1568,6 +1563,7 @@ async function doJoinWithEmail() {
     el('joinError').textContent = '⏳ בודק קוד...';
     const target = await _resolveJoinCode(code);
     if (!target) { await _fail('קוד לא נמצא או פג תוקפו. בקש קוד חדש ממי שהזמין אותך.'); return; }
+    if (!target.memberName) { await _fail(RETIRED_FAMILY_CODE_MSG); return; }
     try {
       user = (await fbAuth.createUserWithEmailAndPassword(email, pwd)).user;
       created = true;
@@ -1595,6 +1591,7 @@ async function _maybeJoinFromLink(user) {
     const target = await _resolveJoinCode(code);
     const currentFamily = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
     if (!target || target.ownerUid === currentFamily) return;
+    if (!target.memberName) { showToast(RETIRED_FAMILY_CODE_MSG, 'error'); return; }
     el('loadingScreen').classList.add('hidden');
     const ok = await _confirm(
       `קיבלת הזמנה להצטרף למשפחה${target.memberName ? ' בתור ' + esc(target.memberName) : ''}.<br>` +
@@ -1665,6 +1662,7 @@ async function doJoinWithGoogle() {
       await _fail('קוד לא נמצא או פג תוקפו. בקש קוד חדש ממי שהזמין אותך.');
       return;
     }
+    if (!target.memberName) { await _fail(RETIRED_FAMILY_CODE_MSG); return; }
     if (!await _joinFamilyAs(user, target)) { await _fail(''); return; }
     el('joinError').textContent = '';
     setAuthLoading(false);
@@ -3452,10 +3450,21 @@ function afterLoad() {
   } else if (S.user && getAllMemberNames().includes(S.user)) {
     renderAll(); tryAutoConnectGCal(); initPresence(); initNotifBanners(); _applyAdminUI(); _initHeaderCollapse(); loadWeather();
   } else {
-    const saved = localStorage.getItem('familyhub_member_' + S.uid);
-    if (saved && getAllMemberNames().includes(saved) && !_fpProtected(saved)) {
+    // Who to open as, without asking "מי אתה?": the profile last used on this device, else the
+    // signed-in account's own member (the family owner, or a code / personal account tied to a
+    // member), else the family owner's only parent. The picker stays for devices that joined with
+    // the general family code, and for "switch member" in the menu.
+    const names = getAllMemberNames();
+    let saved = localStorage.getItem('familyhub_member_' + S.uid);
+    if (!saved || !names.includes(saved)) {
+      const mine = _authMemberName();
+      const parents = getParents();
+      saved = (mine && names.includes(mine)) ? mine
+        : (fbAuth.currentUser?.uid === S.uid && parents.length === 1) ? parents[0] : null;
+    }
+    if (saved && names.includes(saved) && !_fpProtected(saved)) {
       login(saved);
-    } else if (saved && getAllMemberNames().includes(saved)) {
+    } else if (saved && names.includes(saved)) {
       // Protected parent profile: show the picker behind the fingerprint prompt, so a
       // cancelled or failed check leaves the device on the picker, not in the profile
       renderLoginScreen();
@@ -6886,8 +6895,11 @@ async function adminSeedSchoolIndex() {
   btn.disabled = true; out.style.color = ''; out.textContent = '⏳ טוען…';
   try {
     const r = (await fbFunctions.httpsCallable('seedSchoolIndex')()).data || {};
-    out.style.color = '#276749';
-    out.textContent = `✓ נוספו ${r.cities} ערים ו-${r.schools} בתי ספר לבחירה`;
+    out.style.color = r.source === 'live' ? '#276749' : '#975a16';
+    out.textContent = (r.source === 'live'
+        ? `✓ הורדה רשימה עדכנית (${r.official} בתי ספר)`
+        : `⚠️ data.gov.il לא זמין (${r.fetchError || ''}) — נטענה הרשימה השמורה`)
+      + ` · נוספו ${r.added} בתי ספר ו-${r.citiesAdded} ערים · אוחדו ${r.merged} כפילויות · סה״כ ${r.schools} בתי ספר ב-${r.cities} ערים`;
     _cachedCities = null; _cachedSchools = {};
   } catch (e) {
     out.style.color = 'var(--error)'; out.textContent = 'הטעינה נכשלה: ' + (e.message || e);
@@ -6898,9 +6910,24 @@ function renderMaintenanceTools() {
   el('adminMaintenance').innerHTML = `
     <div class="card" style="margin-bottom:12px;padding:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:8px">🏫 רשימת בתי הספר הרשמית</div>
-      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוסיף את כל הערים ובתי הספר מרשימת משרד החינוך (data.gov.il) לבחירה באפליקציה — בלי צורך באישור. שמות קיימים נשארים.</div>
-      <button class="admin-btn" id="seedSchoolsBtn" onclick="adminSeedSchoolIndex()" style="width:100%;padding:9px;font-size:13px">טעינת הרשימה ◀</button>
+      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוריד את הרשימה העדכנית של משרד החינוך (data.gov.il), מוסיף ערים ובתי ספר חדשים לבחירה ומאחד כפילויות — בלי צורך באישור. שמות קיימים נשארים. מתבצע גם אוטומטית ב-1 בכל חודש.</div>
+      <button class="admin-btn" id="seedSchoolsBtn" onclick="adminSeedSchoolIndex()" style="width:100%;padding:9px;font-size:13px">עדכון הרשימה עכשיו ◀</button>
       <div id="seedSchoolsResult" style="font-size:12px;margin-top:8px"></div>
+    </div>
+    <div class="card" style="margin-bottom:12px;padding:12px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px">🔒 ביטול הקוד המשפחתי הכללי</div>
+      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">מוחק את הקודים המשפחתיים הכלליים (שאינם של בן משפחה מסוים). מכשירים שהצטרפו איתם יצטרכו להצטרף מחדש עם קוד אישי. לפני הביצוע תוצג הספירה לאישור.</div>
+      <button class="admin-btn" id="retireCodesBtn" onclick="adminRetireFamilyCodes()" style="width:100%;padding:9px;font-size:13px">בדיקה וביטול ◀</button>
+      <div id="retireCodesResult" style="font-size:12px;margin-top:8px"></div>
+    </div>
+    <div class="card" style="margin-bottom:12px;padding:12px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px">🔀 איחוד בתי ספר כפולים</div>
+      <div style="font-size:13px;color:#4a5568;margin-bottom:10px">שני שמות לאותו בית ספר (למשל "אריק אינשטיין" / "אריק איינשטיין"): השם השני יוסר, הילדים הרשומים בו יעברו לשם שנשאר, והרשימה הרשמית לא תחזיר אותו.</div>
+      <input class="auth-input" id="mergeSchoolCity" placeholder="עיר" style="margin-bottom:8px;text-align:right">
+      <input class="auth-input" id="mergeSchoolKeep" placeholder="השם שנשאר" style="margin-bottom:8px;text-align:right">
+      <input class="auth-input" id="mergeSchoolMerge" placeholder="השם שיוסר" style="margin-bottom:8px;text-align:right">
+      <button class="admin-btn" id="mergeSchoolBtn" onclick="adminMergeSchools()" style="width:100%;padding:9px;font-size:13px">איחוד ◀</button>
+      <div id="mergeSchoolResult" style="font-size:12px;margin-top:8px"></div>
     </div>
     <div class="card" style="margin-bottom:12px;padding:12px">
       <div style="font-weight:700;font-size:14px;margin-bottom:8px">🔑 קודים אישיים לילדים</div>
@@ -7018,6 +7045,41 @@ async function adminDeleteCity() {
   } finally { btn.disabled = false; }
 }
 
+async function adminRetireFamilyCodes() {
+  const res = el('retireCodesResult'), btn = el('retireCodesBtn');
+  btn.disabled = true; res.style.color = '#718096'; res.textContent = 'בודק...';
+  try {
+    const call = fbFunctions.httpsCallable('retireFamilyCodes');
+    const c = (await call({ dryRun: true })).data || {};
+    if (!c.codes && !c.devices) { res.style.color = '#276749'; res.textContent = '✓ אין קודים משפחתיים כלליים פעילים'; return; }
+    res.textContent = '';
+    if (!await _confirm(`לבטל ${c.codes} קודים משפחתיים כלליים?\n\n${c.devices} מכשירים/חשבונות ב-${c.families} משפחות הצטרפו איתם — הם יצטרכו להצטרף מחדש עם קוד אישי. בעלי המשפחות ומי שמחובר עם קוד אישי לא מושפעים.`, { danger: true, okLabel: 'ביטול הקודים' })) return;
+    res.textContent = 'מבטל...';
+    const r = (await call({})).data || {};
+    res.style.color = '#276749';
+    res.textContent = `✓ בוטלו ${r.codes} קודים · ${r.devices} מכשירים נותקו`;
+  } catch (e) {
+    res.style.color = 'var(--error)'; res.textContent = 'שגיאה: ' + (e?.details?.message || e?.message || String(e));
+  } finally { btn.disabled = false; }
+}
+
+async function adminMergeSchools() {
+  const city = el('mergeSchoolCity').value.trim(), keep = el('mergeSchoolKeep').value.trim(), merge = el('mergeSchoolMerge').value.trim();
+  const res = el('mergeSchoolResult'), btn = el('mergeSchoolBtn');
+  if (!city || !keep || !merge) { res.style.color = 'var(--error)'; res.textContent = 'יש להזין עיר ושני שמות'; return; }
+  if (!await _confirm(`לאחד את "${merge}" לתוך "${keep}" (${city})?\n\n"${merge}" יוסר מהרשימה, ילדים הרשומים בו יעברו ל"${keep}", ורענון רשימת משרד החינוך לא יחזיר אותו.`, { okLabel: 'איחוד' })) return;
+  btn.disabled = true; res.style.color = '#718096'; res.textContent = 'מאחד...';
+  try {
+    const r = (await fbFunctions.httpsCallable('adminMergeSchools')({ city, keep, merge })).data || {};
+    _cachedCities = null; _cachedSchools = {};
+    res.style.color = '#276749';
+    res.textContent = `✓ אוחד לתוך "${r.keep}" — ${r.kidsMoved} ילדים הועברו`;
+    ['mergeSchoolMerge'].forEach(id => el(id).value = '');
+  } catch (e) {
+    res.style.color = 'var(--error)'; res.textContent = 'שגיאה: ' + (e?.details?.message || e?.message || String(e));
+  } finally { btn.disabled = false; }
+}
+
 async function adminDeleteSchool() {
   const city       = el('deleteSchoolCityInput').value.trim();
   const schoolName = el('deleteSchoolNameInput').value.trim();
@@ -7028,6 +7090,7 @@ async function adminDeleteSchool() {
   btn.disabled = true; res.style.color = '#718096'; res.textContent = 'מוחק...';
   try {
     const r = await fbFunctions.httpsCallable('adminDeleteSchool')({ city, schoolName });
+    _cachedCities = null; _cachedSchools = {}; // the pickers re-read the list
     res.style.color = '#276749';
     res.textContent = `✓ "${schoolName}" נמחק — ${r.data.classesDeleted} כיתות, ${r.data.kidsUnlinked} ילדים שוחררו`;
     el('deleteSchoolCityInput').value = ''; el('deleteSchoolNameInput').value = '';
@@ -13611,12 +13674,32 @@ async function _restoreFamilyMapping(user) {
 async function _enterApp(user) {
   await _restoreFamilyMapping(user);
   const familyUid = localStorage.getItem('familyhub_family_uid_' + user.uid) || user.uid;
+  // Joined with the retired general family code: in the family, but not as any member
+  if (familyUid !== user.uid && !localStorage.getItem('familyhub_locked_member_' + user.uid)) {
+    const dn = user.displayName || '', pipe = dn.indexOf('|');
+    const fromInvite = pipe > 0 ? dn.slice(pipe + 1) : '';
+    if (fromInvite) localStorage.setItem('familyhub_locked_member_' + user.uid, fromInvite);
+    else return _retiredFamilyCodeDevice(user);
+  }
   S.uid = familyUid;
   S.lockedMember = localStorage.getItem('familyhub_locked_member_' + user.uid) || null;
   el('authScreen').classList.add('hidden');
   await _ensureUidFamilyMapping(familyUid);
   subscribeToFeatureFlags();
   subscribeToFamily(familyUid);
+}
+
+async function _retiredFamilyCodeDevice(user) {
+  ['familyhub_family_uid_', 'familyhub_locked_member_', 'familyhub_map_checked_'].forEach(k => {
+    try { localStorage.removeItem(k + user.uid); } catch (e) {}
+  });
+  _joining = true; // keep the sign-out callback from switching away from the message
+  await fbAuth.signOut().catch(() => {});
+  el('loadingScreen').classList.add('hidden');
+  el('authScreen').classList.remove('hidden');
+  setAuthMode('join');
+  el('joinError').textContent = 'המכשיר הזה הצטרף עם הקוד המשפחתי הכללי, שכבר לא בשימוש. הזינו את הקוד האישי שלכם — ההורה יכול למצוא אותו בהגדרות, ליד השם שלכם.';
+  setTimeout(() => { _joining = false; }, 300);
 }
 
 if (!FB_CONFIGURED) {
