@@ -542,13 +542,35 @@ function subjectLabel(name) {
   return s?.name || name;
 }
 
+// A date as YYYY-MM-DD on the phone's own calendar (toISOString is UTC: in Israel, before 2–3 AM
+// it still says yesterday)
+function _ymd(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const _dayShift = (n) => { const d = new Date(); return _ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)); };
 const _now       = new Date();
-const today      = _now.toISOString().slice(0,10);
-const tomorrow   = new Date(_now.getTime()+864e5).toISOString().slice(0,10);
-const yesterday  = new Date(_now.getTime()-864e5).toISOString().slice(0,10);
+let today        = _ymd(_now);
+let tomorrow     = _dayShift(1);
+let yesterday    = _dayShift(-1);
+// The app can stay open past midnight (Android keeps it running): move "today" along. The
+// calendar's selected day follows if it was on today.
+function _refreshToday() {
+  const t = _ymd(new Date());
+  if (t === today) return;
+  const was = today;
+  today = t; tomorrow = _dayShift(1); yesterday = _dayShift(-1);
+  if (typeof S !== 'undefined') {
+    if (S.calSelected === was) {
+      const d = new Date(); S.calSelected = today; S.calYear = d.getFullYear(); S.calMonth = d.getMonth();
+    }
+    try { if (S.user) renderAll(); } catch (e) { console.warn('[today]', e); }
+  }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _refreshToday(); });
+setInterval(_refreshToday, 60 * 1000);
 
 function _choreWhen(id) {
-  const d = new Date(id).toISOString().slice(0,10);
+  const d = _ymd(new Date(id));
   if (d === today)     return 'היום';
   if (d === yesterday) return 'אתמול';
   return fmtDate(d);
@@ -5079,7 +5101,7 @@ function timeAgo(ts) {
   const days = Math.floor(h / 24);
   if (days === 1) return 'אתמול';
   if (days < 7)   return `לפני ${days} ימים`;
-  return fmtDate(d.toISOString().slice(0, 10));
+  return fmtDate(_ymd(d));
 }
 function fmtEventDate(dateStr) {
   if (!dateStr) return '';
@@ -5947,7 +5969,7 @@ function renderCommCard(kid) {
   const allEvs = [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])]
     .filter(e => matchesGenderFilter(e, kid.name));
   const _cutoff = new Date(); _cutoff.setDate(_cutoff.getDate() - 14);
-  const _today  = new Date().toISOString().slice(0,10);
+  const _today  = _ymd(new Date());
   const upcoming = allEvs.filter(e => {
     if (!e.date) return postStillShown(e);
     const [ey,em,ed] = e.date.split('-').map(Number);
@@ -6025,7 +6047,7 @@ function renderCommCard(kid) {
   let html = `<div class="comm-section-label" style="margin-top:16px">${t('commApplicationsTitle')}</div>`;
   if (myPendingApp) {
     const pct = Math.min(100, Math.round((myPendingApp.voteCount||0)/15*100));
-    const exp = myPendingApp.expiresAt?.toDate ? fmtDate(myPendingApp.expiresAt.toDate().toISOString().slice(0,10)) : '';
+    const exp = myPendingApp.expiresAt?.toDate ? fmtDate(_ymd(myPendingApp.expiresAt.toDate())) : '';
     html += `<div class="application-row">
       <div class="application-info">
         <div class="application-name">✋ ${t('commMyApplication')}</div>
@@ -6036,7 +6058,7 @@ function renderCommCard(kid) {
     </div>`;
   } else if (showResolvedBanner) {
     const approved = myLatestApp.status === 'approved';
-    const dt = myLatestApp.decidedAt?.toDate ? fmtDate(myLatestApp.decidedAt.toDate().toISOString().slice(0,10)) : '';
+    const dt = myLatestApp.decidedAt?.toDate ? fmtDate(_ymd(myLatestApp.decidedAt.toDate())) : '';
     html += `<div class="application-row">
       <div class="application-info">
         <div class="application-name">${approved ? '✅' : '❌'} ${t(approved ? 'commApplicationApprovedMsg' : 'commApplicationDeniedMsg')}</div>
@@ -6047,7 +6069,7 @@ function renderCommCard(kid) {
   otherApps.forEach(app => {
     const voted = (app.votes||[]).includes(S.uid);
     const pct = Math.min(100, Math.round((app.voteCount||0)/15*100));
-    const exp = app.expiresAt?.toDate ? fmtDate(app.expiresAt.toDate().toISOString().slice(0,10)) : '';
+    const exp = app.expiresAt?.toDate ? fmtDate(_ymd(app.expiresAt.toDate())) : '';
     // Admins vote the same as any other parent here — direct approve/reject only
     // happens from the Pending Requests panel, never from the class card.
     const voteBtn = isParent() && (!isCommitteeFor(cid) || isAdmin())
@@ -15594,7 +15616,7 @@ async function _promptFinishCooking(listId) {
   const ok = await _confirm(`🎉 כל השלבים הושלמו!\nלסמן את "${esc(list.name)}" כהכנה שהסתיימה?`, { okLabel: 'כן, סיימתי!' });
   if (!ok) return;
   const now = new Date();
-  const entry = { date: now.toISOString().split('T')[0], by: S.user };
+  const entry = { date: _ymd(now), by: S.user };
   const cookLog = [...(list.cookLog || []), entry];
   // Clear every cooking mark (ingredients and steps) and leave cooking mode
   _cookClear(listId);
