@@ -382,6 +382,11 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
   background: var(--primary-500); color: #fff; vertical-align: 2px; }
 @media (prefers-reduced-motion: reduce) { .hw-emerge { animation: none; } }
 
+/* A community post that arrived while the app is open */
+.post-emerge { animation: hw-emerge .7s cubic-bezier(.2,1.2,.4,1) both, hw-glow 2.4s ease-out .2s both; }
+.post-new-tag { margin-inline-start: 6px; vertical-align: 1px; }
+@media (prefers-reduced-motion: reduce) { .post-emerge { animation: none; } }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }
@@ -2284,10 +2289,13 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
 /* Note: easy to read, clearly secondary to title */
 .post-card-note { font-size: 13px; font-weight: 400; color: var(--gray-500); line-height: 1.6; white-space: pre-line; margin-top: 4px; }
 .post-card-type-badge { display:inline-flex; align-self:flex-start; align-items:center; gap:4px; font-size:11px; font-weight:800; padding:3px 10px; border-radius:var(--r-pill); background:var(--primary-50); color:var(--primary-600); margin-bottom:6px; }
-.post-card-top-row { display:flex; align-items:stretch; gap:12px; margin-bottom:8px; }
-.post-card-top-text { flex:1; min-width:0; display:flex; flex-direction:column; justify-content:center; }
-.post-card-illustration { flex:0 0 auto; display:flex; align-items:center; justify-content:center; }
-.post-card-illustration img { height:100%; max-height:120px; width:auto; max-width:120px; object-fit:contain; display:block; }
+/* The illustration sits at the top corner and the text wraps around it: beside it for the first
+   lines, then the full width below it (a long post no longer gives up half its width) */
+.post-card-top-row { display:flow-root; margin-bottom:8px; }
+.post-card-top-text { min-width:0; }
+.post-card-top-text .post-card-type-badge { display:inline-flex; }
+.post-card-illustration { float:left; float:inline-end; margin-block:0 6px; margin-inline:12px 0; }
+.post-card-illustration img { width:auto; height:auto; max-height:110px; max-width:110px; object-fit:contain; display:block; }
 .post-card-info-panel { display:flex; flex-wrap:wrap; gap:16px; background:var(--gray-50); border-radius:var(--r-md); padding:10px 14px; margin:8px 0; }
 .post-card-info-item { display:flex; align-items:center; justify-content:center; gap:6px; flex:1; font-size:12px; font-weight:700; color:var(--gray-600); text-align:center; padding:0 8px; border-inline-end:1px solid var(--gray-200); }
 .post-card-info-item:last-child { border-inline-end:none; }

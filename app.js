@@ -45,7 +45,7 @@ const STRINGS = {
     todayChores:'⚡ משימות היום',
     personChores: n => `⚡ משימות של ${n}`,
     starChart:'⭐ לוח כוכבים',
-    hwDueSoon:'📋 שיעורים להגשה',
+    hwDueSoon:'📋 שיעורי בית',
     allDone:'🎉 הכל גמור! כל הכבוד!',
     noPendingHw:'📭 אין שיעורים ממתינים!',
     hwHistory:'📋 שיעורים שהסתיימו', hwHistoryEmpty:'אין שיעורים שהושלמו עדיין', hwHistorySearch:'חיפוש בהיסטוריה...',
@@ -175,7 +175,7 @@ const STRINGS = {
     todayChores:"⚡ Today's Chores",
     personChores: n => `⚡ ${n}'s Chores`,
     starChart:'⭐ Star Chart',
-    hwDueSoon:'📋 Homework Due Soon',
+    hwDueSoon:'📋 Homework',
     allDone:'🎉 All done! Great job!',
     noPendingHw:'📭 No pending homework!',
     hwHistory:'📋 History', hwHistoryEmpty:'No completed homework yet', hwHistorySearch:'Search history…',
@@ -542,13 +542,35 @@ function subjectLabel(name) {
   return s?.name || name;
 }
 
+// A date as YYYY-MM-DD on the phone's own calendar (toISOString is UTC: in Israel, before 2–3 AM
+// it still says yesterday)
+function _ymd(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+const _dayShift = (n) => { const d = new Date(); return _ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)); };
 const _now       = new Date();
-const today      = _now.toISOString().slice(0,10);
-const tomorrow   = new Date(_now.getTime()+864e5).toISOString().slice(0,10);
-const yesterday  = new Date(_now.getTime()-864e5).toISOString().slice(0,10);
+let today        = _ymd(_now);
+let tomorrow     = _dayShift(1);
+let yesterday    = _dayShift(-1);
+// The app can stay open past midnight (Android keeps it running): move "today" along. The
+// calendar's selected day follows if it was on today.
+function _refreshToday() {
+  const t = _ymd(new Date());
+  if (t === today) return;
+  const was = today;
+  today = t; tomorrow = _dayShift(1); yesterday = _dayShift(-1);
+  if (typeof S !== 'undefined') {
+    if (S.calSelected === was) {
+      const d = new Date(); S.calSelected = today; S.calYear = d.getFullYear(); S.calMonth = d.getMonth();
+    }
+    try { if (S.user) renderAll(); } catch (e) { console.warn('[today]', e); }
+  }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') _refreshToday(); });
+setInterval(_refreshToday, 60 * 1000);
 
 function _choreWhen(id) {
-  const d = new Date(id).toISOString().slice(0,10);
+  const d = _ymd(new Date(id));
   if (d === today)     return 'היום';
   if (d === yesterday) return 'אתמול';
   return fmtDate(d);
@@ -4723,13 +4745,8 @@ function showAc(inputEl, options) {
   const exactSlice = exact.slice(0, 8);
   _acOptions = [...exactSlice, ...fuzzy];
 
-  const r = inputEl.getBoundingClientRect();
-  Object.assign(dd.style, {
-    display:'block', position:'fixed', zIndex:'1100',
-    top: (r.bottom + 3) + 'px',
-    left: r.left + 'px',
-    width: r.width + 'px',
-  });
+  Object.assign(dd.style, { display:'block', position:'fixed', zIndex:'1100' });
+  _acPlace();
 
   const isHe = getLang() === 'he';
   const didYouMean = isHe ? 'האם התכוונת ל...' : 'Did you mean…';
@@ -4747,6 +4764,19 @@ function hideAc() {
   el('acDropdown').style.display = 'none';
   _acInput = null;
 }
+// The list is fixed on screen, so it follows its field: placed under it again whenever the page
+// (or any scrolling panel) scrolls or resizes, and closed once the field scrolls out of view.
+function _acPlace() {
+  const dd = el('acDropdown');
+  if (!_acInput || dd.style.display === 'none') return;
+  const r = _acInput.getBoundingClientRect();
+  if (r.bottom < 0 || r.top > window.innerHeight || !_acInput.isConnected) { hideAc(); return; }
+  dd.style.top = (r.bottom + 3) + 'px';
+  dd.style.left = r.left + 'px';
+  dd.style.width = r.width + 'px';
+}
+document.addEventListener('scroll', e => { if (e.target !== el('acDropdown')) _acPlace(); }, true);
+window.addEventListener('resize', _acPlace);
 function scheduleHideAc() {
   _acHideTimer = setTimeout(hideAc, 150);
 }
@@ -5071,7 +5101,7 @@ function timeAgo(ts) {
   const days = Math.floor(h / 24);
   if (days === 1) return 'אתמול';
   if (days < 7)   return `לפני ${days} ימים`;
-  return fmtDate(d.toISOString().slice(0, 10));
+  return fmtDate(_ymd(d));
 }
 function fmtEventDate(dateStr) {
   if (!dateStr) return '';
@@ -5110,6 +5140,18 @@ function unsubscribeAllComm() {
   Object.keys(_commListeners).forEach(_unsubCommClass);
 }
 
+// Posts that arrived while the app is open (someone else's) emerge: a slide-in for a minute
+const _commNewPostAt = {};
+function _commNoteNewPosts(snap) {
+  snap.docChanges().forEach(ch => {
+    if (ch.type !== 'added') return;
+    if (ch.doc.data()?.postedBy?.familyUid === S.uid) return;
+    _commNewPostAt[ch.doc.id] = Date.now();
+  });
+}
+const _commPostIsNew = id => Date.now() - (_commNewPostAt[id] || 0) < 60000;
+const _commPostAnimated = new Set(); // slide in once; later re-renders keep only the "חדש" tag
+
 function subscribeToCommClass(cid) {
   if (_commListeners[cid]) return; // already subscribed
   _commListeners[cid] = [];
@@ -5127,16 +5169,26 @@ function subscribeToCommClass(cid) {
       }, e => console.warn('[community] schedule:', e.code))
   );
 
-  // Live: class events
-  _commListeners[cid].push(
-    fbDb.collection('schoolClasses').doc(cid).collection('events').orderBy('date')
-      .onSnapshot(snap => {
-        if (!_commCache[cid]) return;
-        _commCache[cid].events = snap.docs.map(d => ({id:d.id,...d.data(),scope:'class',scopeId:cid}));
-        syncCommAutoEvents();
-        rerender();
-      }, e => console.warn('[community] events:', e.code))
-  );
+  // Live: class, grade and school posts. New ones (after the first load) emerge in the feed —
+  // the push notification for them comes from the server (onClass/Grade/SchoolEventCreated).
+  const parts = cid.split('~~');
+  const gid = parts.length >= 3 && parts[2] ? parts.slice(0, 3).join('~~') : null;
+  const sid = parts.length >= 2 && parts[1] ? parts.slice(0, 2).join('~~') : null;
+  const livePosts = (ref, key, scope, scopeId) => {
+    let first = true;
+    _commListeners[cid].push(ref.orderBy('date').onSnapshot(snap => {
+      if (!_commCache[cid]) return;
+      if (!first) _commNoteNewPosts(snap);
+      first = false;
+      _commCache[cid][key] = snap.docs.map(d => ({ id: d.id, ...d.data(), scope, scopeId }));
+      if (key === 'events') syncCommAutoEvents();
+      rerender();
+    }, e => console.warn('[community] ' + key + ':', e.code)));
+  };
+  livePosts(fbDb.collection('schoolClasses').doc(cid).collection('events'), 'events', 'class', cid);
+
+  if (gid) livePosts(fbDb.collection('schoolGrades').doc(gid).collection('events'), 'gradeEvents', 'grade', gid);
+  if (sid) livePosts(fbDb.collection('schools').doc(sid).collection('events'), 'schoolEvents', 'school', sid);
 
   // Live: the class's shared synced homework (Webtop / Mashov imports by any family in the class)
   const _syncedSince = new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10);
@@ -5216,6 +5268,8 @@ function subscribeToCommClass(cid) {
             }
           });
           _commCache[cid].classmates = all;
+          // Admin: the new family's parents and committee roles too
+          if (isAdmin() && all.length) _fetchClassmateRoles(cid).then(r => { if (_commCache[cid]) { _commCache[cid].classmateRoles = r; rerender(); } });
         }
         rerender();
       }, e => console.warn('[community] members:', e.code))
@@ -5232,6 +5286,28 @@ function subscribeToCommClass(cid) {
         rerender();
       }, e => console.warn('[community] homework:', e.code))
   );
+}
+
+// Admin: each classmate family's parents and committee roles (getClassParents)
+async function _fetchClassmateRoles(cid) {
+  const classmateRoles = {};
+  try {
+    const raw = await fbFunctions.httpsCallable('getClassParents')({ classId: cid });
+    Object.entries(raw.data || {}).forEach(([familyUid, info]) => {
+      const legacyComm = info.legacyComm || [];
+      classmateRoles[familyUid] = {
+        parents: (info.parents || []).map(m => {
+          const perMember = m.committeeClasses;
+          const isComm = Array.isArray(perMember)
+            ? (perMember.includes(cid) || perMember.includes('*'))
+            : (legacyComm.includes(cid) || legacyComm.includes('*'));
+          return { name: m.name, emoji: m.emoji || '👤', isCommittee: isComm };
+        }),
+        legacyComm,
+      };
+    });
+  } catch(e) { console.warn('getClassParents failed:', e.message); }
+  return classmateRoles;
 }
 
 async function loadCommunityData(kidsWithSchool) {
@@ -5256,25 +5332,7 @@ async function loadCommunityData(kidsWithSchool) {
       const classmates = membersSnap.docs.map(d=>d.data()).filter(m=>m.familyUid!==S.uid);
       // Fetch classmate roles (admin-only)
       // classmateRoles: { [familyUid]: { parents: [{name, emoji, isCommittee}], legacyComm } }
-      const classmateRoles = {};
-      if (isAdmin() && classmates.length) {
-        try {
-          const raw = await fbFunctions.httpsCallable('getClassParents')({ classId: cid });
-          Object.entries(raw.data || {}).forEach(([familyUid, info]) => {
-            const legacyComm = info.legacyComm || [];
-            classmateRoles[familyUid] = {
-              parents: (info.parents || []).map(m => {
-                const perMember = m.committeeClasses;
-                const isComm = Array.isArray(perMember)
-                  ? (perMember.includes(cid) || perMember.includes('*'))
-                  : (legacyComm.includes(cid) || legacyComm.includes('*'));
-                return { name: m.name, emoji: m.emoji || '👤', isCommittee: isComm };
-              }),
-              legacyComm,
-            };
-          });
-        } catch(e) { console.warn('getClassParents failed:', e.message); }
-      }
+      const classmateRoles = (isAdmin() && classmates.length) ? await _fetchClassmateRoles(cid) : {};
       // Seed cache with static data; live fields start empty — onSnapshot fills them.
       // Merge onto any existing cache rather than replacing it outright: loadCommunityData
       // can be called more than once for the same class before the first call's listeners
@@ -5419,7 +5477,10 @@ function renderPostCard(ev, cid) {
     : _authorAvatar(ev.postedBy?.firstName || '?');
 
   const scopeTag = scopeBadge(scope);
-  return `<div class="post-card" data-ev-id="${ev.id}" data-cid="${esc(cid)}">
+  const fresh = _commPostIsNew(ev.id);
+  const animate = fresh && !_commPostAnimated.has(ev.id);
+  if (animate) _commPostAnimated.add(ev.id);
+  return `<div class="post-card${animate ? ' post-emerge' : ''}" data-ev-id="${ev.id}" data-cid="${esc(cid)}">
     <div class="post-card-header">
       <div class="post-card-avatar">${avatarHtml}</div>
       <div class="post-card-meta">
@@ -5431,12 +5492,12 @@ function renderPostCard(ev, cid) {
     </div>
     <div class="post-card-body">
       <div class="post-card-top-row">
+        <div class="post-card-illustration"><img src="${eventTypeIllustration(ev.type)}" alt="" loading="lazy"></div>
         <div class="post-card-top-text">
-          <span class="post-card-type-badge">${eventTypeIcon(ev.type)} ${esc(eventTypeName(ev.type))}</span>
+          <span class="post-card-type-badge">${eventTypeIcon(ev.type)} ${esc(eventTypeName(ev.type))}</span>${fresh ? '<span class="hw-new-tag post-new-tag">חדש</span>' : ''}
           <div class="post-card-title">${esc(ev.title)}</div>
           ${ev.note ? `<div class="post-card-note">${esc(ev.note)}</div>` : ''}
         </div>
-        <div class="post-card-illustration"><img src="${eventTypeIllustration(ev.type)}" alt="" loading="lazy"></div>
       </div>
       ${(ev.location || ev.date || ev.time) ? `<div class="post-card-info-panel">
         ${ev.location ? `<div class="post-card-info-item">
@@ -5939,7 +6000,7 @@ function renderCommCard(kid) {
   const allEvs = [...(cache.events||[]), ...(cache.gradeEvents||[]), ...(cache.schoolEvents||[])]
     .filter(e => matchesGenderFilter(e, kid.name));
   const _cutoff = new Date(); _cutoff.setDate(_cutoff.getDate() - 14);
-  const _today  = new Date().toISOString().slice(0,10);
+  const _today  = _ymd(new Date());
   const upcoming = allEvs.filter(e => {
     if (!e.date) return postStillShown(e);
     const [ey,em,ed] = e.date.split('-').map(Number);
@@ -5957,7 +6018,6 @@ function renderCommCard(kid) {
         <div style="font-size:15px;font-weight:900;color:#1a202c">${esc(kid.name)}</div>
         <div style="font-size:11px;color:#718096;font-weight:600">🏫 ${esc(classLabelFor(kid.school))}</div>
       </div>
-      <button onclick="refreshCommunity()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#c8d3e8;padding:4px;line-height:1" title="רענן">↻</button>
     </div>
 
     ${isCommitteeFor(cid) && !isAdmin() ? `<div style="text-align:end;margin:-4px 0 8px"><button class="comm-leave-btn" onclick="leaveCommittee('${cid}')">${t('commLeaveCommittee')}</button></div>` : ''}
@@ -6017,7 +6077,7 @@ function renderCommCard(kid) {
   let html = `<div class="comm-section-label" style="margin-top:16px">${t('commApplicationsTitle')}</div>`;
   if (myPendingApp) {
     const pct = Math.min(100, Math.round((myPendingApp.voteCount||0)/15*100));
-    const exp = myPendingApp.expiresAt?.toDate ? fmtDate(myPendingApp.expiresAt.toDate().toISOString().slice(0,10)) : '';
+    const exp = myPendingApp.expiresAt?.toDate ? fmtDate(_ymd(myPendingApp.expiresAt.toDate())) : '';
     html += `<div class="application-row">
       <div class="application-info">
         <div class="application-name">✋ ${t('commMyApplication')}</div>
@@ -6028,7 +6088,7 @@ function renderCommCard(kid) {
     </div>`;
   } else if (showResolvedBanner) {
     const approved = myLatestApp.status === 'approved';
-    const dt = myLatestApp.decidedAt?.toDate ? fmtDate(myLatestApp.decidedAt.toDate().toISOString().slice(0,10)) : '';
+    const dt = myLatestApp.decidedAt?.toDate ? fmtDate(_ymd(myLatestApp.decidedAt.toDate())) : '';
     html += `<div class="application-row">
       <div class="application-info">
         <div class="application-name">${approved ? '✅' : '❌'} ${t(approved ? 'commApplicationApprovedMsg' : 'commApplicationDeniedMsg')}</div>
@@ -6039,7 +6099,7 @@ function renderCommCard(kid) {
   otherApps.forEach(app => {
     const voted = (app.votes||[]).includes(S.uid);
     const pct = Math.min(100, Math.round((app.voteCount||0)/15*100));
-    const exp = app.expiresAt?.toDate ? fmtDate(app.expiresAt.toDate().toISOString().slice(0,10)) : '';
+    const exp = app.expiresAt?.toDate ? fmtDate(_ymd(app.expiresAt.toDate())) : '';
     // Admins vote the same as any other parent here — direct approve/reject only
     // happens from the Pending Requests panel, never from the class card.
     const voteBtn = isParent() && (!isCommitteeFor(cid) || isAdmin())
@@ -7561,7 +7621,15 @@ async function renderAdminPanel(showLog = true) {
   }
 }
 
+// Another family (admin, from the family details panel): through the server, since a family's
+// doc is writable only by that family. Errors are thrown so the caller can show them.
 async function setCommitteeRole(familyUid, memberName, grant, cid) {
+  if (familyUid !== S.uid) {
+    await fbFunctions.httpsCallable('adminSetCommittee')({ familyUid, memberName, grant, cid });
+    unsubscribeAllComm(); _commCache = {};
+    renderCommunity().catch(() => {});
+    return;
+  }
   try {
     const famDoc = await fbDb.collection('families').doc(familyUid).get();
     if (!famDoc.exists) return;
@@ -12367,7 +12435,8 @@ function renderFamilyDetails(data, familyUid, clickedMemberName) {
           return `<div class="ftree-node-comm-row">
             <span class="ftree-node-comm-class">${esc(label)}</span>
             <button class="ftree-comm-toggle${on ? ' on' : ''}"
-              onclick="toggleCommitteeFromPanel('${familyUid}','${esc(p.name)}',${!on},'${cid}',this)">
+              data-fam="${esc(familyUid)}" data-member="${esc(p.name)}" data-cid="${esc(cid)}" data-grant="${!on ? '1' : ''}"
+              onclick="toggleCommitteeFromPanel(this.dataset.fam,this.dataset.member,!!this.dataset.grant,this.dataset.cid,this)">
               ${on ? '✓ ועד' : '+ ועד'}
             </button>
           </div>`;
@@ -12441,7 +12510,8 @@ async function toggleCommitteeFromPanel(familyUid, memberName, grant, cid, btn) 
   } catch(e) {
     console.error('toggleCommitteeFromPanel:', e);
     btn.disabled = false;
-    btn.textContent = grant ? t('grantCommittee') : t('revokeCommittee');
+    btn.textContent = grant ? '+ ועד' : '✓ ועד';
+    _alert('העדכון נכשל: ' + (e?.message || e));
   }
 }
 
@@ -15586,7 +15656,7 @@ async function _promptFinishCooking(listId) {
   const ok = await _confirm(`🎉 כל השלבים הושלמו!\nלסמן את "${esc(list.name)}" כהכנה שהסתיימה?`, { okLabel: 'כן, סיימתי!' });
   if (!ok) return;
   const now = new Date();
-  const entry = { date: now.toISOString().split('T')[0], by: S.user };
+  const entry = { date: _ymd(now), by: S.user };
   const cookLog = [...(list.cookLog || []), entry];
   // Clear every cooking mark (ingredients and steps) and leave cooking mode
   _cookClear(listId);

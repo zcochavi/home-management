@@ -491,6 +491,33 @@ async function grantCommitteeClass(familyUid, memberName, classId) {
   await famRef.update({ members: updatedMembers, committeeClasses: familyCommitteeClasses });
 }
 
+// Admin: make a parent of another family committee for one of their kids' classes, or remove
+// them (the family details panel). Done here because a family's doc is writable only by that
+// family. Mirrors setCommitteeRole in app.js: per-member committeeClasses, plus the family-level
+// union the other functions read.
+exports.adminSetCommittee = functions.https.onCall(async (data, context) => {
+  if (context.auth?.uid !== ADMIN_UID)
+    throw new functions.https.HttpsError('permission-denied', 'Admins only');
+  const familyUid = String(data?.familyUid || ''), memberName = String(data?.memberName || ''), cid = String(data?.cid || '');
+  const grant = !!data?.grant;
+  if (!familyUid || !memberName || !cid) throw new functions.https.HttpsError('invalid-argument', 'Missing fields');
+  const famRef = db.collection('families').doc(familyUid);
+  const fd = (await famRef.get()).data();
+  if (!fd) throw new functions.https.HttpsError('not-found', 'No such family');
+  let found = false;
+  const members = (fd.members || []).map(m => {
+    if (m.name !== memberName || m.role === 'kid') return m;
+    found = true;
+    const current = m.committeeClasses ?? (fd.role === 'committee' ? ['*'] : (fd.committeeClasses || []));
+    const next = grant ? [...new Set([...current, cid])] : current.filter(c => c !== cid);
+    return { ...m, committeeClasses: next };
+  });
+  if (!found) throw new functions.https.HttpsError('not-found', 'No such parent in the family');
+  const committeeClasses = [...new Set(members.flatMap(m => m.committeeClasses || []))];
+  await famRef.update({ members, committeeClasses });
+  return { ok: true, committeeClasses: members.find(m => m.name === memberName)?.committeeClasses || [] };
+});
+
 exports.onApplicationUpdated = functions.firestore
   .document('committeeApplications/{appId}')
   .onUpdate(async (change, ctx) => {
