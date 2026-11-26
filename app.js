@@ -6011,7 +6011,6 @@ function renderCommCard(kid) {
         <div style="font-size:15px;font-weight:900;color:#1a202c">${esc(kid.name)}</div>
         <div style="font-size:11px;color:#718096;font-weight:600">🏫 ${esc(classLabelFor(kid.school))}</div>
       </div>
-      <button onclick="refreshCommunity()" style="background:none;border:none;font-size:18px;cursor:pointer;color:#c8d3e8;padding:4px;line-height:1" title="רענן">↻</button>
     </div>
 
     ${isCommitteeFor(cid) && !isAdmin() ? `<div style="text-align:end;margin:-4px 0 8px"><button class="comm-leave-btn" onclick="leaveCommittee('${cid}')">${t('commLeaveCommittee')}</button></div>` : ''}
