@@ -7591,7 +7591,15 @@ async function renderAdminPanel(showLog = true) {
   }
 }
 
+// Another family (admin, from the family details panel): through the server, since a family's
+// doc is writable only by that family. Errors are thrown so the caller can show them.
 async function setCommitteeRole(familyUid, memberName, grant, cid) {
+  if (familyUid !== S.uid) {
+    await fbFunctions.httpsCallable('adminSetCommittee')({ familyUid, memberName, grant, cid });
+    unsubscribeAllComm(); _commCache = {};
+    renderCommunity().catch(() => {});
+    return;
+  }
   try {
     const famDoc = await fbDb.collection('families').doc(familyUid).get();
     if (!famDoc.exists) return;
@@ -12397,7 +12405,8 @@ function renderFamilyDetails(data, familyUid, clickedMemberName) {
           return `<div class="ftree-node-comm-row">
             <span class="ftree-node-comm-class">${esc(label)}</span>
             <button class="ftree-comm-toggle${on ? ' on' : ''}"
-              onclick="toggleCommitteeFromPanel('${familyUid}','${esc(p.name)}',${!on},'${cid}',this)">
+              data-fam="${esc(familyUid)}" data-member="${esc(p.name)}" data-cid="${esc(cid)}" data-grant="${!on ? '1' : ''}"
+              onclick="toggleCommitteeFromPanel(this.dataset.fam,this.dataset.member,!!this.dataset.grant,this.dataset.cid,this)">
               ${on ? '✓ ועד' : '+ ועד'}
             </button>
           </div>`;
@@ -12471,7 +12480,8 @@ async function toggleCommitteeFromPanel(familyUid, memberName, grant, cid, btn) 
   } catch(e) {
     console.error('toggleCommitteeFromPanel:', e);
     btn.disabled = false;
-    btn.textContent = grant ? t('grantCommittee') : t('revokeCommittee');
+    btn.textContent = grant ? '+ ועד' : '✓ ועד';
+    _alert('העדכון נכשל: ' + (e?.message || e));
   }
 }
 
