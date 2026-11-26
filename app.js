@@ -5461,12 +5461,12 @@ function renderPostCard(ev, cid) {
     </div>
     <div class="post-card-body">
       <div class="post-card-top-row">
+        <div class="post-card-illustration"><img src="${eventTypeIllustration(ev.type)}" alt="" loading="lazy"></div>
         <div class="post-card-top-text">
           <span class="post-card-type-badge">${eventTypeIcon(ev.type)} ${esc(eventTypeName(ev.type))}</span>
           <div class="post-card-title">${esc(ev.title)}</div>
           ${ev.note ? `<div class="post-card-note">${esc(ev.note)}</div>` : ''}
         </div>
-        <div class="post-card-illustration"><img src="${eventTypeIllustration(ev.type)}" alt="" loading="lazy"></div>
       </div>
       ${(ev.location || ev.date || ev.time) ? `<div class="post-card-info-panel">
         ${ev.location ? `<div class="post-card-info-item">
