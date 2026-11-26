@@ -5186,6 +5186,7 @@ function subscribeToCommClass(cid) {
     }, e => console.warn('[community] ' + key + ':', e.code)));
   };
   livePosts(fbDb.collection('schoolClasses').doc(cid).collection('events'), 'events', 'class', cid);
+
   if (gid) livePosts(fbDb.collection('schoolGrades').doc(gid).collection('events'), 'gradeEvents', 'grade', gid);
   if (sid) livePosts(fbDb.collection('schools').doc(sid).collection('events'), 'schoolEvents', 'school', sid);
 
@@ -5267,6 +5268,8 @@ function subscribeToCommClass(cid) {
             }
           });
           _commCache[cid].classmates = all;
+          // Admin: the new family's parents and committee roles too
+          if (isAdmin() && all.length) _fetchClassmateRoles(cid).then(r => { if (_commCache[cid]) { _commCache[cid].classmateRoles = r; rerender(); } });
         }
         rerender();
       }, e => console.warn('[community] members:', e.code))
@@ -5283,6 +5286,28 @@ function subscribeToCommClass(cid) {
         rerender();
       }, e => console.warn('[community] homework:', e.code))
   );
+}
+
+// Admin: each classmate family's parents and committee roles (getClassParents)
+async function _fetchClassmateRoles(cid) {
+  const classmateRoles = {};
+  try {
+    const raw = await fbFunctions.httpsCallable('getClassParents')({ classId: cid });
+    Object.entries(raw.data || {}).forEach(([familyUid, info]) => {
+      const legacyComm = info.legacyComm || [];
+      classmateRoles[familyUid] = {
+        parents: (info.parents || []).map(m => {
+          const perMember = m.committeeClasses;
+          const isComm = Array.isArray(perMember)
+            ? (perMember.includes(cid) || perMember.includes('*'))
+            : (legacyComm.includes(cid) || legacyComm.includes('*'));
+          return { name: m.name, emoji: m.emoji || '👤', isCommittee: isComm };
+        }),
+        legacyComm,
+      };
+    });
+  } catch(e) { console.warn('getClassParents failed:', e.message); }
+  return classmateRoles;
 }
 
 async function loadCommunityData(kidsWithSchool) {
@@ -5307,25 +5332,7 @@ async function loadCommunityData(kidsWithSchool) {
       const classmates = membersSnap.docs.map(d=>d.data()).filter(m=>m.familyUid!==S.uid);
       // Fetch classmate roles (admin-only)
       // classmateRoles: { [familyUid]: { parents: [{name, emoji, isCommittee}], legacyComm } }
-      const classmateRoles = {};
-      if (isAdmin() && classmates.length) {
-        try {
-          const raw = await fbFunctions.httpsCallable('getClassParents')({ classId: cid });
-          Object.entries(raw.data || {}).forEach(([familyUid, info]) => {
-            const legacyComm = info.legacyComm || [];
-            classmateRoles[familyUid] = {
-              parents: (info.parents || []).map(m => {
-                const perMember = m.committeeClasses;
-                const isComm = Array.isArray(perMember)
-                  ? (perMember.includes(cid) || perMember.includes('*'))
-                  : (legacyComm.includes(cid) || legacyComm.includes('*'));
-                return { name: m.name, emoji: m.emoji || '👤', isCommittee: isComm };
-              }),
-              legacyComm,
-            };
-          });
-        } catch(e) { console.warn('getClassParents failed:', e.message); }
-      }
+      const classmateRoles = (isAdmin() && classmates.length) ? await _fetchClassmateRoles(cid) : {};
       // Seed cache with static data; live fields start empty — onSnapshot fills them.
       // Merge onto any existing cache rather than replacing it outright: loadCommunityData
       // can be called more than once for the same class before the first call's listeners
