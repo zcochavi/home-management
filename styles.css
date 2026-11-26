@@ -382,6 +382,11 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
   background: var(--primary-500); color: #fff; vertical-align: 2px; }
 @media (prefers-reduced-motion: reduce) { .hw-emerge { animation: none; } }
 
+/* A community post that arrived while the app is open */
+.post-emerge { animation: hw-emerge .7s cubic-bezier(.2,1.2,.4,1) both, hw-glow 2.4s ease-out .2s both; }
+.post-new-tag { margin-inline-start: 6px; vertical-align: 1px; }
+@media (prefers-reduced-motion: reduce) { .post-emerge { animation: none; } }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }

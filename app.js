@@ -5140,6 +5140,18 @@ function unsubscribeAllComm() {
   Object.keys(_commListeners).forEach(_unsubCommClass);
 }
 
+// Posts that arrived while the app is open (someone else's) emerge: a slide-in for a minute
+const _commNewPostAt = {};
+function _commNoteNewPosts(snap) {
+  snap.docChanges().forEach(ch => {
+    if (ch.type !== 'added') return;
+    if (ch.doc.data()?.postedBy?.familyUid === S.uid) return;
+    _commNewPostAt[ch.doc.id] = Date.now();
+  });
+}
+const _commPostIsNew = id => Date.now() - (_commNewPostAt[id] || 0) < 60000;
+const _commPostAnimated = new Set(); // slide in once; later re-renders keep only the "חדש" tag
+
 function subscribeToCommClass(cid) {
   if (_commListeners[cid]) return; // already subscribed
   _commListeners[cid] = [];
@@ -5157,16 +5169,25 @@ function subscribeToCommClass(cid) {
       }, e => console.warn('[community] schedule:', e.code))
   );
 
-  // Live: class events
-  _commListeners[cid].push(
-    fbDb.collection('schoolClasses').doc(cid).collection('events').orderBy('date')
-      .onSnapshot(snap => {
-        if (!_commCache[cid]) return;
-        _commCache[cid].events = snap.docs.map(d => ({id:d.id,...d.data(),scope:'class',scopeId:cid}));
-        syncCommAutoEvents();
-        rerender();
-      }, e => console.warn('[community] events:', e.code))
-  );
+  // Live: class, grade and school posts. New ones (after the first load) emerge in the feed —
+  // the push notification for them comes from the server (onClass/Grade/SchoolEventCreated).
+  const parts = cid.split('~~');
+  const gid = parts.length >= 3 && parts[2] ? parts.slice(0, 3).join('~~') : null;
+  const sid = parts.length >= 2 && parts[1] ? parts.slice(0, 2).join('~~') : null;
+  const livePosts = (ref, key, scope, scopeId) => {
+    let first = true;
+    _commListeners[cid].push(ref.orderBy('date').onSnapshot(snap => {
+      if (!_commCache[cid]) return;
+      if (!first) _commNoteNewPosts(snap);
+      first = false;
+      _commCache[cid][key] = snap.docs.map(d => ({ id: d.id, ...d.data(), scope, scopeId }));
+      if (key === 'events') syncCommAutoEvents();
+      rerender();
+    }, e => console.warn('[community] ' + key + ':', e.code)));
+  };
+  livePosts(fbDb.collection('schoolClasses').doc(cid).collection('events'), 'events', 'class', cid);
+  if (gid) livePosts(fbDb.collection('schoolGrades').doc(gid).collection('events'), 'gradeEvents', 'grade', gid);
+  if (sid) livePosts(fbDb.collection('schools').doc(sid).collection('events'), 'schoolEvents', 'school', sid);
 
   // Live: the class's shared synced homework (Webtop / Mashov imports by any family in the class)
   const _syncedSince = new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10);
@@ -5449,7 +5470,10 @@ function renderPostCard(ev, cid) {
     : _authorAvatar(ev.postedBy?.firstName || '?');
 
   const scopeTag = scopeBadge(scope);
-  return `<div class="post-card" data-ev-id="${ev.id}" data-cid="${esc(cid)}">
+  const fresh = _commPostIsNew(ev.id);
+  const animate = fresh && !_commPostAnimated.has(ev.id);
+  if (animate) _commPostAnimated.add(ev.id);
+  return `<div class="post-card${animate ? ' post-emerge' : ''}" data-ev-id="${ev.id}" data-cid="${esc(cid)}">
     <div class="post-card-header">
       <div class="post-card-avatar">${avatarHtml}</div>
       <div class="post-card-meta">
@@ -5463,7 +5487,7 @@ function renderPostCard(ev, cid) {
       <div class="post-card-top-row">
         <div class="post-card-illustration"><img src="${eventTypeIllustration(ev.type)}" alt="" loading="lazy"></div>
         <div class="post-card-top-text">
-          <span class="post-card-type-badge">${eventTypeIcon(ev.type)} ${esc(eventTypeName(ev.type))}</span>
+          <span class="post-card-type-badge">${eventTypeIcon(ev.type)} ${esc(eventTypeName(ev.type))}</span>${fresh ? '<span class="hw-new-tag post-new-tag">חדש</span>' : ''}
           <div class="post-card-title">${esc(ev.title)}</div>
           ${ev.note ? `<div class="post-card-note">${esc(ev.note)}</div>` : ''}
         </div>
