@@ -115,3 +115,19 @@ test('other portals: Carrefour page list, Cerberus token, <Branch> stores and <P
   assert.strictEqual(Object.keys(cp.CHAINS).length, 25);
   assert.ok(Object.values(cp.CHAINS).every(c => c.slug && c.name && c.chainId && c.portal));
 });
+
+test('branch comparison: same city (incl. abbreviations), not online shops, matching a list item', () => {
+  assert.ok(cp.sameCity({ city: '7900', address: 'ראשון לציון 1 , פ"ת , ישראל' }, 'פתח תקווה'));
+  assert.ok(cp.sameCity({ name: 'שופרסל דיל פתח תקווה' }, 'פתח תקווה'));
+  assert.ok(cp.sameCity({ name: 'אקספרס פ"ת- היבנר' }, 'פתח תקווה'));
+  assert.ok(!cp.sameCity({ city: '8300', name: 'ראשון' }, 'פתח תקווה'));
+  assert.ok(cp.notAShop({ name: 'שופרסל ONLINE' }) && cp.notAShop({ name: 'BE אם המושבות' }) && !cp.notAShop({ name: 'שופרסל דיל' }));
+  const it = (code, name, price, weighted = false) => ({ code, name, price, weighted });
+  const items = [it('1', 'עגבניות ירוקות במשקל', 45, true), it('2', 'עגבניות חממה גדול', 9.9, true), it('3', 'איקרה ביצי דג', 17.9),
+    it('4', 'ביצים *12 M', 13.4), it('5', 'במבה 80ג', 4.6), it('6', 'עגבניות מרוסקות', 6.9)];
+  const by = new Map(items.map(i => [i.code, i]));
+  assert.deepStrictEqual(cp.matchItem(by, items, { code: '5', name: 'במבה' }), { p: items[4], how: 'code' });
+  assert.strictEqual(cp.matchItem(by, items, { product: 'עגבניה', name: 'עגבניות', weighted: true }).p.code, '2'); // plain + cheaper, sold by weight
+  assert.strictEqual(cp.matchItem(by, items, { product: '12 ביצי משק טריות L', name: 'ביצים', weighted: false }).p.code, '4'); // not the roe
+  assert.strictEqual(cp.matchItem(by, items, { product: 'פטרוזיליה', name: 'פטרוזיליה' }), null);
+});

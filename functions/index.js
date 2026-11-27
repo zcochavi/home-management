@@ -2804,6 +2804,22 @@ exports.groceryPricesTlv = onRequestV2({ ...TLV_OPTS, timeoutSeconds: 120, memor
       const rank = c => { const i = top.indexOf(c.slug); return i < 0 ? top.length : i; };
       return res.json({ chains: Object.values(chainPrices.CHAINS).sort((a, b) => rank(a) - rank(b)).map(c => ({ id: c.slug, name: c.name })) });
     }
+    if (op === 'city') { // every chain's branches in the city of the given branch (or &city=)
+      let city = String(req.query.city || '');
+      if (!city && req.query.store) {
+        const st = (await cpStores(chain)).find(x => chainPrices.sameStore(x.storeId, req.query.store));
+        city = st ? chainPrices.cityName(st.city) || '' : '';
+      }
+      if (!city) return res.status(404).json({ error: 'city unknown' });
+      const out = [];
+      await Promise.all(Object.values(chainPrices.CHAINS).map(async c => {
+        try {
+          (await cpStores(c.slug)).filter(st => chainPrices.sameCity(st, city) && !chainPrices.notAShop(st))
+            .forEach(st => out.push({ chain: c.slug, chainName: c.name, id: String(st.storeId), label: chainPrices.storeLabel(st) }));
+        } catch (e) { console.warn('city stores', c.slug, e.message); }
+      }));
+      return res.json({ city, stores: out });
+    }
     if (op === 'check') { // admin check: can every chain's branch list be read? (?op=check&chains=a,b)
       const want = String(req.query.chains || '').split(',').filter(c => chainPrices.CHAINS[c]);
       const out = {};
@@ -2827,6 +2843,13 @@ exports.groceryPricesTlv = onRequestV2({ ...TLV_OPTS, timeoutSeconds: 120, memor
     if (op === 'search') {
       const q = String(req.query.q || '').slice(0, 80);
       return res.json({ ...head, results: chainPrices.rankProducts(data.items, q, 25) });
+    }
+    if (op === 'basket') { // POST {items: [{code, product, name, weighted}]} → the product for each, or null
+      let body = req.body;
+      if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+      if (Buffer.isBuffer(body)) { try { body = JSON.parse(body.toString('utf8')); } catch (e) { body = {}; } }
+      const list = (body?.items || []).slice(0, 150);
+      return res.json({ ...head, matches: list.map(it => { const m = chainPrices.matchItem(data.byCode, data.items, it); return m ? { ...m.p, how: m.how } : null; }) });
     }
     if (op === 'prices') {
       let body = req.body;
