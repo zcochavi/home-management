@@ -2627,7 +2627,8 @@ async function cpListFiles(t, wanted, pages = 40) {
 async function cpStores() {
   const ref = db.collection('chainPrices').doc('hatzi-hinam__stores');
   const d = (await ref.get()).data();
-  if (d?.stores && Date.now() - d.fetchedAt < 24 * 3600e3) return d.stores;
+  const readable = (d?.stores || []).some(st => /[\u0590-\u05FF]/.test([st.name, st.city, st.address].join('')));
+  if (d?.stores && readable && Date.now() - d.fetchedAt < 24 * 3600e3) return d.stores;
   const [file] = await cpListFiles(3, f => f.type === 'Stores', 5);
   if (!file) throw new Error('no Stores file on the portal');
   const stores = chainPrices.parseStores(chainPrices.toText(await cpGet(file.url, true)));
@@ -2659,6 +2660,12 @@ exports.chainPricesTlv = onRequestV2({ ...TLV_OPTS, timeoutSeconds: 300, memory:
   res.set('Cache-Control', 'no-store');
   try {
     const query = String(req.query.store || 'אם המושבות פתח תקווה');
+    if (req.query.stores === '1') { // the branch list (public), to find a branch's name
+      const ref = db.collection('chainPrices').doc('hatzi-hinam__stores');
+      if (req.query.refresh === '1') await ref.delete();
+      const stores = await cpStores();
+      return res.json({ count: stores.length, file: (await ref.get()).data()?.file, stores });
+    }
     const stores = await cpStores();
     const matches = chainPrices.findStore(stores, query);
     if (matches.length !== 1) {
