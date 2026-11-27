@@ -2798,3 +2798,15 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .gp-chain { font-family: inherit; font-size: 14px; font-weight: 600; color: var(--gray-600); background: var(--gray-100); border: 1.5px solid transparent; border-radius: var(--r-pill); padding: 7px 16px; cursor: pointer; }
 .gp-chain.sel { color: var(--primary-700); background: var(--primary-50); border-color: var(--primary-500); }
 .gp-chain-more { background: none; border: 1.5px dashed var(--gray-300); color: var(--primary-600); }
+/* Statistics: prices and spending */
+.gstat-bar-fill.gstat-bar-spend { background: var(--success); }
+.gstat-sub { font-size: 12.5px; font-weight: 600; color: var(--gray-600); margin: 12px 2px 6px; }
+.gstat-top { background: var(--surface); border-radius: 14px; overflow: hidden; }
+.gstat-top-row { display: flex; justify-content: space-between; padding: 9px 12px; font-size: 13.5px; color: var(--gray-700); border-bottom: 1px solid var(--gray-100); cursor: pointer; }
+.gstat-top-row:last-child { border-bottom: 0; }
+.gstat-top-row b { color: var(--gray-900); }
+.gstat-spend-note { display: block; margin: 6px 2px 4px; font-size: 11.5px; }
+.gitem-pchart { width: 100%; height: auto; display: block; background: var(--surface); border-radius: 14px; margin-top: 8px; }
+.gitem-pchart polyline { fill: none; stroke: var(--primary-500); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.gitem-pchart circle { fill: var(--surface); stroke: var(--primary-600); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.gitem-pchart-axis { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--gray-500); margin: 3px 4px 0; }

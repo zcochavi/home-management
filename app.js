@@ -10749,7 +10749,10 @@ async function doneShopping() {
       const b = { name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' };
       // With prices on: the price paid, and remembered on the pool item for the ▲/▼ next time
       const line = _gpOn() ? _gpLine(x) : null;
-      if (line?.state === 'priced') { b.price = line.pr.price; b.chain = _gpChain(); if (line.pool) _gpSetLastPrice(line.pool, line.pr.price); }
+      if (line?.state === 'priced') {
+        b.price = line.pr.price; b.total = Math.round(line.total * 100) / 100; b.chain = _gpChain(); b.chainName = _gpCfg()?.chainName || '';
+        if (line.pool) _gpSetLastPrice(line.pool, line.pr.price);
+      }
       return b;
     }),
     missed: missed.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' })),
@@ -11220,10 +11223,15 @@ const _plKey = name => String(name || '').trim().toLowerCase()
 const _plRef = () => fbDb.collection('families').doc(S.uid).collection('stats').doc('purchases');
 const _plMonth = ts => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
 const _plEmpty = () => ({ v: 2, trips: { n: 0, first: 0, last: 0, byMonth: {} }, items: {} });
+// With shopping-list prices on, bought items carry price / total / chainName; then per item
+// prices: [[ts, price, chainName], …last 24] and spent (₪), and per month trips.spend / spendTrips.
+const PL_PRICES = 24;
+const _r2 = n => Math.round(n * 100) / 100;
 function _plAdd(log, trip) {
   const ts = trip.ts || Date.now();
   if (ts <= (log.trips.last || 0)) return; // already counted (or older than what's counted)
   const T = log.trips;
+  let tripSpend = 0;
   T.n++; T.first = T.first || ts; T.last = ts;
   T.byMonth[_plMonth(ts)] = (T.byMonth[_plMonth(ts)] || 0) + 1;
   const seen = new Set();
@@ -11240,7 +11248,18 @@ function _plAdd(log, trip) {
     it.qtys = [...it.qtys, Number(b.qty) || 1].slice(-PL_RECENT);
     const mm = _plMonth(ts).slice(5);
     it.byMonth = { ...(it.byMonth || {}), [mm]: ((it.byMonth || {})[mm] || 0) + 1 };
+    if (b.price != null && Number.isFinite(Number(b.price))) {
+      const total = Number(b.total ?? Number(b.price) * (Number(b.qty) || 1)) || 0;
+      it.prices = [...(it.prices || []), [ts, Number(b.price), b.chainName || b.chain || '']].slice(-PL_PRICES);
+      it.spent = _r2((it.spent || 0) + total);
+      tripSpend += total;
+    }
   });
+  if (tripSpend) {
+    const ym = _plMonth(ts);
+    T.spend = { ...(T.spend || {}), [ym]: _r2(((T.spend || {})[ym] || 0) + tripSpend) };
+    T.spendTrips = { ...(T.spendTrips || {}), [ym]: ((T.spendTrips || {})[ym] || 0) + 1 };
+  }
 }
 // The earlier format (a year of raw purchases) → running statistics
 function _plFromRaw(raw) {
@@ -11259,9 +11278,32 @@ async function _loadPurchaseLog() {
     try { d = (await _plRef().get()).data(); } catch (e) { console.warn('[insights] load:', e.message); }
     if (d?.v === 2) log = d;
     else if (d && Array.isArray(d.trips)) { log = _plFromRaw(d); _plRef().set(log).catch(() => {}); }
-    else { // first time: start from the shopping history
-      log = _plEmpty();
+    else { // first time: start from the shopping history (prices included)
+      log = { ..._plEmpty(), pricesFrom: Date.now() };
       [...(S.shoppingHistory || [])].sort((a, b) => a.ts - b.ts).forEach(t => _plAdd(log, t));
+      _plRef().set(log).catch(() => {});
+    }
+    // Once: prices from trips the log counted before it kept prices (shopping history has them)
+    if (!log.pricesFrom) {
+      log.pricesFrom = Date.now();
+      [...(S.shoppingHistory || [])].sort((a, b) => a.ts - b.ts).forEach(t => {
+        let tripSpend = 0;
+        const seen = new Set();
+        (t.bought || []).forEach(b => {
+          const it = log.items[_plKey(b.name)];
+          if (b.price == null || !it || seen.has(_plKey(b.name)) || (it.prices || []).some(p => p[0] === t.ts)) return;
+          seen.add(_plKey(b.name));
+          const total = Number(b.total ?? Number(b.price) * (Number(b.qty) || 1)) || 0;
+          it.prices = [...(it.prices || []), [t.ts, Number(b.price), b.chainName || b.chain || '']].sort((x, y) => x[0] - y[0]).slice(-PL_PRICES);
+          it.spent = _r2((it.spent || 0) + total);
+          tripSpend += total;
+        });
+        if (tripSpend) {
+          const ym = _plMonth(t.ts), T = log.trips;
+          T.spend = { ...(T.spend || {}), [ym]: _r2(((T.spend || {})[ym] || 0) + tripSpend) };
+          T.spendTrips = { ...(T.spendTrips || {}), [ym]: ((T.spendTrips || {})[ym] || 0) + 1 };
+        }
+      });
       _plRef().set(log).catch(() => {});
     }
     _purchaseLog = log;
@@ -11318,6 +11360,7 @@ function _groceryStats(log, now = Date.now()) {
       due: it.n >= 3 && gap >= 1 && since >= gap * 0.85 && season.factor >= 0.5,
       score: (gap ? since / gap : 0) * Math.min(2, Math.max(0.5, season.factor)),
       season: season.label, seasonFactor: season.factor,
+      lastPrice: it.prices?.length ? it.prices[it.prices.length - 1][1] : null, spent: it.spent || 0,
     };
   });
 }
@@ -11459,13 +11502,75 @@ function _itemStatsHtml(log, key, now) {
       <div><span>עונה</span><b>${seasonTxt}</b></div>
       <div><span>נקנה לראשונה</span><b>${fmtD(it.first)}</b></div>
     </div>
+    ${_itemPriceHtml(it, fmtD)}
     <div class="gstat-label">קניות לפי חודשי השנה</div>
     <div class="gstat-bars gitem-bars">${mm.map((m, i) => `<div class="gstat-bar${m === curM ? ' cur' : ''}"><span class="gstat-bar-n">${vals[i] || ''}</span>
       <div class="gstat-bar-fill" style="height:${Math.round(vals[i] / maxV * 100)}%"></div>
       <span class="gstat-bar-m">${new Date(2026, i, 1).toLocaleDateString('he-IL', { month: 'narrow' })}</span></div>`).join('')}</div>
     <div class="gstat-label">קניות אחרונות</div>
-    <div class="gitem-recent">${recent.map((t, i) => `<div><span>${fmtD(t)}</span><b>${qtys[i] != null ? qtys[i] + ' יח׳' : ''}</b></div>`).join('')}</div>
+    <div class="gitem-recent">${recent.map((t, i) => { const pr = (it.prices || []).find(p => Math.abs(p[0] - t) < 864e5 / 2);
+      return `<div><span>${fmtD(t)}</span><b>${qtys[i] != null ? qtys[i] + ' יח׳' : ''}${pr ? ` · ₪${pr[1].toFixed(2)}` : ''}</b></div>`; }).join('')}</div>
   </div>`;
+}
+
+// An item's prices: last / average / range, total spent, a chart over its purchases (oldest on the
+// left, like the other timelines), and today's price at the family's branch when it's linked
+function _itemPriceHtml(it, fmtD) {
+  const ps = it.prices || [];
+  const pool = S.groceryPool.find(p => _plKey(p.name) === _plKey(it.name));
+  const today = _gpOn() && pool ? _gpPrices[_gpBarcode(pool)] : null;
+  if (!ps.length && !today) return '';
+  const vals = ps.map(p => p[1]);
+  const last = ps[ps.length - 1];
+  const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  let chart = '';
+  if (ps.length >= 2) {
+    const W = 300, H = 90, P = 14, x0 = ps[0][0], span = Math.max(1, last[0] - x0), rng = Math.max(0.01, hi - lo);
+    const pt = p => [P + (p[0] - x0) / span * (W - 2 * P), H - P - (p[1] - lo) / rng * (H - 2 * P)];
+    const pts = ps.map(pt);
+    chart = `<svg class="gitem-pchart" viewBox="0 0 ${W} ${H}" dir="ltr">
+      <polyline points="${pts.map(q => q.map(v => v.toFixed(1)).join(',')).join(' ')}" />
+      ${pts.map((q, i) => `<circle cx="${q[0].toFixed(1)}" cy="${q[1].toFixed(1)}" r="3"><title>${fmtD(ps[i][0])} · ₪${ps[i][1].toFixed(2)}${ps[i][2] ? ' · ' + esc(ps[i][2]) : ''}</title></circle>`).join('')}
+    </svg>
+    <div class="gitem-pchart-axis" dir="ltr"><span dir="rtl">${fmtD(ps[0][0])}</span><span>₪${lo.toFixed(2)}–₪${hi.toFixed(2)}</span><span dir="rtl">${fmtD(last[0])}</span></div>`;
+  }
+  const chainNames = [...new Set(ps.map(p => p[2]).filter(Boolean))];
+  return `<div class="gstat-label">💰 מחירים</div>
+    <div class="gitem-facts">
+      ${last ? `<div><span>מחיר בקנייה האחרונה</span><b>₪${last[1].toFixed(2)}${last[2] ? ' · ' + esc(last[2]) : ''}</b></div>` : ''}
+      ${today ? `<div><span>מחיר היום · ${esc(_gpCfg()?.storeLabel || '')}</span><b>₪${today.price.toFixed(2)}${today.weighted ? ' לק"ג' : ''}${last && Math.abs(today.price - last[1]) >= 0.05 ? ` <span class="gp-delta ${today.price > last[1] ? 'up' : 'down'}">${today.price > last[1] ? '▲' : '▼'} ${Math.abs(today.price - last[1]).toFixed(2)}</span>` : ''}</b></div>` : ''}
+      ${vals.length >= 2 ? `<div><span>מחיר ממוצע</span><b>₪${avg.toFixed(2)}</b></div><div><span>הכי זול / הכי יקר</span><b>₪${lo.toFixed(2)} / ₪${hi.toFixed(2)}</b></div>` : ''}
+      ${it.spent ? `<div><span>סה״כ הוצאה (${vals.length} קניות עם מחיר)</span><b>₪${it.spent.toFixed(2)}</b></div>` : ''}
+      ${chainNames.length > 1 ? `<div><span>נקנה ב</span><b>${chainNames.map(esc).join(', ')}</b></div>` : ''}
+    </div>${chart}`;
+}
+// Spending, from purchases made with prices on: this month, per trip, the last 6 months, top items
+function _spendHtml(log, now) {
+  const sp = log.trips.spend || {};
+  if (!Object.keys(sp).length) return '';
+  const months = [];
+  for (let i = 5; i >= 0; i--) { const d = new Date(now); d.setDate(1); d.setMonth(d.getMonth() - i); months.push(d); }
+  const vals = months.map(m => sp[_plMonth(m.getTime())] || 0), maxV = Math.max(1, ...vals);
+  const cur = _plMonth(now), prevD = new Date(now); prevD.setDate(1); prevD.setMonth(prevD.getMonth() - 1);
+  const prev = _plMonth(prevD.getTime());
+  const allTrips = Object.values(log.trips.spendTrips || {}).reduce((a, b) => a + b, 0);
+  const allSpend = Object.values(sp).reduce((a, b) => a + b, 0);
+  const top = Object.values(log.items).filter(it => it.spent).sort((a, b) => b.spent - a.spent).slice(0, 5);
+  const fmt = n => '₪' + Math.round(n).toLocaleString('he-IL');
+  return `<div class="gstat-label">💰 הוצאות</div>
+    <div class="gstat-summary">
+      <div><b>${fmt(sp[cur] || 0)}</b><span>החודש</span></div>
+      <div><b>${sp[prev] ? fmt(sp[prev]) : '—'}</b><span>חודש שעבר</span></div>
+      <div><b>${allTrips ? fmt(allSpend / allTrips) : '—'}</b><span>בממוצע לקנייה</span></div>
+    </div>
+    <div class="gstat-bars">${months.map((m, i) => `<div class="gstat-bar${_plMonth(m.getTime()) === cur ? ' cur' : ''}"><span class="gstat-bar-n">${vals[i] ? Math.round(vals[i]) : ''}</span>
+      <div class="gstat-bar-fill gstat-bar-spend" style="height:${Math.round(vals[i] / maxV * 100)}%"></div>
+      <span class="gstat-bar-m">${m.toLocaleDateString('he-IL', { month: 'short' })}</span></div>`).join('')}</div>
+    ${top.length ? `<div class="gstat-sub">הכי הרבה כסף הולך על</div>
+    <div class="gstat-top">${top.map(it => `<div class="gstat-top-row" data-key="${esc(_plKey(it.name))}" onclick="openItemStats(this.dataset.key)">
+      <span>${esc(it.name)}</span><b>${fmt(it.spent)}</b></div>`).join('')}</div>` : ''}
+    <div class="gstat-hint gstat-spend-note">לפי המחירים בסניף שבחרתם, מהקניות שנעשו כשהמחירים מופעלים. פריטים במשקל — הערכה.</div>`;
 }
 
 async function renderGroceryStats() {
@@ -11495,6 +11600,7 @@ async function renderGroceryStats() {
       <div><b>${(log.trips.n / Math.max(1, (now - log.trips.first) / (30.4 * 864e5))).toFixed(1).replace('.0', '')}</b><span>קניות בחודש</span></div>
       <div><b>${stats.length}</b><span>מוצרים שונים</span></div>
     </div>
+    ${_spendHtml(log, now)}
     <div class="gstat-label">קניות בחודש</div>
     <div class="gstat-bars">${months.map((m, i) => `<div class="gstat-bar"><span class="gstat-bar-n">${counts[i] || ''}</span>
       <div class="gstat-bar-fill" style="height:${Math.round(counts[i] / maxC * 100)}%"></div>
@@ -11503,7 +11609,7 @@ async function renderGroceryStats() {
     <input class="pool-search gstat-search" type="search" placeholder="חיפוש מוצר..." value="${esc(_gstatQuery)}" oninput="onGstatSearch(this.value)">
     <div class="gstat-list">${stats.map(x => `<div class="gstat-row" data-key="${esc(_plKey(x.name))}" onclick="openItemStats(this.dataset.key)">
       <div class="gstat-name">${esc(x.name)}${x.season === 'winter' ? ' <span class="gstat-season">❄️ בעיקר בחורף</span>' : x.season === 'summer' ? ' <span class="gstat-season">☀️ בעיקר בקיץ</span>' : ''}${x.due ? ' <span class="gstat-due">כדאי לקנות</span>' : ''}</div>
-      <div class="gstat-meta">${fmtRate(x.perMonth)}${x.n >= 3 && x.gap ? ' · ' + _fmtEvery(x.gap) : ''} · בד״כ ${Math.round(x.qty * 10) / 10} יח׳ · לאחרונה ${_fmtAgo(x.since)}</div>
+      <div class="gstat-meta">${fmtRate(x.perMonth)}${x.n >= 3 && x.gap ? ' · ' + _fmtEvery(x.gap) : ''} · בד״כ ${Math.round(x.qty * 10) / 10} יח׳ · לאחרונה ${_fmtAgo(x.since)}${x.lastPrice != null ? ` · ₪${x.lastPrice.toFixed(2)}` : ''}</div>
     </div>`).join('')}</div>`;
   if (_gstatQuery) onGstatSearch(_gstatQuery);
 }
