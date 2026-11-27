@@ -10894,7 +10894,11 @@ function _gpRefresh(force) {
       _gpAsked = new Set(codes); _gpLoadedAt = Date.now(); _gpError = null;
     })
     .catch(e => { console.warn('grocery prices:', e); _gpError = String(e.message || e); _gpLoadedAt = Date.now(); _gpAsked = new Set(codes); })
-    .finally(() => { _gpLoading = null; if (S.tab === 'grocery' && _grocerySection === 'shopping') renderShoppingList(); });
+    .finally(() => {
+      _gpLoading = null;
+      if (S.tab === 'grocery' && _grocerySection === 'shopping') renderShoppingList();
+      if (S.tab === 'grocery' && _grocerySection === 'stats' && _gstatItem) renderGroceryStats(); // today's price
+    });
   return _gpLoading;
 }
 // Typical weight of one unit (grams), for products sold by weight but listed in units. Matched
@@ -11548,7 +11552,14 @@ function _itemPriceHtml(it, fmtD) {
 // Spending, from purchases made with prices on: this month, per trip, the last 6 months, top items
 function _spendHtml(log, now) {
   const sp = log.trips.spend || {};
-  if (!Object.keys(sp).length) return '';
+  if (!Object.keys(sp).length) {
+    // No priced trips yet: say why, rather than show nothing
+    if (!_gpFeature()) return '';
+    return `<div class="gstat-label">💰 הוצאות</div>
+      <div class="gstat-empty-spend">${_gpOn()
+        ? 'עוד אין קניות עם מחירים. מהפעם הבאה שתלחצו ״סיימתי לקנות״, יופיעו כאן ההוצאות של כל קנייה ומחיר כל מוצר.'
+        : 'כדי לראות כאן כמה עולה כל קנייה וכל מוצר, הפעילו מחירים ברשימת הקניות (⚙️ בכרטיס המחירים).'}</div>`;
+  }
   const months = [];
   for (let i = 5; i >= 0; i--) { const d = new Date(now); d.setDate(1); d.setMonth(d.getMonth() - i); months.push(d); }
   const vals = months.map(m => sp[_plMonth(m.getTime())] || 0), maxV = Math.max(1, ...vals);
@@ -11576,6 +11587,7 @@ function _spendHtml(log, now) {
 async function renderGroceryStats() {
   const box = el('groceryStatsEl');
   if (!box) return;
+  if (_gpOn()) _gpRefresh(); // today's prices, for the item view
   if (!_purchaseLog) { box.innerHTML = `<div class="empty">⏳ טוען…</div>`; await _loadPurchaseLog(); }
   const log = _purchaseLog, now = Date.now();
   if (_gstatItem && log.items[_gstatItem]) {

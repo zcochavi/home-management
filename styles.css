@@ -2810,3 +2810,4 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .gitem-pchart polyline { fill: none; stroke: var(--primary-500); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .gitem-pchart circle { fill: var(--surface); stroke: var(--primary-600); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .gitem-pchart-axis { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--gray-500); margin: 3px 4px 0; }
+.gstat-empty-spend { background: var(--surface); border-radius: 14px; padding: 12px 14px; font-size: 13px; color: var(--gray-600); line-height: 1.55; border: 1.5px dashed var(--gray-200); }
