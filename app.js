@@ -10877,13 +10877,38 @@ function _grocerySuggestions() {
 const _fmtEvery = g => g < 1.5 ? 'כל יום' : g < 6.5 ? `כל ~${Math.round(g)} ימים` : g < 10.5 ? 'בערך פעם בשבוע'
   : g < 17 ? 'בערך פעם בשבועיים' : g < 45 ? 'בערך פעם בחודש' : `כל ~${Math.round(g / 30)} חודשים`;
 const _fmtAgo = d => d < 1 ? 'היום' : d < 2 ? 'אתמול' : `לפני ${Math.round(d)} ימים`;
+// What wasn't bought on the last trip ("missed" in the newest history entry), minus what's on the
+// list or in the cart now; hidden after "add all" / ✕ until the next trip
+const _missedDismissKey = () => 'familyhub_grocery_missed_' + S.uid;
+function _lastTripMissed() {
+  const last = (S.shoppingHistory || [])[0];
+  if (!last?.missed?.length) return { trip: null, items: [] };
+  try { if (localStorage.getItem(_missedDismissKey()) === String(last.ts)) return { trip: last, items: [] }; } catch (e) {}
+  const inList = new Set([...S.shoppingList, ...S.inCart].map(x => _plKey(x.name)));
+  const seen = new Set();
+  const items = last.missed.filter(m => { const k = _plKey(m.name); if (!k || inList.has(k) || seen.has(k)) return false; seen.add(k); return true; });
+  return { trip: last, items };
+}
 function _grocerySuggestHtml() {
   const list = isParent() ? _grocerySuggestions() : [];
-  if (!list.length) return '';
+  const missed = isParent() ? _lastTripMissed() : { items: [] };
+  // an item in both lists shows once, under "not bought last time"
+  const missedKeys = new Set(missed.items.map(m => _plKey(m.name)));
+  const regular = list.filter(x => !missedKeys.has(_plKey(x.name)));
+  if (!regular.length && !missed.items.length) return '';
+  const when = missed.trip ? _fmtAgo((Date.now() - missed.trip.ts) / 864e5) : '';
   return `<div class="card gsugg-card">
     <div class="card-title">💡 אולי שכחתם?</div>
-    <div class="gsugg-sub">לפי מה שאתם קונים בדרך כלל</div>
-    ${list.map(x => `<div class="gsugg-row">
+    ${missed.items.length ? `<div class="gsugg-missed">
+      <div class="gsugg-missed-head">
+        <div><div class="gsugg-missed-title">🛒 לא נקנו בפעם הקודמת</div><div class="gsugg-sub">בקנייה של ${esc(when)}</div></div>
+        <button class="gsugg-add" onclick="addMissedItems()">+ להוסיף הכל (${missed.items.length})</button>
+        <button class="gsugg-skip" onclick="dismissMissedItems()" aria-label="לא הפעם">✕</button>
+      </div>
+      <div class="gsugg-chips">${missed.items.map(m => `<button class="gsugg-chip" data-name="${esc(m.name)}" onclick="addMissedItems(this.dataset.name)">+ ${esc(m.name)}${(m.qty || 1) !== 1 ? ` <span>${fmtQty(m.qty, m.qtyType)}</span>` : ''}</button>`).join('')}</div>
+    </div>` : ''}
+    ${regular.length ? `<div class="gsugg-sub">${missed.items.length ? 'ועוד, ' : ''}לפי מה שאתם קונים בדרך כלל</div>` : ''}
+    ${regular.map(x => `<div class="gsugg-row">
       <div class="gsugg-info">
         <div class="gsugg-name">${esc(x.name)}</div>
         <div class="gsugg-why">${x.seasonFactor >= 1.2 ? (x.season === 'winter' ? '❄️ עונת החורף · ' : x.season === 'summer' ? '☀️ עונת הקיץ · ' : '') : ''}נקנה ${_fmtEvery(x.gap)} · לאחרונה ${_fmtAgo(x.since)}</div>
@@ -10892,6 +10917,28 @@ function _grocerySuggestHtml() {
       <button class="gsugg-skip" data-key="${esc(_plKey(x.name))}" onclick="dismissSuggestedItem(this.dataset.key)" aria-label="לא הפעם">✕</button>
     </div>`).join('')}
   </div>`;
+}
+// Add the last trip's missed items: one (by name) or all of them, with the quantities asked for then
+function addMissedItems(name) {
+  const { trip, items } = _lastTripMissed();
+  const pick = name ? items.filter(m => m.name === name) : items;
+  if (!pick.length) return;
+  pick.forEach((m, i) => {
+    const pool = S.groceryPool.find(p => _plKey(p.name) === _plKey(m.name));
+    const qty = m.qty || pool?.lastQty || 1;
+    S.shoppingList.push({ id: Date.now() + i, ...(pool ? { poolId: pool.id, category: pool.category } : {}),
+      name: pool?.name || m.name, qty, qtyType: m.qtyType || pool?.qtyType || 'count', requestedQty: qty });
+  });
+  if (!name && trip) { try { localStorage.setItem(_missedDismissKey(), String(trip.ts)); } catch (e) {} }
+  saveGrocery();
+  renderShoppingList();
+  renderPool();
+  showToast(pick.length === 1 ? `✓ ${pick[0].name} נוסף לרשימה` : `✓ ${pick.length} פריטים נוספו לרשימה`, 'success');
+}
+function dismissMissedItems() {
+  const { trip } = _lastTripMissed();
+  if (trip) { try { localStorage.setItem(_missedDismissKey(), String(trip.ts)); } catch (e) {} }
+  renderShoppingList();
 }
 function addSuggestedItem(key) {
   const st = _groceryStats(_purchaseLog).find(x => _plKey(x.name) === key);
