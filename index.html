@@ -828,6 +828,7 @@
         <button class="grocery-subtab active" id="gtab-pool"     onclick="switchGrocerySection('pool')">🏪 מאגר</button>
         <button class="grocery-subtab"        id="gtab-shopping" onclick="switchGrocerySection('shopping')">🛒 קניות</button>
         <button class="grocery-subtab"        id="gtab-history"  onclick="switchGrocerySection('history')">📋 היסטוריה</button>
+        <button class="grocery-subtab"        id="gtab-stats"    onclick="switchGrocerySection('stats')">📊 סטטיסטיקה</button>
       </div>
 
       <!-- POOL -->
@@ -869,8 +870,16 @@
         </div>
       </div>
 
+      <div id="grocerySec-stats" style="display:none">
+        <div class="card">
+          <div class="card-title">📊 סטטיסטיקת קניות</div>
+          <div id="groceryStatsEl"></div>
+        </div>
+      </div>
+
       <!-- SHOPPING + CART combined -->
       <div id="grocerySec-shopping" style="display:none">
+        <div id="grocerySuggestEl"></div>
         <div class="card">
           <div class="card-title" id="shoppingListTitle"></div>
           <div id="shoppingListEl"></div>

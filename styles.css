@@ -390,6 +390,32 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
 /* Full-screen sign-in / profile screens: clear of the status and navigation bars */
 #authScreen, #loginScreen { padding-top: max(20px, env(safe-area-inset-top, 0px)); padding-bottom: max(20px, env(safe-area-inset-bottom, 0px)); }
 
+/* Supermarket: "maybe you forgot?" and statistics */
+.gsugg-card { border: 1.5px solid var(--primary-100); background: var(--primary-50); }
+.gsugg-sub { font-size: 12px; font-weight: 600; color: var(--gray-500); margin: -6px 0 8px; }
+.gsugg-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--primary-100); }
+.gsugg-row:first-of-type { border-top: none; }
+.gsugg-info { flex: 1; min-width: 0; }
+.gsugg-name { font-size: 14px; font-weight: 800; color: var(--gray-900); }
+.gsugg-why { font-size: 11px; font-weight: 600; color: var(--gray-500); margin-top: 2px; }
+.gsugg-add { border: none; border-radius: 10px; padding: 7px 12px; background: var(--primary-500); color: #fff; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; flex-shrink: 0; }
+.gsugg-skip { border: none; background: none; color: var(--gray-400); font-size: 15px; cursor: pointer; padding: 4px 6px; flex-shrink: 0; }
+.gstat-summary { display: flex; gap: 8px; margin-bottom: 14px; }
+.gstat-summary > div { flex: 1; background: var(--gray-50); border-radius: 12px; padding: 10px 6px; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.gstat-summary b { font-size: 20px; font-weight: 900; color: var(--primary-500); }
+.gstat-summary span { font-size: 11px; font-weight: 700; color: var(--gray-500); }
+.gstat-label { font-size: 12px; font-weight: 800; color: var(--gray-500); margin: 10px 0 6px; }
+.gstat-bars { display: flex; align-items: flex-end; gap: 8px; height: 110px; padding: 0 4px 18px; position: relative; }
+.gstat-bar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; }
+.gstat-bar-fill { width: 70%; min-height: 3px; background: var(--primary-400, #8FA8FF); border-radius: 6px 6px 2px 2px; }
+.gstat-bar-n { font-size: 11px; font-weight: 800; color: var(--gray-600, #555); margin-bottom: 2px; }
+.gstat-bar-m { position: absolute; bottom: -18px; font-size: 10px; font-weight: 700; color: var(--gray-400); }
+.gstat-row { padding: 9px 0; border-top: 1px solid var(--gray-100); }
+.gstat-row:first-child { border-top: none; }
+.gstat-name { font-size: 14px; font-weight: 800; color: var(--gray-900); }
+.gstat-meta { font-size: 11px; font-weight: 600; color: var(--gray-500); margin-top: 2px; line-height: 1.6; }
+.gstat-due { display: inline-block; font-size: 10px; font-weight: 800; color: #b45309; background: #fef3c7; border-radius: 8px; padding: 1px 7px; margin-inline-start: 4px; }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }
