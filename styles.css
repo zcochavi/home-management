@@ -2794,3 +2794,6 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .gp-kg { color: var(--primary-600); font-weight: 600; cursor: pointer; }
 .gp-weight-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; font-size: 14px; color: var(--gray-600); }
 .gp-weight-row input { width: 110px; text-align: center; font-size: 16px; }
+.gp-chains { display: flex; gap: 8px; flex-wrap: wrap; }
+.gp-chain { font-family: inherit; font-size: 14px; font-weight: 600; color: var(--gray-600); background: var(--gray-100); border: 1.5px solid transparent; border-radius: var(--r-pill); padding: 7px 16px; cursor: pointer; }
+.gp-chain.sel { color: var(--primary-700); background: var(--primary-50); border-color: var(--primary-500); }

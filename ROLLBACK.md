@@ -27,8 +27,9 @@ git checkout 4a69d38 -- app.js index.html styles.css functions/
 
 Prices only add fields; nothing existing is changed or removed:
 
-- pool items: `barcode`, `productName`, `barcodeSkip`, `lastPrice`, `unitGrams`
-- shopping history entries: `price` on bought items
+- pool items: `barcode`, `productName`, `barcodeSkip`, `lastPrice`, `unitGrams`, and per chain
+  `barcodes`, `productNames`, `lastPrices`
+- shopping history entries: `price` and `chain` on bought items
 - family document: `groceryPrices` (`on`, `store`, `storeLabel`, `chainName`, `chain`, `dismissed`)
 
 The old version ignores these fields and keeps them when it saves, so going back and forth loses
