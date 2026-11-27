@@ -420,6 +420,8 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
   border-radius: var(--r-pill); padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap; }
 .hist-stats-btn + .pool-search-toggle { margin-inline-start: 6px; }
 
+.gstat-season { display: inline-block; font-size: 10px; font-weight: 800; color: #2563eb; background: #e0ecff; border-radius: 8px; padding: 1px 7px; margin-inline-start: 4px; }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }

@@ -10750,7 +10750,8 @@ async function doneShopping() {
 // is an admin setting): every "done shopping" updates them, nothing ever expires.
 // families/{uid}/stats/purchases =
 //   { v: 2, trips: { n, first, last, byMonth: { 'YYYY-MM': n } },
-//     items: { <key>: { name, n, first, last, gaps: [days…last 12], qtys: [last 12] } } }
+//     items: { <key>: { name, n, first, last, gaps: [days…last 12], qtys: [last 12],
+//                       byMonth: { '01'..'12': n } } } }   — calendar month, all years together
 // Started from the existing history the first time (or from the earlier raw log). From it:
 // "maybe you forgot" suggestions and the statistics view.
 const PL_RECENT = 12;
@@ -10778,6 +10779,8 @@ function _plAdd(log, trip) {
     }
     it.n++; it.last = ts; it.name = b.name;
     it.qtys = [...it.qtys, Number(b.qty) || 1].slice(-PL_RECENT);
+    const mm = _plMonth(ts).slice(5);
+    it.byMonth = { ...(it.byMonth || {}), [mm]: ((it.byMonth || {})[mm] || 0) + 1 };
   });
 }
 // The earlier format (a year of raw purchases) → running statistics
@@ -10817,18 +10820,45 @@ async function _logPurchases(trip) {
 }
 const _median = a => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 // Per item: how often it's bought, how much, when last, and whether it's due again
+// Time of year. Per calendar month: the item's purchases per month of shopping (months with trips,
+// all years together). season = its rate in this month and the two around it ÷ its rate over the
+// whole year — 1 normal, < 1 off season (ice lollies in winter), > 1 in season. Needs shopping in at
+// least 6 different calendar months and 4 purchases; otherwise 1 (not enough to tell yet).
+const WINTER_MM = ['11', '12', '01', '02', '03'], SUMMER_MM = ['06', '07', '08', '09'];
+function _plSeason(log, it, now = Date.now()) {
+  const tripMonths = {};
+  Object.entries(log.trips.byMonth || {}).forEach(([ym, c]) => { if (c) { const mm = ym.slice(5); tripMonths[mm] = (tripMonths[mm] || 0) + 1; } });
+  const observed = Object.keys(tripMonths);
+  const res = { factor: 1, label: '' };
+  if (observed.length < 6 || (it.n || 0) < 4 || !it.byMonth) return res;
+  const rate = mm => tripMonths[mm] ? (it.byMonth[mm] || 0) / tripMonths[mm] : null;
+  const all = observed.map(rate), avg = all.reduce((a, b) => a + b, 0) / all.length;
+  if (!avg) return res;
+  const cur = new Date(now).getMonth();
+  const win = [-1, 0, 1].map(d => String(((cur + d + 12) % 12) + 1).padStart(2, '0')).map(rate).filter(r => r !== null);
+  if (win.length) res.factor = (win.reduce((a, b) => a + b, 0) / win.length) / avg;
+  // "mostly winter / summer": that season's average rate at least twice the other's
+  const seasonRate = mms => { const r = mms.map(rate).filter(x => x !== null); return r.length ? r.reduce((a, b) => a + b, 0) / r.length : null; };
+  const w = seasonRate(WINTER_MM), su = seasonRate(SUMMER_MM);
+  if (w !== null && su !== null) res.label = w >= su * 2 && w > 0 ? 'winter' : su >= w * 2 && su > 0 ? 'summer' : '';
+  return res;
+}
+
 function _groceryStats(log, now = Date.now()) {
   if (!log?.items) return [];
   return Object.values(log.items).filter(it => it.n).map(it => {
     const gap = _median(it.gaps || []);
+    const season = _plSeason(log, it, now);
     const since = (now - it.last) / 864e5;
     const spanMonths = Math.max(1, (now - Math.min(log.trips.first || it.first, it.first)) / (30.4 * 864e5));
     return {
       name: it.name, n: it.n, last: it.last, since, gap,
       perMonth: it.n / spanMonths,
       qty: _median(it.qtys || []) || 1,
-      due: it.n >= 3 && gap >= 1 && since >= gap * 0.85,
-      score: gap ? since / gap : 0,
+      // Due: its usual interval has passed — and it isn't off season now (half its usual rate or less)
+      due: it.n >= 3 && gap >= 1 && since >= gap * 0.85 && season.factor >= 0.5,
+      score: (gap ? since / gap : 0) * Math.min(2, Math.max(0.5, season.factor)),
+      season: season.label, seasonFactor: season.factor,
     };
   });
 }
@@ -10856,7 +10886,7 @@ function _grocerySuggestHtml() {
     ${list.map(x => `<div class="gsugg-row">
       <div class="gsugg-info">
         <div class="gsugg-name">${esc(x.name)}</div>
-        <div class="gsugg-why">נקנה ${_fmtEvery(x.gap)} · לאחרונה ${_fmtAgo(x.since)}</div>
+        <div class="gsugg-why">${x.seasonFactor >= 1.2 ? (x.season === 'winter' ? '❄️ עונת החורף · ' : x.season === 'summer' ? '☀️ עונת הקיץ · ' : '') : ''}נקנה ${_fmtEvery(x.gap)} · לאחרונה ${_fmtAgo(x.since)}</div>
       </div>
       <button class="gsugg-add" data-key="${esc(_plKey(x.name))}" onclick="addSuggestedItem(this.dataset.key)">+ להוסיף</button>
       <button class="gsugg-skip" data-key="${esc(_plKey(x.name))}" onclick="dismissSuggestedItem(this.dataset.key)" aria-label="לא הפעם">✕</button>
@@ -10913,7 +10943,7 @@ async function renderGroceryStats() {
       <span class="gstat-bar-m">${m.toLocaleDateString('he-IL', { month: 'short' })}</span></div>`).join('')}</div>
     <div class="gstat-label">המוצרים שלכם</div>
     <div class="gstat-list">${stats.slice(0, 40).map(x => `<div class="gstat-row">
-      <div class="gstat-name">${esc(x.name)}${x.due ? ' <span class="gstat-due">כדאי לקנות</span>' : ''}</div>
+      <div class="gstat-name">${esc(x.name)}${x.season === 'winter' ? ' <span class="gstat-season">❄️ בעיקר בחורף</span>' : x.season === 'summer' ? ' <span class="gstat-season">☀️ בעיקר בקיץ</span>' : ''}${x.due ? ' <span class="gstat-due">כדאי לקנות</span>' : ''}</div>
       <div class="gstat-meta">${fmtRate(x.perMonth)}${x.n >= 3 && x.gap ? ' · ' + _fmtEvery(x.gap) : ''} · בד״כ ${Math.round(x.qty * 10) / 10} יח׳ · לאחרונה ${_fmtAgo(x.since)}</div>
     </div>`).join('')}</div>`;
 }
