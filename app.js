@@ -10914,11 +10914,63 @@ function dismissSuggestedItem(key) {
 }
 
 // Statistics tab
+let _gstatItem = null, _gstatQuery = '';
+function openItemStats(key) { _gstatItem = key; renderGroceryStats(); el('grocerySec-stats')?.scrollIntoView({ block: 'start' }); }
+function closeItemStats() { _gstatItem = null; renderGroceryStats(); }
+function onGstatSearch(v) {
+  _gstatQuery = v;
+  const q = _plKey(v);
+  document.querySelectorAll('#groceryStatsEl .gstat-row').forEach(r => { r.style.display = !q || (r.dataset.key || '').includes(q) ? '' : 'none'; });
+}
+// One item: its numbers, a year-round chart by calendar month, recent purchases and when it's next due
+function _itemStatsHtml(log, key, now) {
+  const it = log.items[key];
+  const x = _groceryStats({ ...log, items: { [key]: it } }, now)[0];
+  if (!it || !x) return `<div class="empty">המוצר לא נמצא</div>`;
+  const fmtD = ts => new Date(ts).toLocaleDateString('he-IL', { day: 'numeric', month: 'short', year: 'numeric' });
+  // recent purchase dates, from the last one back through the recent gaps
+  const dates = [it.last];
+  [...(it.gaps || [])].reverse().forEach(g => dates.push(dates[dates.length - 1] - g * 864e5));
+  const recent = dates.slice(0, Math.min(dates.length, (it.qtys || []).length || dates.length));
+  const qtys = [...(it.qtys || [])].reverse();
+  const mm = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+  const vals = mm.map(m => (it.byMonth || {})[m] || 0), maxV = Math.max(1, ...vals);
+  const curM = String(new Date(now).getMonth() + 1).padStart(2, '0');
+  const next = x.gap ? it.last + x.gap * 864e5 : null;
+  const nextTxt = !next ? '—' : next <= now ? 'עכשיו' : (() => { const d = Math.ceil((next - now) / 864e5); return d <= 1 ? 'מחר' : `בעוד ${d} ימים`; })();
+  const seasonTxt = x.season === 'winter' ? '❄️ בעיקר בחורף' : x.season === 'summer' ? '☀️ בעיקר בקיץ' : 'כל השנה';
+  return `<div class="gitem">
+    <div class="gitem-head"><div class="gitem-name">${esc(it.name)}</div>${x.due ? '<span class="gstat-due">כדאי לקנות</span>' : ''}</div>
+    <div class="gstat-summary gitem-nums">
+      <div><b>${it.n}</b><span>פעמים נקנה</span></div>
+      <div><b>${x.gap ? Math.round(x.gap) : '—'}</b><span>ימים בין קניות</span></div>
+      <div><b>${Math.round(x.qty * 10) / 10}</b><span>יח׳ בכל קנייה</span></div>
+    </div>
+    <div class="gitem-facts">
+      <div><span>קנייה אחרונה</span><b>${fmtD(it.last)} (${_fmtAgo(x.since)})</b></div>
+      <div><span>הקנייה הבאה צפויה</span><b>${nextTxt}</b></div>
+      <div><span>בכמה זמן</span><b>${x.gap ? _fmtEvery(x.gap) : 'עוד אין מספיק קניות'}</b></div>
+      <div><span>עונה</span><b>${seasonTxt}</b></div>
+      <div><span>נקנה לראשונה</span><b>${fmtD(it.first)}</b></div>
+    </div>
+    <div class="gstat-label">קניות לפי חודשי השנה</div>
+    <div class="gstat-bars gitem-bars">${mm.map((m, i) => `<div class="gstat-bar${m === curM ? ' cur' : ''}"><span class="gstat-bar-n">${vals[i] || ''}</span>
+      <div class="gstat-bar-fill" style="height:${Math.round(vals[i] / maxV * 100)}%"></div>
+      <span class="gstat-bar-m">${new Date(2026, i, 1).toLocaleDateString('he-IL', { month: 'narrow' })}</span></div>`).join('')}</div>
+    <div class="gstat-label">קניות אחרונות</div>
+    <div class="gitem-recent">${recent.map((t, i) => `<div><span>${fmtD(t)}</span><b>${qtys[i] != null ? qtys[i] + ' יח׳' : ''}</b></div>`).join('')}</div>
+  </div>`;
+}
+
 async function renderGroceryStats() {
   const box = el('groceryStatsEl');
   if (!box) return;
   if (!_purchaseLog) { box.innerHTML = `<div class="empty">⏳ טוען…</div>`; await _loadPurchaseLog(); }
   const log = _purchaseLog, now = Date.now();
+  if (_gstatItem && log.items[_gstatItem]) {
+    box.innerHTML = `<button class="hist-stats-btn gitem-back" onclick="closeItemStats()">‹ כל המוצרים</button>` + _itemStatsHtml(log, _gstatItem, now);
+    return;
+  }
   const stats = _groceryStats(log, now).sort((a, b) => b.perMonth - a.perMonth);
   if (!log.trips.n || !stats.length) {
     box.innerHTML = `<div class="empty">עוד אין מספיק קניות. אחרי כמה קניות (״סיימתי קניות״) יופיעו כאן הנתונים.</div>`;
@@ -10941,11 +10993,13 @@ async function renderGroceryStats() {
     <div class="gstat-bars">${months.map((m, i) => `<div class="gstat-bar"><span class="gstat-bar-n">${counts[i] || ''}</span>
       <div class="gstat-bar-fill" style="height:${Math.round(counts[i] / maxC * 100)}%"></div>
       <span class="gstat-bar-m">${m.toLocaleDateString('he-IL', { month: 'short' })}</span></div>`).join('')}</div>
-    <div class="gstat-label">המוצרים שלכם</div>
-    <div class="gstat-list">${stats.slice(0, 40).map(x => `<div class="gstat-row">
+    <div class="gstat-label">המוצרים שלכם <span class="gstat-hint">· לחצו על מוצר לפרטים</span></div>
+    <input class="pool-search gstat-search" type="search" placeholder="חיפוש מוצר..." value="${esc(_gstatQuery)}" oninput="onGstatSearch(this.value)">
+    <div class="gstat-list">${stats.map(x => `<div class="gstat-row" data-key="${esc(_plKey(x.name))}" onclick="openItemStats(this.dataset.key)">
       <div class="gstat-name">${esc(x.name)}${x.season === 'winter' ? ' <span class="gstat-season">❄️ בעיקר בחורף</span>' : x.season === 'summer' ? ' <span class="gstat-season">☀️ בעיקר בקיץ</span>' : ''}${x.due ? ' <span class="gstat-due">כדאי לקנות</span>' : ''}</div>
       <div class="gstat-meta">${fmtRate(x.perMonth)}${x.n >= 3 && x.gap ? ' · ' + _fmtEvery(x.gap) : ''} · בד״כ ${Math.round(x.qty * 10) / 10} יח׳ · לאחרונה ${_fmtAgo(x.since)}</div>
     </div>`).join('')}</div>`;
+  if (_gstatQuery) onGstatSearch(_gstatQuery);
 }
 
 function _histEntryHtml(entry, searchTerm) {

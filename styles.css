@@ -422,6 +422,23 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
 
 .gstat-season { display: inline-block; font-size: 10px; font-weight: 800; color: #2563eb; background: #e0ecff; border-radius: 8px; padding: 1px 7px; margin-inline-start: 4px; }
 
+/* One item's statistics */
+.gstat-row { cursor: pointer; }
+.gstat-row:active { background: var(--gray-50); }
+.gstat-hint { font-weight: 600; color: var(--gray-400); }
+.gstat-search { margin: 0 0 6px; }
+.gitem-back { margin: 0 0 12px; }
+.gitem-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.gitem-name { font-size: 20px; font-weight: 900; color: var(--gray-900); }
+.gitem-facts { display: flex; flex-direction: column; gap: 0; margin: 4px 0 6px; }
+.gitem-facts > div, .gitem-recent > div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--gray-100); font-size: 13px; }
+.gitem-facts span, .gitem-recent span { color: var(--gray-500); font-weight: 600; }
+.gitem-facts b, .gitem-recent b { color: var(--gray-900); font-weight: 800; text-align: end; }
+.gitem-bars { gap: 3px; }
+.gitem-bars .gstat-bar-fill { width: 80%; }
+.gstat-bar.cur .gstat-bar-fill { background: var(--primary-500); }
+.gstat-bar.cur .gstat-bar-m { color: var(--primary-500); font-weight: 900; }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }
