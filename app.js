@@ -10842,7 +10842,26 @@ function _gpRefresh(force) {
     .finally(() => { _gpLoading = null; if (S.tab === 'grocery' && _grocerySection === 'shopping') renderShoppingList(); });
   return _gpLoading;
 }
-// One list (or cart) entry's price: { state: 'priced' | 'unlinked' | 'missing' | 'loading', … }
+// Typical weight of one unit (grams), for products sold by weight but listed in units. Matched
+// against the item's name, then the product's — the first match wins, so "תפוח אדמה" before "תפוח".
+// The family can set its own per item (pool item field unitGrams).
+const GP_UNIT_GRAMS = [
+  ['תפוח אדמה', 200], ['תפוחי אדמה', 200], ['בטטה', 300], ['עגבני', 150], ['מלפפון', 120], ['בצל', 150],
+  ['תפוח', 180], ['בננ', 150], ['אבוקדו', 200], ['לימון', 100], ['פלפל', 200], ['חציל', 350], ['קישוא', 200],
+  ['תפוז', 200], ['קלמנטינ', 80], ['אשכולית', 300], ['גזר', 100], ['סלק', 200], ['אגס', 180], ['אפרסק', 150],
+  ['נקטרינ', 150], ['שזיף', 60], ['מנגו', 350], ['קיווי', 80], ['רימון', 300], ['כרובית', 800], ['ברוקולי', 400],
+  ['כרוב', 1200], ['מלון', 1500], ['חזה עוף', 250], ['שוק עוף', 200], ['פרגית', 120],
+];
+function _gpUnitGrams(pool, pr) {
+  if (pool?.unitGrams > 0) return pool.unitGrams;
+  for (const txt of [pool?.name, pr?.name]) {
+    const hit = txt && GP_UNIT_GRAMS.find(([w]) => String(txt).includes(w));
+    if (hit) return hit[1];
+  }
+  return 0;
+}
+const _gpKg = kg => (Math.round(kg * 10) / 10 || Math.round(kg * 100) / 100).toString();
+// One list (or cart) entry's price: { state: 'priced' | 'unlinked' | 'missing' | 'loading' | 'needWeight', … }
 function _gpLine(item) {
   const pool = S.groceryPool.find(p => p.id === item.poolId);
   const code = _gpBarcode(pool);
@@ -10850,10 +10869,15 @@ function _gpLine(item) {
   const pr = _gpPrices[code];
   if (!pr) return { state: _gpLoading || !_gpAsked.has(code) ? 'loading' : 'missing', pool, code };
   const qty = Number(item.qty ?? 1) || 1;
-  // Sold by weight: the price is per kilo — a list quantity in units counts as about a kilo each
-  const total = pr.price * qty;
   const delta = pool?.lastPrice && Math.abs(pr.price - pool.lastPrice) >= 0.05 ? pr.price - pool.lastPrice : 0;
-  return { state: 'priced', pool, code, pr, total, est: !!pr.weighted, delta };
+  // Sold by weight (price per kilo) but listed in units: units × the weight of one unit
+  if (pr.weighted && item.qtyType !== 'kg') {
+    const grams = _gpUnitGrams(pool, pr);
+    if (!grams) return { state: 'needWeight', pool, code, pr };
+    const kg = qty * grams / 1000;
+    return { state: 'priced', pool, code, pr, total: pr.price * kg, est: true, kg, delta };
+  }
+  return { state: 'priced', pool, code, pr, total: pr.price * qty, est: !!pr.weighted, delta };
 }
 function _gpProductLine(line, poolId) {
   const pick = `onclick="openGpPicker(${poolId});event.stopPropagation()"`;
@@ -10861,7 +10885,11 @@ function _gpProductLine(line, poolId) {
   if (line.state === 'loading') return `<div class="gp-prod gp-muted">טוען מחיר…</div>`;
   if (line.state === 'missing') return `<div class="gp-prod gp-muted" ${pick} role="button">המוצר לא נמצא בסניף · בחר אחר</div>`;
   const pr = line.pr;
+  if (line.state === 'needWeight') return `<div class="gp-prod" ${pick} role="button">${esc(pr.name)} · ${_gpMoney(pr.price)} לק"ג</div>
+    <button class="gp-link-btn" onclick="openGpWeight(${poolId});event.stopPropagation()">הוסף משקל ליחידה</button>`;
+  const weigh = line.kg ? `<span class="gp-kg" onclick="openGpWeight(${poolId});event.stopPropagation()" role="button">≈${_gpKg(line.kg)} ק"ג</span> · ` : '';
   const per = pr.weighted ? ` · ${_gpMoney(pr.price)} לק"ג` : '';
+  if (weigh) return `<div class="gp-prod">${weigh}<span ${pick} role="button">${esc(pr.name)}${per}</span></div>`;
   return `<div class="gp-prod" ${pick} role="button">${esc(pr.name)}${per}</div>`;
 }
 function _gpPriceHtml(line, qty) {
@@ -10944,6 +10972,7 @@ function openGpPicker(poolId) {
       oninput="_gpSearchSoon()" onkeydown="if(event.key==='Enter')_gpSearchNow()">
     <div id="gpResults" class="gp-results"><div class="gp-muted gp-center">מחפש…</div></div>
     <div class="gp-sheet-note">השם ברשימה נשאר "${esc(p.name)}" — אפשר לשנות אותו מתי שרוצים בעריכת הפריט במאגר, והמוצר יישאר מקושר.</div>
+    ${code && _gpPrices[code]?.weighted ? `<div class="gp-sheet-note">⚖️ נמכר במשקל · ${_gpUnitGrams(p, _gpPrices[code]) ? `יחידה ≈ ${_gpUnitGrams(p, _gpPrices[code])} גרם` : 'אין משקל ליחידה'} <button class="gp-link-btn" onclick="openGpWeight(${poolId})">משקל ליחידה</button></div>` : ''}
     <div class="gp-sheet-btns">
       ${code ? `<button class="gp-btn2" onclick="_gpUnlink(${poolId}, false)">הסרת הקישור</button>` : ''}
       ${!p.barcodeSkip ? `<button class="gp-btn2" onclick="_gpUnlink(${poolId}, true)">בלי מוצר</button>` : ''}
@@ -11001,12 +11030,48 @@ function _gpUnlink(poolId, skip) {
   if (skip) p.barcodeSkip = true; else delete p.barcodeSkip;
   saveGrocery(); _gpCloseSheet(); renderShoppingList(); renderPool();
 }
+// Weight of one unit, for an item sold by weight that the family lists in units
+function openGpWeight(poolId) {
+  const p = S.groceryPool.find(x => x.id === poolId);
+  if (!p) return;
+  const code = _gpBarcode(p), pr = code && _gpPrices[code];
+  const typical = _gpUnitGrams({ name: p.name }, pr);
+  _gpSheetKind = 'weight'; _gpPickFor = null;
+  _gpSheet(`
+    <div class="gp-sheet-h">כמה שוקלת יחידה של ${esc(p.name)}?</div>
+    <div class="gp-sheet-sub">${pr ? `${esc(pr.name)} · ${_gpMoney(pr.price)} לק"ג` : 'נמכר במשקל'}</div>
+    <div class="gp-weight-row">
+      <input class="g-input" id="gpWeightIn" type="number" inputmode="numeric" min="1" max="20000" step="10"
+        value="${p.unitGrams || typical || ''}" placeholder="למשל 150" onkeydown="if(event.key==='Enter')_gpSaveWeight(${poolId})">
+      <span>גרם</span>
+    </div>
+    <div class="gp-sheet-note">כשהפריט ברשימה ביחידות (למשל 4 ${esc(p.name)}), המחיר מחושב לפי המשקל הזה.${typical ? ` משקל רגיל: ${typical} גרם.` : ''} פריטים ברשימה בק"ג מחושבים כרגיל.</div>
+    <div class="gp-sheet-btns">
+      <button class="gp-btn" onclick="_gpSaveWeight(${poolId})">שמירה</button>
+      ${p.unitGrams ? `<button class="gp-btn2" onclick="_gpSaveWeight(${poolId}, true)">חזרה למשקל הרגיל</button>` : ''}
+      <button class="gp-btn2" onclick="_gpCloseSheet()">ביטול</button>
+    </div>`);
+  setTimeout(() => el('gpWeightIn')?.focus(), 250);
+}
+function _gpSaveWeight(poolId, reset) {
+  const p = S.groceryPool.find(x => x.id === poolId);
+  if (!p) return;
+  if (reset) delete p.unitGrams;
+  else {
+    const g = Math.round(Number(el('gpWeightIn')?.value));
+    if (!(g > 0 && g <= 20000)) return;
+    p.unitGrams = g;
+  }
+  saveGrocery(); _gpCloseSheet(); renderShoppingList(); renderPool();
+}
 // Under the pool item's edit row: which product it is, and a way to change it
 function _gpPoolLinkHtml(p) {
   if (!_gpOn()) return '';
   const code = _gpBarcode(p), pr = code && _gpPrices[code];
   const what = code ? esc(pr?.name || p.productName || 'מוצר מקושר') : (p.barcodeSkip ? 'בלי מוצר' : 'לא מקושר למוצר');
-  return `<div class="gp-pool-link">🏷️ ${what}${pr ? ` · ${_gpMoney(pr.price)}` : ''} <button class="gp-link-btn" onclick="openGpPicker(${p.id})">${code ? 'שינוי מוצר' : 'בחר מוצר'}</button></div>`;
+  const grams = pr?.weighted ? _gpUnitGrams(p, pr) : 0;
+  return `<div class="gp-pool-link">🏷️ ${what}${pr ? ` · ${_gpMoney(pr.price)}${pr.weighted ? ' לק"ג' : ''}` : ''} <button class="gp-link-btn" onclick="openGpPicker(${p.id})">${code ? 'שינוי מוצר' : 'בחר מוצר'}</button>
+    ${pr?.weighted ? `<button class="gp-link-btn" onclick="openGpWeight(${p.id})">⚖️ ${grams ? `יחידה ≈ ${grams} גרם` : 'משקל ליחידה'}</button>` : ''}</div>`;
 }
 
 // Settings: prices on/off and the branch
