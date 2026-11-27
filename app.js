@@ -10746,53 +10746,63 @@ async function doneShopping() {
 // ════════════════════════════════════════
 //  SHOPPING INSIGHTS
 // ════════════════════════════════════════
-// A year of purchases per item, kept apart from the shopping history (which keeps only the
-// last 50 trips / its TTL): families/{uid}/stats/purchases =
-//   { trips: [ts, ...], items: { <key>: { name, buys: [[ts, qty], ...] } } }
-// Started from the existing history the first time. From it: "maybe you forgot" suggestions
-// (items bought regularly whose usual interval has passed) and a statistics tab.
-const PL_KEEP_MS = 365 * 864e5, PL_MAX_BUYS = 120;
+// Running statistics per item, kept forever and apart from the shopping history (whose period
+// is an admin setting): every "done shopping" updates them, nothing ever expires.
+// families/{uid}/stats/purchases =
+//   { v: 2, trips: { n, first, last, byMonth: { 'YYYY-MM': n } },
+//     items: { <key>: { name, n, first, last, gaps: [days…last 12], qtys: [last 12] } } }
+// Started from the existing history the first time (or from the earlier raw log). From it:
+// "maybe you forgot" suggestions and the statistics view.
+const PL_RECENT = 12;
 let _purchaseLog = null, _purchaseLogLoading = null;
 const _plKey = name => String(name || '').trim().toLowerCase()
   .replace(/[\u05F4\u201C\u201D"]/g, '"').replace(/[\u05F3\u2018\u2019']/g, "'").replace(/\s+/g, ' ');
 const _plRef = () => fbDb.collection('families').doc(S.uid).collection('stats').doc('purchases');
+const _plMonth = ts => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const _plEmpty = () => ({ v: 2, trips: { n: 0, first: 0, last: 0, byMonth: {} }, items: {} });
 function _plAdd(log, trip) {
   const ts = trip.ts || Date.now();
-  if (!log.trips.includes(ts)) log.trips.push(ts);
+  if (ts <= (log.trips.last || 0)) return; // already counted (or older than what's counted)
+  const T = log.trips;
+  T.n++; T.first = T.first || ts; T.last = ts;
+  T.byMonth[_plMonth(ts)] = (T.byMonth[_plMonth(ts)] || 0) + 1;
+  const seen = new Set();
   (trip.bought || []).forEach(b => {
     const k = _plKey(b.name);
-    if (!k) return;
-    const it = (log.items[k] ||= { name: b.name, buys: [] });
-    if (!it.buys.some(x => x[0] === ts)) it.buys.push([ts, Number(b.qty) || 1]);
-    it.name = b.name;
+    if (!k || seen.has(k)) return;
+    seen.add(k);
+    const it = (log.items[k] ||= { name: b.name, n: 0, first: ts, last: 0, gaps: [], qtys: [] });
+    if (it.last) {
+      const gap = Math.round((ts - it.last) / 864e5);
+      if (gap > 0) it.gaps = [...it.gaps, gap].slice(-PL_RECENT);
+    }
+    it.n++; it.last = ts; it.name = b.name;
+    it.qtys = [...it.qtys, Number(b.qty) || 1].slice(-PL_RECENT);
   });
 }
-function _plTrim(log, now = Date.now()) {
-  const cut = now - PL_KEEP_MS;
-  log.trips = log.trips.filter(t => t >= cut).sort((a, b) => a - b);
-  Object.keys(log.items).forEach(k => {
-    const it = log.items[k];
-    it.buys = it.buys.filter(b => b[0] >= cut).sort((a, b) => a[0] - b[0]).slice(-PL_MAX_BUYS);
-    if (!it.buys.length) delete log.items[k];
-  });
+// The earlier format (a year of raw purchases) → running statistics
+function _plFromRaw(raw) {
+  const log = _plEmpty();
+  const byTs = {};
+  (raw.trips || []).forEach(t => { byTs[t] ||= { ts: t, bought: [] }; });
+  Object.values(raw.items || {}).forEach(it => (it.buys || []).forEach(([t, q]) => { (byTs[t] ||= { ts: t, bought: [] }).bought.push({ name: it.name, qty: q }); }));
+  Object.values(byTs).sort((a, b) => a.ts - b.ts).forEach(t => _plAdd(log, t));
   return log;
 }
 async function _loadPurchaseLog() {
   if (_purchaseLog) return _purchaseLog;
   if (_purchaseLogLoading) return _purchaseLogLoading;
   _purchaseLogLoading = (async () => {
-    let log = null;
-    try {
-      const d = (await _plRef().get()).data();
-      if (d?.trips) log = { trips: d.trips || [], items: d.items || {} };
-    } catch (e) { console.warn('[insights] load:', e.message); }
-    if (!log) { // first time: start from the shopping history
-      log = { trips: [], items: {} };
-      [...(S.shoppingHistory || [])].reverse().forEach(t => _plAdd(log, t));
-      _plTrim(log);
+    let log = null, d = null;
+    try { d = (await _plRef().get()).data(); } catch (e) { console.warn('[insights] load:', e.message); }
+    if (d?.v === 2) log = d;
+    else if (d && Array.isArray(d.trips)) { log = _plFromRaw(d); _plRef().set(log).catch(() => {}); }
+    else { // first time: start from the shopping history
+      log = _plEmpty();
+      [...(S.shoppingHistory || [])].sort((a, b) => a.ts - b.ts).forEach(t => _plAdd(log, t));
       _plRef().set(log).catch(() => {});
     }
-    _purchaseLog = _plTrim(log);
+    _purchaseLog = log;
     _purchaseLogLoading = null;
     return _purchaseLog;
   })();
@@ -10802,31 +10812,23 @@ async function _logPurchases(trip) {
   try {
     const log = await _loadPurchaseLog();
     _plAdd(log, trip);
-    _plTrim(log);
     await _plRef().set(log);
   } catch (e) { console.warn('[insights] save:', e.message); }
 }
 const _median = a => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
 // Per item: how often it's bought, how much, when last, and whether it's due again
 function _groceryStats(log, now = Date.now()) {
-  if (!log) return [];
-  const firstTrip = log.trips.length ? Math.min(...log.trips) : now;
-  return Object.values(log.items).map(it => {
-    const days = [...new Set(it.buys.map(b => Math.floor(b[0] / 864e5)))].sort((a, b) => a - b);
-    const gaps = days.slice(1).map((d, i) => d - days[i]).filter(g => g > 0);
-    const gap = _median(gaps);
-    const last = it.buys[it.buys.length - 1][0];
-    const since = (now - last) / 864e5;
-    const spanMonths = Math.max(1, (now - Math.min(firstTrip, it.buys[0][0])) / (30.4 * 864e5));
-    const n = it.buys.length;
-    const tripsSince = log.trips.filter(t => t > last).length;
+  if (!log?.items) return [];
+  return Object.values(log.items).filter(it => it.n).map(it => {
+    const gap = _median(it.gaps || []);
+    const since = (now - it.last) / 864e5;
+    const spanMonths = Math.max(1, (now - Math.min(log.trips.first || it.first, it.first)) / (30.4 * 864e5));
     return {
-      name: it.name, n, last, since, gap,
-      perMonth: n / spanMonths,
-      qty: _median(it.buys.map(b => b[1])) || 1,
-      due: n >= 3 && gap >= 1 && since >= gap * 0.85,
+      name: it.name, n: it.n, last: it.last, since, gap,
+      perMonth: it.n / spanMonths,
+      qty: _median(it.qtys || []) || 1,
+      due: it.n >= 3 && gap >= 1 && since >= gap * 0.85,
       score: gap ? since / gap : 0,
-      tripsSince,
     };
   });
 }
@@ -10837,7 +10839,7 @@ function _grocerySuggestions() {
   const inList = new Set([...S.shoppingList, ...S.inCart].map(x => _plKey(x.name)));
   let dismissed = {};
   try { dismissed = JSON.parse(localStorage.getItem(_plDismissKey()) || '{}'); } catch (e) {}
-  const trip = _purchaseLog.trips.length;
+  const trip = _purchaseLog.trips.n;
   return _groceryStats(_purchaseLog)
     .filter(x => x.due && !inList.has(_plKey(x.name)) && dismissed[_plKey(x.name)] !== trip)
     .sort((a, b) => b.score - a.score).slice(0, 6);
@@ -10876,7 +10878,7 @@ function addSuggestedItem(key) {
 function dismissSuggestedItem(key) {
   let d = {};
   try { d = JSON.parse(localStorage.getItem(_plDismissKey()) || '{}'); } catch (e) {}
-  d[key] = _purchaseLog?.trips.length || 0; // hidden until the next shopping trip
+  d[key] = _purchaseLog?.trips.n || 0; // hidden until the next shopping trip
   try { localStorage.setItem(_plDismissKey(), JSON.stringify(d)); } catch (e) {}
   renderShoppingList();
 }
@@ -10888,21 +10890,21 @@ async function renderGroceryStats() {
   if (!_purchaseLog) { box.innerHTML = `<div class="empty">⏳ טוען…</div>`; await _loadPurchaseLog(); }
   const log = _purchaseLog, now = Date.now();
   const stats = _groceryStats(log, now).sort((a, b) => b.perMonth - a.perMonth);
-  if (!log.trips.length || !stats.length) {
+  if (!log.trips.n || !stats.length) {
     box.innerHTML = `<div class="empty">עוד אין מספיק קניות. אחרי כמה קניות (״סיימתי קניות״) יופיעו כאן הנתונים.</div>`;
     return;
   }
   // trips per month, last 6 months
   const months = [];
   for (let i = 5; i >= 0; i--) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); months.push(d); }
-  const counts = months.map(m => log.trips.filter(t => { const d = new Date(t); return d.getMonth() === m.getMonth() && d.getFullYear() === m.getFullYear(); }).length);
+  const counts = months.map(m => log.trips.byMonth[_plMonth(m.getTime())] || 0);
   const maxC = Math.max(1, ...counts);
   const fmtRate = r => r >= 1.5 ? `${Math.round(r * 10) / 10} פעמים בחודש` : r >= 0.75 ? 'בערך פעם בחודש'
     : r >= 0.2 ? `פעם ב-${Math.max(2, Math.round(1 / r))} חודשים` : 'לעתים רחוקות';
   box.innerHTML = `
     <div class="gstat-summary">
-      <div><b>${log.trips.length}</b><span>קניות</span></div>
-      <div><b>${(log.trips.length / Math.max(1, (now - Math.min(...log.trips)) / (30.4 * 864e5))).toFixed(1).replace('.0', '')}</b><span>קניות בחודש</span></div>
+      <div><b>${log.trips.n}</b><span>קניות</span></div>
+      <div><b>${(log.trips.n / Math.max(1, (now - log.trips.first) / (30.4 * 864e5))).toFixed(1).replace('.0', '')}</b><span>קניות בחודש</span></div>
       <div><b>${stats.length}</b><span>מוצרים שונים</span></div>
     </div>
     <div class="gstat-label">קניות בחודש</div>
