@@ -10983,6 +10983,7 @@ function _gpTotalHtml() {
       <button class="gp-store-chip" onclick="openGpSettings()">${esc(cfg.chainName || 'חצי חינם')} · ${esc(cfg.storeLabel || '')} ⚙️</button>
     </div>
     ${sum ? `<div class="gp-meter"><i style="width:${Math.round(cartSum / sum * 100)}%"></i></div>` : ''}
+    ${priced.length ? `<div class="gp-cmp-row"><button class="gp-cmp-btn" onclick="openGpCompare()">⚖️ השוואה בין סניפים</button></div>` : ''}
     <div class="gp-total-note"><span>${cartSum ? `בעגלה ${_gpMoney(cartSum)}` : ''}${cartSum && notes.length ? ' · ' : ''}${notes.join(' · ')}</span><span>${_gpError ? 'לא הצלחנו לטעון מחירים' : whenTxt}</span></div>
   </div>`;
 }
@@ -11023,7 +11024,7 @@ function _gpSheet(html) {
   requestAnimationFrame(() => ov.classList.add('open'));
   return ov;
 }
-function _gpCloseSheet() { el('gpSheetOv')?.classList.remove('open'); _gpPickFor = null; _gpSheetKind = null; }
+function _gpCloseSheet() { el('gpSheetOv')?.classList.remove('open'); _gpPickFor = null; _gpSheetKind = null; _gpCmp = null; }
 
 // Product picker: choose which product a list item is, once — the item keeps its own name
 function openGpPicker(poolId) {
@@ -11110,6 +11111,120 @@ function _gpUnlink(poolId, skip) {
   if (skip) _gpCloseSheet();
   else openGpPicker(poolId); // stay in the picker to choose another product
 }
+// ── Compare branches: the list's cost in every chain's branches in the family branch's city ──
+// Each branch's products come from the server (op=basket): by barcode there (the family's choice
+// for that chain, or a real barcode), else by name. An item a branch doesn't have is counted at the
+// family branch's price, so totals stay comparable; the row says how many it found.
+let _gpCmp = null;
+function _gpCost(pr, item, pool) {
+  const qty = Number(item.qty ?? 1) || 1;
+  if (pr.weighted && item.qtyType !== 'kg') {
+    const g = _gpUnitGrams(pool, pr);
+    return g ? pr.price * qty * g / 1000 : null;
+  }
+  return pr.price * qty;
+}
+async function openGpCompare() {
+  const cfg = _gpCfg();
+  if (!_gpOn()) return;
+  const items = [...S.shoppingList, ...S.inCart].map(x => ({ x, pool: S.groceryPool.find(p => p.id === x.poolId), line: _gpLine(x) }));
+  const mine = cfg.chain + ':' + cfg.store;
+  const key = Date.now();
+  _gpCmp = { key, city: '', stores: null, res: {}, open: null, items, mine, error: null };
+  _gpSheetKind = 'compare'; _gpPickFor = null;
+  _gpSheet(`
+    <div class="gp-sheet-h">השוואה בין סניפים</div>
+    <div class="gp-sheet-sub" id="gpCmpSub">${items.length} פריטים ברשימה · מחפש סניפים בעיר…</div>
+    <div id="gpCmpList" class="gp-cmp-list"><div class="gp-muted gp-center">טוען…</div></div>
+    <div class="gp-sheet-note">מחירים לפי הקובץ היומי של כל סניף. מוצר שלא נמצא בסניף מחושב לפי המחיר אצלכם, ומוצר שנמצא לפי שם מסומן — ייתכן שזה לא בדיוק אותו מוצר.</div>
+    <div class="gp-sheet-btns"><button class="gp-btn" onclick="_gpCloseSheet()">סגירה</button></div>`);
+  try {
+    const d = await _gpFetch('city', { store: cfg.store });
+    if (_gpCmp?.key !== key) return;
+    _gpCmp.city = d.city;
+    const stores = d.stores || [];
+    if (!stores.some(st => st.chain + ':' + st.id === mine)) stores.push({ chain: cfg.chain, chainName: cfg.chainName, id: cfg.store, label: cfg.storeLabel });
+    _gpCmp.stores = stores;
+    el('gpCmpSub') && (el('gpCmpSub').textContent = `${items.length} פריטים ברשימה · ${stores.length} סניפים ב${d.city}`);
+  } catch (e) {
+    if (_gpCmp?.key !== key) return;
+    _gpCmp.error = 'לא הצלחנו למצוא את הסניפים בעיר. נסו שוב.'; _gpRenderCmp(); return;
+  }
+  // the family's branch from what's already loaded; the rest from the server, four at a time
+  _gpCmp.res[mine] = _gpCmpResult(items.map(o => o.line.state === 'priced' ? { ...o.line.pr, how: 'code' } : null));
+  _gpRenderCmp();
+  const queue = _gpCmp.stores.filter(st => st.chain + ':' + st.id !== mine);
+  const worker = async () => {
+    while (queue.length && _gpCmp?.key === key) {
+      const st = queue.shift(), k = st.chain + ':' + st.id;
+      try {
+        const body = { items: items.map(o => ({ code: _gpBarcode(o.pool, st.chain), product: o.line.pr?.name || '', name: o.x.name,
+          weighted: o.line.pr ? !!o.line.pr.weighted : null })) };
+        const d = await _gpFetch('basket', { chain: st.chain, store: st.id }, body);
+        if (_gpCmp?.key !== key) return;
+        _gpCmp.res[k] = _gpCmpResult(d.matches || []);
+      } catch (e) {
+        if (_gpCmp?.key !== key) return;
+        _gpCmp.res[k] = { error: true };
+      }
+      _gpRenderCmp();
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+}
+// A branch's matches → its total (missing items at the family branch's price) and per item lines
+function _gpCmpResult(matches) {
+  let total = 0, found = 0, counted = 0;
+  const lines = _gpCmp.items.map((o, i) => {
+    const m = matches[i];
+    const mineCost = o.line.state === 'priced' ? o.line.total : null;
+    const cost = m ? _gpCost(m, o.x, o.pool) : null;
+    if (cost != null) { total += cost; found++; counted++; return { m, cost, how: m.how }; }
+    if (mineCost != null) { total += mineCost; counted++; }
+    return { m: null, cost: mineCost, fallback: mineCost != null };
+  });
+  return { total, found, counted, lines };
+}
+function _gpRenderCmp() {
+  const box = el('gpCmpList');
+  if (!box || !_gpCmp) return;
+  if (_gpCmp.error) { box.innerHTML = `<div class="gp-muted gp-center">${esc(_gpCmp.error)}</div>`; return; }
+  if (!_gpCmp.stores) return;
+  const mine = _gpCmp.res[_gpCmp.mine], n = _gpCmp.items.length;
+  const rows = _gpCmp.stores.map(st => ({ st, k: st.chain + ':' + st.id, r: _gpCmp.res[st.chain + ':' + st.id] }));
+  const done = rows.filter(o => o.r && !o.r.error).sort((a, b) => a.r.total - b.r.total);
+  const cheapest = done[0]?.k;
+  const order = [...done, ...rows.filter(o => !o.r), ...rows.filter(o => o.r?.error)];
+  box.innerHTML = order.map(({ st, k, r }) => {
+    const isMine = k === _gpCmp.mine, open = _gpCmp.open === k;
+    const diff = r && !r.error && mine && !isMine ? r.total - mine.total : 0;
+    const right = !r ? '<span class="gp-muted">…</span>' : r.error ? '<span class="gp-muted">לא זמין</span>'
+      : `<b>${_gpMoney(r.total)}</b>${Math.abs(diff) >= 0.5 ? `<span class="gp-delta ${diff > 0 ? 'up' : 'down'}" dir="ltr">${diff > 0 ? '+' : '−'}${_gpMoney(Math.abs(diff))}</span>` : ''}`;
+    const detail = open && r && !r.error ? `<div class="gp-cmp-detail">${_gpCmp.items.map((o, i) => { const l = r.lines[i];
+        return `<div class="gp-cmp-item"><span>${esc(o.x.name)}${l.m ? `<small>${esc(l.m.name)}${l.how === 'name' ? ' · <em>לפי שם</em>' : ''}</small>` : `<small class="gp-muted">${l.fallback ? 'לא נמצא — לפי המחיר אצלכם' : 'לא נמצא'}</small>`}</span>
+          <b class="${l.m ? '' : 'gp-muted'}">${l.cost != null ? _gpMoney(l.cost) : '—'}</b></div>`; }).join('')}
+        ${!isMine ? `<button class="gp-btn gp-cmp-switch" onclick="_gpCmpSwitch('${esc(st.chain)}','${esc(st.id)}')">לעבור לסניף הזה</button>` : ''}</div>` : '';
+    return `<div class="gp-cmp-row-wrap${isMine ? ' mine' : ''}${open ? ' open' : ''}">
+      <button class="gp-cmp-store" onclick="_gpCmpToggle('${esc(k)}')" ${!r || r.error ? 'disabled' : ''}>
+        <span class="gp-cmp-name"><b>${esc(st.chainName || '')}</b> ${esc(_gpCmpLabel(st.label))}
+          <small>${isMine ? '<span class="gp-tag gp-tag-mine">הסניף שלכם</span> ' : ''}${k === cheapest && done.length > 1 ? '<span class="gp-tag">הכי זול</span> ' : ''}${r && !r.error ? `נמצאו ${r.found} מתוך ${n}` : ''}</small></span>
+        <span class="gp-cmp-total">${right}</span>
+      </button>${detail}</div>`;
+  }).join('');
+}
+// Within one city, the city in front of each branch name says nothing ("פתח תקווה · דיל יכין סנטר")
+const _gpCmpLabel = label => { const c = _gpCmp?.city || ''; const l = String(label || '');
+  return c && l.startsWith(c + ' · ') ? l.slice(c.length + 3) : l === c ? 'סניף ' + c : l; };
+function _gpCmpToggle(k) { if (!_gpCmp) return; _gpCmp.open = _gpCmp.open === k ? null : k; _gpRenderCmp(); }
+function _gpCmpSwitch(chain, id) {
+  const st = _gpCmp?.stores?.find(s => s.chain === chain && s.id === id);
+  if (!st) return;
+  _gpPrices = {}; _gpAsked = new Set(); _gpMeta = null;
+  _gpSaveCfg({ on: true, chain, store: id, storeLabel: st.label, chainName: st.chainName });
+  _gpRefresh(true);
+  _gpCloseSheet();
+}
+
 // Weight of one unit, for an item sold by weight that the family lists in units
 function openGpWeight(poolId) {
   const p = S.groceryPool.find(x => x.id === poolId);

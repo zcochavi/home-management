@@ -2816,3 +2816,22 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .gstat-empty-spend { background: var(--surface); border-radius: 14px; padding: 12px 14px; font-size: 13px; color: var(--gray-600); line-height: 1.55; border: 1.5px dashed var(--gray-200); }
 .gp-other { font-size: 12px; font-weight: 500; color: var(--gray-500); margin: 6px 2px 0; }
 #gpStoreSearch { position: sticky; top: 30px; z-index: 1; background: var(--surface); box-shadow: 0 -12px 0 var(--surface), 0 8px 10px -8px rgba(17,24,39,.15); }
+/* Compare branches */
+.gp-cmp-row { display: flex; justify-content: flex-start; margin-top: 8px; }
+.gp-cmp-btn { font-family: inherit; font-size: 12.5px; font-weight: 600; color: var(--primary-700); background: var(--primary-50); border: 1px solid var(--primary-100); border-radius: var(--r-pill); padding: 5px 12px; cursor: pointer; }
+.gp-cmp-list { display: flex; flex-direction: column; gap: 6px; }
+.gp-cmp-row-wrap { border: 1.5px solid var(--gray-200); border-radius: 14px; overflow: hidden; }
+.gp-cmp-row-wrap.mine { border-color: var(--primary-500); background: var(--primary-50); }
+.gp-cmp-store { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; background: none; border: none; font-family: inherit; text-align: right; cursor: pointer; }
+.gp-cmp-store:disabled { cursor: default; }
+.gp-cmp-name { flex: 1; min-width: 0; font-size: 13.5px; color: var(--gray-700); display: flex; flex-direction: column; gap: 2px; }
+.gp-cmp-name b { color: var(--gray-900); }
+.gp-cmp-name small { font-size: 11.5px; color: var(--gray-500); }
+.gp-cmp-total { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 15px; color: var(--gray-900); flex: none; }
+.gp-tag-mine { color: var(--primary-700); background: var(--primary-100); }
+.gp-cmp-detail { padding: 0 12px 12px; border-top: 1px solid var(--gray-100); }
+.gp-cmp-item { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--gray-100); font-size: 13px; color: var(--gray-700); }
+.gp-cmp-item span { display: flex; flex-direction: column; min-width: 0; }
+.gp-cmp-item small { font-size: 11px; color: var(--gray-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gp-cmp-item em { font-style: normal; color: #b45309; }
+.gp-cmp-switch { width: 100%; margin-top: 10px; }
