@@ -1777,6 +1777,8 @@ function initNotifBanners() {
   _initPendingSchoolsCache();
 }
 
+// "X finished shopping — didn't bring …": for the other parents, not kids and not the one who shopped
+const _shoppingDoneForMe = n => n.type !== 'shopping_done' || (!isKid() && !(n.by && n.by === S.user));
 function _refreshNotifBanners() {
   // Request-type notifs only show if explicitly addressed to this user (recipientUid match).
   // A kid "viewing as" a profile inside the admin's own family shares S.uid with the admin,
@@ -1786,7 +1788,7 @@ function _refreshNotifBanners() {
     && (n.type !== 'admin_reply'   || n.recipientUid === S.uid)
     && (!['school_pending','event_pending','application_pending'].includes(n.type) ||
         (n.recipientUid === S.uid && n.requestedByUid !== S.uid && !isKid()))
-    && (n.type !== 'shopping_done' || !isKid());
+    && _shoppingDoneForMe(n);
   renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
 }
 
@@ -1838,7 +1840,7 @@ function _updateBellBadge() {
   if (!badge) return;
   const count = _allNotifs.filter(n => !n.dismissed &&
     !['school_pending','event_pending','application_pending'].includes(n.type) &&
-    (n.type !== 'shopping_done' || !isKid())
+    _shoppingDoneForMe(n)
   ).length;
   badge.textContent = count > 9 ? '9+' : count;
   badge.classList.toggle('hidden', count === 0);
@@ -2240,7 +2242,7 @@ function renderMessageCenter() {
   if (!list) return;
   const notifs = _allNotifs.filter(n =>
     n.type !== 'admin_message' &&
-    (n.type !== 'shopping_done' || !isKid()) &&
+    _shoppingDoneForMe(n) &&
     (n.type !== 'admin_reply'   || n.recipientUid === S.uid) &&
     !_REQUEST_NOTIF_TYPES.includes(n.type)
   );
@@ -10757,6 +10759,15 @@ async function doneShopping() {
     }),
     missed: missed.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' })),
   };
+  // With prices: was the estimate right? The amount actually paid (the receipt) is kept with the
+  // trip — est and paid — and the statistics count it as the trip's spending
+  const priced = entry.bought.filter(b => b.total != null);
+  if (_gpOn() && priced.length) {
+    const est = Math.round(priced.reduce((a, b) => a + b.total, 0) * 100) / 100;
+    entry.est = est;
+    const paid = await _askPaid(est, entry.bought.length - priced.length);
+    if (paid != null) entry.paid = paid;
+  }
   const ttlCutoff = Date.now() - getShoppingHistoryTtlDays() * 24 * 60 * 60 * 1000;
   S.shoppingHistory = [entry, ...S.shoppingHistory.filter(e => e.ts >= ttlCutoff)].slice(0, 50);
   _logPurchases(entry);
@@ -10765,6 +10776,34 @@ async function doneShopping() {
   saveGrocery();
   saveShoppingHistory();
   switchGrocerySection('shopping');
+}
+
+// "The estimate was ₪X — is that what you paid?" → the amount (the estimate, or the corrected
+// one), or null when skipped
+function _askPaid(est, unpriced) {
+  const ov = _cmodalEl();
+  ov.innerHTML = `<div class="cmodal-box gp-paid" onclick="event.stopPropagation()">
+    <div class="cmodal-msg">🧾 כמה יצא בקופה?</div>
+    <div class="gp-paid-est">סה״כ משוער: <b>${_gpMoney(est)}</b>${unpriced ? `<small>לא כולל ${unpriced === 1 ? 'פריט אחד' : unpriced + ' פריטים'} בלי מחיר</small>` : ''}</div>
+    <label class="gp-paid-lbl">אם הסכום בקבלה שונה, תקנו אותו:</label>
+    <div class="gp-paid-in"><span>₪</span><input id="gpPaidIn" type="number" inputmode="decimal" min="0" step="0.01" value="${est.toFixed(2)}"
+      oninput="_gpPaidChanged(${est})" onkeydown="if(event.key==='Enter')_gpPaidSave()"></div>
+    <div class="cmodal-btns">
+      <button class="cmodal-btn cmodal-ok" id="gpPaidOk" onclick="_gpPaidSave()">כן, מדויק</button>
+      <button class="cmodal-btn cmodal-cancel" onclick="_cmodalClose(null)">דלג</button>
+    </div>
+  </div>`;
+  requestAnimationFrame(() => ov.classList.add('cmodal-visible'));
+  return new Promise(res => { _cmodalResolve = v => res(typeof v === 'number' ? v : null); });
+}
+function _gpPaidChanged(est) {
+  const v = Number(el('gpPaidIn')?.value), b = el('gpPaidOk');
+  if (b) b.textContent = Number.isFinite(v) && Math.abs(v - est) >= 0.01 ? 'שמירה' : 'כן, מדויק';
+}
+function _gpPaidSave() {
+  const v = Number(el('gpPaidIn')?.value);
+  if (!(Number.isFinite(v) && v >= 0)) return;
+  _cmodalClose(Math.round(v * 100) / 100);
 }
 
 // ════════════════════════════════════════
@@ -10981,6 +11020,7 @@ function _gpTotalHtml() {
       <button class="gp-store-chip" onclick="openGpSettings()">${esc(cfg.chainName || 'חצי חינם')} · ${esc(cfg.storeLabel || '')} ⚙️</button>
     </div>
     ${sum ? `<div class="gp-meter"><i style="width:${Math.round(cartSum / sum * 100)}%"></i></div>` : ''}
+    ${priced.length ? `<div class="gp-cmp-row"><button class="gp-cmp-btn" onclick="openGpCompare()">⚖️ השוואה בין סניפים</button></div>` : ''}
     <div class="gp-total-note"><span>${cartSum ? `בעגלה ${_gpMoney(cartSum)}` : ''}${cartSum && notes.length ? ' · ' : ''}${notes.join(' · ')}</span><span>${_gpError ? 'לא הצלחנו לטעון מחירים' : whenTxt}</span></div>
   </div>`;
 }
@@ -11021,7 +11061,7 @@ function _gpSheet(html) {
   requestAnimationFrame(() => ov.classList.add('open'));
   return ov;
 }
-function _gpCloseSheet() { el('gpSheetOv')?.classList.remove('open'); _gpPickFor = null; _gpSheetKind = null; }
+function _gpCloseSheet() { el('gpSheetOv')?.classList.remove('open'); _gpPickFor = null; _gpSheetKind = null; _gpCmp = null; }
 
 // Product picker: choose which product a list item is, once — the item keeps its own name
 function openGpPicker(poolId) {
@@ -11108,6 +11148,120 @@ function _gpUnlink(poolId, skip) {
   if (skip) _gpCloseSheet();
   else openGpPicker(poolId); // stay in the picker to choose another product
 }
+// ── Compare branches: the list's cost in every chain's branches in the family branch's city ──
+// Each branch's products come from the server (op=basket): by barcode there (the family's choice
+// for that chain, or a real barcode), else by name. An item a branch doesn't have is counted at the
+// family branch's price, so totals stay comparable; the row says how many it found.
+let _gpCmp = null;
+function _gpCost(pr, item, pool) {
+  const qty = Number(item.qty ?? 1) || 1;
+  if (pr.weighted && item.qtyType !== 'kg') {
+    const g = _gpUnitGrams(pool, pr);
+    return g ? pr.price * qty * g / 1000 : null;
+  }
+  return pr.price * qty;
+}
+async function openGpCompare() {
+  const cfg = _gpCfg();
+  if (!_gpOn()) return;
+  const items = [...S.shoppingList, ...S.inCart].map(x => ({ x, pool: S.groceryPool.find(p => p.id === x.poolId), line: _gpLine(x) }));
+  const mine = cfg.chain + ':' + cfg.store;
+  const key = Date.now();
+  _gpCmp = { key, city: '', stores: null, res: {}, open: null, items, mine, error: null };
+  _gpSheetKind = 'compare'; _gpPickFor = null;
+  _gpSheet(`
+    <div class="gp-sheet-h">השוואה בין סניפים</div>
+    <div class="gp-sheet-sub" id="gpCmpSub">${items.length} פריטים ברשימה · מחפש סניפים בעיר…</div>
+    <div id="gpCmpList" class="gp-cmp-list"><div class="gp-muted gp-center">טוען…</div></div>
+    <div class="gp-sheet-note">מחירים לפי הקובץ היומי של כל סניף. מוצר שלא נמצא בסניף מחושב לפי המחיר אצלכם, ומוצר שנמצא לפי שם מסומן — ייתכן שזה לא בדיוק אותו מוצר.</div>
+    <div class="gp-sheet-btns"><button class="gp-btn" onclick="_gpCloseSheet()">סגירה</button></div>`);
+  try {
+    const d = await _gpFetch('city', { store: cfg.store });
+    if (_gpCmp?.key !== key) return;
+    _gpCmp.city = d.city;
+    const stores = d.stores || [];
+    if (!stores.some(st => st.chain + ':' + st.id === mine)) stores.push({ chain: cfg.chain, chainName: cfg.chainName, id: cfg.store, label: cfg.storeLabel });
+    _gpCmp.stores = stores;
+    el('gpCmpSub') && (el('gpCmpSub').textContent = `${items.length} פריטים ברשימה · ${stores.length} סניפים ב${d.city}`);
+  } catch (e) {
+    if (_gpCmp?.key !== key) return;
+    _gpCmp.error = 'לא הצלחנו למצוא את הסניפים בעיר. נסו שוב.'; _gpRenderCmp(); return;
+  }
+  // the family's branch from what's already loaded; the rest from the server, four at a time
+  _gpCmp.res[mine] = _gpCmpResult(items.map(o => o.line.state === 'priced' ? { ...o.line.pr, how: 'code' } : null));
+  _gpRenderCmp();
+  const queue = _gpCmp.stores.filter(st => st.chain + ':' + st.id !== mine);
+  const worker = async () => {
+    while (queue.length && _gpCmp?.key === key) {
+      const st = queue.shift(), k = st.chain + ':' + st.id;
+      try {
+        const body = { items: items.map(o => ({ code: _gpBarcode(o.pool, st.chain), product: o.line.pr?.name || '', name: o.x.name,
+          weighted: o.line.pr ? !!o.line.pr.weighted : null })) };
+        const d = await _gpFetch('basket', { chain: st.chain, store: st.id }, body);
+        if (_gpCmp?.key !== key) return;
+        _gpCmp.res[k] = _gpCmpResult(d.matches || []);
+      } catch (e) {
+        if (_gpCmp?.key !== key) return;
+        _gpCmp.res[k] = { error: true };
+      }
+      _gpRenderCmp();
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+}
+// A branch's matches → its total (missing items at the family branch's price) and per item lines
+function _gpCmpResult(matches) {
+  let total = 0, found = 0, counted = 0;
+  const lines = _gpCmp.items.map((o, i) => {
+    const m = matches[i];
+    const mineCost = o.line.state === 'priced' ? o.line.total : null;
+    const cost = m ? _gpCost(m, o.x, o.pool) : null;
+    if (cost != null) { total += cost; found++; counted++; return { m, cost, how: m.how }; }
+    if (mineCost != null) { total += mineCost; counted++; }
+    return { m: null, cost: mineCost, fallback: mineCost != null };
+  });
+  return { total, found, counted, lines };
+}
+function _gpRenderCmp() {
+  const box = el('gpCmpList');
+  if (!box || !_gpCmp) return;
+  if (_gpCmp.error) { box.innerHTML = `<div class="gp-muted gp-center">${esc(_gpCmp.error)}</div>`; return; }
+  if (!_gpCmp.stores) return;
+  const mine = _gpCmp.res[_gpCmp.mine], n = _gpCmp.items.length;
+  const rows = _gpCmp.stores.map(st => ({ st, k: st.chain + ':' + st.id, r: _gpCmp.res[st.chain + ':' + st.id] }));
+  const done = rows.filter(o => o.r && !o.r.error).sort((a, b) => a.r.total - b.r.total);
+  const cheapest = done[0]?.k;
+  const order = [...done, ...rows.filter(o => !o.r), ...rows.filter(o => o.r?.error)];
+  box.innerHTML = order.map(({ st, k, r }) => {
+    const isMine = k === _gpCmp.mine, open = _gpCmp.open === k;
+    const diff = r && !r.error && mine && !isMine ? r.total - mine.total : 0;
+    const right = !r ? '<span class="gp-muted">…</span>' : r.error ? '<span class="gp-muted">לא זמין</span>'
+      : `<b>${_gpMoney(r.total)}</b>${Math.abs(diff) >= 0.5 ? `<span class="gp-delta ${diff > 0 ? 'up' : 'down'}" dir="ltr">${diff > 0 ? '+' : '−'}${_gpMoney(Math.abs(diff))}</span>` : ''}`;
+    const detail = open && r && !r.error ? `<div class="gp-cmp-detail">${_gpCmp.items.map((o, i) => { const l = r.lines[i];
+        return `<div class="gp-cmp-item"><span>${esc(o.x.name)}${l.m ? `<small>${esc(l.m.name)}${l.how === 'name' ? ' · <em>לפי שם</em>' : ''}</small>` : `<small class="gp-muted">${l.fallback ? 'לא נמצא — לפי המחיר אצלכם' : 'לא נמצא'}</small>`}</span>
+          <b class="${l.m ? '' : 'gp-muted'}">${l.cost != null ? _gpMoney(l.cost) : '—'}</b></div>`; }).join('')}
+        ${!isMine ? `<button class="gp-btn gp-cmp-switch" onclick="_gpCmpSwitch('${esc(st.chain)}','${esc(st.id)}')">לעבור לסניף הזה</button>` : ''}</div>` : '';
+    return `<div class="gp-cmp-row-wrap${isMine ? ' mine' : ''}${open ? ' open' : ''}">
+      <button class="gp-cmp-store" onclick="_gpCmpToggle('${esc(k)}')" ${!r || r.error ? 'disabled' : ''}>
+        <span class="gp-cmp-name"><b>${esc(st.chainName || '')}</b> ${esc(_gpCmpLabel(st.label))}
+          <small>${isMine ? '<span class="gp-tag gp-tag-mine">הסניף שלכם</span> ' : ''}${k === cheapest && done.length > 1 ? '<span class="gp-tag">הכי זול</span> ' : ''}${r && !r.error ? `נמצאו ${r.found} מתוך ${n}` : ''}</small></span>
+        <span class="gp-cmp-total">${right}</span>
+      </button>${detail}</div>`;
+  }).join('');
+}
+// Within one city, the city in front of each branch name says nothing ("פתח תקווה · דיל יכין סנטר")
+const _gpCmpLabel = label => { const c = _gpCmp?.city || ''; const l = String(label || '');
+  return c && l.startsWith(c + ' · ') ? l.slice(c.length + 3) : l === c ? 'סניף ' + c : l; };
+function _gpCmpToggle(k) { if (!_gpCmp) return; _gpCmp.open = _gpCmp.open === k ? null : k; _gpRenderCmp(); }
+function _gpCmpSwitch(chain, id) {
+  const st = _gpCmp?.stores?.find(s => s.chain === chain && s.id === id);
+  if (!st) return;
+  _gpPrices = {}; _gpAsked = new Set(); _gpMeta = null;
+  _gpSaveCfg({ on: true, chain, store: id, storeLabel: st.label, chainName: st.chainName });
+  _gpRefresh(true);
+  _gpCloseSheet();
+}
+
 // Weight of one unit, for an item sold by weight that the family lists in units
 function openGpWeight(poolId) {
   const p = S.groceryPool.find(x => x.id === poolId);
@@ -11270,6 +11424,7 @@ function _plAdd(log, trip) {
       tripSpend += total;
     }
   });
+  if (trip.paid != null) tripSpend = Number(trip.paid) || 0; // what was actually paid, when it was entered
   if (tripSpend) {
     const ym = _plMonth(ts);
     T.spend = { ...(T.spend || {}), [ym]: _r2(((T.spend || {})[ym] || 0) + tripSpend) };
@@ -11313,6 +11468,7 @@ async function _loadPurchaseLog() {
           it.spent = _r2((it.spent || 0) + total);
           tripSpend += total;
         });
+        if (t.paid != null && tripSpend) tripSpend = Number(t.paid) || 0;
         if (tripSpend) {
           const ym = _plMonth(t.ts), T = log.trips;
           T.spend = { ...(T.spend || {}), [ym]: _r2(((T.spend || {})[ym] || 0) + tripSpend) };
@@ -11663,10 +11819,12 @@ function _histEntryHtml(entry, searchTerm) {
       + `</div>`
     : '';
 
+  const money = entry.paid != null ? `<span class="hist-paid">🧾 ₪${Number(entry.paid).toFixed(2)}</span>`
+    : entry.est != null ? `<span class="hist-paid hist-est">~₪${Number(entry.est).toFixed(2)}</span>` : '';
   return `<div class="hist-entry">
     <div class="hist-header">
       <span class="hist-who">${emoji} ${esc(entry.by)}</span>
-      <span class="hist-when">${datePrefix}${timeStr}</span>
+      <span class="hist-when">${datePrefix}${timeStr}${money}</span>
     </div>
     <div class="hist-items-text">${boughtHtml}</div>
     ${missedHtml}
