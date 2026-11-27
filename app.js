@@ -650,6 +650,7 @@ const FEATURE_FLAGS_DEF = [
   { key: 'mashovConnection', icon: '📘', labelHe: 'חיבור משו״ב', descHe: 'כרטיס חיבור משו״ב בהגדרות ושיעורי בית מסונכרנים ממשו״ב, לכל ילד/ה שמשויך/ת לילד/ה במשו״ב', defaultOff: true },
   { key: 'androidBeta', icon: '📱', labelHe: 'הזמנה לבודקי אנדרואיד', descHe: 'כרטיס בבית שמזמין הורים לבדוק את האפליקציה — באתר, באנדרואיד, כשיש קישור', defaultOff: true, urlField: 'androidBetaUrl' },
   // appOnly: exists only in the Android app, so the switch is just off / on
+  { key: 'groceryPrices', icon: '💰', labelHe: 'מחירים ברשימת הקניות', descHe: 'מחיר ליד כל פריט וסה"כ משוער לקנייה, מהסניף שהמשפחה בוחרת (חצי חינם). כבוי = הסופר בדיוק כמו קודם', defaultOff: true },
   { key: 'pushTestCard', icon: '🔔', labelHe: 'כרטיס בדיקת התראות', descHe: 'כרטיס "בדיקת התראות" בהגדרות המשפחה — באפליקציית אנדרואיד בלבד', appOnly: true },
 ];
 
@@ -10282,7 +10283,7 @@ function renderPool() {
           onclick="togglePoolEditQtyType(${p.id})">${editIsKg?'ק"ג':'יח\''}</button>
         <button class="cart-btn" onclick="confirmEditPoolItem(${p.id})">✓</button>
         <button class="pool-add-btn" onclick="cancelEditPoolItem()" style="border-color:#718096;color:#718096">✕</button>
-      </div>`;
+      </div>${_gpPoolLinkHtml(p)}`;
     }
 
     const threeDotSVG = `<svg viewBox="0 0 16 16" fill="currentColor" style="width:14px;height:14px;display:block"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>`;
@@ -10533,6 +10534,8 @@ function confirmEditPoolItem(id) {
   if (!newName) return;
   const newCat  = el(`poolEditCat_${id}`)?.value || '';
   const oldName = pool.name;
+  // A default-pool item linked by its name keeps its product under the new name
+  if (newName !== oldName && !pool.barcode && !pool.barcodeSkip && DEFAULT_POOL_BARCODES[oldName]) pool.barcode = DEFAULT_POOL_BARCODES[oldName];
   pool.name     = newName;
   pool.category = newCat;
   pool.qtyType  = _poolEditQtyType;
@@ -10558,12 +10561,15 @@ function renderShoppingList() {
     sugg.innerHTML = _grocerySuggestHtml();
   }
   const hasContent = S.shoppingList.length || S.inCart.length;
+  // Prices (only with the groceryPrices switch and the family's choice — see SHOPPING LIST PRICES)
+  const gp = _gpOn();
+  if (gp) _gpRefresh();
   if (!hasContent) {
     el('shoppingListEl').innerHTML = `<div class="empty">${t('shoppingListEmpty')}</div>`;
     el('doneShoppingBtn').style.display = 'none';
     return;
   }
-  let html = '';
+  let html = gp ? _gpTotalHtml() : (_gpFeature() ? _gpInviteHtml() : '');
   const cats = getGroceryCats();
   const knownCats = new Set(cats.map(c => c.name));
 
@@ -10577,8 +10583,10 @@ function renderShoppingList() {
       ? 'background:#fff3e0;color:#e65100'
       : 'background:#e9f5ff;color:#2b6cb0';
     const qtyBadge = `<span class="unit-badge slist-req-badge" style="${badgeStyle}">${fmtQty(requested, item.qtyType)}</span>`;
+    const line = gp ? _gpLine(item) : null;
     return `<div class="slist-item">
-      <div class="slist-item-name">${esc(item.name)} ${qtyBadge}</div>
+      <div class="slist-item-name">${esc(item.name)} ${qtyBadge}${line ? _gpProductLine(line, item.poolId) : ''}</div>
+      ${line ? _gpPriceHtml(line, actual) : ''}
       <input class="qty-input${isKg?' kg':''}" type="number"
         min="${isKg?'0.001':'1'}" step="${isKg?'0.001':'1'}" value="${actual}"
         onfocus="this.select()"
@@ -10619,8 +10627,10 @@ function renderShoppingList() {
       const gapHtml = actual !== requested
         ? `<span class="cart-req-qty">מ-${fmtQty(requested, item.qtyType)}</span>`
         : '';
+      const line = gp ? _gpLine(item) : null;
       return `<div class="cart-item">
         <div class="cart-item-name">${esc(item.name)} <span class="unit-badge" style="background:var(--gray-100);color:var(--gray-500)">${fmtQty(actual, item.qtyType)}</span>${gapHtml}</div>
+        ${line ? _gpPriceHtml(line, actual) : ''}
         <button class="return-to-list-btn" onclick="returnToList(${item.id})">${t('returnToList')}</button>
       </div>`;
     }).join('');
@@ -10730,7 +10740,13 @@ async function doneShopping() {
     id: Date.now(),
     ts: Date.now(),
     by: S.user,
-    bought: S.inCart.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' })),
+    bought: S.inCart.map(x => {
+      const b = { name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' };
+      // With prices on: the price paid, and remembered on the pool item for the ▲/▼ next time
+      const line = _gpOn() ? _gpLine(x) : null;
+      if (line?.state === 'priced') { b.price = line.pr.price; if (line.pool) line.pool.lastPrice = line.pr.price; }
+      return b;
+    }),
     missed: missed.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' })),
   };
   const ttlCutoff = Date.now() - getShoppingHistoryTtlDays() * 24 * 60 * 60 * 1000;
@@ -10741,6 +10757,295 @@ async function doneShopping() {
   saveGrocery();
   saveShoppingHistory();
   switchGrocerySection('shopping');
+}
+
+// ════════════════════════════════════════
+//  SHOPPING LIST PRICES
+// ════════════════════════════════════════
+// Prices from the family's supermarket branch (Hatzi Hinam's public price files, fetched in Tel
+// Aviv by groceryPricesTlv). Shown only when BOTH are on: the groceryPrices feature switch (admin
+// feature switches, off by default — turning it off restores the supermarket exactly as it was)
+// and the family's own choice, familyData.groceryPrices = { on, store, storeLabel, chainName }.
+// Pool items gain only new fields — barcode, productName, barcodeSkip, lastPrice — so a version
+// without this code keeps working on the same data. Linking a product never changes the item's own
+// name: it can be renamed as always and stays linked. Kids see the list without prices.
+const GP_URL = 'https://me-west1-familyhub-7fdd5.cloudfunctions.net/groceryPricesTlv';
+// The default pool's items, linked to Hatzi Hinam products (produce codes are the chain's own)
+const DEFAULT_POOL_BARCODES = {
+  "עגבניות": '7000', "מלפפונים": '7100', "בצל": '6660', "תפוחי אדמה": '7290018825822', "גזר": '6800',
+  "פלפל אדום": '7114', "פלפל צהוב": '7248', "חסה": '7290016270013', "כרוב": '7500', "קישואים": '6950',
+  "חציל": '6900', "שום": '7376', "תפוחים": '7751', "בננות": '7800', "תפוזים": '7742', "לימון": '7662',
+  "אבוקדו": '8500', "ענבים": '8200', "אבטיח": '7290000007007', "מלון": '7152', "ברוקולי": '7290000000626',
+  "כרובית": '7145', "חלב": '7290110328887', "ביצים": '7290001201589', "גבינה צהובה": '7290102394821',
+  "גבינה לבנה 5%": '7290000474502', "קוטג'": '7290004127329', "יוגורט": '7290006498052',
+  "שמנת מתוקה": '7290000058047', "שמנת חמוצה": '7290004125455', "חמאה": '7290116932033',
+  "גבינת שמנת": '7290108502541', "גבינה בולגרית": '7290011064020', "גבינת פטה": '7290011499358',
+  "אורז": '7290003485796', "פסטה": '7290000060880', "קמח לבן": '7290003060009', "סוכר": '7290003485222',
+  "שמן זית": '7290120348301', "שמן קנולה": '7290109062716', "מלח": '7290004063016',
+  "פלפל שחור גרוס": '7290013677693', "רוטב עגבניות": '7613035807778', "טונה בקופסה": '7290013847645',
+  "תירס בקופסה": '7290000208312', "שעועית בקופסה": '7290119384020', "חומוס קופסה": '7290000208428',
+  "טחינה גולמית": '7290017275338', "ריבה": '8690799021847', "דבש": '7290002130567', "קורנפלקס": '5900020041142',
+  "גרנולה": '7290019644378', "עדשים": '7290003485390', "קינואה": '7290105541697', "קמח תופח": '7290003060047',
+  "אבקת אפייה": '7290002319016', "שמרים יבשים": '7290000453910', "חרדל": '7290000111360',
+  "מיונז": '7290000120836', "קטשופ": '7290000072623', "חומץ בלסמי": '7290015009027',
+  "אבקת מרק עוף": '7290117905661', "קפה נמס": '7290000176413', "תה": '7290000345208', "חזה עוף": '7290004329730',
+  "שניצל עוף": '7290003485284', "כנפי עוף": '7290004329747', "בשר טחון בקר": '7290003409044',
+  "סטייק אנטריקוט": '7290000030357', "קבב": '7290006738615', "נקניקיות": '7290000318035',
+  "המבורגר": '7290000365817', "פילה סלמון": '7290000085104', "דג אמנון": '7290016485059',
+  "טונה טרייה": '7290000664255', "לחם פרוס": '7290002037163', "פיתות": '7290003222568', "חלה": '7290000000084',
+  "בגט": '170', "מים מינרליים": '7290110115180', "מיץ תפוזים": '7290016682441', "קולה": '7290110115203',
+  "סודה": '7290019056119', "בירה": '7290019398264', "יין אדום": '7290008802512', "ביסלי": '7290000066141',
+  "במבה": '7290000066318', "עוגיות שוקולד צ'יפס": '8710502064814', "וופלים": '7290000311234',
+  "גלידה": '72986370', "פיצה קפואה": '7290108503692', "ירקות קפואים": '7290000106175',
+  "שקיות זבל": '4007519050720', "נייר טואלט": '7290111346088', "מגבות נייר": '7290103702687',
+  "סבון כלים": '7290000692227', "אבקת כביסה": '8435495863151', "מרכך כביסה": '7290115481068',
+  "אקונומיקה": '7290015899512', "שמפו": '7290011668419', "משחת שיניים": '7290014962521',
+  "דאודורנט": '7290000299907'
+};
+let _gpPrices = {}, _gpMeta = null, _gpAsked = new Set(), _gpLoadedAt = 0, _gpLoading = null, _gpError = null;
+let _gpStores = null, _gpSearchSeq = 0, _gpSearchTimer = null, _gpPickFor = null, _gpSheetKind = null;
+const _gpCfg = () => familyData?.groceryPrices || null;
+const _gpFeature = () => featureOn('groceryPrices') && isParent();
+const _gpOn = () => _gpFeature() && !!_gpCfg()?.on && !!_gpCfg()?.store;
+const _gpMoney = n => '₪' + (Math.round(n * 100) / 100).toFixed(2);
+// The product a pool item is linked to: its own barcode, else the default pool's (not for items
+// the family marked "no product")
+function _gpBarcode(p) {
+  if (!p || p.barcodeSkip) return null;
+  return p.barcode || DEFAULT_POOL_BARCODES[p.name] || null;
+}
+function _gpPoolCodes() { return [...new Set(S.groceryPool.map(_gpBarcode).filter(Boolean))]; }
+
+async function _gpFetch(op, params = {}, body) {
+  const qs = new URLSearchParams({ op, ...params }).toString();
+  const r = await fetch(GP_URL + '?' + qs, body
+    ? { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) }
+    : {});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || d.error) throw new Error(d.error || ('HTTP ' + r.status));
+  return d;
+}
+// Prices of every linked pool item, fetched again after 30 minutes or when a new barcode appears
+function _gpRefresh(force) {
+  if (!_gpOn() || _gpLoading) return _gpLoading;
+  const store = _gpCfg().store, codes = _gpPoolCodes();
+  const fresh = _gpMeta?.store === store && Date.now() - _gpLoadedAt < 30 * 60e3 && codes.every(c => _gpAsked.has(c));
+  if (fresh && !force) return null;
+  _gpLoading = _gpFetch('prices', { store }, { codes })
+    .then(d => {
+      if (_gpMeta?.store !== store) _gpPrices = {};
+      Object.assign(_gpPrices, d.prices || {});
+      _gpMeta = { store, fileTime: d.fileTime, fetchedAt: d.fetchedAt };
+      _gpAsked = new Set(codes); _gpLoadedAt = Date.now(); _gpError = null;
+    })
+    .catch(e => { console.warn('grocery prices:', e); _gpError = String(e.message || e); _gpLoadedAt = Date.now(); _gpAsked = new Set(codes); })
+    .finally(() => { _gpLoading = null; if (S.tab === 'grocery' && _grocerySection === 'shopping') renderShoppingList(); });
+  return _gpLoading;
+}
+// One list (or cart) entry's price: { state: 'priced' | 'unlinked' | 'missing' | 'loading', … }
+function _gpLine(item) {
+  const pool = S.groceryPool.find(p => p.id === item.poolId);
+  const code = _gpBarcode(pool);
+  if (!code) return { state: 'unlinked', pool };
+  const pr = _gpPrices[code];
+  if (!pr) return { state: _gpLoading || !_gpAsked.has(code) ? 'loading' : 'missing', pool, code };
+  const qty = Number(item.qty ?? 1) || 1;
+  // Sold by weight: the price is per kilo — a list quantity in units counts as about a kilo each
+  const total = pr.price * qty;
+  const delta = pool?.lastPrice && Math.abs(pr.price - pool.lastPrice) >= 0.05 ? pr.price - pool.lastPrice : 0;
+  return { state: 'priced', pool, code, pr, total, est: !!pr.weighted, delta };
+}
+function _gpProductLine(line, poolId) {
+  const pick = `onclick="openGpPicker(${poolId});event.stopPropagation()"`;
+  if (line.state === 'unlinked') return `<button class="gp-link-btn" ${pick}>בחר מוצר</button>`;
+  if (line.state === 'loading') return `<div class="gp-prod gp-muted">טוען מחיר…</div>`;
+  if (line.state === 'missing') return `<div class="gp-prod gp-muted" ${pick} role="button">המוצר לא נמצא בסניף · בחר אחר</div>`;
+  const pr = line.pr;
+  const per = pr.weighted ? ` · ${_gpMoney(pr.price)} לק"ג` : '';
+  return `<div class="gp-prod" ${pick} role="button">${esc(pr.name)}${per}</div>`;
+}
+function _gpPriceHtml(line, qty) {
+  if (line.state !== 'priced') return '';
+  const d = line.delta;
+  const badge = d ? `<span class="gp-delta ${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(2)}</span>` : '';
+  const mult = !line.est && qty > 1 ? `<span class="gp-mult">${qty} × ${line.pr.price.toFixed(2)}</span>` : '';
+  return `<div class="gp-price"><b class="${line.est ? 'gp-est' : ''}">${line.est ? '~' : ''}${_gpMoney(line.total)}</b>${badge || mult}</div>`;
+}
+// The card above the list: the estimated total, what is already in the cart, and the branch
+function _gpTotalHtml() {
+  const cfg = _gpCfg();
+  const lines = [...S.shoppingList, ...S.inCart].map(x => ({ x, l: _gpLine(x), cart: S.inCart.includes(x) }));
+  const priced = lines.filter(o => o.l.state === 'priced');
+  const sum = priced.reduce((s, o) => s + o.l.total, 0);
+  const cartSum = priced.filter(o => o.cart).reduce((s, o) => s + o.l.total, 0);
+  const left = lines.filter(o => o.l.state !== 'priced' && o.l.state !== 'loading');
+  const loading = lines.some(o => o.l.state === 'loading');
+  const est = priced.some(o => o.l.est);
+  const when = _gpMeta?.fileTime ? new Date(_gpMeta.fileTime) : null;
+  const whenTxt = when ? `מחירים מ-${when.getUTCDate()}.${when.getUTCMonth() + 1}` : '';
+  const notes = [];
+  if (left.length) notes.push(left.length === 1 ? `${left[0].x.name} לא בחשבון` : `${left.length} פריטים לא בחשבון`);
+  if (est) notes.push('~ לפי משקל');
+  return `<div class="gp-total-card">
+    <div class="gp-total-row">
+      <div><div class="gp-total-lbl">סה"כ משוער</div>
+        <div class="gp-total-big">${_gpError && !priced.length ? '—' : _gpMoney(sum).replace('.00', '')}${loading ? ' <span class="gp-muted" style="font-size:12px">…</span>' : ''}</div></div>
+      <button class="gp-store-chip" onclick="openGpSettings()">${esc(cfg.chainName || 'חצי חינם')} · ${esc(cfg.storeLabel || '')} ⚙️</button>
+    </div>
+    ${sum ? `<div class="gp-meter"><i style="width:${Math.round(cartSum / sum * 100)}%"></i></div>` : ''}
+    <div class="gp-total-note"><span>${cartSum ? `בעגלה ${_gpMoney(cartSum)}` : ''}${cartSum && notes.length ? ' · ' : ''}${notes.join(' · ')}</span><span>${_gpError ? 'לא הצלחנו לטעון מחירים' : whenTxt}</span></div>
+  </div>`;
+}
+// Feature on but the family hasn't chosen: a one-time invitation
+function _gpInviteHtml() {
+  const cfg = _gpCfg();
+  if (cfg?.on || cfg?.dismissed) return '';
+  return `<div class="gp-invite">
+    <div class="gp-invite-t">💰 מחירים ברשימת הקניות <span class="gp-new">חדש</span></div>
+    <div class="gp-invite-s">בוחרים סניף של חצי חינם, ורואים ליד כל פריט כמה הוא עולה, וכמה תעלה כל הקנייה.</div>
+    <div class="gp-invite-btns"><button class="gp-btn" onclick="openGpSettings()">בחירת סניף</button>
+      <button class="gp-btn2" onclick="_gpSaveCfg({ dismissed: true })">לא עכשיו</button></div>
+  </div>`;
+}
+async function _gpSaveCfg(patch) {
+  if (!S.uid || !fbDb) return;
+  const next = { ...(_gpCfg() || {}), ...patch };
+  if (familyData) familyData.groceryPrices = next;
+  renderShoppingList();
+  try { await fbDb.collection('families').doc(S.uid).update({ groceryPrices: next }); }
+  catch (e) { console.error('groceryPrices save:', e); }
+}
+
+// ── Bottom sheet (product picker, settings) ──
+function _gpSheet(html) {
+  let ov = el('gpSheetOv');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'gpSheetOv'; ov.className = 'gp-sheet-ov';
+    ov.addEventListener('click', e => { if (e.target === ov) _gpCloseSheet(); });
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = `<div class="gp-sheet" dir="rtl"><div class="gp-grab"></div>${html}</div>`;
+  requestAnimationFrame(() => ov.classList.add('open'));
+  return ov;
+}
+function _gpCloseSheet() { el('gpSheetOv')?.classList.remove('open'); _gpPickFor = null; _gpSheetKind = null; }
+
+// Product picker: choose which product a list item is, once — the item keeps its own name
+function openGpPicker(poolId) {
+  const p = S.groceryPool.find(x => x.id === poolId);
+  if (!p || !_gpOn()) return;
+  _gpPickFor = poolId; _gpSheetKind = 'picker';
+  const cfg = _gpCfg(), code = _gpBarcode(p);
+  _gpSheet(`
+    <div class="gp-sheet-h">איזה ${esc(p.name)}?</div>
+    <div class="gp-sheet-sub">${esc(cfg.chainName || 'חצי חינם')} · ${esc(cfg.storeLabel || '')}</div>
+    <input class="g-input gp-search" id="gpSearch" value="${esc(p.name)}" placeholder="חיפוש: מותג, אחוז שומן, גודל…"
+      oninput="_gpSearchSoon()" onkeydown="if(event.key==='Enter')_gpSearchNow()">
+    <div id="gpResults" class="gp-results"><div class="gp-muted gp-center">מחפש…</div></div>
+    <div class="gp-sheet-note">השם ברשימה נשאר "${esc(p.name)}" — אפשר לשנות אותו מתי שרוצים בעריכת הפריט במאגר, והמוצר יישאר מקושר.</div>
+    <div class="gp-sheet-btns">
+      ${code ? `<button class="gp-btn2" onclick="_gpUnlink(${poolId}, false)">הסרת הקישור</button>` : ''}
+      ${!p.barcodeSkip ? `<button class="gp-btn2" onclick="_gpUnlink(${poolId}, true)">בלי מוצר</button>` : ''}
+      <button class="gp-btn2" onclick="_gpCloseSheet()">ביטול</button>
+    </div>`);
+  _gpSearchNow();
+}
+// "100מיליליטר" → '-100 מ"ל', "1ליטר" → 'ליטר' (for "₪2.28 ל-100 מ"ל")
+function _gpUnit(u) {
+  const m = /^\s*([\d.]+)?\s*(.*)$/.exec(String(u)) || [];
+  const name = ({ 'מיליליטר': 'מ"ל', 'גרם': 'גרם', 'ליטר': 'ליטר', 'קילוגרם': 'ק"ג', 'יחידות': 'יחידה', 'יחידה': 'יחידה' })[(m[2] || '').trim()] || (m[2] || '').trim();
+  return !m[1] || m[1] === '1' ? name : `-${m[1]} ${name}`;
+}
+function _gpSearchSoon() { clearTimeout(_gpSearchTimer); _gpSearchTimer = setTimeout(_gpSearchNow, 350); }
+async function _gpSearchNow() {
+  clearTimeout(_gpSearchTimer);
+  const q = el('gpSearch')?.value.trim(), box = el('gpResults'), poolId = _gpPickFor;
+  if (!box || !q) { if (box) box.innerHTML = ''; return; }
+  const seq = ++_gpSearchSeq;
+  try {
+    const d = await _gpFetch('search', { store: _gpCfg().store, q });
+    if (seq !== _gpSearchSeq || _gpPickFor !== poolId) return;
+    const cur = _gpBarcode(S.groceryPool.find(x => x.id === poolId));
+    const res = d.results || [];
+    // "Cheapest" by the price per unit, among the products measured in the most common unit
+    // whose name starts with what was searched (not the wafers when looking for chocolate milk)
+    const first = q.split(/\s+/)[0];
+    const comparable = res.filter(r => !r.weighted && r.unitPrice && r.unit && String(r.name).trim().startsWith(first));
+    const units = {}; comparable.forEach(r => { units[r.unit] = (units[r.unit] || 0) + 1; });
+    const unit = Object.keys(units).sort((x, y) => units[y] - units[x])[0];
+    const cheapest = comparable.filter(r => r.unit === unit).sort((a, b) => a.unitPrice - b.unitPrice)[0];
+    window._gpLastResults = Object.fromEntries(res.map(r => [String(r.code), r]));
+    box.innerHTML = res.length ? res.map(r => `
+      <button class="gp-opt${String(r.code) === String(cur) ? ' sel' : ''}" onclick="_gpPick(${poolId}, '${esc(String(r.code))}')">
+        <span class="gp-radio"></span>
+        <span class="gp-opt-main"><span class="gp-opt-n">${esc(r.name)}${cheapest && r === cheapest && res.length > 1 ? ' <span class="gp-tag">הכי זול</span>' : ''}</span>
+          <span class="gp-opt-m">${esc(r.maker || '')}</span></span>
+        <span class="gp-opt-p">${_gpMoney(r.price)}<span>${r.weighted ? 'לק"ג' : r.unitPrice && r.unit ? `${_gpMoney(r.unitPrice)} ל${esc(_gpUnit(r.unit))}` : ''}</span></span>
+      </button>`).join('') : `<div class="gp-muted gp-center">לא נמצאו מוצרים. נסו מילה אחרת.</div>`;
+  } catch (e) {
+    if (seq === _gpSearchSeq) box.innerHTML = `<div class="gp-muted gp-center">החיפוש לא הצליח. נסו שוב.</div>`;
+  }
+}
+function _gpPick(poolId, code) {
+  const p = S.groceryPool.find(x => x.id === poolId), r = window._gpLastResults?.[code];
+  if (!p || !r) return;
+  p.barcode = String(code); p.productName = r.name; delete p.barcodeSkip;
+  _gpPrices[String(code)] = r; _gpAsked.add(String(code));
+  saveGrocery(); _gpCloseSheet(); renderShoppingList(); renderPool();
+}
+function _gpUnlink(poolId, skip) {
+  const p = S.groceryPool.find(x => x.id === poolId);
+  if (!p) return;
+  delete p.barcode; delete p.productName;
+  if (skip) p.barcodeSkip = true; else delete p.barcodeSkip;
+  saveGrocery(); _gpCloseSheet(); renderShoppingList(); renderPool();
+}
+// Under the pool item's edit row: which product it is, and a way to change it
+function _gpPoolLinkHtml(p) {
+  if (!_gpOn()) return '';
+  const code = _gpBarcode(p), pr = code && _gpPrices[code];
+  const what = code ? esc(pr?.name || p.productName || 'מוצר מקושר') : (p.barcodeSkip ? 'בלי מוצר' : 'לא מקושר למוצר');
+  return `<div class="gp-pool-link">🏷️ ${what}${pr ? ` · ${_gpMoney(pr.price)}` : ''} <button class="gp-link-btn" onclick="openGpPicker(${p.id})">${code ? 'שינוי מוצר' : 'בחר מוצר'}</button></div>`;
+}
+
+// Settings: prices on/off and the branch
+async function openGpSettings() {
+  const cfg = _gpCfg() || {};
+  const render = () => {
+    const stores = _gpStores?.stores;
+    _gpSheet(`
+      <div class="gp-sheet-h">מחירים ברשימת הקניות</div>
+      <div class="gp-sheet-sub">מחירים מהקובץ היומי שהרשת מפרסמת לפי חוק שקיפות המחירים</div>
+      <label class="gp-row"><span>הצג מחירים ברשימה</span>
+        <input type="checkbox" class="gp-toggle" ${cfg.on ? 'checked' : ''} onchange="_gpSetOn(this.checked)"></label>
+      <div class="gp-sheet-sec">סניף · ${esc(_gpStores?.chainName || 'חצי חינם')}</div>
+      <div class="gp-store-list">${stores ? stores.map(st => `
+        <button class="gp-store${st.id === cfg.store ? ' sel' : ''}" onclick="_gpSetStore('${esc(st.id)}')">
+          <span>${esc(st.label)}</span>${st.id === cfg.store ? '<span class="gp-check">✓</span>' : ''}</button>`).join('')
+        : `<div class="gp-muted gp-center">${_gpStores === false ? 'לא הצלחנו לטעון את הסניפים. נסו שוב.' : 'טוען סניפים…'}</div>`}</div>
+      <div class="gp-sheet-note">רשתות נוספות — בהמשך.</div>
+      <div class="gp-sheet-btns"><button class="gp-btn" onclick="_gpCloseSheet()">סגירה</button></div>`);
+  };
+  render();
+  _gpSheetKind = 'settings'; _gpPickFor = null;
+  if (!_gpStores) {
+    try { _gpStores = await _gpFetch('stores'); } catch (e) { console.warn('grocery stores:', e); _gpStores = false; }
+    if (_gpSheetKind === 'settings') render();
+    if (_gpStores === false) _gpStores = null; // try again next time
+  }
+}
+function _gpSetOn(on) {
+  _gpSaveCfg({ on }); // shown once a branch is chosen too
+  if (on) _gpRefresh(true);
+}
+function _gpSetStore(id) {
+  const st = _gpStores?.stores?.find(s => s.id === id);
+  if (!st) return;
+  _gpPrices = {}; _gpAsked = new Set(); _gpMeta = null;
+  _gpSaveCfg({ on: true, store: id, storeLabel: st.label, chainName: _gpStores.chainName || 'חצי חינם', chain: _gpStores.chain || 'hatzi-hinam' });
+  _gpRefresh(true);
+  openGpSettings();
 }
 
 // ════════════════════════════════════════
