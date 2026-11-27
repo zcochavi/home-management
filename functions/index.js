@@ -2612,38 +2612,39 @@ const cpGet = async (url, binary) => {
   if (!r.ok) throw Object.assign(new Error(`GET ${url.split('?')[0]} → HTTP ${r.status}`), { status: r.status });
   return binary ? Buffer.from(await r.arrayBuffer()) : r.text();
 };
-// Files of one type (t: 1 prices, 2 promos, 3 stores), newest first, up to `pages` listing pages
-async function cpListFiles(t, wanted, pages = 40) {
-  const H = chainPrices.HATZI_HINAM, found = [], seen = new Set();
+// A chain's files of one kind (prices | promos | stores), newest first, up to `pages` listing pages
+// (only the branch's own listing, where the portal can filter by branch)
+async function cpListFiles(chain, kind, wanted, pages = 40, storeId = 0) {
+  const C = chainPrices.CHAINS[chain], found = [], seen = new Set();
   for (let p = 1; p <= pages; p++) {
-    const links = chainPrices.listingLinks(await cpGet(`${H.base}/Prices?t=${t}&p=${p}`));
+    const links = chainPrices.listingLinks(await cpGet(C.listUrl(kind, p, C.byStore ? storeId : 0)));
     const fresh = links.filter(l => !seen.has(l.name));
     if (!fresh.length) break;
     fresh.forEach(l => { seen.add(l.name); const f = { ...l, ...chainPrices.parseFilename(l.name) }; if (wanted(f)) found.push(f); });
-    if (found.length && t === 3) break;
+    if (found.length && (kind === 'stores' || C.byStore)) break;
   }
   return found.sort((a, b) => (b.ts || 0) - (a.ts || 0));
 }
-async function cpStores() {
-  const ref = db.collection('chainPrices').doc('hatzi-hinam__stores');
+async function cpStores(chain = 'hatzi-hinam') {
+  const ref = db.collection('chainPrices').doc(chain + '__stores');
   const d = (await ref.get()).data();
-  const readable = (d?.stores || []).some(st => /[\u0590-\u05FF]/.test([st.name, st.city, st.address].join('')));
+  const readable = (d?.stores || []).some(st => /[֐-׿]/.test([st.name, st.city, st.address].join('')));
   if (d?.stores && readable && Date.now() - d.fetchedAt < 24 * 3600e3) return d.stores;
-  const [file] = await cpListFiles(3, f => f.type === 'Stores', 5);
+  const [file] = await cpListFiles(chain, 'stores', f => f.type === 'Stores', 5);
   if (!file) throw new Error('no Stores file on the portal');
   const stores = chainPrices.parseStores(chainPrices.toText(await cpGet(file.url, true)));
   await ref.set({ stores, fetchedAt: Date.now(), file: file.name });
   return stores;
 }
-async function cpLoadPrices(store, refresh) {
-  const ref = db.collection('chainPrices').doc('hatzi-hinam__' + store.storeId);
+async function cpLoadPrices(store, refresh, chain = 'hatzi-hinam') {
+  const ref = db.collection('chainPrices').doc(chain + '__' + store.storeId);
   const meta = (await ref.get()).data();
   const age = meta ? Date.now() - meta.fetchedAt : Infinity;
   if (meta && (age < (refresh ? CP_MIN_REFRESH_MS : CP_FRESH_MS))) {
     const chunks = await ref.collection('chunks').orderBy('i').get();
     return { meta, items: chunks.docs.flatMap(c => JSON.parse(c.data().json)) };
   }
-  const [file] = await cpListFiles(1, f => f.type === 'PriceFull' && chainPrices.sameStore(f.storeId, store.storeId));
+  const [file] = await cpListFiles(chain, 'prices', f => f.type === 'PriceFull' && chainPrices.sameStore(f.storeId, store.storeId), 40, store.storeId);
   if (!file) throw new Error(`no PriceFull file for branch ${store.storeId}`);
   const parsed = chainPrices.parsePrices(chainPrices.toText(await cpGet(file.url, true)));
   const items = parsed.map(i => [i.code, i.name, i.maker, i.price, i.unitPrice, i.unit, i.qty, i.unitQty, i.weighted ? 1 : 0]);
@@ -2652,7 +2653,7 @@ async function cpLoadPrices(store, refresh) {
   for (let i = 0, n = 0; i < items.length; i += CP_CHUNK, n++) {
     await ref.collection('chunks').doc(String(n)).set({ i: n, json: JSON.stringify(items.slice(i, i + CP_CHUNK)) });
   }
-  const m = { chain: 'hatzi-hinam', store, file: file.name, fileTime: file.ts || null, fetchedAt: Date.now(), count: items.length };
+  const m = { chain, store, file: file.name, fileTime: file.ts || null, fetchedAt: Date.now(), count: items.length };
   await ref.set(m);
   return { meta: m, items };
 }
@@ -2693,37 +2694,44 @@ exports.chainPricesTlv = onRequestV2({ ...TLV_OPTS, timeoutSeconds: 300, memory:
 // ─── groceryPricesTlv — prices in the shopping list (Hatzi Hinam) ─────────────────────────────
 // Public price data only (no family data), from Tel Aviv like the trial above, whose download and
 // Firestore cache it shares. The app calls it only when the groceryPrices switch is on.
+//   GET  ?op=chains                         → the chains the app supports
+//   (every op takes &chain=<hatzi-hinam | shufersal>, Hatzi Hinam when missing)
 //   GET  ?op=stores                         → the chain's branches, labelled for a picker
 //   GET  ?op=search&store=<id>&q=<words>    → products for a list item, best match first
 //   POST ?op=prices&store=<id>, body {codes} → the price of each barcode in the branch
 // The app sends POST bodies as text/plain, so the browser makes no preflight request.
-const _gpMem = new Map(); // storeId → { at, meta, items, byCode } — per instance, 10 minutes
+const _gpMem = new Map(); // chain__storeId → { at, meta, items, byCode } — per instance, 10 minutes
 const _gpObj = a => ({ code: a[0], name: a[1], maker: a[2], price: a[3], unitPrice: a[4], unit: a[5], qty: a[6], unitQty: a[7], weighted: !!a[8] });
-async function _gpLoad(storeId) {
-  const hit = _gpMem.get(storeId);
+async function _gpLoad(chain, storeId) {
+  const key = chain + '__' + storeId, hit = _gpMem.get(key);
   if (hit && Date.now() - hit.at < 10 * 60e3) return hit;
-  const store = (await cpStores()).find(st => chainPrices.sameStore(st.storeId, storeId));
+  const store = (await cpStores(chain)).find(st => chainPrices.sameStore(st.storeId, storeId));
   if (!store) throw Object.assign(new Error('unknown branch'), { status: 404 });
-  const { meta, items } = await cpLoadPrices(store, false);
+  const { meta, items } = await cpLoadPrices(store, false, chain);
   const objs = items.map(_gpObj);
   const out = { at: Date.now(), meta, items: objs, byCode: new Map(objs.map(o => [String(o.code), o])) };
-  _gpMem.set(storeId, out);
+  for (const k of _gpMem.keys()) if (Date.now() - _gpMem.get(k).at > 30 * 60e3) _gpMem.delete(k); // keep memory small
+  _gpMem.set(key, out);
   return out;
 }
 exports.groceryPricesTlv = onRequestV2({ ...TLV_OPTS, timeoutSeconds: 120, memory: '1GiB', cors: true }, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
     const op = String(req.query.op || '');
+    const chain = String(req.query.chain || 'hatzi-hinam');
+    const C = chainPrices.CHAINS[chain];
+    if (op === 'chains') return res.json({ chains: Object.values(chainPrices.CHAINS).map(c => ({ id: c.slug, name: c.name })) });
+    if (!C) return res.status(400).json({ error: 'unknown chain' });
     if (op === 'stores') {
-      const stores = (await cpStores()).filter(st => chainPrices.cityName(st.city) || st.name)
-        .map(st => ({ id: String(st.storeId), city: chainPrices.cityName(st.city), label: chainPrices.storeLabel(st) }))
+      const stores = (await cpStores(chain)).filter(st => chainPrices.cityName(st.city) || st.name)
+        .map(st => ({ id: String(st.storeId), city: chainPrices.cityName(st.city), label: chainPrices.storeLabel(st), sub: st.subChainName || undefined }))
         .sort((a, b) => a.label.localeCompare(b.label, 'he'));
-      return res.json({ chain: 'hatzi-hinam', chainName: 'חצי חינם', stores });
+      return res.json({ chain, chainName: C.name, stores });
     }
     const storeId = String(req.query.store || '').replace(/\D/g, '');
     if (!storeId) return res.status(400).json({ error: 'store is required' });
-    const data = await _gpLoad(storeId);
-    const head = { store: storeId, fileTime: data.meta.fileTime || null, fetchedAt: data.meta.fetchedAt };
+    const data = await _gpLoad(chain, storeId);
+    const head = { chain, store: storeId, fileTime: data.meta.fileTime || null, fetchedAt: data.meta.fetchedAt };
     if (op === 'search') {
       const q = String(req.query.q || '').slice(0, 80);
       return res.json({ ...head, results: chainPrices.rankProducts(data.items, q, 25) });
