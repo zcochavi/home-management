@@ -99,3 +99,19 @@ test('Shufersal: listing URL by branch, file names, the uppercase Stores file', 
   assert.deepStrictEqual(stores.map(s => [s.storeId, s.subChainName, s.city]), [['413', 'שופרסל דיל', 'פתח תקווה'], ['5', 'שופרסל שלי', 'תל אביב']]);
   assert.deepStrictEqual(stores.map(cp.storeLabel), ['שופרסל דיל פתח תקווה', 'תל אביב · שלי רמת אביב']);
 });
+
+test('other portals: Carrefour page list, Cerberus token, <Branch> stores and <Product> items', () => {
+  const page = `<script>const path = '20261127';\nconst files = [{"name":"Stores7290055700007-000-202611270100.xml"},{"name":"PriceFull7290055700007-001-100-202611270300.gz"}];\n</script>`;
+  assert.deepStrictEqual(cp.carrefourFiles(page).map(f => f.url), [
+    'https://prices.carrefour.co.il/20261127/Stores7290055700007-000-202611270100.xml',
+    'https://prices.carrefour.co.il/20261127/PriceFull7290055700007-001-100-202611270300.gz']);
+  assert.deepStrictEqual(cp.carrefourFiles('<html>nothing</html>'), []);
+  assert.strictEqual(cp.cerberusCsrf('<meta name="csrftoken" content="abc123">'), 'abc123');
+  assert.strictEqual(cp.cerberusCsrf('<html>'), null);
+  const victory = '<Store><ChainId>1</ChainId><Branches><Branch><StoreID>45</StoreID><StoreName>ויקטורי פתח תקווה</StoreName><City>פתח תקווה</City></Branch><Branch><StoreID>46</StoreID><StoreName>ויקטורי חולון</StoreName></Branch></Branches></Store>';
+  assert.deepStrictEqual(cp.parseStores(victory).map(s => s.storeId), ['45', '46']);
+  const products = '<Prices><Products><Product><ItemCode>1</ItemCode><ItemName>חלב</ItemName><ItemPrice>7.4</ItemPrice></Product></Products></Prices>';
+  assert.deepStrictEqual(cp.parsePrices(products).map(i => [i.code, i.price]), [['1', 7.4]]);
+  assert.strictEqual(Object.keys(cp.CHAINS).length, 25);
+  assert.ok(Object.values(cp.CHAINS).every(c => c.slug && c.name && c.chainId && c.portal));
+});

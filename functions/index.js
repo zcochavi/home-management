@@ -2612,10 +2612,39 @@ const cpGet = async (url, binary) => {
   if (!r.ok) throw Object.assign(new Error(`GET ${url.split('?')[0]} → HTTP ${r.status}`), { status: r.status });
   return binary ? Buffer.from(await r.arrayBuffer()) : r.text();
 };
-// A chain's files of one kind (prices | promos | stores), newest first, up to `pages` listing pages
-// (only the branch's own listing, where the portal can filter by branch)
+// A chain's files of one kind (prices | promos | stores), newest first — each portal lists them its
+// own way (see CHAINS in chain-prices-helpers.js). `wanted` filters the parsed file names; storeId
+// narrows the listing where the portal can.
+const CP_TYPE = { prices: 'PriceFull', promos: 'PromoFull', stores: 'Stores' };
+const cpSorted = files => files.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+const cpParsed = (list, C, wanted) => list
+  .filter(l => l.name && !/^null/i.test(l.name) && (!C.chainId || l.name.includes(C.chainId)))
+  .map(l => ({ ...l, ...chainPrices.parseFilename(l.name) })).filter(wanted);
 async function cpListFiles(chain, kind, wanted, pages = 40, storeId = 0) {
-  const C = chainPrices.CHAINS[chain], found = [], seen = new Set();
+  const C = chainPrices.CHAINS[chain];
+  if (C.portal === 'cerberus') {
+    const ses = await cpCerberus(C);
+    const rows = await ses.list(CP_TYPE[kind]);
+    const prefix = C.folder === '/' ? '' : C.folder.replace(/^\/|\/$/g, '') + '/';
+    return cpSorted(cpParsed(rows.filter(r => r.type === 'file').map(r => ({ name: r.fname, url: `${chainPrices.CERBERUS}/file/d/${prefix}${encodeURIComponent(r.fname)}`, cerberus: true })), C, wanted));
+  }
+  if (C.portal === 'laib') {
+    const rows = JSON.parse(await cpGet(`https://laibcatalog.co.il/webapi/api/getfiles?edi=${C.chainId}`));
+    return cpSorted(cpParsed(rows.map(r => ({ name: String(r.fileName || '').trim(), url: `https://laibcatalog.co.il/webapi/${C.chainId}/${encodeURIComponent(String(r.fileName || '').trim())}` })), { chainId: '' }, wanted));
+  }
+  if (C.portal === 'bina') {
+    const base = `https://${C.prefix}.binaprojects.com`;
+    const body = new URLSearchParams({ WStore: kind === 'prices' && storeId ? String(storeId) : '', WDate: '', WFileType: kind === 'stores' ? '1' : kind === 'prices' ? '4' : '5' });
+    const r = await fetch(`${base}/MainIO_Hok.aspx`, { method: 'POST', body, headers: { 'User-Agent': CP_UA, 'Content-Type': 'application/x-www-form-urlencoded' } });
+    if (!r.ok) throw new Error(`${C.slug}: listing HTTP ${r.status}`);
+    const rows = JSON.parse(await r.text());
+    return cpSorted(cpParsed(rows.map(x => ({ name: String(x.FileNm || '').trim(), url: `${base}/Download/${encodeURIComponent(String(x.FileNm || '').trim())}` })), { chainId: '' }, wanted));
+  }
+  if (C.portal === 'carrefour') {
+    return cpSorted(cpParsed(chainPrices.carrefourFiles(await cpGet('https://prices.carrefour.co.il/')), { chainId: '' }, wanted));
+  }
+  // listing pages (Hatzi Hinam, Shufersal)
+  const found = [], seen = new Set();
   for (let p = 1; p <= pages; p++) {
     const links = chainPrices.listingLinks(await cpGet(C.listUrl(kind, p, C.byStore ? storeId : 0)));
     const fresh = links.filter(l => !seen.has(l.name));
@@ -2623,7 +2652,57 @@ async function cpListFiles(chain, kind, wanted, pages = 40, storeId = 0) {
     fresh.forEach(l => { seen.add(l.name); const f = { ...l, ...chainPrices.parseFilename(l.name) }; if (wanted(f)) found.push(f); });
     if (found.length && (kind === 'stores' || C.byStore)) break;
   }
-  return found.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  return cpSorted(found);
+}
+const cpDownload = async (C, file) => file.cerberus ? (await cpCerberus(C)).get(file.url) : cpGet(file.url, true);
+
+// Cerberus (url.publishedprices.co.il): a session per chain — the login page's CSRF token and cookie,
+// POST /login/user, then the file page's new token. Sessions last ~30 minutes; kept for 20.
+const _cpCerb = new Map();
+const CP_UA = 'Mozilla/5.0 (FamilyHub prices)';
+function _cpCookies(res, jar) {
+  const raw = res.headers.raw ? (res.headers.raw()['set-cookie'] || []) : [];
+  raw.forEach(c => { const [kv] = c.split(';'); const i = kv.indexOf('='); if (i > 0) jar.set(kv.slice(0, i).trim(), kv.slice(i + 1).trim()); });
+}
+async function cpCerberus(C) {
+  const hit = _cpCerb.get(C.slug);
+  if (hit && Date.now() - hit.at < 20 * 60e3) return hit;
+  const B = chainPrices.CERBERUS, jar = new Map();
+  const req = async (url, opts = {}) => {
+    let r, u = url, o = opts;
+    for (let hop = 0; hop < 5; hop++) { // follow redirects ourselves, carrying the cookies
+      r = await fetch(u, { ...o, redirect: 'manual', headers: { 'User-Agent': CP_UA, ...(o.headers || {}), Cookie: [...jar].map(([k, v]) => `${k}=${v}`).join('; ') } });
+      _cpCookies(r, jar);
+      const loc = r.status >= 300 && r.status < 400 && r.headers.get('location');
+      if (!loc) break;
+      u = new URL(loc, u).toString(); o = {};
+    }
+    return r;
+  };
+  let r = await req(`${B}/login`);
+  let csrf = chainPrices.cerberusCsrf(await r.text());
+  if (!csrf) throw new Error(`${C.slug}: no login token`);
+  r = await req(`${B}/login/user`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ r: '', username: C.user, password: C.pass || '', Submit: 'Sign in', csrftoken: csrf }).toString() });
+  const html = await r.text();
+  if (new URL(r.url || `${B}/login`).pathname.startsWith('/login')) throw new Error(`${C.slug}: login rejected`); // success lands on /file
+  csrf = chainPrices.cerberusCsrf(html) || csrf;
+  const ses = {
+    at: Date.now(),
+    list: async search => {
+      const res = await req(`${B}/file/json/dir`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ iDisplayLength: '100000', sSearch: search || '', cd: C.folder || '/', csrftoken: csrf }).toString() });
+      const txt = await res.text();
+      try { return JSON.parse(txt).aaData || []; } catch (e) { _cpCerb.delete(C.slug); throw new Error(`${C.slug}: listing is not JSON (session?)`); }
+    },
+    get: async url => {
+      const res = await req(url);
+      if (!res.ok || /text\/html/.test(res.headers.get('content-type') || '')) { _cpCerb.delete(C.slug); throw new Error(`${C.slug}: download refused`); }
+      return Buffer.from(await res.arrayBuffer());
+    },
+  };
+  _cpCerb.set(C.slug, ses);
+  return ses;
 }
 async function cpStores(chain = 'hatzi-hinam') {
   const ref = db.collection('chainPrices').doc(chain + '__stores');
@@ -2632,7 +2711,7 @@ async function cpStores(chain = 'hatzi-hinam') {
   if (d?.stores && readable && Date.now() - d.fetchedAt < 24 * 3600e3) return d.stores;
   const [file] = await cpListFiles(chain, 'stores', f => f.type === 'Stores', 5);
   if (!file) throw new Error('no Stores file on the portal');
-  const stores = chainPrices.parseStores(chainPrices.toText(await cpGet(file.url, true)));
+  const stores = chainPrices.parseStores(chainPrices.toText(await cpDownload(chainPrices.CHAINS[chain], file)));
   await ref.set({ stores, fetchedAt: Date.now(), file: file.name });
   return stores;
 }
@@ -2646,7 +2725,7 @@ async function cpLoadPrices(store, refresh, chain = 'hatzi-hinam') {
   }
   const [file] = await cpListFiles(chain, 'prices', f => f.type === 'PriceFull' && chainPrices.sameStore(f.storeId, store.storeId), 40, store.storeId);
   if (!file) throw new Error(`no PriceFull file for branch ${store.storeId}`);
-  const parsed = chainPrices.parsePrices(chainPrices.toText(await cpGet(file.url, true)));
+  const parsed = chainPrices.parsePrices(chainPrices.toText(await cpDownload(chainPrices.CHAINS[chain], file)));
   const items = parsed.map(i => [i.code, i.name, i.maker, i.price, i.unitPrice, i.unit, i.qty, i.unitQty, i.weighted ? 1 : 0]);
   const old = await ref.collection('chunks').get();
   await Promise.all(old.docs.map(d => d.ref.delete()));
@@ -2720,7 +2799,20 @@ exports.groceryPricesTlv = onRequestV2({ ...TLV_OPTS, timeoutSeconds: 120, memor
     const op = String(req.query.op || '');
     const chain = String(req.query.chain || 'hatzi-hinam');
     const C = chainPrices.CHAINS[chain];
-    if (op === 'chains') return res.json({ chains: Object.values(chainPrices.CHAINS).map(c => ({ id: c.slug, name: c.name })) });
+    if (op === 'chains') { // the biggest chains first (the app shows eight, the rest behind "more")
+      const top = ['hatzi-hinam', 'shufersal', 'rami-levy', 'victory', 'yochananof', 'carrefour', 'osher-ad', 'tiv-taam'];
+      const rank = c => { const i = top.indexOf(c.slug); return i < 0 ? top.length : i; };
+      return res.json({ chains: Object.values(chainPrices.CHAINS).sort((a, b) => rank(a) - rank(b)).map(c => ({ id: c.slug, name: c.name })) });
+    }
+    if (op === 'check') { // admin check: can every chain's branch list be read? (?op=check&chains=a,b)
+      const want = String(req.query.chains || '').split(',').filter(c => chainPrices.CHAINS[c]);
+      const out = {};
+      await Promise.all((want.length ? want : Object.keys(chainPrices.CHAINS)).map(async c => {
+        try { const st = await cpStores(c); out[c] = { ok: true, stores: st.length, sample: st.slice(0, 2).map(chainPrices.storeLabel) }; }
+        catch (e) { out[c] = { ok: false, error: String(e.message || e).slice(0, 200) }; }
+      }));
+      return res.json(out);
+    }
     if (!C) return res.status(400).json({ error: 'unknown chain' });
     if (op === 'stores') {
       const stores = (await cpStores(chain)).filter(st => chainPrices.cityName(st.city) || st.name)

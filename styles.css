@@ -2797,3 +2797,4 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .gp-chains { display: flex; gap: 8px; flex-wrap: wrap; }
 .gp-chain { font-family: inherit; font-size: 14px; font-weight: 600; color: var(--gray-600); background: var(--gray-100); border: 1.5px solid transparent; border-radius: var(--r-pill); padding: 7px 16px; cursor: pointer; }
 .gp-chain.sel { color: var(--primary-700); background: var(--primary-50); border-color: var(--primary-500); }
+.gp-chain-more { background: none; border: 1.5px dashed var(--gray-300); color: var(--primary-600); }

@@ -10803,7 +10803,7 @@ const DEFAULT_POOL_BARCODES = {
   "דאודורנט": '7290000299907'
 };
 let _gpPrices = {}, _gpMeta = null, _gpAsked = new Set(), _gpLoadedAt = 0, _gpLoading = null, _gpError = null;
-let _gpStoresBy = {}, _gpChains = null, _gpSettingsChain = null, _gpStoreFilter = '', _gpSearchSeq = 0, _gpSearchTimer = null, _gpPickFor = null, _gpSheetKind = null;
+let _gpStoresBy = {}, _gpChains = null, _gpAllChains = false, _gpSettingsChain = null, _gpStoreFilter = '', _gpSearchSeq = 0, _gpSearchTimer = null, _gpPickFor = null, _gpSheetKind = null;
 const _gpCfg = () => familyData?.groceryPrices || null;
 const _gpFeature = () => featureOn('groceryPrices') && isParent();
 const _gpOn = () => _gpFeature() && !!_gpCfg()?.on && !!_gpCfg()?.store;
@@ -11120,7 +11120,8 @@ async function openGpSettings(chain) {
       <label class="gp-row"><span>הצג מחירים ברשימה</span>
         <input type="checkbox" class="gp-toggle" ${cfg.on ? 'checked' : ''} onchange="_gpSetOn(this.checked)"></label>
       <div class="gp-sheet-sec">רשת</div>
-      <div class="gp-chains">${chains.map(c => `<button class="gp-chain${c.id === ch ? ' sel' : ''}" onclick="_gpStoreFilter='';openGpSettings('${esc(c.id)}')">${esc(c.name)}</button>`).join('')}</div>
+      <div class="gp-chains">${chains.filter((c, i) => _gpAllChains || i < 8 || c.id === ch).map(c => `<button class="gp-chain${c.id === ch ? ' sel' : ''}" onclick="_gpStoreFilter='';openGpSettings('${esc(c.id)}')">${esc(c.name)}</button>`).join('')}
+        ${!_gpAllChains && chains.length > 8 ? `<button class="gp-chain gp-chain-more" onclick="_gpAllChains=true;openGpSettings()">עוד ${chains.length - 8} רשתות</button>` : ''}</div>
       <div class="gp-sheet-sec">סניף · ${esc(data?.chainName || chains.find(c => c.id === ch)?.name || '')}</div>
       ${many ? `<input class="g-input gp-search" id="gpStoreSearch" value="${esc(_gpStoreFilter)}" placeholder="חיפוש לפי עיר או שם הסניף" oninput="_gpStoreFilter=this.value;_gpRenderStores()">` : ''}
       <div class="gp-store-list" id="gpStoreList">${all ? _gpStoresHtml(stores, mine) : `<div class="gp-muted gp-center">${data === false ? 'לא הצלחנו לטעון את הסניפים. נסו שוב.' : 'טוען סניפים…'}</div>`}</div>
