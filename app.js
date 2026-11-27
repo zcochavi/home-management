@@ -1732,7 +1732,7 @@ function _applyAdminUI() {
 }
 
 // ── Toast (temporary on-screen info, no bell) ────────────────
-function showToast(msg, type = 'info', duration = 4000) {
+function _toastWrap() {
   let wrap = el('toastWrap');
   if (!wrap) {
     wrap = document.createElement('div');
@@ -1740,6 +1740,10 @@ function showToast(msg, type = 'info', duration = 4000) {
     wrap.style.cssText = 'position:fixed;bottom:calc(var(--tab-bar-h,68px) + env(safe-area-inset-bottom,0px) + 12px);right:50%;transform:translateX(50%);z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;width:90%;max-width:360px';
     document.body.appendChild(wrap);
   }
+  return wrap;
+}
+function showToast(msg, type = 'info', duration = 4000) {
+  const wrap = _toastWrap();
   const t = document.createElement('div');
   const bg = type === 'error' ? '#c53030' : type === 'success' ? '#4CAF84' : '#4a65cc';
   t.style.cssText = `background:${bg};color:#fff;padding:12px 18px;border-radius:12px;font-size:13px;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.18);opacity:0;transition:opacity .25s;text-align:center;pointer-events:none`;
@@ -10572,11 +10576,11 @@ function renderShoppingList() {
   const gp = _gpOn();
   if (gp) _gpRefresh();
   if (!hasContent) {
-    el('shoppingListEl').innerHTML = `<div class="empty">${t('shoppingListEmpty')}</div>`;
+    el('shoppingListEl').innerHTML = _smartFillBtnHtml() + `<div class="empty">${t('shoppingListEmpty')}</div>`;
     el('doneShoppingBtn').style.display = 'none';
     return;
   }
-  let html = gp ? _gpTotalHtml() : (_gpFeature() ? _gpInviteHtml() : '');
+  let html = _smartFillBtnHtml() + (gp ? _gpTotalHtml() : (_gpFeature() ? _gpInviteHtml() : ''));
   const cats = getGroceryCats();
   const knownCats = new Set(cats.map(c => c.name));
 
@@ -10591,8 +10595,8 @@ function renderShoppingList() {
       : 'background:#e9f5ff;color:#2b6cb0';
     const qtyBadge = `<span class="unit-badge slist-req-badge" style="${badgeStyle}">${fmtQty(requested, item.qtyType)}</span>`;
     const line = gp ? _gpLine(item) : null;
-    return `<div class="slist-item">
-      <div class="slist-item-name">${esc(item.name)} ${qtyBadge}${line ? _gpProductLine(line, item.poolId) : ''}</div>
+    return `<div class="slist-item${item.smart && _smartJustAdded.has(item.id) ? ' gfill-new' : ''}">
+      <div class="slist-item-name">${item.smart ? '<span class="gfill-mark" title="נוסף ע״י מילוי חכם">✨</span>' : ''}${esc(item.name)} ${qtyBadge}${line ? _gpProductLine(line, item.poolId) : item.smart && item.smartWhy ? `<div class="gfill-why">${esc(item.smartWhy)}</div>` : ''}</div>
       ${line ? _gpPriceHtml(line, actual) : ''}
       <input class="qty-input${isKg?' kg':''}" type="number"
         min="${isKg?'0.001':'1'}" step="${isKg?'0.001':'1'}" value="${actual}"
@@ -11612,6 +11616,74 @@ function dismissMissedItems() {
   const { trip } = _lastTripMissed();
   if (trip) { try { localStorage.setItem(_missedDismissKey(), String(trip.ts)); } catch (e) {} }
   renderShoppingList();
+}
+// ── Smart fill: one tap fills the list with what the family will probably need this trip ──
+// From the purchase statistics: an item is in if it will run out before the next trip — its usual
+// interval has passed, or will by then (the family's usual time between trips) — and it isn't
+// off season; staples bought on nearly every trip fall out of the same rule. Plus what wasn't
+// bought last time. Quantity: the usual one. Only items not already on the list or in the cart.
+let _smartJustAdded = new Set(), _smartUndo = null;
+function _smartFillPlan() {
+  const log = _purchaseLog;
+  if (!log?.trips?.n) return [];
+  const T = log.trips, now = Date.now();
+  const tripGap = T.n > 1 ? Math.max(1, (T.last - T.first) / 864e5 / (T.n - 1)) : 7; // days between trips
+  const sinceTrip = (now - (T.last || now)) / 864e5;
+  const inList = new Set([...S.shoppingList, ...S.inCart].map(x => _plKey(x.name)));
+  const plan = new Map();
+  _lastTripMissed().items.forEach(m => {
+    const k = _plKey(m.name);
+    if (!inList.has(k)) plan.set(k, { name: m.name, qty: m.qty || 1, qtyType: m.qtyType, why: 'לא נקנה בפעם הקודמת' });
+  });
+  _groceryStats(log, now).forEach(x => {
+    const k = _plKey(x.name);
+    if (inList.has(k) || plan.has(k) || !x.gap || x.seasonFactor < 0.5) return;
+    const share = x.n / T.n; // on how many of the trips it was bought
+    if (x.n < 3 && !(x.n >= 2 && share >= 0.5)) return; // not enough to tell
+    const runsOut = x.since + Math.max(tripGap - sinceTrip, tripGap * 0.5) >= x.gap * 0.9;
+    if (!runsOut) return;
+    plan.set(k, { name: x.name, qty: Math.round(x.qty * 1000) / 1000 || 1,
+      why: share >= 0.7 ? 'נקנה כמעט בכל קנייה' : `נקנה ${_fmtEvery(x.gap)} · לאחרונה ${_fmtAgo(x.since)}` });
+  });
+  return [...plan.values()];
+}
+function _smartFillBtnHtml() {
+  if (!isParent() || !_purchaseLog || (_purchaseLog.trips?.n || 0) < 3) return '';
+  return `<div class="gfill-bar"><button class="gfill-btn" onclick="smartFillList()">✨ מלא לי את הרשימה</button></div>`;
+}
+function smartFillList() {
+  const plan = _smartFillPlan();
+  if (!plan.length) { showToast('נראה שיש לכם הכל 🙂 לפי ההרגלים שלכם אין מה להוסיף הפעם', 'info'); return; }
+  const before = S.shoppingList.map(x => x.id);
+  const added = plan.map((it, i) => {
+    const pool = S.groceryPool.find(p => _plKey(p.name) === _plKey(it.name));
+    const qty = pool?.lastQty || it.qty || 1;
+    return { id: Date.now() + i, ...(pool ? { poolId: pool.id, category: pool.category } : {}), name: pool?.name || it.name,
+      qty, qtyType: it.qtyType || pool?.qtyType || 'count', requestedQty: qty, smart: true, smartWhy: it.why };
+  });
+  S.shoppingList.push(...added);
+  _smartJustAdded = new Set(added.map(x => x.id));
+  _smartUndo = before;
+  saveGrocery(); renderShoppingList(); renderPool();
+  setTimeout(() => { _smartJustAdded = new Set(); }, 2500);
+  _undoToast(`✨ נוספו ${added.length === 1 ? 'פריט אחד' : added.length + ' פריטים'} לרשימה`, () => {
+    if (!_smartUndo) return;
+    const keep = new Set(_smartUndo), ids = new Set(added.map(x => x.id));
+    S.shoppingList = S.shoppingList.filter(x => keep.has(x.id) || !ids.has(x.id));
+    _smartUndo = null;
+    saveGrocery(); renderShoppingList(); renderPool();
+  });
+}
+// A toast with an "undo" button (6 seconds)
+function _undoToast(msg, onUndo) {
+  const wrap = _toastWrap();
+  const t = document.createElement('div');
+  t.className = 'undo-toast';
+  t.innerHTML = `<span>${esc(msg)}</span><button>ביטול</button>`;
+  t.querySelector('button').onclick = () => { onUndo(); t.remove(); };
+  wrap.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('in'));
+  setTimeout(() => { t.classList.remove('in'); setTimeout(() => t.remove(), 280); }, 6000);
 }
 function addSuggestedItem(key) {
   const st = _groceryStats(_purchaseLog).find(x => _plKey(x.name) === key);
