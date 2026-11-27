@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <script>
     (async function(){
       try {
@@ -860,6 +860,7 @@
         <div class="card">
           <div class="pool-title-row">
             <div class="card-title" id="historyTitle"></div>
+            <button class="hist-stats-btn" onclick="switchGrocerySection('stats')">📊 סטטיסטיקה</button>
             <button class="pool-search-toggle" id="historySearchToggle" onclick="toggleHistorySearch()">🔍</button>
           </div>
           <div class="pool-search-wrap" id="historySearchWrap" style="display:none">
@@ -869,8 +870,19 @@
         </div>
       </div>
 
+      <div id="grocerySec-stats" style="display:none">
+        <div class="card">
+          <div class="pool-title-row">
+            <div class="card-title">📊 סטטיסטיקת קניות</div>
+            <button class="hist-stats-btn" onclick="switchGrocerySection('history')">‹ להיסטוריה</button>
+          </div>
+          <div id="groceryStatsEl"></div>
+        </div>
+      </div>
+
       <!-- SHOPPING + CART combined -->
       <div id="grocerySec-shopping" style="display:none">
+        <div id="grocerySuggestEl"></div>
         <div class="card">
           <div class="card-title" id="shoppingListTitle"></div>
           <div id="shoppingListEl"></div>

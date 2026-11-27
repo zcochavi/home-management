@@ -387,6 +387,59 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
 .post-new-tag { margin-inline-start: 6px; vertical-align: 1px; }
 @media (prefers-reduced-motion: reduce) { .post-emerge { animation: none; } }
 
+/* Full-screen sign-in / profile screens: clear of the status and navigation bars */
+#authScreen, #loginScreen { padding-top: max(20px, env(safe-area-inset-top, 0px)); padding-bottom: max(20px, env(safe-area-inset-bottom, 0px)); }
+
+/* Supermarket: "maybe you forgot?" and statistics */
+.gsugg-card { border: 1.5px solid var(--primary-100); background: var(--primary-50); }
+.gsugg-sub { font-size: 12px; font-weight: 600; color: var(--gray-500); margin: -6px 0 8px; }
+.gsugg-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid var(--primary-100); }
+.gsugg-row:first-of-type { border-top: none; }
+.gsugg-info { flex: 1; min-width: 0; }
+.gsugg-name { font-size: 14px; font-weight: 800; color: var(--gray-900); }
+.gsugg-why { font-size: 11px; font-weight: 600; color: var(--gray-500); margin-top: 2px; }
+.gsugg-add { border: none; border-radius: 10px; padding: 7px 12px; background: var(--primary-500); color: #fff; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; flex-shrink: 0; }
+.gsugg-skip { border: none; background: none; color: var(--gray-400); font-size: 15px; cursor: pointer; padding: 4px 6px; flex-shrink: 0; }
+.gstat-summary { display: flex; gap: 8px; margin-bottom: 14px; }
+.gstat-summary > div { flex: 1; background: var(--gray-50); border-radius: 12px; padding: 10px 6px; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.gstat-summary b { font-size: 20px; font-weight: 900; color: var(--primary-500); }
+.gstat-summary span { font-size: 11px; font-weight: 700; color: var(--gray-500); }
+.gstat-label { font-size: 12px; font-weight: 800; color: var(--gray-500); margin: 10px 0 6px; }
+.gstat-bars { display: flex; align-items: flex-end; gap: 8px; height: 110px; padding: 0 4px 18px; position: relative;
+  direction: ltr; } /* time runs left to right, like a chart axis — also in Hebrew */
+.gstat-bar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; position: relative; }
+.gstat-bar-fill { width: 70%; min-height: 3px; background: var(--primary-400, #8FA8FF); border-radius: 6px 6px 2px 2px; }
+.gstat-bar-n { font-size: 11px; font-weight: 800; color: var(--gray-600, #555); margin-bottom: 2px; }
+.gstat-bar-m { position: absolute; bottom: -18px; font-size: 10px; font-weight: 700; color: var(--gray-400); }
+.gstat-row { padding: 9px 0; border-top: 1px solid var(--gray-100); }
+.gstat-row:first-child { border-top: none; }
+.gstat-name { font-size: 14px; font-weight: 800; color: var(--gray-900); }
+.gstat-meta { font-size: 11px; font-weight: 600; color: var(--gray-500); margin-top: 2px; line-height: 1.6; }
+.gstat-due { display: inline-block; font-size: 10px; font-weight: 800; color: #b45309; background: #fef3c7; border-radius: 8px; padding: 1px 7px; margin-inline-start: 4px; }
+
+.hist-stats-btn { margin-inline-start: auto; border: 1.5px solid var(--primary-100); background: var(--primary-50); color: var(--primary-600);
+  border-radius: var(--r-pill); padding: 5px 12px; font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.hist-stats-btn + .pool-search-toggle { margin-inline-start: 6px; }
+
+.gstat-season { display: inline-block; font-size: 10px; font-weight: 800; color: #2563eb; background: #e0ecff; border-radius: 8px; padding: 1px 7px; margin-inline-start: 4px; }
+
+/* One item's statistics */
+.gstat-row { cursor: pointer; }
+.gstat-row:active { background: var(--gray-50); }
+.gstat-hint { font-weight: 600; color: var(--gray-400); }
+.gstat-search { margin: 0 0 6px; }
+.gitem-back { margin: 0 0 12px; }
+.gitem-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.gitem-name { font-size: 20px; font-weight: 900; color: var(--gray-900); }
+.gitem-facts { display: flex; flex-direction: column; gap: 0; margin: 4px 0 6px; }
+.gitem-facts > div, .gitem-recent > div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-top: 1px solid var(--gray-100); font-size: 13px; }
+.gitem-facts span, .gitem-recent span { color: var(--gray-500); font-weight: 600; }
+.gitem-facts b, .gitem-recent b { color: var(--gray-900); font-weight: 800; text-align: end; }
+.gitem-bars { gap: 3px; }
+.gitem-bars .gstat-bar-fill { width: 80%; }
+.gstat-bar.cur .gstat-bar-fill { background: var(--primary-500); }
+.gstat-bar.cur .gstat-bar-m { color: var(--primary-500); font-weight: 900; }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }
@@ -449,6 +502,9 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
   border-bottom: 1px solid var(--gray-100);
   box-shadow: 0 2px 12px rgba(0,0,0,0.05);
   padding: 0 var(--sp-md);
+  /* Phones that draw the app under the status bar (installed web app / Android edge to edge,
+     with viewport-fit=cover): keep the header below it. 0 elsewhere. */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 .header-row {
   display: flex; align-items: center; height: 50px; position: relative;
@@ -2018,6 +2074,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
   position: sticky; top: 0; z-index: 10;
   background: var(--surface);
   padding: 14px var(--sp-md);
+  padding-top: calc(14px + env(safe-area-inset-top, 0px));
   display: flex; align-items: center; gap: 10px;
   border-bottom: 1px solid var(--gray-100);
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
