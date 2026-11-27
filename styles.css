@@ -2791,3 +2791,6 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .gp-store { display: flex; justify-content: space-between; align-items: center; padding: 11px 4px; font-family: inherit; font-size: 14px; color: var(--gray-700); background: none; border: none; border-bottom: 1px solid var(--gray-100); cursor: pointer; text-align: right; }
 .gp-store.sel { color: var(--primary-700); font-weight: 600; }
 .gp-check { color: var(--primary-600); font-weight: 700; }
+.gp-kg { color: var(--primary-600); font-weight: 600; cursor: pointer; }
+.gp-weight-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; font-size: 14px; color: var(--gray-600); }
+.gp-weight-row input { width: 110px; text-align: center; font-size: 16px; }
