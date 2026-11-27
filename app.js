@@ -10538,7 +10538,7 @@ function confirmEditPoolItem(id) {
   if (newName !== oldName && !pool.barcodeSkip) {
     if (!pool.barcode && DEFAULT_POOL_BARCODES[oldName]) pool.barcode = DEFAULT_POOL_BARCODES[oldName];
     Object.entries(GP_CHAIN_DEFAULTS).forEach(([ch, map]) => {
-      if (map[oldName] && !pool.barcodes?.[ch]) pool.barcodes = { ...(pool.barcodes || {}), [ch]: map[oldName] };
+      if (map[oldName] && !(pool.barcodes && ch in pool.barcodes)) pool.barcodes = { ...(pool.barcodes || {}), [ch]: map[oldName] };
     });
   }
   pool.name     = newName;
@@ -10828,7 +10828,7 @@ const _gpChain = () => _gpCfg()?.chain || 'hatzi-hinam';
 const _gpLocalCode = c => String(c).length < 8 || /^7290000000\d{3}$/.test(String(c));
 function _gpBarcode(p, chain = _gpChain()) {
   if (!p || p.barcodeSkip) return null;
-  if (p.barcodes?.[chain]) return p.barcodes[chain];
+  if (p.barcodes && chain in p.barcodes) return p.barcodes[chain] || null; // '' = unlinked here on purpose
   if (p.barcode && (!_gpLocalCode(p.barcode) || (p.barcodeChain || 'hatzi-hinam') === chain)) return p.barcode;
   const d = (GP_CHAIN_DEFAULTS[chain] || {})[p.name] || DEFAULT_POOL_BARCODES[p.name];
   if (d && (!_gpLocalCode(d) || chain === 'hatzi-hinam' || (GP_CHAIN_DEFAULTS[chain] || {})[p.name] === d)) return d;
@@ -10894,7 +10894,11 @@ function _gpRefresh(force) {
       _gpAsked = new Set(codes); _gpLoadedAt = Date.now(); _gpError = null;
     })
     .catch(e => { console.warn('grocery prices:', e); _gpError = String(e.message || e); _gpLoadedAt = Date.now(); _gpAsked = new Set(codes); })
-    .finally(() => { _gpLoading = null; if (S.tab === 'grocery' && _grocerySection === 'shopping') renderShoppingList(); });
+    .finally(() => {
+      _gpLoading = null;
+      if (S.tab === 'grocery' && _grocerySection === 'shopping') renderShoppingList();
+      if (S.tab === 'grocery' && _grocerySection === 'stats' && _gstatItem) renderGroceryStats(); // today's price
+    });
   return _gpLoading;
 }
 // Typical weight of one unit (grams), for products sold by weight but listed in units. Matched
@@ -11007,9 +11011,13 @@ function _gpSheet(html) {
     ov = document.createElement('div');
     ov.id = 'gpSheetOv'; ov.className = 'gp-sheet-ov';
     ov.addEventListener('click', e => { if (e.target === ov) _gpCloseSheet(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && el('gpSheetOv')?.classList.contains('open')) _gpCloseSheet(); });
     document.body.appendChild(ov);
   }
-  ov.innerHTML = `<div class="gp-sheet" dir="rtl"><div class="gp-grab"></div>${html}</div>`;
+  // A close button that stays at the top while the sheet scrolls (long branch lists); the
+  // buttons at the bottom stay in view too (CSS)
+  ov.innerHTML = `<div class="gp-sheet" dir="rtl"><div class="gp-sheet-top"><div class="gp-grab"></div>
+    <button class="gp-sheet-x" onclick="_gpCloseSheet()" aria-label="סגירה">✕</button></div>${html}</div>`;
   requestAnimationFrame(() => ov.classList.add('open'));
   return ov;
 }
@@ -11051,8 +11059,11 @@ async function _gpSearchNow() {
   try {
     const d = await _gpFetch('search', { store: _gpCfg().store, q });
     if (seq !== _gpSearchSeq || _gpPickFor !== poolId) return;
-    const cur = _gpBarcode(S.groceryPool.find(x => x.id === poolId));
-    const res = d.results || [];
+    const pool = S.groceryPool.find(x => x.id === poolId), cur = _gpBarcode(pool);
+    // The linked product first (the item's own name often doesn't find it), then the results
+    const linked = cur && (_gpPrices[cur] || (d.results || []).find(r => String(r.code) === String(cur))
+      || (_gpProductName(pool) ? { code: cur, name: _gpProductName(pool), price: null } : null));
+    const res = [...(linked ? [linked] : []), ...(d.results || []).filter(r => String(r.code) !== String(cur))];
     // "Cheapest" by the price per unit, among the products measured in the most common unit
     // whose name starts with what was searched (not the wafers when looking for chocolate milk)
     const first = q.split(/\s+/)[0];
@@ -11066,8 +11077,9 @@ async function _gpSearchNow() {
         <span class="gp-radio"></span>
         <span class="gp-opt-main"><span class="gp-opt-n">${esc(r.name)}${cheapest && r === cheapest && res.length > 1 ? ' <span class="gp-tag">הכי זול</span>' : ''}</span>
           <span class="gp-opt-m">${esc(r.maker || '')}</span></span>
-        <span class="gp-opt-p">${_gpMoney(r.price)}<span>${r.weighted ? 'לק"ג' : r.unitPrice && r.unit ? `${_gpMoney(r.unitPrice)} ל${esc(_gpUnit(r.unit))}` : ''}</span></span>
-      </button>`).join('') : `<div class="gp-muted gp-center">לא נמצאו מוצרים. נסו מילה אחרת.</div>`;
+        <span class="gp-opt-p">${r.price != null ? _gpMoney(r.price) : ''}<span>${r.weighted ? 'לק"ג' : r.unitPrice && r.unit ? `${_gpMoney(r.unitPrice)} ל${esc(_gpUnit(r.unit))}` : ''}</span></span>
+      </button>${linked && r === linked ? `<div class="gp-sheet-sec gp-other">${res.length > 1 ? 'מוצרים אחרים' : 'לא נמצאו מוצרים אחרים בשם הזה — חפשו מילה אחרת כדי להחליף'}</div>` : ''}`).join('')
+      : `<div class="gp-muted gp-center">לא נמצאו מוצרים. נסו מילה אחרת.</div>`;
   } catch (e) {
     if (seq === _gpSearchSeq) box.innerHTML = `<div class="gp-muted gp-center">החיפוש לא הצליח. נסו שוב.</div>`;
   }
@@ -11087,11 +11099,14 @@ function _gpUnlink(poolId, skip) {
   const p = S.groceryPool.find(x => x.id === poolId);
   if (!p) return;
   const chain = _gpChain();
-  if (p.barcodes) { delete p.barcodes[chain]; if (!Object.keys(p.barcodes).length) delete p.barcodes; }
+  // Unlinked in this chain on purpose ('' — no fallback to the default pool's product)
+  p.barcodes = { ...(p.barcodes || {}), [chain]: '' };
   if (p.productNames) { delete p.productNames[chain]; if (!Object.keys(p.productNames).length) delete p.productNames; }
   if (chain === 'hatzi-hinam' || (p.barcode && !_gpLocalCode(p.barcode))) { delete p.barcode; delete p.productName; }
   if (skip) p.barcodeSkip = true; else delete p.barcodeSkip;
-  saveGrocery(); _gpCloseSheet(); renderShoppingList(); renderPool();
+  saveGrocery(); renderShoppingList(); renderPool();
+  if (skip) _gpCloseSheet();
+  else openGpPicker(poolId); // stay in the picker to choose another product
 }
 // Weight of one unit, for an item sold by weight that the family lists in units
 function openGpWeight(poolId) {
@@ -11202,7 +11217,7 @@ function _gpSetStore(id) {
   _gpSaveCfg({ on: true, store: id, storeLabel: st.label, chainName: data.chainName || '', chain: ch });
   _gpRefresh(true);
   _gpStoreFilter = '';
-  openGpSettings(ch);
+  _gpCloseSheet(); // done — back to the list, now with this branch's prices
 }
 
 // ════════════════════════════════════════
@@ -11548,7 +11563,14 @@ function _itemPriceHtml(it, fmtD) {
 // Spending, from purchases made with prices on: this month, per trip, the last 6 months, top items
 function _spendHtml(log, now) {
   const sp = log.trips.spend || {};
-  if (!Object.keys(sp).length) return '';
+  if (!Object.keys(sp).length) {
+    // No priced trips yet: say why, rather than show nothing
+    if (!_gpFeature()) return '';
+    return `<div class="gstat-label">💰 הוצאות</div>
+      <div class="gstat-empty-spend">${_gpOn()
+        ? 'עוד אין קניות עם מחירים. מהפעם הבאה שתלחצו ״סיימתי לקנות״, יופיעו כאן ההוצאות של כל קנייה ומחיר כל מוצר.'
+        : 'כדי לראות כאן כמה עולה כל קנייה וכל מוצר, הפעילו מחירים ברשימת הקניות (⚙️ בכרטיס המחירים).'}</div>`;
+  }
   const months = [];
   for (let i = 5; i >= 0; i--) { const d = new Date(now); d.setDate(1); d.setMonth(d.getMonth() - i); months.push(d); }
   const vals = months.map(m => sp[_plMonth(m.getTime())] || 0), maxV = Math.max(1, ...vals);
@@ -11576,6 +11598,7 @@ function _spendHtml(log, now) {
 async function renderGroceryStats() {
   const box = el('groceryStatsEl');
   if (!box) return;
+  if (_gpOn()) _gpRefresh(); // today's prices, for the item view
   if (!_purchaseLog) { box.innerHTML = `<div class="empty">⏳ טוען…</div>`; await _loadPurchaseLog(); }
   const log = _purchaseLog, now = Date.now();
   if (_gstatItem && log.items[_gstatItem]) {
