@@ -11011,9 +11011,13 @@ function _gpSheet(html) {
     ov = document.createElement('div');
     ov.id = 'gpSheetOv'; ov.className = 'gp-sheet-ov';
     ov.addEventListener('click', e => { if (e.target === ov) _gpCloseSheet(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && el('gpSheetOv')?.classList.contains('open')) _gpCloseSheet(); });
     document.body.appendChild(ov);
   }
-  ov.innerHTML = `<div class="gp-sheet" dir="rtl"><div class="gp-grab"></div>${html}</div>`;
+  // A close button that stays at the top while the sheet scrolls (long branch lists); the
+  // buttons at the bottom stay in view too (CSS)
+  ov.innerHTML = `<div class="gp-sheet" dir="rtl"><div class="gp-sheet-top"><div class="gp-grab"></div>
+    <button class="gp-sheet-x" onclick="_gpCloseSheet()" aria-label="סגירה">✕</button></div>${html}</div>`;
   requestAnimationFrame(() => ov.classList.add('open'));
   return ov;
 }
@@ -11213,7 +11217,7 @@ function _gpSetStore(id) {
   _gpSaveCfg({ on: true, store: id, storeLabel: st.label, chainName: data.chainName || '', chain: ch });
   _gpRefresh(true);
   _gpStoreFilter = '';
-  openGpSettings(ch);
+  _gpCloseSheet(); // done — back to the list, now with this branch's prices
 }
 
 // ════════════════════════════════════════
