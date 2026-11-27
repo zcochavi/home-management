@@ -20,14 +20,62 @@ const HATZI_HINAM = { slug: 'hatzi-hinam', chainId: '7290700100008', base: 'http
 //                within minutes, so each file is downloaded right after its listing is read.
 const CHAINS = {
   'hatzi-hinam': {
-    ...HATZI_HINAM, name: 'חצי חינם',
+    ...HATZI_HINAM, name: 'חצי חינם', portal: 'listing',
     listUrl: (kind, page) => `${HATZI_HINAM.base}/Prices?t=${{ prices: 1, promos: 2, stores: 3 }[kind]}&p=${page}`,
   },
   shufersal: {
-    slug: 'shufersal', chainId: '7290027600007', base: 'https://prices.shufersal.co.il', name: 'שופרסל', byStore: true,
+    slug: 'shufersal', chainId: '7290027600007', base: 'https://prices.shufersal.co.il', name: 'שופרסל', portal: 'listing', byStore: true,
     listUrl: (kind, page, storeId) => `https://prices.shufersal.co.il/FileObject/UpdateCategory?catID=${{ prices: 2, promos: 4, stores: 5 }[kind]}&storeId=${storeId || 0}&page=${page}`,
   },
 };
+// The other supermarket chains, by the shared portal they publish on (logins are public — listed on
+// the government's price-transparency page). Pharmacies and convenience stores are left out.
+//   cerberus  — url.publishedprices.co.il: a login per chain (CSRF token + session cookie), then
+//               POST /file/json/dir lists every file, GET /file/d/<path> downloads
+//   laib      — laibcatalog.co.il: GET /webapi/api/getfiles?edi=<chain id> lists, /webapi/<chain id>/<file>
+//   bina      — <prefix>.binaprojects.com: POST /MainIO_Hok.aspx (WFileType 1 stores, 4 full prices;
+//               WStore = branch) lists, /Download/<file>
+//   carrefour — prices.carrefour.co.il: today's files are a JavaScript list in the page
+const CERBERUS = 'https://url.publishedprices.co.il';
+const cerb = (slug, name, chainId, user, pass = '', folder = '/') => [slug, { slug, name, chainId, portal: 'cerberus', user, pass, folder }];
+const laib = (slug, name, chainId) => [slug, { slug, name, chainId, portal: 'laib' }];
+const bina = (slug, name, chainId, prefix) => [slug, { slug, name, chainId, portal: 'bina', prefix, byStore: true }];
+Object.assign(CHAINS, Object.fromEntries([
+  cerb('rami-levy', 'רמי לוי', '7290058140886', 'RamiLevi'),
+  cerb('yochananof', 'יוחננוף', '7290803800003', 'yohananof'),
+  cerb('osher-ad', 'אושר עד', '7290103152017', 'osherad'),
+  cerb('tiv-taam', 'טיב טעם', '7290873255550', 'TivTaam'),
+  cerb('keshet-teamim', 'קשת טעמים', '7290785400000', 'Keshet'),
+  cerb('stop-market', 'סטופ מרקט', '7290639000004', 'Stop_Market'),
+  cerb('fresh-market', 'פרש מרקט', '7290876100000', 'freshmarket'),
+  cerb('super-yuda', 'סופר יודה', '7290058177776', 'yuda_ho', 'Yud@147', '/Yuda'),
+  cerb('politzer', 'פוליצר', '7291059100008', 'politzer'),
+  cerb('salach-dabach', 'סאלח דבאח', '7290526500006', 'SalachD', '12345'),
+  laib('victory', 'ויקטורי', '7290696200003'),
+  laib('mahsanei-hashuk', 'מחסני השוק', '7290661400001'),
+  laib('het-cohen', 'ח. כהן', '7290455000004'),
+  ['carrefour', { slug: 'carrefour', name: 'קרפור', chainId: '7290055700007', portal: 'carrefour' }],
+  bina('king-store', 'קינג סטור', '7290058108879', 'kingstore'),
+  bina('shuk-hayir', 'שוק העיר', '7290058148776', 'shuk-hayir'),
+  bina('zol-vebegadol', 'זול ובגדול', '7290058173198', 'zolvebegadol'),
+  bina('super-bareket', 'סופר ברקת', '7290875100001', 'superbareket'),
+  bina('maayan-2000', 'מעיין 2000', '7290058159628', 'maayan2000'),
+  bina('super-sapir', 'סופר ספיר', '7290058156016', 'supersapir'),
+  bina('city-market', 'סיטי מרקט', '7290058266241', 'citymarketkiryatgat'),
+  bina('meshnat-yosef', 'משנת יוסף', '7290058289400', 'ktshivuk'),
+  bina('shefa-birkat-hashem', 'שפע ברכת השם', '7290058134977', 'shefabirkathashem'),
+]));
+// Carrefour's page: const path = 'YYYYMMDD'; const files = [{ name: … }, …]
+function carrefourFiles(html) {
+  const day = (/const path = '(\d{8})'/.exec(html) || [])[1];
+  const m = /const files = (\[[\s\S]*?\]);/.exec(html) || /const files = (\[[\s\S]*?\])\s*$/m.exec(html);
+  if (!day || !m) return [];
+  let rows = [];
+  try { rows = JSON.parse(m[1]); } catch (e) { return []; }
+  return rows.map(r => String(r.name || '').trim()).filter(Boolean)
+    .map(name => ({ name, url: `https://prices.carrefour.co.il/${day}/${encodeURIComponent(name)}` }));
+}
+const cerberusCsrf = html => (/<meta name="csrftoken" content="([^"]+)"/.exec(String(html || '')) || [])[1] || null;
 
 // Download links on a listing page
 function listingLinks(html) {
@@ -113,15 +161,22 @@ function records(xml, tag) {
 const pick = (f, ...keys) => { for (const k of keys) if (f[k] != null && f[k] !== '') return f[k]; return null; };
 const num = v => { if (v == null || v === '') return null; const n = Number(String(v).replace(/,/g, '')); return Number.isFinite(n) ? n : null; };
 
+// Chains name their records differently: <Store> or <Branch> (Victory wraps <Branch>es in one <Store>),
+// <Item> or <Product>. The tag that yields the most usable records wins.
+function bestRecords(xml, tags, usable) {
+  let best = [];
+  for (const t of tags) { const r = records(xml, t).filter(usable); if (r.length > best.length) best = r; }
+  return best;
+}
 function parseStores(xml) {
-  return records(xml, 'Store').map(f => ({
+  return bestRecords(xml, ['Store', 'Branch'], f => pick(f, 'storeid')).map(f => ({
     storeId: pick(f, 'storeid'), subChainId: pick(f, 'subchainid'), subChainName: pick(f, 'subchainname'),
     name: pick(f, 'storename'), city: pick(f, 'city'), address: pick(f, 'address'),
   })).filter(s => s.storeId);
 }
 
 function parsePrices(xml) {
-  return records(xml, 'Item').map(f => ({
+  return bestRecords(xml, ['Item', 'Product'], f => pick(f, 'itemcode')).map(f => ({
     code: pick(f, 'itemcode'),
     name: pick(f, 'itemname', 'itemnm'),
     maker: pick(f, 'manufacturername', 'manufacturename'),
@@ -190,4 +245,4 @@ function rankProducts(items, query, limit = 25) {
   return scored.slice(0, limit).map(x => x[3]);
 }
 
-module.exports = { CHAINS, CITY_NAMES, cityName, storeLabel, rankProducts, HATZI_HINAM, listingLinks, parseFilename, sameStore, toText, parseStores, parsePrices, findStore, searchProducts, norm };
+module.exports = { CHAINS, CERBERUS, carrefourFiles, cerberusCsrf, CITY_NAMES, cityName, storeLabel, rankProducts, HATZI_HINAM, listingLinks, parseFilename, sameStore, toText, parseStores, parsePrices, findStore, searchProducts, norm };
