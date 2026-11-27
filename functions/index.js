@@ -2724,6 +2724,10 @@ async function cpLoadPrices(store, refresh, chain = 'hatzi-hinam') {
     return { meta, items: chunks.docs.flatMap(c => JSON.parse(c.data().json)) };
   }
   const [file] = await cpListFiles(chain, 'prices', f => f.type === 'PriceFull' && chainPrices.sameStore(f.storeId, store.storeId), 40, store.storeId);
+  if (!file && meta) { // not listed now (Carrefour lists only today's files, few just after midnight): the last ones kept
+    const chunks = await ref.collection('chunks').orderBy('i').get();
+    return { meta, items: chunks.docs.flatMap(c => JSON.parse(c.data().json)) };
+  }
   if (!file) throw new Error(`no PriceFull file for branch ${store.storeId}`);
   const parsed = chainPrices.parsePrices(chainPrices.toText(await cpDownload(chainPrices.CHAINS[chain], file)));
   const items = parsed.map(i => [i.code, i.name, i.maker, i.price, i.unitPrice, i.unit, i.qty, i.unitQty, i.weighted ? 1 : 0]);
