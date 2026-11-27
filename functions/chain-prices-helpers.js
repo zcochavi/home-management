@@ -12,6 +12,23 @@ const zlib = require('zlib');
 
 const HATZI_HINAM = { slug: 'hatzi-hinam', chainId: '7290700100008', base: 'https://shop.hazi-hinam.co.il' };
 
+// The chains the app supports, and where each one lists its files. kind: prices (PriceFull),
+// promos (PromoFull) or stores. byStore: the listing can be filtered to one branch.
+//   Hatzi Hinam: /Prices?t=<1 prices | 2 promos | 3 stores>&p=<page>
+//   Shufersal:   prices.shufersal.co.il/FileObject/UpdateCategory?catID=<2 PricesFull | 4 PromosFull |
+//                5 Stores>&storeId=<branch, 0 = all>&page=<page> — download links are signed and expire
+//                within minutes, so each file is downloaded right after its listing is read.
+const CHAINS = {
+  'hatzi-hinam': {
+    ...HATZI_HINAM, name: 'חצי חינם',
+    listUrl: (kind, page) => `${HATZI_HINAM.base}/Prices?t=${{ prices: 1, promos: 2, stores: 3 }[kind]}&p=${page}`,
+  },
+  shufersal: {
+    slug: 'shufersal', chainId: '7290027600007', base: 'https://prices.shufersal.co.il', name: 'שופרסל', byStore: true,
+    listUrl: (kind, page, storeId) => `https://prices.shufersal.co.il/FileObject/UpdateCategory?catID=${{ prices: 2, promos: 4, stores: 5 }[kind]}&storeId=${storeId || 0}&page=${page}`,
+  },
+};
+
 // Download links on a listing page
 function listingLinks(html) {
   const out = [], seen = new Set();
@@ -98,7 +115,7 @@ const num = v => { if (v == null || v === '') return null; const n = Number(Stri
 
 function parseStores(xml) {
   return records(xml, 'Store').map(f => ({
-    storeId: pick(f, 'storeid'), subChainId: pick(f, 'subchainid'),
+    storeId: pick(f, 'storeid'), subChainId: pick(f, 'subchainid'), subChainName: pick(f, 'subchainname'),
     name: pick(f, 'storename'), city: pick(f, 'city'), address: pick(f, 'address'),
   })).filter(s => s.storeId);
 }
@@ -146,6 +163,7 @@ const cityName = c => (c == null ? '' : CITY_NAMES[Number(c)] || (/^\d+$/.test(S
 function storeLabel(s) {
   const city = cityName(s.city);
   const addr = String(s.address || '').split(',').map(x => x.trim()).filter(x => x && x !== 'ישראל' && x !== city && !/^פ"?ת$/.test(x)).join(', ');
+  if (s.name && city && norm(s.name).includes(norm(city))) return s.name; // "שופרסל דיל פתח תקווה"
   return [city, s.name || addr].filter(Boolean).join(' · ') || ('סניף ' + s.storeId);
 }
 
@@ -172,4 +190,4 @@ function rankProducts(items, query, limit = 25) {
   return scored.slice(0, limit).map(x => x[3]);
 }
 
-module.exports = { CITY_NAMES, cityName, storeLabel, rankProducts, HATZI_HINAM, listingLinks, parseFilename, sameStore, toText, parseStores, parsePrices, findStore, searchProducts, norm };
+module.exports = { CHAINS, CITY_NAMES, cityName, storeLabel, rankProducts, HATZI_HINAM, listingLinks, parseFilename, sameStore, toText, parseStores, parsePrices, findStore, searchProducts, norm };

@@ -10744,7 +10744,7 @@ async function doneShopping() {
       const b = { name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' };
       // With prices on: the price paid, and remembered on the pool item for the ▲/▼ next time
       const line = _gpOn() ? _gpLine(x) : null;
-      if (line?.state === 'priced') { b.price = line.pr.price; if (line.pool) line.pool.lastPrice = line.pr.price; }
+      if (line?.state === 'priced') { b.price = line.pr.price; b.chain = _gpChain(); if (line.pool) _gpSetLastPrice(line.pool, line.pr.price); }
       return b;
     }),
     missed: missed.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' })),
@@ -10803,21 +10803,40 @@ const DEFAULT_POOL_BARCODES = {
   "דאודורנט": '7290000299907'
 };
 let _gpPrices = {}, _gpMeta = null, _gpAsked = new Set(), _gpLoadedAt = 0, _gpLoading = null, _gpError = null;
-let _gpStores = null, _gpSearchSeq = 0, _gpSearchTimer = null, _gpPickFor = null, _gpSheetKind = null;
+let _gpStoresBy = {}, _gpChains = null, _gpSettingsChain = null, _gpStoreFilter = '', _gpSearchSeq = 0, _gpSearchTimer = null, _gpPickFor = null, _gpSheetKind = null;
 const _gpCfg = () => familyData?.groceryPrices || null;
 const _gpFeature = () => featureOn('groceryPrices') && isParent();
 const _gpOn = () => _gpFeature() && !!_gpCfg()?.on && !!_gpCfg()?.store;
 const _gpMoney = n => '₪' + (Math.round(n * 100) / 100).toFixed(2);
 // The product a pool item is linked to: its own barcode, else the default pool's (not for items
 // the family marked "no product")
-function _gpBarcode(p) {
+// Several chains: a product chosen in a chain is kept per chain (pool field barcodes: { chain: code },
+// productNames likewise); the first chain's links stay in barcode / productName. A real barcode
+// (8+ digits) is the same product in every chain, so a link made in one chain works in the others
+// until the family picks something else there; short codes are a chain's own numbering (produce)
+// and are used only in that chain.
+const _gpChain = () => _gpCfg()?.chain || 'hatzi-hinam';
+const _gpLocalCode = c => String(c).length < 8;
+function _gpBarcode(p, chain = _gpChain()) {
   if (!p || p.barcodeSkip) return null;
-  return p.barcode || DEFAULT_POOL_BARCODES[p.name] || null;
+  if (p.barcodes?.[chain]) return p.barcodes[chain];
+  if (p.barcode && (!_gpLocalCode(p.barcode) || (p.barcodeChain || 'hatzi-hinam') === chain)) return p.barcode;
+  const d = (GP_CHAIN_DEFAULTS[chain] || {})[p.name] || DEFAULT_POOL_BARCODES[p.name];
+  if (d && (!_gpLocalCode(d) || chain === 'hatzi-hinam' || (GP_CHAIN_DEFAULTS[chain] || {})[p.name] === d)) return d;
+  return null;
 }
-function _gpPoolCodes() { return [...new Set(S.groceryPool.map(_gpBarcode).filter(Boolean))]; }
+// The default pool's produce in other chains (their own codes), filled in as each chain is checked
+const GP_CHAIN_DEFAULTS = { shufersal: {} };
+const _gpLastPrice = p => p?.lastPrices?.[_gpChain()] ?? (_gpChain() === 'hatzi-hinam' ? p?.lastPrice : undefined);
+function _gpSetLastPrice(p, price) {
+  p.lastPrices = { ...(p.lastPrices || {}), [_gpChain()]: price };
+  if (_gpChain() === 'hatzi-hinam') p.lastPrice = price;
+}
+const _gpProductName = p => p?.productNames?.[_gpChain()] || (p?.barcode && _gpBarcode(p) === p.barcode ? p.productName : '');
+function _gpPoolCodes() { return [...new Set(S.groceryPool.map(p => _gpBarcode(p)).filter(Boolean))]; }
 
 async function _gpFetch(op, params = {}, body) {
-  const qs = new URLSearchParams({ op, ...params }).toString();
+  const qs = new URLSearchParams({ op, chain: params.chain || _gpChain(), ...params }).toString();
   const r = await fetch(GP_URL + '?' + qs, body
     ? { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) }
     : {});
@@ -10828,10 +10847,10 @@ async function _gpFetch(op, params = {}, body) {
 // Prices of every linked pool item, fetched again after 30 minutes or when a new barcode appears
 function _gpRefresh(force) {
   if (!_gpOn() || _gpLoading) return _gpLoading;
-  const store = _gpCfg().store, codes = _gpPoolCodes();
+  const store = _gpChain() + ':' + _gpCfg().store, codes = _gpPoolCodes();
   const fresh = _gpMeta?.store === store && Date.now() - _gpLoadedAt < 30 * 60e3 && codes.every(c => _gpAsked.has(c));
   if (fresh && !force) return null;
-  _gpLoading = _gpFetch('prices', { store }, { codes })
+  _gpLoading = _gpFetch('prices', { store: _gpCfg().store }, { codes })
     .then(d => {
       if (_gpMeta?.store !== store) _gpPrices = {};
       Object.assign(_gpPrices, d.prices || {});
@@ -10869,7 +10888,8 @@ function _gpLine(item) {
   const pr = _gpPrices[code];
   if (!pr) return { state: _gpLoading || !_gpAsked.has(code) ? 'loading' : 'missing', pool, code };
   const qty = Number(item.qty ?? 1) || 1;
-  const delta = pool?.lastPrice && Math.abs(pr.price - pool.lastPrice) >= 0.05 ? pr.price - pool.lastPrice : 0;
+  const last = _gpLastPrice(pool);
+  const delta = last && Math.abs(pr.price - last) >= 0.05 ? pr.price - last : 0;
   // Sold by weight (price per kilo) but listed in units: units × the weight of one unit
   if (pr.weighted && item.qtyType !== 'kg') {
     const grams = _gpUnitGrams(pool, pr);
@@ -11019,14 +11039,21 @@ async function _gpSearchNow() {
 function _gpPick(poolId, code) {
   const p = S.groceryPool.find(x => x.id === poolId), r = window._gpLastResults?.[code];
   if (!p || !r) return;
-  p.barcode = String(code); p.productName = r.name; delete p.barcodeSkip;
+  const chain = _gpChain();
+  p.barcodes = { ...(p.barcodes || {}), [chain]: String(code) };
+  p.productNames = { ...(p.productNames || {}), [chain]: r.name };
+  if (chain === 'hatzi-hinam') { p.barcode = String(code); p.productName = r.name; }
+  delete p.barcodeSkip;
   _gpPrices[String(code)] = r; _gpAsked.add(String(code));
   saveGrocery(); _gpCloseSheet(); renderShoppingList(); renderPool();
 }
 function _gpUnlink(poolId, skip) {
   const p = S.groceryPool.find(x => x.id === poolId);
   if (!p) return;
-  delete p.barcode; delete p.productName;
+  const chain = _gpChain();
+  if (p.barcodes) { delete p.barcodes[chain]; if (!Object.keys(p.barcodes).length) delete p.barcodes; }
+  if (p.productNames) { delete p.productNames[chain]; if (!Object.keys(p.productNames).length) delete p.productNames; }
+  if (chain === 'hatzi-hinam' || (p.barcode && !_gpLocalCode(p.barcode))) { delete p.barcode; delete p.productName; }
   if (skip) p.barcodeSkip = true; else delete p.barcodeSkip;
   saveGrocery(); _gpCloseSheet(); renderShoppingList(); renderPool();
 }
@@ -11068,49 +11095,77 @@ function _gpSaveWeight(poolId, reset) {
 function _gpPoolLinkHtml(p) {
   if (!_gpOn()) return '';
   const code = _gpBarcode(p), pr = code && _gpPrices[code];
-  const what = code ? esc(pr?.name || p.productName || 'מוצר מקושר') : (p.barcodeSkip ? 'בלי מוצר' : 'לא מקושר למוצר');
+  const what = code ? esc(pr?.name || _gpProductName(p) || 'מוצר מקושר') : (p.barcodeSkip ? 'בלי מוצר' : 'לא מקושר למוצר');
   const grams = pr?.weighted ? _gpUnitGrams(p, pr) : 0;
   return `<div class="gp-pool-link">🏷️ ${what}${pr ? ` · ${_gpMoney(pr.price)}${pr.weighted ? ' לק"ג' : ''}` : ''} <button class="gp-link-btn" onclick="openGpPicker(${p.id})">${code ? 'שינוי מוצר' : 'בחר מוצר'}</button>
     ${pr?.weighted ? `<button class="gp-link-btn" onclick="openGpWeight(${p.id})">⚖️ ${grams ? `יחידה ≈ ${grams} גרם` : 'משקל ליחידה'}</button>` : ''}</div>`;
 }
 
-// Settings: prices on/off and the branch
-async function openGpSettings() {
+// Settings: prices on/off, the chain and the branch
+const GP_CHAINS_FALLBACK = [{ id: 'hatzi-hinam', name: 'חצי חינם' }];
+async function openGpSettings(chain) {
   const cfg = _gpCfg() || {};
+  _gpSettingsChain = chain || _gpSettingsChain || cfg.chain || 'hatzi-hinam';
+  const ch = _gpSettingsChain;
   const render = () => {
-    const stores = _gpStores?.stores;
+    const data = _gpStoresBy[ch], all = data?.stores;
+    const f = _gpStoreFilter.trim();
+    const stores = all && f ? all.filter(st => (st.label + ' ' + (st.city || '') + ' ' + (st.sub || '')).includes(f)) : all;
+    const many = all && all.length > 15;
+    const chains = _gpChains || GP_CHAINS_FALLBACK;
+    const mine = st => ch === (cfg.chain || 'hatzi-hinam') && st.id === cfg.store;
     _gpSheet(`
       <div class="gp-sheet-h">מחירים ברשימת הקניות</div>
       <div class="gp-sheet-sub">מחירים מהקובץ היומי שהרשת מפרסמת לפי חוק שקיפות המחירים</div>
       <label class="gp-row"><span>הצג מחירים ברשימה</span>
         <input type="checkbox" class="gp-toggle" ${cfg.on ? 'checked' : ''} onchange="_gpSetOn(this.checked)"></label>
-      <div class="gp-sheet-sec">סניף · ${esc(_gpStores?.chainName || 'חצי חינם')}</div>
-      <div class="gp-store-list">${stores ? stores.map(st => `
-        <button class="gp-store${st.id === cfg.store ? ' sel' : ''}" onclick="_gpSetStore('${esc(st.id)}')">
-          <span>${esc(st.label)}</span>${st.id === cfg.store ? '<span class="gp-check">✓</span>' : ''}</button>`).join('')
-        : `<div class="gp-muted gp-center">${_gpStores === false ? 'לא הצלחנו לטעון את הסניפים. נסו שוב.' : 'טוען סניפים…'}</div>`}</div>
-      <div class="gp-sheet-note">רשתות נוספות — בהמשך.</div>
+      <div class="gp-sheet-sec">רשת</div>
+      <div class="gp-chains">${chains.map(c => `<button class="gp-chain${c.id === ch ? ' sel' : ''}" onclick="_gpStoreFilter='';openGpSettings('${esc(c.id)}')">${esc(c.name)}</button>`).join('')}</div>
+      <div class="gp-sheet-sec">סניף · ${esc(data?.chainName || chains.find(c => c.id === ch)?.name || '')}</div>
+      ${many ? `<input class="g-input gp-search" id="gpStoreSearch" value="${esc(_gpStoreFilter)}" placeholder="חיפוש לפי עיר או שם הסניף" oninput="_gpStoreFilter=this.value;_gpRenderStores()">` : ''}
+      <div class="gp-store-list" id="gpStoreList">${all ? _gpStoresHtml(stores, mine) : `<div class="gp-muted gp-center">${data === false ? 'לא הצלחנו לטעון את הסניפים. נסו שוב.' : 'טוען סניפים…'}</div>`}</div>
       <div class="gp-sheet-btns"><button class="gp-btn" onclick="_gpCloseSheet()">סגירה</button></div>`);
+  };
+  window._gpRenderStores = () => {
+    const all = _gpStoresBy[ch]?.stores, f = _gpStoreFilter.trim(), box = el('gpStoreList');
+    if (!all || !box) return;
+    const mine = st => ch === (cfg.chain || 'hatzi-hinam') && st.id === cfg.store;
+    box.innerHTML = _gpStoresHtml(f ? all.filter(st => (st.label + ' ' + (st.city || '') + ' ' + (st.sub || '')).includes(f)) : all, mine);
   };
   render();
   _gpSheetKind = 'settings'; _gpPickFor = null;
-  if (!_gpStores) {
-    try { _gpStores = await _gpFetch('stores'); } catch (e) { console.warn('grocery stores:', e); _gpStores = false; }
-    if (_gpSheetKind === 'settings') render();
-    if (_gpStores === false) _gpStores = null; // try again next time
+  const jobs = [];
+  if (!_gpChains) jobs.push(_gpFetch('chains').then(d => { _gpChains = d.chains; }).catch(() => {}));
+  if (!_gpStoresBy[ch]) jobs.push(_gpFetch('stores', { chain: ch }).then(d => { _gpStoresBy[ch] = d; })
+    .catch(e => { console.warn('grocery stores:', e); _gpStoresBy[ch] = false; }));
+  if (jobs.length) {
+    await Promise.all(jobs);
+    if (_gpSheetKind === 'settings' && _gpSettingsChain === ch) render();
+    if (_gpStoresBy[ch] === false) delete _gpStoresBy[ch]; // try again next time
   }
+}
+function _gpStoresHtml(stores, mine) {
+  if (!stores.length) return `<div class="gp-muted gp-center">אין סניף כזה</div>`;
+  // the family's branch first
+  const list = [...stores.filter(mine), ...stores.filter(st => !mine(st))].slice(0, 120);
+  return list.map(st => `
+    <button class="gp-store${mine(st) ? ' sel' : ''}" onclick="_gpSetStore('${esc(st.id)}')">
+      <span>${esc(st.label)}</span>${mine(st) ? '<span class="gp-check">✓</span>' : ''}</button>`).join('')
+    + (stores.length > list.length ? `<div class="gp-muted gp-center">ועוד ${stores.length - list.length} — חפשו לפי עיר</div>` : '');
 }
 function _gpSetOn(on) {
   _gpSaveCfg({ on }); // shown once a branch is chosen too
   if (on) _gpRefresh(true);
 }
 function _gpSetStore(id) {
-  const st = _gpStores?.stores?.find(s => s.id === id);
+  const ch = _gpSettingsChain || 'hatzi-hinam', data = _gpStoresBy[ch];
+  const st = data?.stores?.find(s => s.id === id);
   if (!st) return;
   _gpPrices = {}; _gpAsked = new Set(); _gpMeta = null;
-  _gpSaveCfg({ on: true, store: id, storeLabel: st.label, chainName: _gpStores.chainName || 'חצי חינם', chain: _gpStores.chain || 'hatzi-hinam' });
+  _gpSaveCfg({ on: true, store: id, storeLabel: st.label, chainName: data.chainName || '', chain: ch });
   _gpRefresh(true);
-  openGpSettings();
+  _gpStoreFilter = '';
+  openGpSettings(ch);
 }
 
 // ════════════════════════════════════════

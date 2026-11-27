@@ -80,3 +80,22 @@ test('storeLabel: city from its code, the address without the city and country',
   assert.strictEqual(cp.storeLabel({ storeId: '206', city: '9700', address: 'הרקון 2 הוד השרון' }), 'הוד השרון · הרקון 2 הוד השרון');
   assert.strictEqual(cp.storeLabel({ storeId: '9', city: '1', address: '' }), 'סניף 9');
 });
+
+test('Shufersal: listing URL by branch, file names, the uppercase Stores file', () => {
+  const S = cp.CHAINS.shufersal;
+  assert.strictEqual(S.listUrl('prices', 1, '413'), 'https://prices.shufersal.co.il/FileObject/UpdateCategory?catID=2&storeId=413&page=1');
+  assert.strictEqual(S.listUrl('stores', 2), 'https://prices.shufersal.co.il/FileObject/UpdateCategory?catID=5&storeId=0&page=2');
+  assert.strictEqual(cp.CHAINS['hatzi-hinam'].listUrl('prices', 3), 'https://shop.hazi-hinam.co.il/Prices?t=1&p=3');
+  const f = cp.parseFilename('PriceFull7290027600007-413-202611270300.gz');
+  assert.deepStrictEqual([f.type, f.storeId, f.ts], ['PriceFull', '413', Date.UTC(2026, 10, 27, 3, 0, 0)]);
+  const links = cp.listingLinks('<a href="https://pricesprodpublic.blob.core.windows.net/pricefull/PriceFull7290027600007-413-202611270300.gz?sv=2014&amp;sig=x">x</a>');
+  assert.strictEqual(links[0].url, 'https://pricesprodpublic.blob.core.windows.net/pricefull/PriceFull7290027600007-413-202611270300.gz?sv=2014&sig=x');
+  const xml = `<asx:abap><asx:values><STORES>
+    <STORE><CHAINID>7290027600007</CHAINID><SUBCHAINID>2</SUBCHAINID><STOREID>413</STOREID><SUBCHAINNAME>שופרסל דיל</SUBCHAINNAME>
+      <STORENAME>שופרסל דיל פתח תקווה</STORENAME><ADDRESS>ז'בוטינסקי 72</ADDRESS><CITY>פתח תקווה</CITY></STORE>
+    <STORE><STOREID>5</STOREID><SUBCHAINNAME>שופרסל שלי</SUBCHAINNAME><STORENAME>שלי רמת אביב</STORENAME><ADDRESS>איינשטיין 40</ADDRESS><CITY>תל אביב</CITY></STORE>
+  </STORES></asx:values></asx:abap>`;
+  const stores = cp.parseStores(xml);
+  assert.deepStrictEqual(stores.map(s => [s.storeId, s.subChainName, s.city]), [['413', 'שופרסל דיל', 'פתח תקווה'], ['5', 'שופרסל שלי', 'תל אביב']]);
+  assert.deepStrictEqual(stores.map(cp.storeLabel), ['שופרסל דיל פתח תקווה', 'תל אביב · שלי רמת אביב']);
+});
