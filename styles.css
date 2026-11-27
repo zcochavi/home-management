@@ -387,6 +387,9 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
 .post-new-tag { margin-inline-start: 6px; vertical-align: 1px; }
 @media (prefers-reduced-motion: reduce) { .post-emerge { animation: none; } }
 
+/* Full-screen sign-in / profile screens: clear of the status and navigation bars */
+#authScreen, #loginScreen { padding-top: max(20px, env(safe-area-inset-top, 0px)); padding-bottom: max(20px, env(safe-area-inset-bottom, 0px)); }
+
 /* Photo manager modal */
 .photo-member-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--gray-100); }
 .photo-member-row:last-child { border-bottom: none; }
@@ -449,6 +452,9 @@ button:has(> .btn-arr) { display: flex; align-items: center; justify-content: ce
   border-bottom: 1px solid var(--gray-100);
   box-shadow: 0 2px 12px rgba(0,0,0,0.05);
   padding: 0 var(--sp-md);
+  /* Phones that draw the app under the status bar (installed web app / Android edge to edge,
+     with viewport-fit=cover): keep the header below it. 0 elsewhere. */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 .header-row {
   display: flex; align-items: center; height: 50px; position: relative;
@@ -2018,6 +2024,7 @@ input[type="date"]:focus, input[type="time"]:focus { border-color: var(--primary
   position: sticky; top: 0; z-index: 10;
   background: var(--surface);
   padding: 14px var(--sp-md);
+  padding-top: calc(14px + env(safe-area-inset-top, 0px));
   display: flex; align-items: center; gap: 10px;
   border-bottom: 1px solid var(--gray-100);
   box-shadow: 0 2px 8px rgba(0,0,0,0.04);
