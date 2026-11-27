@@ -2690,6 +2690,60 @@ exports.chainPricesTlv = onRequestV2({ ...TLV_OPTS, timeoutSeconds: 300, memory:
   }
 });
 
+// ─── groceryPricesTlv — prices in the shopping list (Hatzi Hinam) ─────────────────────────────
+// Public price data only (no family data), from Tel Aviv like the trial above, whose download and
+// Firestore cache it shares. The app calls it only when the groceryPrices switch is on.
+//   GET  ?op=stores                         → the chain's branches, labelled for a picker
+//   GET  ?op=search&store=<id>&q=<words>    → products for a list item, best match first
+//   POST ?op=prices&store=<id>, body {codes} → the price of each barcode in the branch
+// The app sends POST bodies as text/plain, so the browser makes no preflight request.
+const _gpMem = new Map(); // storeId → { at, meta, items, byCode } — per instance, 10 minutes
+const _gpObj = a => ({ code: a[0], name: a[1], maker: a[2], price: a[3], unitPrice: a[4], unit: a[5], qty: a[6], unitQty: a[7], weighted: !!a[8] });
+async function _gpLoad(storeId) {
+  const hit = _gpMem.get(storeId);
+  if (hit && Date.now() - hit.at < 10 * 60e3) return hit;
+  const store = (await cpStores()).find(st => chainPrices.sameStore(st.storeId, storeId));
+  if (!store) throw Object.assign(new Error('unknown branch'), { status: 404 });
+  const { meta, items } = await cpLoadPrices(store, false);
+  const objs = items.map(_gpObj);
+  const out = { at: Date.now(), meta, items: objs, byCode: new Map(objs.map(o => [String(o.code), o])) };
+  _gpMem.set(storeId, out);
+  return out;
+}
+exports.groceryPricesTlv = onRequestV2({ ...TLV_OPTS, timeoutSeconds: 120, memory: '1GiB', cors: true }, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const op = String(req.query.op || '');
+    if (op === 'stores') {
+      const stores = (await cpStores()).filter(st => chainPrices.cityName(st.city) || st.name)
+        .map(st => ({ id: String(st.storeId), city: chainPrices.cityName(st.city), label: chainPrices.storeLabel(st) }))
+        .sort((a, b) => a.label.localeCompare(b.label, 'he'));
+      return res.json({ chain: 'hatzi-hinam', chainName: 'חצי חינם', stores });
+    }
+    const storeId = String(req.query.store || '').replace(/\D/g, '');
+    if (!storeId) return res.status(400).json({ error: 'store is required' });
+    const data = await _gpLoad(storeId);
+    const head = { store: storeId, fileTime: data.meta.fileTime || null, fetchedAt: data.meta.fetchedAt };
+    if (op === 'search') {
+      const q = String(req.query.q || '').slice(0, 80);
+      return res.json({ ...head, results: chainPrices.rankProducts(data.items, q, 25) });
+    }
+    if (op === 'prices') {
+      let body = req.body;
+      if (typeof body === 'string') { try { body = JSON.parse(body); } catch (e) { body = {}; } }
+      if (Buffer.isBuffer(body)) { try { body = JSON.parse(body.toString('utf8')); } catch (e) { body = {}; } }
+      const codes = [...new Set((body?.codes || String(req.query.codes || '').split(',')).map(String).filter(Boolean))].slice(0, 600);
+      const prices = {};
+      codes.forEach(c => { const o = data.byCode.get(c); if (o) prices[c] = o; });
+      return res.json({ ...head, prices });
+    }
+    res.status(400).json({ error: 'unknown op' });
+  } catch (e) {
+    console.error('groceryPricesTlv:', e);
+    res.status(e.status || 502).json({ error: String(e.message || e) });
+  }
+});
+
 // ─── webtopSync — runs every 20 min; syncs each family at the admin's Webtop interval ────
 // (appConfig/featureFlags.webtopSyncIntervalHours, set in the admin settings; default 6h)
 exports.webtopSync = functions.pubsub.schedule('*/20 * * * *').onRun(async () => {

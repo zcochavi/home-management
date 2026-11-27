@@ -65,3 +65,18 @@ test('parsePrices / searchProducts', () => {
   assert.deepStrictEqual(cp.searchProducts(items, 'תנובה').map(i => i.code), ['7290004131074']);
   assert.deepStrictEqual(cp.searchProducts(items, ''), []);
 });
+
+test('rankProducts: the plain product before variants, free items left out', () => {
+  const it = (code, name, price = 5) => ({ code, name, price });
+  const items = [it('1', 'ריבת חלב'), it('2', 'חלב מרוכז'), it('3', 'חלב 3% 1 ליטר'), it('4', 'חלב סויה וניל'), it('5', 'חלב חינם', 0), it('6', 'שומשום'), it('7', 'שום קלוף')];
+  assert.deepStrictEqual(cp.rankProducts(items, 'חלב').map(i => i.code), ['3', '2', '4', '1']);
+  assert.deepStrictEqual(cp.rankProducts(items, 'חלב סויה').map(i => i.code), ['4']);
+  assert.deepStrictEqual(cp.rankProducts(items, 'שום').map(i => i.code), ['7', '6']);
+  assert.deepStrictEqual(cp.rankProducts(items, ' '), []);
+});
+
+test('storeLabel: city from its code, the address without the city and country', () => {
+  assert.strictEqual(cp.storeLabel({ storeId: '209', city: '7900', address: 'ראשון לציון 1 , פ"ת , ישראל' }), 'פתח תקווה · ראשון לציון 1');
+  assert.strictEqual(cp.storeLabel({ storeId: '206', city: '9700', address: 'הרקון 2 הוד השרון' }), 'הוד השרון · הרקון 2 הוד השרון');
+  assert.strictEqual(cp.storeLabel({ storeId: '9', city: '1', address: '' }), 'סניף 9');
+});
