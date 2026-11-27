@@ -10759,6 +10759,15 @@ async function doneShopping() {
     }),
     missed: missed.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' })),
   };
+  // With prices: was the estimate right? The amount actually paid (the receipt) is kept with the
+  // trip — est and paid — and the statistics count it as the trip's spending
+  const priced = entry.bought.filter(b => b.total != null);
+  if (_gpOn() && priced.length) {
+    const est = Math.round(priced.reduce((a, b) => a + b.total, 0) * 100) / 100;
+    entry.est = est;
+    const paid = await _askPaid(est, entry.bought.length - priced.length);
+    if (paid != null) entry.paid = paid;
+  }
   const ttlCutoff = Date.now() - getShoppingHistoryTtlDays() * 24 * 60 * 60 * 1000;
   S.shoppingHistory = [entry, ...S.shoppingHistory.filter(e => e.ts >= ttlCutoff)].slice(0, 50);
   _logPurchases(entry);
@@ -10767,6 +10776,34 @@ async function doneShopping() {
   saveGrocery();
   saveShoppingHistory();
   switchGrocerySection('shopping');
+}
+
+// "The estimate was ₪X — is that what you paid?" → the amount (the estimate, or the corrected
+// one), or null when skipped
+function _askPaid(est, unpriced) {
+  const ov = _cmodalEl();
+  ov.innerHTML = `<div class="cmodal-box gp-paid" onclick="event.stopPropagation()">
+    <div class="cmodal-msg">🧾 כמה יצא בקופה?</div>
+    <div class="gp-paid-est">סה״כ משוער: <b>${_gpMoney(est)}</b>${unpriced ? `<small>לא כולל ${unpriced === 1 ? 'פריט אחד' : unpriced + ' פריטים'} בלי מחיר</small>` : ''}</div>
+    <label class="gp-paid-lbl">אם הסכום בקבלה שונה, תקנו אותו:</label>
+    <div class="gp-paid-in"><span>₪</span><input id="gpPaidIn" type="number" inputmode="decimal" min="0" step="0.01" value="${est.toFixed(2)}"
+      oninput="_gpPaidChanged(${est})" onkeydown="if(event.key==='Enter')_gpPaidSave()"></div>
+    <div class="cmodal-btns">
+      <button class="cmodal-btn cmodal-ok" id="gpPaidOk" onclick="_gpPaidSave()">כן, מדויק</button>
+      <button class="cmodal-btn cmodal-cancel" onclick="_cmodalClose(null)">דלג</button>
+    </div>
+  </div>`;
+  requestAnimationFrame(() => ov.classList.add('cmodal-visible'));
+  return new Promise(res => { _cmodalResolve = v => res(typeof v === 'number' ? v : null); });
+}
+function _gpPaidChanged(est) {
+  const v = Number(el('gpPaidIn')?.value), b = el('gpPaidOk');
+  if (b) b.textContent = Number.isFinite(v) && Math.abs(v - est) >= 0.01 ? 'שמירה' : 'כן, מדויק';
+}
+function _gpPaidSave() {
+  const v = Number(el('gpPaidIn')?.value);
+  if (!(Number.isFinite(v) && v >= 0)) return;
+  _cmodalClose(Math.round(v * 100) / 100);
 }
 
 // ════════════════════════════════════════
@@ -11387,6 +11424,7 @@ function _plAdd(log, trip) {
       tripSpend += total;
     }
   });
+  if (trip.paid != null) tripSpend = Number(trip.paid) || 0; // what was actually paid, when it was entered
   if (tripSpend) {
     const ym = _plMonth(ts);
     T.spend = { ...(T.spend || {}), [ym]: _r2(((T.spend || {})[ym] || 0) + tripSpend) };
@@ -11430,6 +11468,7 @@ async function _loadPurchaseLog() {
           it.spent = _r2((it.spent || 0) + total);
           tripSpend += total;
         });
+        if (t.paid != null && tripSpend) tripSpend = Number(t.paid) || 0;
         if (tripSpend) {
           const ym = _plMonth(t.ts), T = log.trips;
           T.spend = { ...(T.spend || {}), [ym]: _r2(((T.spend || {})[ym] || 0) + tripSpend) };
@@ -11780,10 +11819,12 @@ function _histEntryHtml(entry, searchTerm) {
       + `</div>`
     : '';
 
+  const money = entry.paid != null ? `<span class="hist-paid">🧾 ₪${Number(entry.paid).toFixed(2)}</span>`
+    : entry.est != null ? `<span class="hist-paid hist-est">~₪${Number(entry.est).toFixed(2)}</span>` : '';
   return `<div class="hist-entry">
     <div class="hist-header">
       <span class="hist-who">${emoji} ${esc(entry.by)}</span>
-      <span class="hist-when">${datePrefix}${timeStr}</span>
+      <span class="hist-when">${datePrefix}${timeStr}${money}</span>
     </div>
     <div class="hist-items-text">${boughtHtml}</div>
     ${missedHtml}

@@ -2835,3 +2835,13 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .gp-cmp-item small { font-size: 11px; color: var(--gray-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gp-cmp-item em { font-style: normal; color: #b45309; }
 .gp-cmp-switch { width: 100%; margin-top: 10px; }
+/* "How much was it?" after done shopping */
+.gp-paid .cmodal-msg { margin-bottom: 10px; }
+.gp-paid-est { font-size: 14px; color: var(--gray-700); margin-bottom: 12px; display: flex; flex-direction: column; gap: 2px; }
+.gp-paid-est b { font-size: 18px; color: var(--primary-700); }
+.gp-paid-est small { font-size: 11.5px; color: var(--gray-500); }
+.gp-paid-lbl { display: block; font-size: 12.5px; color: var(--gray-600); margin-bottom: 6px; }
+.gp-paid-in { display: flex; align-items: center; gap: 6px; margin-bottom: 16px; font-size: 18px; font-weight: 700; color: var(--gray-700); }
+.gp-paid-in input { flex: 1; min-width: 0; width: 100%; box-sizing: border-box; font-family: inherit; font-size: 18px; font-weight: 700; text-align: center; padding: 8px 10px; border: 1.5px solid var(--gray-200); border-radius: 12px; direction: ltr; }
+.hist-paid { font-weight: 700; color: var(--gray-700); margin-inline-start: 8px; unicode-bidi: isolate; display: inline-block; }
+.hist-paid.hist-est { font-weight: 500; color: var(--gray-500); }
