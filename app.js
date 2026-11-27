@@ -10538,7 +10538,7 @@ function confirmEditPoolItem(id) {
   if (newName !== oldName && !pool.barcodeSkip) {
     if (!pool.barcode && DEFAULT_POOL_BARCODES[oldName]) pool.barcode = DEFAULT_POOL_BARCODES[oldName];
     Object.entries(GP_CHAIN_DEFAULTS).forEach(([ch, map]) => {
-      if (map[oldName] && !pool.barcodes?.[ch]) pool.barcodes = { ...(pool.barcodes || {}), [ch]: map[oldName] };
+      if (map[oldName] && !(pool.barcodes && ch in pool.barcodes)) pool.barcodes = { ...(pool.barcodes || {}), [ch]: map[oldName] };
     });
   }
   pool.name     = newName;
@@ -10828,7 +10828,7 @@ const _gpChain = () => _gpCfg()?.chain || 'hatzi-hinam';
 const _gpLocalCode = c => String(c).length < 8 || /^7290000000\d{3}$/.test(String(c));
 function _gpBarcode(p, chain = _gpChain()) {
   if (!p || p.barcodeSkip) return null;
-  if (p.barcodes?.[chain]) return p.barcodes[chain];
+  if (p.barcodes && chain in p.barcodes) return p.barcodes[chain] || null; // '' = unlinked here on purpose
   if (p.barcode && (!_gpLocalCode(p.barcode) || (p.barcodeChain || 'hatzi-hinam') === chain)) return p.barcode;
   const d = (GP_CHAIN_DEFAULTS[chain] || {})[p.name] || DEFAULT_POOL_BARCODES[p.name];
   if (d && (!_gpLocalCode(d) || chain === 'hatzi-hinam' || (GP_CHAIN_DEFAULTS[chain] || {})[p.name] === d)) return d;
@@ -11055,8 +11055,11 @@ async function _gpSearchNow() {
   try {
     const d = await _gpFetch('search', { store: _gpCfg().store, q });
     if (seq !== _gpSearchSeq || _gpPickFor !== poolId) return;
-    const cur = _gpBarcode(S.groceryPool.find(x => x.id === poolId));
-    const res = d.results || [];
+    const pool = S.groceryPool.find(x => x.id === poolId), cur = _gpBarcode(pool);
+    // The linked product first (the item's own name often doesn't find it), then the results
+    const linked = cur && (_gpPrices[cur] || (d.results || []).find(r => String(r.code) === String(cur))
+      || (_gpProductName(pool) ? { code: cur, name: _gpProductName(pool), price: null } : null));
+    const res = [...(linked ? [linked] : []), ...(d.results || []).filter(r => String(r.code) !== String(cur))];
     // "Cheapest" by the price per unit, among the products measured in the most common unit
     // whose name starts with what was searched (not the wafers when looking for chocolate milk)
     const first = q.split(/\s+/)[0];
@@ -11070,8 +11073,9 @@ async function _gpSearchNow() {
         <span class="gp-radio"></span>
         <span class="gp-opt-main"><span class="gp-opt-n">${esc(r.name)}${cheapest && r === cheapest && res.length > 1 ? ' <span class="gp-tag">הכי זול</span>' : ''}</span>
           <span class="gp-opt-m">${esc(r.maker || '')}</span></span>
-        <span class="gp-opt-p">${_gpMoney(r.price)}<span>${r.weighted ? 'לק"ג' : r.unitPrice && r.unit ? `${_gpMoney(r.unitPrice)} ל${esc(_gpUnit(r.unit))}` : ''}</span></span>
-      </button>`).join('') : `<div class="gp-muted gp-center">לא נמצאו מוצרים. נסו מילה אחרת.</div>`;
+        <span class="gp-opt-p">${r.price != null ? _gpMoney(r.price) : ''}<span>${r.weighted ? 'לק"ג' : r.unitPrice && r.unit ? `${_gpMoney(r.unitPrice)} ל${esc(_gpUnit(r.unit))}` : ''}</span></span>
+      </button>${linked && r === linked ? `<div class="gp-sheet-sec gp-other">${res.length > 1 ? 'מוצרים אחרים' : 'לא נמצאו מוצרים אחרים בשם הזה — חפשו מילה אחרת כדי להחליף'}</div>` : ''}`).join('')
+      : `<div class="gp-muted gp-center">לא נמצאו מוצרים. נסו מילה אחרת.</div>`;
   } catch (e) {
     if (seq === _gpSearchSeq) box.innerHTML = `<div class="gp-muted gp-center">החיפוש לא הצליח. נסו שוב.</div>`;
   }
@@ -11091,11 +11095,14 @@ function _gpUnlink(poolId, skip) {
   const p = S.groceryPool.find(x => x.id === poolId);
   if (!p) return;
   const chain = _gpChain();
-  if (p.barcodes) { delete p.barcodes[chain]; if (!Object.keys(p.barcodes).length) delete p.barcodes; }
+  // Unlinked in this chain on purpose ('' — no fallback to the default pool's product)
+  p.barcodes = { ...(p.barcodes || {}), [chain]: '' };
   if (p.productNames) { delete p.productNames[chain]; if (!Object.keys(p.productNames).length) delete p.productNames; }
   if (chain === 'hatzi-hinam' || (p.barcode && !_gpLocalCode(p.barcode))) { delete p.barcode; delete p.productName; }
   if (skip) p.barcodeSkip = true; else delete p.barcodeSkip;
-  saveGrocery(); _gpCloseSheet(); renderShoppingList(); renderPool();
+  saveGrocery(); renderShoppingList(); renderPool();
+  if (skip) _gpCloseSheet();
+  else openGpPicker(poolId); // stay in the picker to choose another product
 }
 // Weight of one unit, for an item sold by weight that the family lists in units
 function openGpWeight(poolId) {
