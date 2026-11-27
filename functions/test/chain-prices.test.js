@@ -31,6 +31,14 @@ test('toText: gzip, utf-16 and BOM', () => {
   assert.strictEqual(cp.toText(Buffer.from('﻿<a/>', 'utf8')), '<a/>');
 });
 
+test('toText: windows-1255 Hebrew', () => {
+  const hebrew = Buffer.from([0xe0, 0xed, 0x20, 0xe4, 0xee, 0xe5, 0xf9, 0xe1, 0xe5, 0xfa]); // "אם המושבות"
+  const declared = Buffer.concat([Buffer.from('<?xml version="1.0" encoding="windows-1255"?><a>'), hebrew, Buffer.from('</a>')]);
+  assert.ok(cp.toText(declared).includes('אם המושבות'));
+  const undeclared = Buffer.concat([Buffer.from('<a>'), hebrew, Buffer.from('</a>')]);
+  assert.strictEqual(cp.toText(undeclared), '<a>אם המושבות</a>');
+});
+
 test('parseStores / findStore', () => {
   const xml = `<Root><ChainId>7290700100008</ChainId><SubChains><SubChain><Stores>
     <Store><StoreId>12</StoreId><StoreName>אם המושבות</StoreName><Address>רח' ספיר 3</Address><City>פתח תקווה</City></Store>

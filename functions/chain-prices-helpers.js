@@ -55,8 +55,16 @@ function toText(buf) {
   else if (b[0] === 0x50 && b[1] === 0x4b) b = unzipFirst(b);
   if ((b[0] === 0xff && b[1] === 0xfe)) return b.slice(2).toString('utf16le');
   if ((b[0] === 0xfe && b[1] === 0xff)) { const s = Buffer.from(b.slice(2)); s.swap16(); return s.toString('utf16le'); }
+  // The XML declaration may name an older Hebrew encoding (windows-1255 / iso-8859-8)
+  const head = b.slice(0, 200).toString('latin1');
+  const enc = (/encoding\s*=\s*["']([^"']+)["']/i.exec(head) || [])[1] || '';
+  if (/1255|8859-8|hebrew/i.test(enc)) {
+    try { return new TextDecoder(enc.toLowerCase().includes('8859') ? 'iso-8859-8' : 'windows-1255').decode(b); } catch (e) {}
+  }
   let s = b.toString('utf8');
   if (s.charCodeAt(0) === 0xfeff) s = s.slice(1);
+  // Not valid UTF-8 (replacement characters) and no declaration: most likely windows-1255
+  if (!enc && s.includes('\ufffd')) { try { return new TextDecoder('windows-1255').decode(b); } catch (e) {} }
   return s;
 }
 // Minimal ZIP reader: the first entry (stored or deflated)
