@@ -131,3 +131,17 @@ test('branch comparison: same city (incl. abbreviations), not online shops, matc
   assert.strictEqual(cp.matchItem(by, items, { product: '12 ביצי משק טריות L', name: 'ביצים', weighted: false }).p.code, '4'); // not the roe
   assert.strictEqual(cp.matchItem(by, items, { product: 'פטרוזיליה', name: 'פטרוזיליה' }), null);
 });
+
+test('matching by name: singular/plural, same pack size, standard over premium', () => {
+  const it = (code, name, price, weighted = false) => ({ code, name, price, weighted });
+  const items = [it('a', 'עגבניות מגי ארוז', 18.9, true), it('b', 'עגבניה', 7.9, true), it('c', 'עגבניה אורגנית במשקל', 14.9, true),
+    it('e', 'במבה 10*25 גרם', 17.9), it('f', 'במבה 80 גרם אסם', 6.9), it('h', 'ביצים אומגה3 12יחידות L', 23.9),
+    it('i', '12 ביצי משק טריות L לסר', 14.54), it('k', 'קוטג בקטנה 5% 100 גרם', 3.2), it('l', 'קוטג 5% 250 גרם בעלז', 6.5)];
+  const by = new Map(items.map(x => [x.code, x]));
+  const m = q => cp.matchItem(by, items, q)?.p.code;
+  assert.strictEqual(m({ product: 'עגבניות חממה גדול', name: 'עגבניות', weighted: true }), 'b');
+  assert.strictEqual(m({ product: "במבה 80ג'", name: 'במבה', weighted: false }), 'f');
+  assert.strictEqual(m({ product: 'ביצים *12 L', name: 'ביצים', weighted: false }), 'i');
+  assert.strictEqual(m({ product: "קוטג' 5% תנובה מהדרין 250 גרם.", name: "קוטג'", weighted: false }), 'l');
+  assert.ok(!cp.sameCity({ city: 'ירושלים', name: 'צומת פת' }, 'פתח תקווה') && cp.notAShop({ name: 'וולט - צומת פת' }));
+});

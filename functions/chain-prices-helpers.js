@@ -248,7 +248,7 @@ function rankProducts(items, query, limit = 25) {
 // Is a branch in this city? Its city field, or the city named in its label (also as it's commonly
 // abbreviated: פ"ת, ראשל"צ…)
 const CITY_ALIASES = {
-  'פתח תקווה': ['פתח תקוה', 'פ"ת', 'פת'], 'ראשון לציון': ['ראשל"צ', 'ראשלצ'], 'תל אביב-יפו': ['תל אביב', 'ת"א', 'יפו'],
+  'פתח תקווה': ['פתח תקוה', 'פ"ת'], 'ראשון לציון': ['ראשל"צ', 'ראשלצ'], 'תל אביב-יפו': ['תל אביב', 'ת"א', 'יפו'],
   'באר שבע': ['ב"ש'], 'ירושלים': ['י-ם'], 'רמת גן': ['ר"ג'], 'כפר סבא': ['כ"ס'], 'הוד השרון': ['הוד-השרון'],
   'בני ברק': ['ב"ב'], 'ראש העין': ['ראש-העין'], 'קריית אונו': ['קרית אונו'], 'קריית גת': ['קרית גת'],
 };
@@ -256,33 +256,39 @@ function sameCity(store, city) {
   if (!city) return false;
   const c = norm(city), names = [c, ...(CITY_ALIASES[city] || []).map(norm)];
   const sc = norm(cityName(store.city) || '');
-  if (sc && names.includes(sc)) return true;
+  if (sc) return names.includes(sc); // a known city decides (not "צומת פת" in Jerusalem)
   const hay = ' ' + norm([store.name, store.address, cityName(store.city)].join(' ')) + ' ';
   return names.some(n => n.length > 2 ? hay.includes(n) : hay.includes(' ' + n + ' '));
 }
 // Online shops, warehouses and pharmacy sub-chains aren't somewhere to shop for groceries
-const notAShop = s => /online|אונליין|מחסן אונליין|^be\s|\sbe\s|be פארם|מרלו"ג|משרד/i.test(' ' + [s.name, s.subChainName].join(' ') + ' ');
+const notAShop = s => /online|אונליין|מחסן אונליין|וולט|wolt|^be\s|\sbe\s|be פארם|מרלו"ג|משרד/i.test(' ' + [s.name, s.subChainName].join(' ') + ' ');
 
 // A product in another branch for a list item: by its barcode there, else by name — the product's
 // name in the family's branch, cut shorter until something matches, then the item's own name. A
 // product sold by weight is matched to one sold by weight (and packaged to packaged).
+// Sizes in a name — numbers and size letters ("במבה 80ג'" → 80, "ביצים *12 L" → 12 L, "3%" → 3)
+const sizeTokens = n => new Set((String(n || '').match(/\d+(?:\.\d+)?|\b(?:XL|L|M|S)\b/gi) || []).map(x => x.toUpperCase()));
 function matchItem(byCode, items, it) {
   if (it.code && byCode.get(String(it.code))) return { p: byCode.get(String(it.code)), how: 'code' };
   const words = n => norm(n).split(' ').filter(x => x && !/^\d/.test(x));
-  const pw = words(it.product || ''), tries = [];
+  const stemOf = w => w.slice(0, Math.max(3, w.length - 2)); // עגבניה / עגבניות → עגבני, ביצי / ביצים → ביצ
+  const pw = words(it.product || ''), iw = words(it.name || ''), sizes = sizeTokens(it.product);
+  const tries = [];
   for (let k = Math.min(pw.length, 3); k >= 2; k--) tries.push(pw.slice(0, k).join(' ')); // the product's name, specific first
-  if (it.name) tries.push(words(it.name).slice(0, 2).join(' '), words(it.name)[0]);       // the item's own name
-  if (pw[0]) tries.push(pw[0]);
+  if (iw[0]) tries.push(stemOf(iw[0]));                                                    // the item's own word, by its stem
+  if (pw[0]) tries.push(stemOf(pw[0]));
   for (const q of [...new Set(tries.filter(Boolean))]) {
-    const q0 = q.split(' ')[0], stem = q0.slice(0, Math.max(3, q0.length - 2)); // עגבניה / עגבניות, ביצי / ביצים
+    const stem = stemOf(q.split(' ')[0]);
     const ok = rankProducts(items, q, 12).filter(p => (it.weighted == null || !!p.weighted === !!it.weighted)
-      && (words(p.name)[0] || '').startsWith(stem)).slice(0, 5);
-    if (ok.length) { // the plainest (fewest words), then the cheaper
-      ok.sort((a, b) => words(a.name).length - words(b.name).length || a.price - b.price);
+      && (words(p.name)[0] || '').startsWith(stem));
+    if (ok.length) { // the same size first; among those the cheaper (the standard one, not omega-3 eggs),
+      // and without a size to go by the plainest (fewest words), then the cheaper
+      const same = p => { const t = sizeTokens(p.name); let n = 0; sizes.forEach(x => { if (t.has(x)) n++; }); return n; };
+      ok.sort((a, b) => same(b) - same(a) || (same(a) > 0 ? a.price - b.price : words(a.name).length - words(b.name).length || a.price - b.price));
       return { p: ok[0], how: 'name' };
     }
   }
   return null;
 }
 
-module.exports = { sameCity, notAShop, matchItem, CHAINS, CERBERUS, carrefourFiles, cerberusCsrf, CITY_NAMES, cityName, storeLabel, rankProducts, HATZI_HINAM, listingLinks, parseFilename, sameStore, toText, parseStores, parsePrices, findStore, searchProducts, norm };
+module.exports = { sizeTokens, sameCity, notAShop, matchItem, CHAINS, CERBERUS, carrefourFiles, cerberusCsrf, CITY_NAMES, cityName, storeLabel, rankProducts, HATZI_HINAM, listingLinks, parseFilename, sameStore, toText, parseStores, parsePrices, findStore, searchProducts, norm };
