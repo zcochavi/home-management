@@ -1777,6 +1777,8 @@ function initNotifBanners() {
   _initPendingSchoolsCache();
 }
 
+// "X finished shopping — didn't bring …": for the other parents, not kids and not the one who shopped
+const _shoppingDoneForMe = n => n.type !== 'shopping_done' || (!isKid() && !(n.by && n.by === S.user));
 function _refreshNotifBanners() {
   // Request-type notifs only show if explicitly addressed to this user (recipientUid match).
   // A kid "viewing as" a profile inside the admin's own family shares S.uid with the admin,
@@ -1786,7 +1788,7 @@ function _refreshNotifBanners() {
     && (n.type !== 'admin_reply'   || n.recipientUid === S.uid)
     && (!['school_pending','event_pending','application_pending'].includes(n.type) ||
         (n.recipientUid === S.uid && n.requestedByUid !== S.uid && !isKid()))
-    && (n.type !== 'shopping_done' || !isKid());
+    && _shoppingDoneForMe(n);
   renderNotifBanners(_allNotifs.filter(_visibleNotif).reverse());
 }
 
@@ -1838,7 +1840,7 @@ function _updateBellBadge() {
   if (!badge) return;
   const count = _allNotifs.filter(n => !n.dismissed &&
     !['school_pending','event_pending','application_pending'].includes(n.type) &&
-    (n.type !== 'shopping_done' || !isKid())
+    _shoppingDoneForMe(n)
   ).length;
   badge.textContent = count > 9 ? '9+' : count;
   badge.classList.toggle('hidden', count === 0);
@@ -2240,7 +2242,7 @@ function renderMessageCenter() {
   if (!list) return;
   const notifs = _allNotifs.filter(n =>
     n.type !== 'admin_message' &&
-    (n.type !== 'shopping_done' || !isKid()) &&
+    _shoppingDoneForMe(n) &&
     (n.type !== 'admin_reply'   || n.recipientUid === S.uid) &&
     !_REQUEST_NOTIF_TYPES.includes(n.type)
   );
