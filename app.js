@@ -10231,14 +10231,16 @@ window.addEventListener('resize', () => {
 function switchGrocerySection(sec) {
   if (!isParent() && sec !== 'shopping') sec = 'shopping';
   _grocerySection = sec;
-  ['pool','shopping','history'].forEach(s => {
+  ['pool','shopping','history','stats'].forEach(s => {
     el(`grocerySec-${s}`).style.display = s === sec ? '' : 'none';
-    el(`gtab-${s}`)?.classList.toggle('active', s === sec);
+    // statistics open from the history tab (its button), which stays highlighted
+    el(`gtab-${s}`)?.classList.toggle('active', s === sec || (s === 'history' && sec === 'stats'));
   });
   if (sec !== 'shopping') el('doneShoppingBtn').style.display = 'none';
   if (sec === 'pool')     renderPool();
   if (sec === 'shopping') renderShoppingList();
   if (sec === 'history')  renderShoppingHistory();
+  if (sec === 'stats')    renderGroceryStats();
   _updateScrollTopBtn();
 }
 
@@ -10250,6 +10252,7 @@ function renderSupermarket() {
   renderPool();
   if (_grocerySection === 'shopping') renderShoppingList();
   else if (_grocerySection === 'history') renderShoppingHistory();
+  else if (_grocerySection === 'stats') renderGroceryStats();
 }
 
 function renderPool() {
@@ -10548,6 +10551,12 @@ function cancelEditPoolItem() {
 
 function renderShoppingList() {
   const ed = isParent();
+  // "Maybe you forgot?" — once the purchase log is loaded
+  const sugg = el('grocerySuggestEl');
+  if (sugg) {
+    if (!_purchaseLog && isParent() && S.uid) _loadPurchaseLog().then(() => { if (_purchaseLog) renderShoppingList(); });
+    sugg.innerHTML = _grocerySuggestHtml();
+  }
   const hasContent = S.shoppingList.length || S.inCart.length;
   if (!hasContent) {
     el('shoppingListEl').innerHTML = `<div class="empty">${t('shoppingListEmpty')}</div>`;
@@ -10726,11 +10735,271 @@ async function doneShopping() {
   };
   const ttlCutoff = Date.now() - getShoppingHistoryTtlDays() * 24 * 60 * 60 * 1000;
   S.shoppingHistory = [entry, ...S.shoppingHistory.filter(e => e.ts >= ttlCutoff)].slice(0, 50);
+  _logPurchases(entry);
   S.shoppingList = [];
   S.inCart = [];
   saveGrocery();
   saveShoppingHistory();
   switchGrocerySection('shopping');
+}
+
+// ════════════════════════════════════════
+//  SHOPPING INSIGHTS
+// ════════════════════════════════════════
+// Running statistics per item, kept forever and apart from the shopping history (whose period
+// is an admin setting): every "done shopping" updates them, nothing ever expires.
+// families/{uid}/stats/purchases =
+//   { v: 2, trips: { n, first, last, byMonth: { 'YYYY-MM': n } },
+//     items: { <key>: { name, n, first, last, gaps: [days…last 12], qtys: [last 12],
+//                       byMonth: { '01'..'12': n } } } }   — calendar month, all years together
+// Started from the existing history the first time (or from the earlier raw log). From it:
+// "maybe you forgot" suggestions and the statistics view.
+const PL_RECENT = 12;
+let _purchaseLog = null, _purchaseLogLoading = null;
+const _plKey = name => String(name || '').trim().toLowerCase()
+  .replace(/[\u05F4\u201C\u201D"]/g, '"').replace(/[\u05F3\u2018\u2019']/g, "'").replace(/\s+/g, ' ');
+const _plRef = () => fbDb.collection('families').doc(S.uid).collection('stats').doc('purchases');
+const _plMonth = ts => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const _plEmpty = () => ({ v: 2, trips: { n: 0, first: 0, last: 0, byMonth: {} }, items: {} });
+function _plAdd(log, trip) {
+  const ts = trip.ts || Date.now();
+  if (ts <= (log.trips.last || 0)) return; // already counted (or older than what's counted)
+  const T = log.trips;
+  T.n++; T.first = T.first || ts; T.last = ts;
+  T.byMonth[_plMonth(ts)] = (T.byMonth[_plMonth(ts)] || 0) + 1;
+  const seen = new Set();
+  (trip.bought || []).forEach(b => {
+    const k = _plKey(b.name);
+    if (!k || seen.has(k)) return;
+    seen.add(k);
+    const it = (log.items[k] ||= { name: b.name, n: 0, first: ts, last: 0, gaps: [], qtys: [] });
+    if (it.last) {
+      const gap = Math.round((ts - it.last) / 864e5);
+      if (gap > 0) it.gaps = [...it.gaps, gap].slice(-PL_RECENT);
+    }
+    it.n++; it.last = ts; it.name = b.name;
+    it.qtys = [...it.qtys, Number(b.qty) || 1].slice(-PL_RECENT);
+    const mm = _plMonth(ts).slice(5);
+    it.byMonth = { ...(it.byMonth || {}), [mm]: ((it.byMonth || {})[mm] || 0) + 1 };
+  });
+}
+// The earlier format (a year of raw purchases) → running statistics
+function _plFromRaw(raw) {
+  const log = _plEmpty();
+  const byTs = {};
+  (raw.trips || []).forEach(t => { byTs[t] ||= { ts: t, bought: [] }; });
+  Object.values(raw.items || {}).forEach(it => (it.buys || []).forEach(([t, q]) => { (byTs[t] ||= { ts: t, bought: [] }).bought.push({ name: it.name, qty: q }); }));
+  Object.values(byTs).sort((a, b) => a.ts - b.ts).forEach(t => _plAdd(log, t));
+  return log;
+}
+async function _loadPurchaseLog() {
+  if (_purchaseLog) return _purchaseLog;
+  if (_purchaseLogLoading) return _purchaseLogLoading;
+  _purchaseLogLoading = (async () => {
+    let log = null, d = null;
+    try { d = (await _plRef().get()).data(); } catch (e) { console.warn('[insights] load:', e.message); }
+    if (d?.v === 2) log = d;
+    else if (d && Array.isArray(d.trips)) { log = _plFromRaw(d); _plRef().set(log).catch(() => {}); }
+    else { // first time: start from the shopping history
+      log = _plEmpty();
+      [...(S.shoppingHistory || [])].sort((a, b) => a.ts - b.ts).forEach(t => _plAdd(log, t));
+      _plRef().set(log).catch(() => {});
+    }
+    _purchaseLog = log;
+    _purchaseLogLoading = null;
+    return _purchaseLog;
+  })();
+  return _purchaseLogLoading;
+}
+async function _logPurchases(trip) {
+  try {
+    const log = await _loadPurchaseLog();
+    _plAdd(log, trip);
+    await _plRef().set(log);
+  } catch (e) { console.warn('[insights] save:', e.message); }
+}
+const _median = a => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+// Per item: how often it's bought, how much, when last, and whether it's due again
+// Time of year. Per calendar month: the item's purchases per month of shopping (months with trips,
+// all years together). season = its rate in this month and the two around it ÷ its rate over the
+// whole year — 1 normal, < 1 off season (ice lollies in winter), > 1 in season. Needs shopping in at
+// least 6 different calendar months and 4 purchases; otherwise 1 (not enough to tell yet).
+const WINTER_MM = ['11', '12', '01', '02', '03'], SUMMER_MM = ['06', '07', '08', '09'];
+function _plSeason(log, it, now = Date.now()) {
+  const tripMonths = {};
+  Object.entries(log.trips.byMonth || {}).forEach(([ym, c]) => { if (c) { const mm = ym.slice(5); tripMonths[mm] = (tripMonths[mm] || 0) + 1; } });
+  const observed = Object.keys(tripMonths);
+  const res = { factor: 1, label: '' };
+  if (observed.length < 6 || (it.n || 0) < 4 || !it.byMonth) return res;
+  const rate = mm => tripMonths[mm] ? (it.byMonth[mm] || 0) / tripMonths[mm] : null;
+  const all = observed.map(rate), avg = all.reduce((a, b) => a + b, 0) / all.length;
+  if (!avg) return res;
+  const cur = new Date(now).getMonth();
+  const win = [-1, 0, 1].map(d => String(((cur + d + 12) % 12) + 1).padStart(2, '0')).map(rate).filter(r => r !== null);
+  if (win.length) res.factor = (win.reduce((a, b) => a + b, 0) / win.length) / avg;
+  // "mostly winter / summer": that season's average rate at least twice the other's
+  const seasonRate = mms => { const r = mms.map(rate).filter(x => x !== null); return r.length ? r.reduce((a, b) => a + b, 0) / r.length : null; };
+  const w = seasonRate(WINTER_MM), su = seasonRate(SUMMER_MM);
+  if (w !== null && su !== null) res.label = w >= su * 2 && w > 0 ? 'winter' : su >= w * 2 && su > 0 ? 'summer' : '';
+  return res;
+}
+
+function _groceryStats(log, now = Date.now()) {
+  if (!log?.items) return [];
+  return Object.values(log.items).filter(it => it.n).map(it => {
+    const gap = _median(it.gaps || []);
+    const season = _plSeason(log, it, now);
+    const since = (now - it.last) / 864e5;
+    const spanMonths = Math.max(1, (now - Math.min(log.trips.first || it.first, it.first)) / (30.4 * 864e5));
+    return {
+      name: it.name, n: it.n, last: it.last, since, gap,
+      perMonth: it.n / spanMonths,
+      qty: _median(it.qtys || []) || 1,
+      // Due: its usual interval has passed — and it isn't off season now (half its usual rate or less)
+      due: it.n >= 3 && gap >= 1 && since >= gap * 0.85 && season.factor >= 0.5,
+      score: (gap ? since / gap : 0) * Math.min(2, Math.max(0.5, season.factor)),
+      season: season.label, seasonFactor: season.factor,
+    };
+  });
+}
+// Suggestions: due items that aren't on the list or in the cart, and weren't dismissed this trip
+const _plDismissKey = () => 'familyhub_grocery_dismiss_' + S.uid;
+function _grocerySuggestions() {
+  if (!_purchaseLog) return [];
+  const inList = new Set([...S.shoppingList, ...S.inCart].map(x => _plKey(x.name)));
+  let dismissed = {};
+  try { dismissed = JSON.parse(localStorage.getItem(_plDismissKey()) || '{}'); } catch (e) {}
+  const trip = _purchaseLog.trips.n;
+  return _groceryStats(_purchaseLog)
+    .filter(x => x.due && !inList.has(_plKey(x.name)) && dismissed[_plKey(x.name)] !== trip)
+    .sort((a, b) => b.score - a.score).slice(0, 6);
+}
+const _fmtEvery = g => g < 1.5 ? 'כל יום' : g < 6.5 ? `כל ~${Math.round(g)} ימים` : g < 10.5 ? 'בערך פעם בשבוע'
+  : g < 17 ? 'בערך פעם בשבועיים' : g < 45 ? 'בערך פעם בחודש' : `כל ~${Math.round(g / 30)} חודשים`;
+const _fmtAgo = d => d < 1 ? 'היום' : d < 2 ? 'אתמול' : `לפני ${Math.round(d)} ימים`;
+function _grocerySuggestHtml() {
+  const list = isParent() ? _grocerySuggestions() : [];
+  if (!list.length) return '';
+  return `<div class="card gsugg-card">
+    <div class="card-title">💡 אולי שכחתם?</div>
+    <div class="gsugg-sub">לפי מה שאתם קונים בדרך כלל</div>
+    ${list.map(x => `<div class="gsugg-row">
+      <div class="gsugg-info">
+        <div class="gsugg-name">${esc(x.name)}</div>
+        <div class="gsugg-why">${x.seasonFactor >= 1.2 ? (x.season === 'winter' ? '❄️ עונת החורף · ' : x.season === 'summer' ? '☀️ עונת הקיץ · ' : '') : ''}נקנה ${_fmtEvery(x.gap)} · לאחרונה ${_fmtAgo(x.since)}</div>
+      </div>
+      <button class="gsugg-add" data-key="${esc(_plKey(x.name))}" onclick="addSuggestedItem(this.dataset.key)">+ להוסיף</button>
+      <button class="gsugg-skip" data-key="${esc(_plKey(x.name))}" onclick="dismissSuggestedItem(this.dataset.key)" aria-label="לא הפעם">✕</button>
+    </div>`).join('')}
+  </div>`;
+}
+function addSuggestedItem(key) {
+  const st = _groceryStats(_purchaseLog).find(x => _plKey(x.name) === key);
+  if (!st) return;
+  const pool = S.groceryPool.find(p => _plKey(p.name) === key);
+  const qty = pool?.lastQty || Math.round(st.qty * 1000) / 1000 || 1;
+  S.shoppingList.push({ id: Date.now(), ...(pool ? { poolId: pool.id, category: pool.category } : {}),
+    name: pool?.name || st.name, qty, qtyType: pool?.qtyType || 'count', requestedQty: qty });
+  saveGrocery();
+  renderShoppingList();
+  if (pool) renderPool();
+  showToast(`✓ ${pool?.name || st.name} נוסף לרשימה`, 'success');
+}
+function dismissSuggestedItem(key) {
+  let d = {};
+  try { d = JSON.parse(localStorage.getItem(_plDismissKey()) || '{}'); } catch (e) {}
+  d[key] = _purchaseLog?.trips.n || 0; // hidden until the next shopping trip
+  try { localStorage.setItem(_plDismissKey(), JSON.stringify(d)); } catch (e) {}
+  renderShoppingList();
+}
+
+// Statistics tab
+let _gstatItem = null, _gstatQuery = '';
+function openItemStats(key) { _gstatItem = key; renderGroceryStats(); el('grocerySec-stats')?.scrollIntoView({ block: 'start' }); }
+function closeItemStats() { _gstatItem = null; renderGroceryStats(); }
+function onGstatSearch(v) {
+  _gstatQuery = v;
+  const q = _plKey(v);
+  document.querySelectorAll('#groceryStatsEl .gstat-row').forEach(r => { r.style.display = !q || (r.dataset.key || '').includes(q) ? '' : 'none'; });
+}
+// One item: its numbers, a year-round chart by calendar month, recent purchases and when it's next due
+function _itemStatsHtml(log, key, now) {
+  const it = log.items[key];
+  const x = _groceryStats({ ...log, items: { [key]: it } }, now)[0];
+  if (!it || !x) return `<div class="empty">המוצר לא נמצא</div>`;
+  const fmtD = ts => new Date(ts).toLocaleDateString('he-IL', { day: 'numeric', month: 'short', year: 'numeric' });
+  // recent purchase dates, from the last one back through the recent gaps
+  const dates = [it.last];
+  [...(it.gaps || [])].reverse().forEach(g => dates.push(dates[dates.length - 1] - g * 864e5));
+  const recent = dates.slice(0, Math.min(dates.length, (it.qtys || []).length || dates.length));
+  const qtys = [...(it.qtys || [])].reverse();
+  const mm = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+  const vals = mm.map(m => (it.byMonth || {})[m] || 0), maxV = Math.max(1, ...vals);
+  const curM = String(new Date(now).getMonth() + 1).padStart(2, '0');
+  const next = x.gap ? it.last + x.gap * 864e5 : null;
+  const nextTxt = !next ? '—' : next <= now ? 'עכשיו' : (() => { const d = Math.ceil((next - now) / 864e5); return d <= 1 ? 'מחר' : `בעוד ${d} ימים`; })();
+  const seasonTxt = x.season === 'winter' ? '❄️ בעיקר בחורף' : x.season === 'summer' ? '☀️ בעיקר בקיץ' : 'כל השנה';
+  return `<div class="gitem">
+    <div class="gitem-head"><div class="gitem-name">${esc(it.name)}</div>${x.due ? '<span class="gstat-due">כדאי לקנות</span>' : ''}</div>
+    <div class="gstat-summary gitem-nums">
+      <div><b>${it.n}</b><span>פעמים נקנה</span></div>
+      <div><b>${x.gap ? Math.round(x.gap) : '—'}</b><span>ימים בין קניות</span></div>
+      <div><b>${Math.round(x.qty * 10) / 10}</b><span>יח׳ בכל קנייה</span></div>
+    </div>
+    <div class="gitem-facts">
+      <div><span>קנייה אחרונה</span><b>${fmtD(it.last)} (${_fmtAgo(x.since)})</b></div>
+      <div><span>הקנייה הבאה צפויה</span><b>${nextTxt}</b></div>
+      <div><span>בכמה זמן</span><b>${x.gap ? _fmtEvery(x.gap) : 'עוד אין מספיק קניות'}</b></div>
+      <div><span>עונה</span><b>${seasonTxt}</b></div>
+      <div><span>נקנה לראשונה</span><b>${fmtD(it.first)}</b></div>
+    </div>
+    <div class="gstat-label">קניות לפי חודשי השנה</div>
+    <div class="gstat-bars gitem-bars">${mm.map((m, i) => `<div class="gstat-bar${m === curM ? ' cur' : ''}"><span class="gstat-bar-n">${vals[i] || ''}</span>
+      <div class="gstat-bar-fill" style="height:${Math.round(vals[i] / maxV * 100)}%"></div>
+      <span class="gstat-bar-m">${new Date(2026, i, 1).toLocaleDateString('he-IL', { month: 'narrow' })}</span></div>`).join('')}</div>
+    <div class="gstat-label">קניות אחרונות</div>
+    <div class="gitem-recent">${recent.map((t, i) => `<div><span>${fmtD(t)}</span><b>${qtys[i] != null ? qtys[i] + ' יח׳' : ''}</b></div>`).join('')}</div>
+  </div>`;
+}
+
+async function renderGroceryStats() {
+  const box = el('groceryStatsEl');
+  if (!box) return;
+  if (!_purchaseLog) { box.innerHTML = `<div class="empty">⏳ טוען…</div>`; await _loadPurchaseLog(); }
+  const log = _purchaseLog, now = Date.now();
+  if (_gstatItem && log.items[_gstatItem]) {
+    box.innerHTML = `<button class="hist-stats-btn gitem-back" onclick="closeItemStats()">‹ כל המוצרים</button>` + _itemStatsHtml(log, _gstatItem, now);
+    return;
+  }
+  const stats = _groceryStats(log, now).sort((a, b) => b.perMonth - a.perMonth);
+  if (!log.trips.n || !stats.length) {
+    box.innerHTML = `<div class="empty">עוד אין מספיק קניות. אחרי כמה קניות (״סיימתי קניות״) יופיעו כאן הנתונים.</div>`;
+    return;
+  }
+  // trips per month, last 6 months
+  const months = [];
+  for (let i = 5; i >= 0; i--) { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); months.push(d); }
+  const counts = months.map(m => log.trips.byMonth[_plMonth(m.getTime())] || 0);
+  const maxC = Math.max(1, ...counts);
+  const fmtRate = r => r >= 1.5 ? `${Math.round(r * 10) / 10} פעמים בחודש` : r >= 0.75 ? 'בערך פעם בחודש'
+    : r >= 0.2 ? `פעם ב-${Math.max(2, Math.round(1 / r))} חודשים` : 'לעתים רחוקות';
+  box.innerHTML = `
+    <div class="gstat-summary">
+      <div><b>${log.trips.n}</b><span>קניות</span></div>
+      <div><b>${(log.trips.n / Math.max(1, (now - log.trips.first) / (30.4 * 864e5))).toFixed(1).replace('.0', '')}</b><span>קניות בחודש</span></div>
+      <div><b>${stats.length}</b><span>מוצרים שונים</span></div>
+    </div>
+    <div class="gstat-label">קניות בחודש</div>
+    <div class="gstat-bars">${months.map((m, i) => `<div class="gstat-bar"><span class="gstat-bar-n">${counts[i] || ''}</span>
+      <div class="gstat-bar-fill" style="height:${Math.round(counts[i] / maxC * 100)}%"></div>
+      <span class="gstat-bar-m">${m.toLocaleDateString('he-IL', { month: 'short' })}</span></div>`).join('')}</div>
+    <div class="gstat-label">המוצרים שלכם <span class="gstat-hint">· לחצו על מוצר לפרטים</span></div>
+    <input class="pool-search gstat-search" type="search" placeholder="חיפוש מוצר..." value="${esc(_gstatQuery)}" oninput="onGstatSearch(this.value)">
+    <div class="gstat-list">${stats.map(x => `<div class="gstat-row" data-key="${esc(_plKey(x.name))}" onclick="openItemStats(this.dataset.key)">
+      <div class="gstat-name">${esc(x.name)}${x.season === 'winter' ? ' <span class="gstat-season">❄️ בעיקר בחורף</span>' : x.season === 'summer' ? ' <span class="gstat-season">☀️ בעיקר בקיץ</span>' : ''}${x.due ? ' <span class="gstat-due">כדאי לקנות</span>' : ''}</div>
+      <div class="gstat-meta">${fmtRate(x.perMonth)}${x.n >= 3 && x.gap ? ' · ' + _fmtEvery(x.gap) : ''} · בד״כ ${Math.round(x.qty * 10) / 10} יח׳ · לאחרונה ${_fmtAgo(x.since)}</div>
+    </div>`).join('')}</div>`;
+  if (_gstatQuery) onGstatSearch(_gstatQuery);
 }
 
 function _histEntryHtml(entry, searchTerm) {
