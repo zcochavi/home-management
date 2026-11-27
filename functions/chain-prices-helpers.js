@@ -132,4 +132,44 @@ function searchProducts(items, query, limit = 20) {
   return items.filter(i => { const n = norm(i.name + ' ' + (i.maker || '')); return words.every(w => n.includes(w)); }).slice(0, limit);
 }
 
-module.exports = { HATZI_HINAM, listingLinks, parseFilename, sameStore, toText, parseStores, parsePrices, findStore, searchProducts, norm };
+
+// Israel's official locality codes (as the Stores files give them) → name, for the branch picker
+const CITY_NAMES = {
+  70: 'אשדוד', 1200: 'מודיעין', 2610: 'בית שמש', 2640: 'ראש העין', 2650: 'רמת השרון', 2660: 'יבנה',
+  3000: 'ירושלים', 3797: 'מודיעין עילית', 4000: 'חיפה', 5000: 'תל אביב-יפו', 6100: 'בני ברק', 6200: 'בת ים',
+  6300: 'גבעתיים', 6400: 'הרצליה', 6500: 'חדרה', 6600: 'חולון', 6900: 'כפר סבא', 7000: 'לוד', 7100: 'אשקלון',
+  7400: 'נתניה', 7900: 'פתח תקווה', 8300: 'ראשון לציון', 8400: 'רחובות', 8500: 'רמלה', 8600: 'רמת גן',
+  8700: 'רעננה', 9000: 'באר שבע', 9700: 'הוד השרון',
+};
+const cityName = c => (c == null ? '' : CITY_NAMES[Number(c)] || (/^\d+$/.test(String(c)) ? '' : String(c)));
+// A branch as the app shows it: "פתח תקווה · ראשון לציון 1"
+function storeLabel(s) {
+  const city = cityName(s.city);
+  const addr = String(s.address || '').split(',').map(x => x.trim()).filter(x => x && x !== 'ישראל' && x !== city && !/^פ"?ת$/.test(x)).join(', ');
+  return [city, s.name || addr].filter(Boolean).join(' · ') || ('סניף ' + s.storeId);
+}
+
+// Products for a list item, best first: every query word in the name, the name starting with the
+// query ("חלב 3%…" before "ריבת חלב"), then shorter names. Free items (price 0) are left out.
+// Words that mark a processed or flavoured variant ("עגבניות מרוסקות", "חלב סויה") — listed after
+// the plain product unless the query asks for them.
+const VARIANT_WORDS = new Set(['מרוכז', 'יבשות', 'יבש', 'מרוסקות', 'מוחמצות', 'מוחמצים', 'כבושות', 'כבושים', 'כבוש', 'מיובשות',
+  'במלח', 'בחומץ', 'בטעם', 'בטעמים', 'טעם', 'סויה', 'שוקו', 'כתוש', 'אבקה', 'אבקת', 'גבישי', 'פנים', 'מיסילרי', 'סלט', 'ממרח',
+  'ריבת', 'מעדן', 'תבלין', 'רוטב', 'חטיף', 'מסטיק', 'ליקר', 'פחית', 'צ\'יפס', 'קפוא', 'קפואים', 'סנפרוסט', 'מגבונים']);
+function rankProducts(items, query, limit = 25) {
+  const words = norm(query).split(' ').filter(Boolean);
+  if (!words.length) return [];
+  const scored = [];
+  for (const i of items) {
+    if (!i.price) continue;
+    const n = norm(i.name), nw = n.split(' '), hay = n + ' ' + norm(i.maker || '');
+    if (!words.every(w => hay.includes(w))) continue;
+    const starts = nw.slice(0, words.length).join(' ') === words.join(' ') ? 0 : nw[0] === words[0] ? 1 : nw.includes(words[0]) ? 2 : 3;
+    const variant = nw.some(w => VARIANT_WORDS.has(w) && !words.includes(w)) ? 1 : 0;
+    scored.push([starts, variant, nw.length, i]);
+  }
+  scored.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+  return scored.slice(0, limit).map(x => x[3]);
+}
+
+module.exports = { CITY_NAMES, cityName, storeLabel, rankProducts, HATZI_HINAM, listingLinks, parseFilename, sameStore, toText, parseStores, parsePrices, findStore, searchProducts, norm };
