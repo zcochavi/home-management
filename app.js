@@ -10233,7 +10233,8 @@ function switchGrocerySection(sec) {
   _grocerySection = sec;
   ['pool','shopping','history','stats'].forEach(s => {
     el(`grocerySec-${s}`).style.display = s === sec ? '' : 'none';
-    el(`gtab-${s}`)?.classList.toggle('active', s === sec);
+    // statistics open from the history tab (its button), which stays highlighted
+    el(`gtab-${s}`)?.classList.toggle('active', s === sec || (s === 'history' && sec === 'stats'));
   });
   if (sec !== 'shopping') el('doneShoppingBtn').style.display = 'none';
   if (sec === 'pool')     renderPool();
@@ -10247,7 +10248,6 @@ function renderSupermarket() {
   const kidMode = !isParent();
   el('gtab-pool')?.style.setProperty('display', kidMode ? 'none' : '');
   el('gtab-history')?.style.setProperty('display', kidMode ? 'none' : '');
-  el('gtab-stats')?.style.setProperty('display', kidMode ? 'none' : '');
   if (kidMode && _grocerySection !== 'shopping') switchGrocerySection('shopping');
   renderPool();
   if (_grocerySection === 'shopping') renderShoppingList();
