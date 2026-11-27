@@ -10535,7 +10535,12 @@ function confirmEditPoolItem(id) {
   const newCat  = el(`poolEditCat_${id}`)?.value || '';
   const oldName = pool.name;
   // A default-pool item linked by its name keeps its product under the new name
-  if (newName !== oldName && !pool.barcode && !pool.barcodeSkip && DEFAULT_POOL_BARCODES[oldName]) pool.barcode = DEFAULT_POOL_BARCODES[oldName];
+  if (newName !== oldName && !pool.barcodeSkip) {
+    if (!pool.barcode && DEFAULT_POOL_BARCODES[oldName]) pool.barcode = DEFAULT_POOL_BARCODES[oldName];
+    Object.entries(GP_CHAIN_DEFAULTS).forEach(([ch, map]) => {
+      if (map[oldName] && !pool.barcodes?.[ch]) pool.barcodes = { ...(pool.barcodes || {}), [ch]: map[oldName] };
+    });
+  }
   pool.name     = newName;
   pool.category = newCat;
   pool.qtyType  = _poolEditQtyType;
@@ -10816,7 +10821,8 @@ const _gpMoney = n => '₪' + (Math.round(n * 100) / 100).toFixed(2);
 // until the family picks something else there; short codes are a chain's own numbering (produce)
 // and are used only in that chain.
 const _gpChain = () => _gpCfg()?.chain || 'hatzi-hinam';
-const _gpLocalCode = c => String(c).length < 8;
+// Short codes, and 7290000000xxx (the same number is חלה at Hatzi Hinam, a pepper at Shufersal)
+const _gpLocalCode = c => String(c).length < 8 || /^7290000000\d{3}$/.test(String(c));
 function _gpBarcode(p, chain = _gpChain()) {
   if (!p || p.barcodeSkip) return null;
   if (p.barcodes?.[chain]) return p.barcodes[chain];
@@ -10825,8 +10831,35 @@ function _gpBarcode(p, chain = _gpChain()) {
   if (d && (!_gpLocalCode(d) || chain === 'hatzi-hinam' || (GP_CHAIN_DEFAULTS[chain] || {})[p.name] === d)) return d;
   return null;
 }
-// The default pool's produce in other chains (their own codes), filled in as each chain is checked
-const GP_CHAIN_DEFAULTS = { shufersal: {} };
+// The default pool in other chains: their own produce codes, and products where the Hatzi Hinam
+// barcode isn't sold there (other brands / the chain's own brand). Checked against each chain's
+// live price file; an item without an entry falls back to the Hatzi Hinam barcode when it's real.
+const GP_CHAIN_DEFAULTS = {
+  shufersal: {
+    "עגבניות": '7290000000022', "מלפפונים": '7290000000046', "בצל": '7290000000480',
+    "תפוחי אדמה": '7290000000596', "גזר": '7290000001661', "פלפל אדום": '7290000000091',
+    "פלפל צהוב": '7290000000855', "חסה": '7290000000282', "כרוב": '7290000000138', "קישואים": '7290000000053',
+    "חציל": '7290000000114', "שום": '7290000000411', "תפוחים": '7290000963082', "בננות": '7290000964775',
+    "תפוזים": '7290000964508', "לימון": '7290000964492', "אבוקדו": '7290000964980', "ענבים": '7290000966038',
+    "מלון": '7290000965079', "ברוקולי": '7290000000626', "כרובית": '7290000000176', "חלב": '7290107932080',
+    "יוגורט": '7290000057149', "גבינת שמנת": '7290014890145', "אורז": '7290000211442',
+    "קמח לבן": '7290003107216', "סוכר": '7296073383666', "שמן זית": '7296073703785',
+    "שמן קנולה": '7290006941466', "פלפל שחור גרוס": '7290000134987', "שעועית בקופסה": '7290000208213',
+    "טחינה גולמית": '7296073734345', "דבש": '7296073095910', "קורנפלקס": '7296073754459',
+    "גרנולה": '7290006582669', "עדשים": '7290003643769', "קינואה": '7296073263845', "קמח תופח": '7296073021575',
+    "שמרים יבשים": '7290000453231', "חומץ בלסמי": '8001010062844', "אבקת מרק עוף": '7296073749851',
+    "תה": '7290000345260', "חזה עוף": '7290002684053', "שניצל עוף": '7290002684077', "כנפי עוף": '7290002684114',
+    "בשר טחון בקר": '7290000552989', "סטייק אנטריקוט": '7290003451869', "קבב": '7290004846923',
+    "המבורגר": '7296073747291', "פילה סלמון": '7290008255271', "דג אמנון": '7290008255523',
+    "טונה טרייה": '7290014907195', "לחם פרוס": '7296073219347', "פיתות": '7296073515357', "חלה": '7290000002040',
+    "בגט": '7290000097237', "מים מינרליים": '7290009952995', "מיץ תפוזים": '7290003009640',
+    "קולה": '7290013585394', "בירה": '7290008464468', "יין אדום": '7290000521008', "וופלים": '7290000311500',
+    "פיצה קפואה": '7296073731917', "שקיות זבל": '7296073731795', "נייר טואלט": '7290000262031',
+    "מגבות נייר": '7290000188355', "אבקת כביסה": '7296073733805', "מרכך כביסה": '7290020269003',
+    "אקונומיקה": '7290019841845', "שמפו": '7296073722571', "משחת שיניים": '7891024030974',
+    "דאודורנט": '7791293048574'
+  },
+};
 const _gpLastPrice = p => p?.lastPrices?.[_gpChain()] ?? (_gpChain() === 'hatzi-hinam' ? p?.lastPrice : undefined);
 function _gpSetLastPrice(p, price) {
   p.lastPrices = { ...(p.lastPrices || {}), [_gpChain()]: price };
