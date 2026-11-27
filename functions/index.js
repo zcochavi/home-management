@@ -2596,6 +2596,93 @@ const TLV_OPTS = { region: 'me-west1', serviceAccount: 'familyhub-7fdd5@appspot.
 exports.webtopRequestOtpTlv = onRequestV2(TLV_OPTS, _safeWebtop(_handleWebtopRequestOtp));
 exports.webtopVerifyOtpTlv  = onRequestV2(TLV_OPTS, _safeWebtop(_handleWebtopVerifyOtp));
 
+// ─── chainPricesTlv — supermarket prices trial (Hatzi Hinam), from Tel Aviv ────────────────────
+// Israel's price-transparency law makes chains publish every branch's prices; Hatzi Hinam's portal
+// answers Israeli addresses only, so this runs in me-west1. Public data only (no family data):
+//   GET ?store=<words of the branch>  → the branch, when its prices were fetched, how many products
+//       &q=<words>                    → products whose name contains them (up to 30)
+//       &all=1                        → every product
+//       &refresh=1                    → fetch again now (at most every 30 minutes)
+// Prices are kept in Firestore (chainPrices/…) and fetched again after 6 hours. Nothing in the app
+// uses this yet.
+const chainPrices = require('./chain-prices-helpers');
+const CP_FRESH_MS = 6 * 3600e3, CP_MIN_REFRESH_MS = 30 * 60e3, CP_CHUNK = 2500;
+const cpGet = async (url, binary) => {
+  const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (FamilyHub price trial)', 'Accept-Language': 'he-IL,he;q=0.9' } });
+  if (!r.ok) throw Object.assign(new Error(`GET ${url.split('?')[0]} → HTTP ${r.status}`), { status: r.status });
+  return binary ? Buffer.from(await r.arrayBuffer()) : r.text();
+};
+// Files of one type (t: 1 prices, 2 promos, 3 stores), newest first, up to `pages` listing pages
+async function cpListFiles(t, wanted, pages = 40) {
+  const H = chainPrices.HATZI_HINAM, found = [], seen = new Set();
+  for (let p = 1; p <= pages; p++) {
+    const links = chainPrices.listingLinks(await cpGet(`${H.base}/Prices?t=${t}&p=${p}`));
+    const fresh = links.filter(l => !seen.has(l.name));
+    if (!fresh.length) break;
+    fresh.forEach(l => { seen.add(l.name); const f = { ...l, ...chainPrices.parseFilename(l.name) }; if (wanted(f)) found.push(f); });
+    if (found.length && t === 3) break;
+  }
+  return found.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+}
+async function cpStores() {
+  const ref = db.collection('chainPrices').doc('hatzi-hinam__stores');
+  const d = (await ref.get()).data();
+  if (d?.stores && Date.now() - d.fetchedAt < 24 * 3600e3) return d.stores;
+  const [file] = await cpListFiles(3, f => f.type === 'Stores', 5);
+  if (!file) throw new Error('no Stores file on the portal');
+  const stores = chainPrices.parseStores(chainPrices.toText(await cpGet(file.url, true)));
+  await ref.set({ stores, fetchedAt: Date.now(), file: file.name });
+  return stores;
+}
+async function cpLoadPrices(store, refresh) {
+  const ref = db.collection('chainPrices').doc('hatzi-hinam__' + store.storeId);
+  const meta = (await ref.get()).data();
+  const age = meta ? Date.now() - meta.fetchedAt : Infinity;
+  if (meta && (age < (refresh ? CP_MIN_REFRESH_MS : CP_FRESH_MS))) {
+    const chunks = await ref.collection('chunks').orderBy('i').get();
+    return { meta, items: chunks.docs.flatMap(c => JSON.parse(c.data().json)) };
+  }
+  const [file] = await cpListFiles(1, f => f.type === 'PriceFull' && chainPrices.sameStore(f.storeId, store.storeId));
+  if (!file) throw new Error(`no PriceFull file for branch ${store.storeId}`);
+  const parsed = chainPrices.parsePrices(chainPrices.toText(await cpGet(file.url, true)));
+  const items = parsed.map(i => [i.code, i.name, i.maker, i.price, i.unitPrice, i.unit, i.qty, i.unitQty, i.weighted ? 1 : 0]);
+  const old = await ref.collection('chunks').get();
+  await Promise.all(old.docs.map(d => d.ref.delete()));
+  for (let i = 0, n = 0; i < items.length; i += CP_CHUNK, n++) {
+    await ref.collection('chunks').doc(String(n)).set({ i: n, json: JSON.stringify(items.slice(i, i + CP_CHUNK)) });
+  }
+  const m = { chain: 'hatzi-hinam', store, file: file.name, fileTime: file.ts || null, fetchedAt: Date.now(), count: items.length };
+  await ref.set(m);
+  return { meta: m, items };
+}
+exports.chainPricesTlv = onRequestV2({ ...TLV_OPTS, timeoutSeconds: 300, memory: '1GiB' }, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const query = String(req.query.store || 'אם המושבות פתח תקווה');
+    const stores = await cpStores();
+    const matches = chainPrices.findStore(stores, query);
+    if (matches.length !== 1) {
+      const words = chainPrices.norm(query).split(' ').filter(w => w.length > 1);
+      return res.status(matches.length ? 300 : 404).json({
+        error: matches.length ? 'several branches match' : 'no branch matches',
+        // branches in a city the query names
+        matches: matches.length ? matches : stores.filter(s => { const c = chainPrices.norm(s.city); return c && words.some(w => c.includes(w)); }),
+        branches: stores.length,
+      });
+    }
+    const { meta, items } = await cpLoadPrices(matches[0], req.query.refresh === '1');
+    const toObj = a => ({ code: a[0], name: a[1], maker: a[2], price: a[3], unitPrice: a[4], unit: a[5], qty: a[6], unitQty: a[7], weighted: !!a[8] });
+    const out = { store: meta.store, file: meta.file, fileTime: meta.fileTime, fetchedAt: meta.fetchedAt, count: meta.count };
+    if (req.query.q) out.results = chainPrices.searchProducts(items.map(toObj), String(req.query.q), 30);
+    else if (req.query.all === '1') out.items = items.map(toObj);
+    else out.sample = items.slice(0, 10).map(toObj);
+    res.json(out);
+  } catch (e) {
+    console.error('chainPricesTlv:', e);
+    res.status(502).json({ error: String(e.message || e) });
+  }
+});
+
 // ─── webtopSync — runs every 20 min; syncs each family at the admin's Webtop interval ────
 // (appConfig/featureFlags.webtopSyncIntervalHours, set in the admin settings; default 6h)
 exports.webtopSync = functions.pubsub.schedule('*/20 * * * *').onRun(async () => {
