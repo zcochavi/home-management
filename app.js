@@ -10571,6 +10571,7 @@ function renderShoppingList() {
     if (!_purchaseLog && isParent() && S.uid) _loadPurchaseLog().then(() => { if (_purchaseLog) renderShoppingList(); });
     sugg.innerHTML = _grocerySuggestHtml();
   }
+  if (isParent() && _relinkLooseItems()) saveGrocery();
   const hasContent = S.shoppingList.length || S.inCart.length;
   // Prices (only with the groceryPrices switch and the family's choice — see SHOPPING LIST PRICES)
   const gp = _gpOn();
@@ -10752,7 +10753,7 @@ async function doneShopping() {
     ts: Date.now(),
     by: S.user,
     bought: S.inCart.map(x => {
-      const b = { name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' };
+      const b = { name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count', ..._itemCode(x) };
       // With prices on: the price paid, and remembered on the pool item for the ▲/▼ next time
       const line = _gpOn() ? _gpLine(x) : null;
       if (line?.state === 'priced') {
@@ -10761,7 +10762,7 @@ async function doneShopping() {
       }
       return b;
     }),
-    missed: missed.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' })),
+    missed: missed.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count', ..._itemCode(x) })),
   };
   // With prices: was the estimate right? The amount actually paid (the receipt) is kept with the
   // trip — est and paid — and the statistics count it as the trip's spending
@@ -10782,6 +10783,13 @@ async function doneShopping() {
   switchGrocerySection('shopping');
 }
 
+// A list item's product barcode (its pool item's, in the family's chain) — an anchor that survives
+// renaming, for finding the pool item again from the history and the statistics
+function _itemCode(x) {
+  const pool = S.groceryPool.find(p => p.id === x.poolId);
+  const code = pool && _gpBarcode(pool);
+  return code ? { code: String(code) } : {};
+}
 // "The estimate was ₪X — is that what you paid?" → the amount (the estimate, or the corrected
 // one), or null when skipped
 function _askPaid(est, unpriced) {
@@ -11076,8 +11084,12 @@ function openGpPicker(poolId) {
   _gpSheet(`
     <div class="gp-sheet-h">איזה ${esc(p.name)}?</div>
     <div class="gp-sheet-sub">${esc(cfg.chainName || 'חצי חינם')} · ${esc(cfg.storeLabel || '')}</div>
-    <input class="g-input gp-search" id="gpSearch" value="${esc(p.name)}" placeholder="חיפוש: מותג, אחוז שומן, גודל…"
-      oninput="_gpSearchSoon()" onkeydown="if(event.key==='Enter')_gpSearchNow()">
+    <div class="gp-search-row">
+      <input class="g-input gp-search" id="gpSearch" value="${esc(p.name)}" placeholder="שם המוצר, מותג, גודל — או מספר הברקוד"
+        oninput="_gpSearchSoon()" onkeydown="if(event.key==='Enter')_gpSearchNow()">
+      <button class="gp-scan-btn" onclick="el('gpScanIn').click()" aria-label="צילום ברקוד" title="צילום ברקוד">📷</button>
+      <input type="file" id="gpScanIn" accept="image/*" style="display:none" onchange="_gpScanPhoto(this)">
+    </div>
     <div id="gpResults" class="gp-results"><div class="gp-muted gp-center">מחפש…</div></div>
     <div class="gp-sheet-note">השם ברשימה נשאר "${esc(p.name)}" — אפשר לשנות אותו מתי שרוצים בעריכת הפריט במאגר, והמוצר יישאר מקושר.</div>
     ${code && _gpPrices[code]?.weighted ? `<div class="gp-sheet-note">⚖️ נמכר במשקל · ${_gpUnitGrams(p, _gpPrices[code]) ? `יחידה ≈ ${_gpUnitGrams(p, _gpPrices[code])} גרם` : 'אין משקל ליחידה'} <button class="gp-link-btn" onclick="openGpWeight(${poolId})">משקל ליחידה</button></div>` : ''}
@@ -11093,6 +11105,47 @@ function _gpUnit(u) {
   const m = /^\s*([\d.]+)?\s*(.*)$/.exec(String(u)) || [];
   const name = ({ 'מיליליטר': 'מ"ל', 'גרם': 'גרם', 'ליטר': 'ליטר', 'קילוגרם': 'ק"ג', 'יחידות': 'יחידה', 'יחידה': 'יחידה' })[(m[2] || '').trim()] || (m[2] || '').trim();
   return !m[1] || m[1] === '1' ? name : `-${m[1]} ${name}`;
+}
+// A photo of a barcode → its number, into the search. The browser's own reader where there is one
+// (Chrome on Android), else ZXing (loaded the first time it's needed).
+async function _gpScanPhoto(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  const box = el('gpResults');
+  if (box) box.innerHTML = '<div class="gp-muted gp-center">קורא את הברקוד…</div>';
+  let code = null;
+  try { code = await _readBarcode(file); } catch (e) { console.warn('barcode:', e); }
+  if (!code) { if (box) box.innerHTML = '<div class="gp-muted gp-center">לא הצלחנו לקרוא ברקוד בתמונה. צלמו מקרוב, עם הקווים לרוחב ובאור טוב — או הקלידו את המספר.</div>'; return; }
+  const s = el('gpSearch');
+  if (s) { s.value = code; _gpSearchNow(); }
+}
+let _zxingLoading = null;
+async function _readBarcode(file) {
+  const formats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'];
+  if ('BarcodeDetector' in window) {
+    try {
+      const supported = await BarcodeDetector.getSupportedFormats?.() || formats;
+      const det = new BarcodeDetector({ formats: formats.filter(f => supported.includes(f)) });
+      const found = await det.detect(await createImageBitmap(file));
+      if (found[0]?.rawValue) return found[0].rawValue.replace(/\D/g, '') || found[0].rawValue;
+    } catch (e) { console.warn('BarcodeDetector:', e); }
+  }
+  if (!window.ZXing) {
+    _zxingLoading ||= new Promise((res, rej) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+      sc.onload = res; sc.onerror = () => { _zxingLoading = null; rej(new Error('zxing failed to load')); };
+      document.head.appendChild(sc);
+    });
+    await _zxingLoading;
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const hints = new Map([[window.ZXing.DecodeHintType.TRY_HARDER, true]]);
+    const r = await new window.ZXing.BrowserMultiFormatReader(hints).decodeFromImageUrl(url);
+    return r?.getText ? r.getText() : r?.text || null;
+  } finally { URL.revokeObjectURL(url); }
 }
 function _gpSearchSoon() { clearTimeout(_gpSearchTimer); _gpSearchTimer = setTimeout(_gpSearchNow, 350); }
 async function _gpSearchNow() {
@@ -11116,6 +11169,10 @@ async function _gpSearchNow() {
     const unit = Object.keys(units).sort((x, y) => units[y] - units[x])[0];
     const cheapest = comparable.filter(r => r.unit === unit).sort((a, b) => a.unitPrice - b.unitPrice)[0];
     window._gpLastResults = Object.fromEntries(res.map(r => [String(r.code), r]));
+    if (d.byCode && !(d.results || []).length) { // a barcode the branch doesn't sell
+      box.innerHTML = `<div class="gp-muted gp-center">הברקוד ${esc(q)} לא נמצא בסניף הזה. נסו לחפש לפי השם.</div>`;
+      return;
+    }
     box.innerHTML = res.length ? res.map(r => `
       <button class="gp-opt${String(r.code) === String(cur) ? ' sel' : ''}" onclick="_gpPick(${poolId}, '${esc(String(r.code))}')">
         <span class="gp-radio"></span>
@@ -11391,7 +11448,7 @@ function _gpSetStore(id) {
 // "maybe you forgot" suggestions and the statistics view.
 const PL_RECENT = 12;
 let _purchaseLog = null, _purchaseLogLoading = null;
-const _plKey = name => String(name || '').trim().toLowerCase()
+const _plKey = name => String(name || '').replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '').trim().toLowerCase()
   .replace(/[\u05F4\u201C\u201D"]/g, '"').replace(/[\u05F3\u2018\u2019']/g, "'").replace(/\s+/g, ' ');
 const _plRef = () => fbDb.collection('families').doc(S.uid).collection('stats').doc('purchases');
 const _plMonth = ts => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
@@ -11412,13 +11469,20 @@ function _plAdd(log, trip) {
     const k = _plKey(b.name);
     if (!k || seen.has(k)) return;
     seen.add(k);
+    // Bought before under another name (renamed in the pool)? The barcode says it's the same item
+    if (b.code && !log.items[k]) {
+      const was = Object.keys(log.items).find(kk => (log.items[kk].codes || []).includes(String(b.code)));
+      if (was && !seen.has(was)) { log.items[k] = log.items[was]; delete log.items[was]; seen.add(was); }
+    }
     const it = (log.items[k] ||= { name: b.name, n: 0, first: ts, last: 0, gaps: [], qtys: [] });
+    if (b.code) it.codes = [String(b.code), ...(it.codes || []).filter(c => c !== String(b.code))].slice(0, 5);
     if (it.last) {
       const gap = Math.round((ts - it.last) / 864e5);
       if (gap > 0) it.gaps = [...it.gaps, gap].slice(-PL_RECENT);
     }
     it.n++; it.last = ts; it.name = b.name;
     it.qtys = [...it.qtys, Number(b.qty) || 1].slice(-PL_RECENT);
+    if (b.qtyType) it.qtyType = b.qtyType; // units or kg, as last bought
     const mm = _plMonth(ts).slice(5);
     it.byMonth = { ...(it.byMonth || {}), [mm]: ((it.byMonth || {})[mm] || 0) + 1 };
     if (b.price != null && Number.isFinite(Number(b.price))) {
@@ -11535,7 +11599,7 @@ function _groceryStats(log, now = Date.now()) {
       due: it.n >= 3 && gap >= 1 && since >= gap * 0.85 && season.factor >= 0.5,
       score: (gap ? since / gap : 0) * Math.min(2, Math.max(0.5, season.factor)),
       season: season.label, seasonFactor: season.factor,
-      lastPrice: it.prices?.length ? it.prices[it.prices.length - 1][1] : null, spent: it.spent || 0,
+      lastPrice: it.prices?.length ? it.prices[it.prices.length - 1][1] : null, spent: it.spent || 0, codes: it.codes || [],
     };
   });
 }
@@ -11547,8 +11611,10 @@ function _grocerySuggestions() {
   let dismissed = {};
   try { dismissed = JSON.parse(localStorage.getItem(_plDismissKey()) || '{}'); } catch (e) {}
   const trip = _purchaseLog.trips.n;
+  const listPools = new Set([...S.shoppingList, ...S.inCart].map(x => x.poolId).filter(Boolean));
+  const onList = x => inList.has(_plKey(x.name)) || listPools.has(_poolForName(x.name, x.codes)?.id); // renamed, same product
   return _groceryStats(_purchaseLog)
-    .filter(x => x.due && !inList.has(_plKey(x.name)) && dismissed[_plKey(x.name)] !== trip)
+    .filter(x => x.due && !onList(x) && dismissed[_plKey(x.name)] !== trip)
     .sort((a, b) => b.score - a.score).slice(0, 6);
 }
 const _fmtEvery = g => g < 1.5 ? 'כל יום' : g < 6.5 ? `כל ~${Math.round(g)} ימים` : g < 10.5 ? 'בערך פעם בשבוע'
@@ -11562,8 +11628,10 @@ function _lastTripMissed() {
   if (!last?.missed?.length) return { trip: null, items: [] };
   try { if (localStorage.getItem(_missedDismissKey()) === String(last.ts)) return { trip: last, items: [] }; } catch (e) {}
   const inList = new Set([...S.shoppingList, ...S.inCart].map(x => _plKey(x.name)));
+  const listPools = new Set([...S.shoppingList, ...S.inCart].map(x => x.poolId).filter(Boolean));
   const seen = new Set();
-  const items = last.missed.filter(m => { const k = _plKey(m.name); if (!k || inList.has(k) || seen.has(k)) return false; seen.add(k); return true; });
+  const items = last.missed.filter(m => { const k = _plKey(m.name); if (!k || inList.has(k) || seen.has(k)) return false;
+    if (m.code && listPools.has(_poolForName(m.name, [m.code])?.id)) return false; seen.add(k); return true; });
   return { trip: last, items };
 }
 function _grocerySuggestHtml() {
@@ -11601,7 +11669,7 @@ function addMissedItems(name) {
   const pick = name ? items.filter(m => m.name === name) : items;
   if (!pick.length) return;
   pick.forEach((m, i) => {
-    const pool = S.groceryPool.find(p => _plKey(p.name) === _plKey(m.name));
+    const pool = _poolForName(m.name, m.code ? [m.code] : _purchaseLog?.items[_plKey(m.name)]?.codes);
     const qty = m.qty || pool?.lastQty || 1;
     S.shoppingList.push({ id: Date.now() + i, ...(pool ? { poolId: pool.id, category: pool.category } : {}),
       name: pool?.name || m.name, qty, qtyType: m.qtyType || pool?.qtyType || 'count', requestedQty: qty });
@@ -11623,6 +11691,35 @@ function dismissMissedItems() {
 // off season; staples bought on nearly every trip fall out of the same rule. Plus what wasn't
 // bought last time. Quantity: the usual one. Only items not already on the list or in the cart.
 let _smartJustAdded = new Set(), _smartUndo = null;
+function _poolForName(name, codes) {
+  // By barcode first: a pool item linked to one of these products (in any chain), whatever its name now
+  const cs = new Set((codes || []).filter(Boolean).map(String));
+  if (cs.size) {
+    const byCode = S.groceryPool.find(p => !p.barcodeSkip && [p.barcode, ...Object.values(p.barcodes || {}), _gpBarcode(p)]
+      .some(c => c && cs.has(String(c))));
+    if (byCode) return byCode;
+  }
+  const k = _plKey(name);
+  if (!k) return null;
+  const exact = S.groceryPool.find(p => _plKey(p.name) === k);
+  if (exact) return exact;
+  const near = S.groceryPool.filter(p => { const pk = _plKey(p.name); return pk.length >= 3 && (pk.includes(k) || k.includes(pk)); });
+  return near.sort((a, b) => Math.abs(_plKey(a.name).length - k.length) - Math.abs(_plKey(b.name).length - k.length))[0] || null;
+}
+// List items that lost their link to the pool (added by name when it didn't match): attach them
+// again — the pool item's category, unit and product — once the name finds one
+function _relinkLooseItems() {
+  let changed = false;
+  [...S.shoppingList, ...S.inCart].forEach(x => {
+    if (x.poolId && S.groceryPool.some(p => p.id === x.poolId)) return;
+    const pool = S.groceryPool.find(p => _plKey(p.name) === _plKey(x.name)); // exact (invisible marks aside) — no guessing here
+    if (!pool || [...S.shoppingList, ...S.inCart].some(y => y !== x && y.poolId === pool.id)) return;
+    x.poolId = pool.id; x.category = pool.category;
+    if (pool.qtyType) x.qtyType = pool.qtyType;
+    changed = true;
+  });
+  return changed;
+}
 function _smartFillPlan() {
   const log = _purchaseLog;
   if (!log?.trips?.n) return [];
@@ -11633,7 +11730,7 @@ function _smartFillPlan() {
   const plan = new Map();
   _lastTripMissed().items.forEach(m => {
     const k = _plKey(m.name);
-    if (!inList.has(k)) plan.set(k, { name: m.name, qty: m.qty || 1, qtyType: m.qtyType, why: 'לא נקנה בפעם הקודמת' });
+    if (!inList.has(k)) plan.set(k, { name: m.name, codes: m.code ? [m.code] : _purchaseLog.items[k]?.codes, qty: m.qty || 1, qtyType: m.qtyType, why: 'לא נקנה בפעם הקודמת' });
   });
   _groceryStats(log, now).forEach(x => {
     const k = _plKey(x.name);
@@ -11642,7 +11739,7 @@ function _smartFillPlan() {
     if (x.n < 3 && !(x.n >= 2 && share >= 0.5)) return; // not enough to tell
     const runsOut = x.since + Math.max(tripGap - sinceTrip, tripGap * 0.5) >= x.gap * 0.9;
     if (!runsOut) return;
-    plan.set(k, { name: x.name, qty: Math.round(x.qty * 1000) / 1000 || 1,
+    plan.set(k, { name: x.name, codes: x.codes, qty: Math.round(x.qty * 1000) / 1000 || 1, qtyType: _purchaseLog.items[k]?.qtyType,
       why: share >= 0.7 ? 'נקנה כמעט בכל קנייה' : `נקנה ${_fmtEvery(x.gap)} · לאחרונה ${_fmtAgo(x.since)}` });
   });
   return [...plan.values()];
@@ -11656,11 +11753,13 @@ function smartFillList() {
   if (!plan.length) { showToast('נראה שיש לכם הכל 🙂 לפי ההרגלים שלכם אין מה להוסיף הפעם', 'info'); return; }
   const before = S.shoppingList.map(x => x.id);
   const added = plan.map((it, i) => {
-    const pool = S.groceryPool.find(p => _plKey(p.name) === _plKey(it.name));
+    const pool = _poolForName(it.name, it.codes);
     const qty = pool?.lastQty || it.qty || 1;
     return { id: Date.now() + i, ...(pool ? { poolId: pool.id, category: pool.category } : {}), name: pool?.name || it.name,
-      qty, qtyType: it.qtyType || pool?.qtyType || 'count', requestedQty: qty, smart: true, smartWhy: it.why };
-  });
+      qty, qtyType: pool?.qtyType || it.qtyType || 'count', requestedQty: qty, smart: true, smartWhy: it.why };
+  }).filter((x, i, arr) => !x.poolId || ![...S.shoppingList, ...S.inCart].some(y => y.poolId === x.poolId)
+    && arr.findIndex(y => y.poolId === x.poolId) === i); // the same pool item once
+  if (!added.length) { showToast('נראה שיש לכם הכל 🙂 לפי ההרגלים שלכם אין מה להוסיף הפעם', 'info'); return; }
   S.shoppingList.push(...added);
   _smartJustAdded = new Set(added.map(x => x.id));
   _smartUndo = before;
@@ -11688,7 +11787,7 @@ function _undoToast(msg, onUndo) {
 function addSuggestedItem(key) {
   const st = _groceryStats(_purchaseLog).find(x => _plKey(x.name) === key);
   if (!st) return;
-  const pool = S.groceryPool.find(p => _plKey(p.name) === key);
+  const pool = _poolForName(st.name, st.codes);
   const qty = pool?.lastQty || Math.round(st.qty * 1000) / 1000 || 1;
   S.shoppingList.push({ id: Date.now(), ...(pool ? { poolId: pool.id, category: pool.category } : {}),
     name: pool?.name || st.name, qty, qtyType: pool?.qtyType || 'count', requestedQty: qty });
