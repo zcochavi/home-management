@@ -2846,6 +2846,14 @@ exports.groceryPricesTlv = onRequestV2({ ...TLV_OPTS, timeoutSeconds: 120, memor
     const head = { chain, store: storeId, fileTime: data.meta.fileTime || null, fetchedAt: data.meta.fetchedAt };
     if (op === 'search') {
       const q = String(req.query.q || '').slice(0, 80);
+      // A barcode (typed, or read from a photo): that product, if the branch sells it
+      const digits = q.replace(/[\s-]/g, '');
+      if (/^\d{6,14}$/.test(digits)) {
+        const bare = c => String(c).replace(/^0+/, '');
+        let hit = data.byCode.get(digits) || data.byCode.get(bare(digits));
+        if (!hit) for (const [c, o] of data.byCode) if (bare(c) === bare(digits)) { hit = o; break; }
+        return res.json({ ...head, byCode: true, results: hit ? [hit] : [] });
+      }
       return res.json({ ...head, results: chainPrices.rankProducts(data.items, q, 25) });
     }
     if (op === 'basket') { // POST {items: [{code, product, name, weighted}]} → the product for each, or null
