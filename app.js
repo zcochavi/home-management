@@ -10753,7 +10753,7 @@ async function doneShopping() {
     ts: Date.now(),
     by: S.user,
     bought: S.inCart.map(x => {
-      const b = { name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' };
+      const b = { name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count', ..._itemCode(x) };
       // With prices on: the price paid, and remembered on the pool item for the ▲/▼ next time
       const line = _gpOn() ? _gpLine(x) : null;
       if (line?.state === 'priced') {
@@ -10762,7 +10762,7 @@ async function doneShopping() {
       }
       return b;
     }),
-    missed: missed.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count' })),
+    missed: missed.map(x => ({ name: x.name, qty: x.qty || 1, qtyType: x.qtyType || 'count', ..._itemCode(x) })),
   };
   // With prices: was the estimate right? The amount actually paid (the receipt) is kept with the
   // trip — est and paid — and the statistics count it as the trip's spending
@@ -10783,6 +10783,13 @@ async function doneShopping() {
   switchGrocerySection('shopping');
 }
 
+// A list item's product barcode (its pool item's, in the family's chain) — an anchor that survives
+// renaming, for finding the pool item again from the history and the statistics
+function _itemCode(x) {
+  const pool = S.groceryPool.find(p => p.id === x.poolId);
+  const code = pool && _gpBarcode(pool);
+  return code ? { code: String(code) } : {};
+}
 // "The estimate was ₪X — is that what you paid?" → the amount (the estimate, or the corrected
 // one), or null when skipped
 function _askPaid(est, unpriced) {
@@ -11413,7 +11420,13 @@ function _plAdd(log, trip) {
     const k = _plKey(b.name);
     if (!k || seen.has(k)) return;
     seen.add(k);
+    // Bought before under another name (renamed in the pool)? The barcode says it's the same item
+    if (b.code && !log.items[k]) {
+      const was = Object.keys(log.items).find(kk => (log.items[kk].codes || []).includes(String(b.code)));
+      if (was && !seen.has(was)) { log.items[k] = log.items[was]; delete log.items[was]; seen.add(was); }
+    }
     const it = (log.items[k] ||= { name: b.name, n: 0, first: ts, last: 0, gaps: [], qtys: [] });
+    if (b.code) it.codes = [String(b.code), ...(it.codes || []).filter(c => c !== String(b.code))].slice(0, 5);
     if (it.last) {
       const gap = Math.round((ts - it.last) / 864e5);
       if (gap > 0) it.gaps = [...it.gaps, gap].slice(-PL_RECENT);
@@ -11537,7 +11550,7 @@ function _groceryStats(log, now = Date.now()) {
       due: it.n >= 3 && gap >= 1 && since >= gap * 0.85 && season.factor >= 0.5,
       score: (gap ? since / gap : 0) * Math.min(2, Math.max(0.5, season.factor)),
       season: season.label, seasonFactor: season.factor,
-      lastPrice: it.prices?.length ? it.prices[it.prices.length - 1][1] : null, spent: it.spent || 0,
+      lastPrice: it.prices?.length ? it.prices[it.prices.length - 1][1] : null, spent: it.spent || 0, codes: it.codes || [],
     };
   });
 }
@@ -11549,8 +11562,10 @@ function _grocerySuggestions() {
   let dismissed = {};
   try { dismissed = JSON.parse(localStorage.getItem(_plDismissKey()) || '{}'); } catch (e) {}
   const trip = _purchaseLog.trips.n;
+  const listPools = new Set([...S.shoppingList, ...S.inCart].map(x => x.poolId).filter(Boolean));
+  const onList = x => inList.has(_plKey(x.name)) || listPools.has(_poolForName(x.name, x.codes)?.id); // renamed, same product
   return _groceryStats(_purchaseLog)
-    .filter(x => x.due && !inList.has(_plKey(x.name)) && dismissed[_plKey(x.name)] !== trip)
+    .filter(x => x.due && !onList(x) && dismissed[_plKey(x.name)] !== trip)
     .sort((a, b) => b.score - a.score).slice(0, 6);
 }
 const _fmtEvery = g => g < 1.5 ? 'כל יום' : g < 6.5 ? `כל ~${Math.round(g)} ימים` : g < 10.5 ? 'בערך פעם בשבוע'
@@ -11564,8 +11579,10 @@ function _lastTripMissed() {
   if (!last?.missed?.length) return { trip: null, items: [] };
   try { if (localStorage.getItem(_missedDismissKey()) === String(last.ts)) return { trip: last, items: [] }; } catch (e) {}
   const inList = new Set([...S.shoppingList, ...S.inCart].map(x => _plKey(x.name)));
+  const listPools = new Set([...S.shoppingList, ...S.inCart].map(x => x.poolId).filter(Boolean));
   const seen = new Set();
-  const items = last.missed.filter(m => { const k = _plKey(m.name); if (!k || inList.has(k) || seen.has(k)) return false; seen.add(k); return true; });
+  const items = last.missed.filter(m => { const k = _plKey(m.name); if (!k || inList.has(k) || seen.has(k)) return false;
+    if (m.code && listPools.has(_poolForName(m.name, [m.code])?.id)) return false; seen.add(k); return true; });
   return { trip: last, items };
 }
 function _grocerySuggestHtml() {
@@ -11603,7 +11620,7 @@ function addMissedItems(name) {
   const pick = name ? items.filter(m => m.name === name) : items;
   if (!pick.length) return;
   pick.forEach((m, i) => {
-    const pool = _poolForName(m.name);
+    const pool = _poolForName(m.name, m.code ? [m.code] : _purchaseLog?.items[_plKey(m.name)]?.codes);
     const qty = m.qty || pool?.lastQty || 1;
     S.shoppingList.push({ id: Date.now() + i, ...(pool ? { poolId: pool.id, category: pool.category } : {}),
       name: pool?.name || m.name, qty, qtyType: m.qtyType || pool?.qtyType || 'count', requestedQty: qty });
@@ -11625,7 +11642,14 @@ function dismissMissedItems() {
 // off season; staples bought on nearly every trip fall out of the same rule. Plus what wasn't
 // bought last time. Quantity: the usual one. Only items not already on the list or in the cart.
 let _smartJustAdded = new Set(), _smartUndo = null;
-function _poolForName(name) {
+function _poolForName(name, codes) {
+  // By barcode first: a pool item linked to one of these products (in any chain), whatever its name now
+  const cs = new Set((codes || []).filter(Boolean).map(String));
+  if (cs.size) {
+    const byCode = S.groceryPool.find(p => !p.barcodeSkip && [p.barcode, ...Object.values(p.barcodes || {}), _gpBarcode(p)]
+      .some(c => c && cs.has(String(c))));
+    if (byCode) return byCode;
+  }
   const k = _plKey(name);
   if (!k) return null;
   const exact = S.groceryPool.find(p => _plKey(p.name) === k);
@@ -11657,7 +11681,7 @@ function _smartFillPlan() {
   const plan = new Map();
   _lastTripMissed().items.forEach(m => {
     const k = _plKey(m.name);
-    if (!inList.has(k)) plan.set(k, { name: m.name, qty: m.qty || 1, qtyType: m.qtyType, why: 'לא נקנה בפעם הקודמת' });
+    if (!inList.has(k)) plan.set(k, { name: m.name, codes: m.code ? [m.code] : _purchaseLog.items[k]?.codes, qty: m.qty || 1, qtyType: m.qtyType, why: 'לא נקנה בפעם הקודמת' });
   });
   _groceryStats(log, now).forEach(x => {
     const k = _plKey(x.name);
@@ -11666,7 +11690,7 @@ function _smartFillPlan() {
     if (x.n < 3 && !(x.n >= 2 && share >= 0.5)) return; // not enough to tell
     const runsOut = x.since + Math.max(tripGap - sinceTrip, tripGap * 0.5) >= x.gap * 0.9;
     if (!runsOut) return;
-    plan.set(k, { name: x.name, qty: Math.round(x.qty * 1000) / 1000 || 1, qtyType: _purchaseLog.items[k]?.qtyType,
+    plan.set(k, { name: x.name, codes: x.codes, qty: Math.round(x.qty * 1000) / 1000 || 1, qtyType: _purchaseLog.items[k]?.qtyType,
       why: share >= 0.7 ? 'נקנה כמעט בכל קנייה' : `נקנה ${_fmtEvery(x.gap)} · לאחרונה ${_fmtAgo(x.since)}` });
   });
   return [...plan.values()];
@@ -11680,7 +11704,7 @@ function smartFillList() {
   if (!plan.length) { showToast('נראה שיש לכם הכל 🙂 לפי ההרגלים שלכם אין מה להוסיף הפעם', 'info'); return; }
   const before = S.shoppingList.map(x => x.id);
   const added = plan.map((it, i) => {
-    const pool = _poolForName(it.name);
+    const pool = _poolForName(it.name, it.codes);
     const qty = pool?.lastQty || it.qty || 1;
     return { id: Date.now() + i, ...(pool ? { poolId: pool.id, category: pool.category } : {}), name: pool?.name || it.name,
       qty, qtyType: pool?.qtyType || it.qtyType || 'count', requestedQty: qty, smart: true, smartWhy: it.why };
@@ -11714,7 +11738,7 @@ function _undoToast(msg, onUndo) {
 function addSuggestedItem(key) {
   const st = _groceryStats(_purchaseLog).find(x => _plKey(x.name) === key);
   if (!st) return;
-  const pool = _poolForName(st.name);
+  const pool = _poolForName(st.name, st.codes);
   const qty = pool?.lastQty || Math.round(st.qty * 1000) / 1000 || 1;
   S.shoppingList.push({ id: Date.now(), ...(pool ? { poolId: pool.id, category: pool.category } : {}),
     name: pool?.name || st.name, qty, qtyType: pool?.qtyType || 'count', requestedQty: qty });

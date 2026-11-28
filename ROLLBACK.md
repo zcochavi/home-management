@@ -29,8 +29,8 @@ Prices only add fields; nothing existing is changed or removed:
 
 - pool items: `barcode`, `productName`, `barcodeSkip`, `lastPrice`, `unitGrams`, and per chain
   `barcodes`, `productNames`, `lastPrices`
-- shopping history entries: `price`, `total`, `chain`, `chainName` on bought items; `est` and `paid` (the estimated and the actually paid total) on the trip
-- purchase statistics (`stats/purchases`): per item `prices` and `spent`, per month `trips.spend` / `trips.spendTrips`
+- shopping history entries: `price`, `total`, `chain`, `chainName`, `code` on bought items (`code` on missed ones too); `est` and `paid` (the estimated and the actually paid total) on the trip
+- purchase statistics (`stats/purchases`): per item `prices`, `spent`, `codes`, `qtyType`, per month `trips.spend` / `trips.spendTrips`
 - family document: `groceryPrices` (`on`, `store`, `storeLabel`, `chainName`, `chain`, `dismissed`)
 
 The old version ignores these fields and keeps them when it saves, so going back and forth loses
