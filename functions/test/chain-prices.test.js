@@ -145,3 +145,12 @@ test('matching by name: singular/plural, same pack size, standard over premium',
   assert.strictEqual(m({ product: "קוטג' 5% תנובה מהדרין 250 גרם.", name: "קוטג'", weighted: false }), 'l');
   assert.ok(!cp.sameCity({ city: 'ירושלים', name: 'צומת פת' }, 'פתח תקווה') && cp.notAShop({ name: 'וולט - צומת פת' }));
 });
+
+test('matching by name: the right product even when its long name ranks low', () => {
+  const it = (code, name, price) => ({ code, name, price, weighted: false });
+  // many short "ביצ…" names ahead of the regular eggs, whose name is long
+  const filler = Array.from({ length: 20 }, (_, i) => it('f' + i, `ביצת הפתעה ${i}`, 5.9));
+  const items = [...filler, it('kinder', 'ביצת הפתעה קינדר', 5.9), it('free', 'ביצי חופש 12יח L', 21.9), it('reg', '12 ביצי משק טריות L לסר', 14.54)];
+  const by = new Map(items.map(x => [x.code, x]));
+  assert.strictEqual(cp.matchItem(by, items, { product: 'ביצים *12 L', name: 'ביצים', weighted: false }).p.code, 'reg');
+});
