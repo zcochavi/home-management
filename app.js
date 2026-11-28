@@ -11235,15 +11235,16 @@ async function openGpCompare() {
     <div class="gp-sheet-sub" id="gpCmpSub">${items.length} פריטים ברשימה · מחפש סניפים בעיר…</div>
     <div id="gpCmpList" class="gp-cmp-list"><div class="gp-muted gp-center">טוען…</div></div>
     <div class="gp-sheet-note">מחירים לפי הקובץ היומי של כל סניף. מוצר שלא נמצא בסניף מחושב לפי המחיר אצלכם, ומוצר שנמצא לפי שם מסומן — ייתכן שזה לא בדיוק אותו מוצר.</div>
-    <div class="gp-sheet-btns"><button class="gp-btn" onclick="_gpCloseSheet()">סגירה</button></div>`);
+    <div class="gp-sheet-btns"><button class="gp-btn2" onclick="openGpCompareSettings()">⚙️ הסניפים להשוואה</button><button class="gp-btn" onclick="_gpCloseSheet()">סגירה</button></div>`);
   try {
-    const d = await _gpFetch('city', { store: cfg.store });
+    const own = cfg.compare?.mode === 'mine' && cfg.compare.stores?.length ? cfg.compare.stores : null;
+    const d = own ? { city: '', stores: own.map(st => ({ ...st })) } : await _gpFetch('city', { store: cfg.store });
     if (_gpCmp?.key !== key) return;
     _gpCmp.city = d.city;
     const stores = d.stores || [];
     if (!stores.some(st => st.chain + ':' + st.id === mine)) stores.push({ chain: cfg.chain, chainName: cfg.chainName, id: cfg.store, label: cfg.storeLabel });
     _gpCmp.stores = stores;
-    el('gpCmpSub') && (el('gpCmpSub').textContent = `${items.length} פריטים ברשימה · ${stores.length} סניפים ב${d.city}`);
+    el('gpCmpSub') && (el('gpCmpSub').textContent = `${items.length} פריטים ברשימה · ${own ? `הסניף שלכם ועוד ${own.length === 1 ? 'סניף אחד שבחרתם' : own.length + ' שבחרתם'}` : `${stores.length} סניפים ב${d.city}`}`);
   } catch (e) {
     if (_gpCmp?.key !== key) return;
     _gpCmp.error = 'לא הצלחנו למצוא את הסניפים בעיר. נסו שוב.'; _gpRenderCmp(); return;
@@ -11367,6 +11368,78 @@ function _gpPoolLinkHtml(p) {
     ${pr?.weighted ? `<button class="gp-link-btn" onclick="openGpWeight(${p.id})">⚖️ ${grams ? `יחידה ≈ ${grams} גרם` : 'משקל ליחידה'}</button>` : ''}</div>`;
 }
 
+// Which branches the comparison uses: every branch in the family branch's city (the default), or the
+// family's own regular branches — familyData.groceryPrices.compare = { mode: 'city' | 'mine', stores }
+let _gpCmpSetChain = null, _gpCmpSetFilter = '';
+async function openGpCompareSettings(chain) {
+  const cfg = _gpCfg() || {};
+  const cmp = cfg.compare || { mode: 'city', stores: [] };
+  const ch = _gpCmpSetChain = chain || _gpCmpSetChain || cfg.chain || 'hatzi-hinam';
+  const chosen = new Set((cmp.stores || []).map(st => st.chain + ':' + st.id));
+  const chains = _gpChains || GP_CHAINS_FALLBACK;
+  const render = () => {
+    const data = _gpStoresBy[ch], f = _gpCmpSetFilter.trim();
+    const all = data?.stores, list = all && f ? all.filter(st => (st.label + ' ' + (st.city || '')).includes(f)) : all;
+    _gpSheet(`
+      <div class="gp-sheet-h">⚖️ הסניפים להשוואה</div>
+      <div class="gp-sheet-sub">באילו סניפים להשוות את מחיר הרשימה. הסניף שלכם (${esc(cfg.chainName || '')} · ${esc(cfg.storeLabel || '')}) תמיד בהשוואה.</div>
+      <label class="gp-radio-row"><input type="radio" name="gpCmpMode" ${cmp.mode !== 'mine' ? 'checked' : ''} onchange="_gpSetCompareMode('city')">
+        <span>כל הסניפים בעיר שלכם<small>ברירת המחדל</small></span></label>
+      <label class="gp-radio-row"><input type="radio" name="gpCmpMode" ${cmp.mode === 'mine' ? 'checked' : ''} onchange="_gpSetCompareMode('mine')">
+        <span>רק הסניפים שבחרתי<small>${(cmp.stores || []).length ? `${cmp.stores.length} נבחרו` : 'בחרו למטה'}</small></span></label>
+      ${(cmp.stores || []).length ? `<div class="gp-cmp-chosen">${cmp.stores.map(st => `<span class="gp-cmp-chip"><b>${esc(st.chainName || '')}</b> ${esc(st.label || '')}
+        <button onclick="_gpToggleCompareStore('${esc(st.chain)}','${esc(st.id)}')" aria-label="הסרה">✕</button></span>`).join('')}</div>` : ''}
+      <div class="gp-sheet-sec">הוספת סניף</div>
+      <div class="gp-chains">${chains.filter((c, i) => _gpAllChains || i < 8 || c.id === ch).map(c => `<button class="gp-chain${c.id === ch ? ' sel' : ''}" onclick="_gpCmpSetFilter='';openGpCompareSettings('${esc(c.id)}')">${esc(c.name)}</button>`).join('')}
+        ${!_gpAllChains && chains.length > 8 ? `<button class="gp-chain gp-chain-more" onclick="_gpAllChains=true;openGpCompareSettings()">עוד ${chains.length - 8} רשתות</button>` : ''}</div>
+      ${all && all.length > 15 ? `<input class="g-input gp-search" id="gpCmpStoreSearch" value="${esc(_gpCmpSetFilter)}" placeholder="חיפוש לפי עיר או שם הסניף" oninput="_gpCmpSetFilter=this.value;_gpRenderCmpStores()">` : ''}
+      <div class="gp-store-list" id="gpCmpStoreList">${all ? _gpCmpStoresHtml(list, chosen, ch) : `<div class="gp-muted gp-center">${data === false ? 'לא הצלחנו לטעון את הסניפים. נסו שוב.' : 'טוען סניפים…'}</div>`}</div>
+      <div class="gp-sheet-btns"><button class="gp-btn" onclick="_gpCloseSheet()">סגירה</button></div>`);
+  };
+  window._gpRenderCmpStores = () => {
+    const all = _gpStoresBy[ch]?.stores, f = _gpCmpSetFilter.trim(), box = el('gpCmpStoreList');
+    if (all && box) box.innerHTML = _gpCmpStoresHtml(f ? all.filter(st => (st.label + ' ' + (st.city || '')).includes(f)) : all, chosen, ch);
+  };
+  render();
+  _gpSheetKind = 'cmpset'; _gpPickFor = null;
+  const jobs = [];
+  if (!_gpChains) jobs.push(_gpFetch('chains').then(d => { _gpChains = d.chains; }).catch(() => {}));
+  if (!_gpStoresBy[ch]) jobs.push(_gpFetch('stores', { chain: ch }).then(d => { _gpStoresBy[ch] = d; }).catch(() => { _gpStoresBy[ch] = false; }));
+  if (jobs.length) {
+    await Promise.all(jobs);
+    if (_gpSheetKind === 'cmpset' && _gpCmpSetChain === ch) render();
+    if (_gpStoresBy[ch] === false) delete _gpStoresBy[ch];
+  }
+}
+function _gpCmpStoresHtml(stores, chosen, ch) {
+  if (!stores.length) return `<div class="gp-muted gp-center">אין סניף כזה</div>`;
+  const cfg = _gpCfg() || {};
+  const list = [...stores.filter(st => chosen.has(ch + ':' + st.id)), ...stores.filter(st => !chosen.has(ch + ':' + st.id))].slice(0, 120);
+  return list.map(st => { const k = ch + ':' + st.id, on = chosen.has(k), home = ch === cfg.chain && st.id === cfg.store;
+    return `<button class="gp-store${on ? ' sel' : ''}" ${home ? 'disabled' : ''} onclick="_gpToggleCompareStore('${esc(ch)}','${esc(st.id)}')">
+      <span>${esc(st.label)}${home ? ' <small class="gp-muted">· הסניף שלכם</small>' : ''}</span><span class="gp-check">${on || home ? '✓' : '+'}</span></button>`; }).join('')
+    + (stores.length > list.length ? `<div class="gp-muted gp-center">ועוד ${stores.length - list.length} — חפשו לפי עיר</div>` : '');
+}
+function _gpSetCompareMode(mode) {
+  const cmp = { mode: 'city', stores: [], ...(_gpCfg()?.compare || {}) };
+  _gpSaveCfg({ compare: { ...cmp, mode } });
+  openGpCompareSettings();
+}
+function _gpToggleCompareStore(chain, id) {
+  const cmp = { mode: 'city', stores: [], ...(_gpCfg()?.compare || {}) };
+  const k = chain + ':' + id, has = cmp.stores.some(st => st.chain + ':' + st.id === k);
+  let stores;
+  if (has) stores = cmp.stores.filter(st => st.chain + ':' + st.id !== k);
+  else {
+    const st = _gpStoresBy[chain]?.stores?.find(s => s.id === id);
+    if (!st) return;
+    stores = [...cmp.stores, { chain, chainName: _gpStoresBy[chain].chainName || '', id, label: st.label }];
+  }
+  // choosing a branch means comparing the chosen ones; removing the last goes back to the city
+  _gpSaveCfg({ compare: { mode: stores.length ? (has ? cmp.mode : 'mine') : 'city', stores } });
+  openGpCompareSettings();
+}
+
 // Settings: prices on/off, the chain and the branch
 const GP_CHAINS_FALLBACK = [{ id: 'hatzi-hinam', name: 'חצי חינם' }];
 async function openGpSettings(chain) {
@@ -11385,6 +11458,8 @@ async function openGpSettings(chain) {
       <div class="gp-sheet-sub">מחירים מהקובץ היומי שהרשת מפרסמת לפי חוק שקיפות המחירים</div>
       <label class="gp-row"><span>הצג מחירים ברשימה</span>
         <input type="checkbox" class="gp-toggle" ${cfg.on ? 'checked' : ''} onchange="_gpSetOn(this.checked)"></label>
+      <button class="gp-row gp-row-btn" onclick="openGpCompareSettings()"><span>⚖️ השוואת מחירים<small>${cfg.compare?.mode === 'mine' && cfg.compare.stores?.length
+        ? `${cfg.compare.stores.length === 1 ? 'סניף אחד שבחרתם' : cfg.compare.stores.length + ' סניפים שבחרתם'}` : 'כל הסניפים בעיר שלכם'}</small></span><span class="gp-row-go">שינוי ‹</span></button>
       <div class="gp-sheet-sec">רשת</div>
       <div class="gp-chains">${chains.filter((c, i) => _gpAllChains || i < 8 || c.id === ch).map(c => `<button class="gp-chain${c.id === ch ? ' sel' : ''}" onclick="_gpStoreFilter='';openGpSettings('${esc(c.id)}')">${esc(c.name)}</button>`).join('')}
         ${!_gpAllChains && chains.length > 8 ? `<button class="gp-chain gp-chain-more" onclick="_gpAllChains=true;openGpSettings()">עוד ${chains.length - 8} רשתות</button>` : ''}</div>

@@ -2860,3 +2860,16 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .gp-search-row .gp-search { margin-bottom: 0; flex: 1; min-width: 0; }
 .gp-scan-btn { flex: none; width: 46px; border-radius: var(--r-input); border: 1.5px solid var(--gray-200); background: var(--surface); font-size: 20px; cursor: pointer; }
 .gp-scan-btn:active { background: var(--primary-50); }
+/* Comparison branches */
+.gp-row-btn { width: 100%; background: none; border: none; border-bottom: 1px solid var(--gray-100); font-family: inherit; cursor: pointer; text-align: right; }
+.gp-row-btn span:first-child { display: flex; flex-direction: column; gap: 2px; }
+.gp-row-btn small, .gp-radio-row small { font-size: 11.5px; color: var(--gray-500); font-weight: 400; }
+.gp-row-go { font-size: 12.5px; font-weight: 600; color: var(--primary-600); }
+.gp-radio-row { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--gray-100); font-size: 14px; color: var(--gray-700); cursor: pointer; }
+.gp-radio-row span { display: flex; flex-direction: column; gap: 2px; }
+.gp-radio-row input { width: 18px; height: 18px; accent-color: var(--primary-500); flex: none; }
+.gp-cmp-chosen { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 2px; }
+.gp-cmp-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--gray-700); background: var(--primary-50); border: 1px solid var(--primary-100); border-radius: var(--r-pill); padding: 4px 6px 4px 10px; }
+.gp-cmp-chip b { color: var(--primary-700); }
+.gp-cmp-chip button { border: none; background: var(--surface); color: var(--gray-500); width: 20px; height: 20px; border-radius: 50%; font-size: 11px; cursor: pointer; }
+.gp-store:disabled { opacity: .6; cursor: default; }
