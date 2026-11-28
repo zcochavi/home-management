@@ -11084,8 +11084,12 @@ function openGpPicker(poolId) {
   _gpSheet(`
     <div class="gp-sheet-h">איזה ${esc(p.name)}?</div>
     <div class="gp-sheet-sub">${esc(cfg.chainName || 'חצי חינם')} · ${esc(cfg.storeLabel || '')}</div>
-    <input class="g-input gp-search" id="gpSearch" value="${esc(p.name)}" placeholder="חיפוש: מותג, אחוז שומן, גודל…"
-      oninput="_gpSearchSoon()" onkeydown="if(event.key==='Enter')_gpSearchNow()">
+    <div class="gp-search-row">
+      <input class="g-input gp-search" id="gpSearch" value="${esc(p.name)}" placeholder="שם המוצר, מותג, גודל — או מספר הברקוד"
+        oninput="_gpSearchSoon()" onkeydown="if(event.key==='Enter')_gpSearchNow()">
+      <button class="gp-scan-btn" onclick="el('gpScanIn').click()" aria-label="צילום ברקוד" title="צילום ברקוד">📷</button>
+      <input type="file" id="gpScanIn" accept="image/*" style="display:none" onchange="_gpScanPhoto(this)">
+    </div>
     <div id="gpResults" class="gp-results"><div class="gp-muted gp-center">מחפש…</div></div>
     <div class="gp-sheet-note">השם ברשימה נשאר "${esc(p.name)}" — אפשר לשנות אותו מתי שרוצים בעריכת הפריט במאגר, והמוצר יישאר מקושר.</div>
     ${code && _gpPrices[code]?.weighted ? `<div class="gp-sheet-note">⚖️ נמכר במשקל · ${_gpUnitGrams(p, _gpPrices[code]) ? `יחידה ≈ ${_gpUnitGrams(p, _gpPrices[code])} גרם` : 'אין משקל ליחידה'} <button class="gp-link-btn" onclick="openGpWeight(${poolId})">משקל ליחידה</button></div>` : ''}
@@ -11101,6 +11105,47 @@ function _gpUnit(u) {
   const m = /^\s*([\d.]+)?\s*(.*)$/.exec(String(u)) || [];
   const name = ({ 'מיליליטר': 'מ"ל', 'גרם': 'גרם', 'ליטר': 'ליטר', 'קילוגרם': 'ק"ג', 'יחידות': 'יחידה', 'יחידה': 'יחידה' })[(m[2] || '').trim()] || (m[2] || '').trim();
   return !m[1] || m[1] === '1' ? name : `-${m[1]} ${name}`;
+}
+// A photo of a barcode → its number, into the search. The browser's own reader where there is one
+// (Chrome on Android), else ZXing (loaded the first time it's needed).
+async function _gpScanPhoto(input) {
+  const file = input.files && input.files[0];
+  input.value = '';
+  if (!file) return;
+  const box = el('gpResults');
+  if (box) box.innerHTML = '<div class="gp-muted gp-center">קורא את הברקוד…</div>';
+  let code = null;
+  try { code = await _readBarcode(file); } catch (e) { console.warn('barcode:', e); }
+  if (!code) { if (box) box.innerHTML = '<div class="gp-muted gp-center">לא הצלחנו לקרוא ברקוד בתמונה. צלמו מקרוב, עם הקווים לרוחב ובאור טוב — או הקלידו את המספר.</div>'; return; }
+  const s = el('gpSearch');
+  if (s) { s.value = code; _gpSearchNow(); }
+}
+let _zxingLoading = null;
+async function _readBarcode(file) {
+  const formats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'];
+  if ('BarcodeDetector' in window) {
+    try {
+      const supported = await BarcodeDetector.getSupportedFormats?.() || formats;
+      const det = new BarcodeDetector({ formats: formats.filter(f => supported.includes(f)) });
+      const found = await det.detect(await createImageBitmap(file));
+      if (found[0]?.rawValue) return found[0].rawValue.replace(/\D/g, '') || found[0].rawValue;
+    } catch (e) { console.warn('BarcodeDetector:', e); }
+  }
+  if (!window.ZXing) {
+    _zxingLoading ||= new Promise((res, rej) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';
+      sc.onload = res; sc.onerror = () => { _zxingLoading = null; rej(new Error('zxing failed to load')); };
+      document.head.appendChild(sc);
+    });
+    await _zxingLoading;
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const hints = new Map([[window.ZXing.DecodeHintType.TRY_HARDER, true]]);
+    const r = await new window.ZXing.BrowserMultiFormatReader(hints).decodeFromImageUrl(url);
+    return r?.getText ? r.getText() : r?.text || null;
+  } finally { URL.revokeObjectURL(url); }
 }
 function _gpSearchSoon() { clearTimeout(_gpSearchTimer); _gpSearchTimer = setTimeout(_gpSearchNow, 350); }
 async function _gpSearchNow() {
@@ -11124,6 +11169,10 @@ async function _gpSearchNow() {
     const unit = Object.keys(units).sort((x, y) => units[y] - units[x])[0];
     const cheapest = comparable.filter(r => r.unit === unit).sort((a, b) => a.unitPrice - b.unitPrice)[0];
     window._gpLastResults = Object.fromEntries(res.map(r => [String(r.code), r]));
+    if (d.byCode && !(d.results || []).length) { // a barcode the branch doesn't sell
+      box.innerHTML = `<div class="gp-muted gp-center">הברקוד ${esc(q)} לא נמצא בסניף הזה. נסו לחפש לפי השם.</div>`;
+      return;
+    }
     box.innerHTML = res.length ? res.map(r => `
       <button class="gp-opt${String(r.code) === String(cur) ? ' sel' : ''}" onclick="_gpPick(${poolId}, '${esc(String(r.code))}')">
         <span class="gp-radio"></span>
