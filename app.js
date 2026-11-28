@@ -10571,6 +10571,7 @@ function renderShoppingList() {
     if (!_purchaseLog && isParent() && S.uid) _loadPurchaseLog().then(() => { if (_purchaseLog) renderShoppingList(); });
     sugg.innerHTML = _grocerySuggestHtml();
   }
+  if (isParent() && _relinkLooseItems()) saveGrocery();
   const hasContent = S.shoppingList.length || S.inCart.length;
   // Prices (only with the groceryPrices switch and the family's choice — see SHOPPING LIST PRICES)
   const gp = _gpOn();
@@ -11391,7 +11392,7 @@ function _gpSetStore(id) {
 // "maybe you forgot" suggestions and the statistics view.
 const PL_RECENT = 12;
 let _purchaseLog = null, _purchaseLogLoading = null;
-const _plKey = name => String(name || '').trim().toLowerCase()
+const _plKey = name => String(name || '').replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069\uFEFF]/g, '').trim().toLowerCase()
   .replace(/[\u05F4\u201C\u201D"]/g, '"').replace(/[\u05F3\u2018\u2019']/g, "'").replace(/\s+/g, ' ');
 const _plRef = () => fbDb.collection('families').doc(S.uid).collection('stats').doc('purchases');
 const _plMonth = ts => { const d = new Date(ts); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
@@ -11419,6 +11420,7 @@ function _plAdd(log, trip) {
     }
     it.n++; it.last = ts; it.name = b.name;
     it.qtys = [...it.qtys, Number(b.qty) || 1].slice(-PL_RECENT);
+    if (b.qtyType) it.qtyType = b.qtyType; // units or kg, as last bought
     const mm = _plMonth(ts).slice(5);
     it.byMonth = { ...(it.byMonth || {}), [mm]: ((it.byMonth || {})[mm] || 0) + 1 };
     if (b.price != null && Number.isFinite(Number(b.price))) {
@@ -11601,7 +11603,7 @@ function addMissedItems(name) {
   const pick = name ? items.filter(m => m.name === name) : items;
   if (!pick.length) return;
   pick.forEach((m, i) => {
-    const pool = S.groceryPool.find(p => _plKey(p.name) === _plKey(m.name));
+    const pool = _poolForName(m.name);
     const qty = m.qty || pool?.lastQty || 1;
     S.shoppingList.push({ id: Date.now() + i, ...(pool ? { poolId: pool.id, category: pool.category } : {}),
       name: pool?.name || m.name, qty, qtyType: m.qtyType || pool?.qtyType || 'count', requestedQty: qty });
@@ -11623,6 +11625,28 @@ function dismissMissedItems() {
 // off season; staples bought on nearly every trip fall out of the same rule. Plus what wasn't
 // bought last time. Quantity: the usual one. Only items not already on the list or in the cart.
 let _smartJustAdded = new Set(), _smartUndo = null;
+function _poolForName(name) {
+  const k = _plKey(name);
+  if (!k) return null;
+  const exact = S.groceryPool.find(p => _plKey(p.name) === k);
+  if (exact) return exact;
+  const near = S.groceryPool.filter(p => { const pk = _plKey(p.name); return pk.length >= 3 && (pk.includes(k) || k.includes(pk)); });
+  return near.sort((a, b) => Math.abs(_plKey(a.name).length - k.length) - Math.abs(_plKey(b.name).length - k.length))[0] || null;
+}
+// List items that lost their link to the pool (added by name when it didn't match): attach them
+// again — the pool item's category, unit and product — once the name finds one
+function _relinkLooseItems() {
+  let changed = false;
+  [...S.shoppingList, ...S.inCart].forEach(x => {
+    if (x.poolId && S.groceryPool.some(p => p.id === x.poolId)) return;
+    const pool = S.groceryPool.find(p => _plKey(p.name) === _plKey(x.name)); // exact (invisible marks aside) — no guessing here
+    if (!pool || [...S.shoppingList, ...S.inCart].some(y => y !== x && y.poolId === pool.id)) return;
+    x.poolId = pool.id; x.category = pool.category;
+    if (pool.qtyType) x.qtyType = pool.qtyType;
+    changed = true;
+  });
+  return changed;
+}
 function _smartFillPlan() {
   const log = _purchaseLog;
   if (!log?.trips?.n) return [];
@@ -11642,7 +11666,7 @@ function _smartFillPlan() {
     if (x.n < 3 && !(x.n >= 2 && share >= 0.5)) return; // not enough to tell
     const runsOut = x.since + Math.max(tripGap - sinceTrip, tripGap * 0.5) >= x.gap * 0.9;
     if (!runsOut) return;
-    plan.set(k, { name: x.name, qty: Math.round(x.qty * 1000) / 1000 || 1,
+    plan.set(k, { name: x.name, qty: Math.round(x.qty * 1000) / 1000 || 1, qtyType: _purchaseLog.items[k]?.qtyType,
       why: share >= 0.7 ? 'נקנה כמעט בכל קנייה' : `נקנה ${_fmtEvery(x.gap)} · לאחרונה ${_fmtAgo(x.since)}` });
   });
   return [...plan.values()];
@@ -11656,11 +11680,13 @@ function smartFillList() {
   if (!plan.length) { showToast('נראה שיש לכם הכל 🙂 לפי ההרגלים שלכם אין מה להוסיף הפעם', 'info'); return; }
   const before = S.shoppingList.map(x => x.id);
   const added = plan.map((it, i) => {
-    const pool = S.groceryPool.find(p => _plKey(p.name) === _plKey(it.name));
+    const pool = _poolForName(it.name);
     const qty = pool?.lastQty || it.qty || 1;
     return { id: Date.now() + i, ...(pool ? { poolId: pool.id, category: pool.category } : {}), name: pool?.name || it.name,
-      qty, qtyType: it.qtyType || pool?.qtyType || 'count', requestedQty: qty, smart: true, smartWhy: it.why };
-  });
+      qty, qtyType: pool?.qtyType || it.qtyType || 'count', requestedQty: qty, smart: true, smartWhy: it.why };
+  }).filter((x, i, arr) => !x.poolId || ![...S.shoppingList, ...S.inCart].some(y => y.poolId === x.poolId)
+    && arr.findIndex(y => y.poolId === x.poolId) === i); // the same pool item once
+  if (!added.length) { showToast('נראה שיש לכם הכל 🙂 לפי ההרגלים שלכם אין מה להוסיף הפעם', 'info'); return; }
   S.shoppingList.push(...added);
   _smartJustAdded = new Set(added.map(x => x.id));
   _smartUndo = before;
@@ -11688,7 +11714,7 @@ function _undoToast(msg, onUndo) {
 function addSuggestedItem(key) {
   const st = _groceryStats(_purchaseLog).find(x => _plKey(x.name) === key);
   if (!st) return;
-  const pool = S.groceryPool.find(p => _plKey(p.name) === key);
+  const pool = _poolForName(st.name);
   const qty = pool?.lastQty || Math.round(st.qty * 1000) / 1000 || 1;
   S.shoppingList.push({ id: Date.now(), ...(pool ? { poolId: pool.id, category: pool.category } : {}),
     name: pool?.name || st.name, qty, qtyType: pool?.qtyType || 'count', requestedQty: qty });
