@@ -7951,7 +7951,28 @@ async function mgmtRemoveSubject(name) {
 // ════════════════════════════════════════
 
 // ── Grocery Settings ─────────────────────
-function openGrocerySettings()  { renderGroceryCats(); el('grocerySettingsPanel').classList.remove('hidden'); }
+function openGrocerySettings()  { renderGroceryCats(); renderGsPrices(); el('grocerySettingsPanel').classList.remove('hidden'); }
+// Prices in the supermarket settings: the same settings as the price card's ⚙️ (only with the switch)
+function renderGsPrices() {
+  const box = el('gsPricesCard');
+  if (!box) return;
+  if (!_gpFeature()) { box.innerHTML = ''; return; }
+  const cfg = _gpCfg() || {};
+  const cmp = cfg.compare?.mode === 'mine' && cfg.compare.stores?.length
+    ? (cfg.compare.stores.length === 1 ? 'סניף אחד שבחרתם' : cfg.compare.stores.length + ' סניפים שבחרתם') : 'כל הסניפים בעיר שלכם';
+  box.innerHTML = `<div class="card gs-prices">
+    <div class="card-title">💰 מחירים</div>
+    <div class="gs-prices-rows">
+      <div><span>מחירים ברשימה</span><b>${cfg.on && cfg.store ? 'מופעלים' : 'כבויים'}</b></div>
+      <div><span>רשת וסניף</span><b>${cfg.store ? esc((cfg.chainName || '') + ' · ' + (cfg.storeLabel || '')) : 'לא נבחר'}</b></div>
+      <div><span>השוואת מחירים</span><b>${cmp}</b></div>
+    </div>
+    <div class="gs-prices-btns">
+      <button class="gp-btn" onclick="openGpSettings()">רשת וסניף</button>
+      <button class="gp-btn2" onclick="openGpCompareSettings()" ${cfg.store ? '' : 'disabled'}>סניפים להשוואה</button>
+    </div>
+  </div>`;
+}
 function closeGrocerySettings() { el('grocerySettingsPanel').classList.add('hidden'); }
 
 function renderGroceryCats() {
@@ -11052,6 +11073,7 @@ async function _gpSaveCfg(patch) {
   const next = { ...(_gpCfg() || {}), ...patch };
   if (familyData) familyData.groceryPrices = next;
   renderShoppingList();
+  if (!el('grocerySettingsPanel')?.classList.contains('hidden')) renderGsPrices();
   try { await fbDb.collection('families').doc(S.uid).update({ groceryPrices: next }); }
   catch (e) { console.error('groceryPrices save:', e); }
 }
