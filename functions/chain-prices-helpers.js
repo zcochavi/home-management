@@ -277,18 +277,25 @@ function matchItem(byCode, items, it) {
   for (let k = Math.min(pw.length, 3); k >= 2; k--) tries.push(pw.slice(0, k).join(' ')); // the product's name, specific first
   if (iw[0]) tries.push(stemOf(iw[0]));                                                    // the item's own word, by its stem
   if (pw[0]) tries.push(stemOf(pw[0]));
+  // Candidates from every search (not just the first that finds something: "במבה גרם" alone would
+  // miss "במבה 80ג'"), each with the right first word and sold the same way
+  const pool = new Map();
   for (const q of [...new Set(tries.filter(Boolean))]) {
     const stem = stemOf(q.split(' ')[0]);
-    const ok = rankProducts(items, q, 12).filter(p => (it.weighted == null || !!p.weighted === !!it.weighted)
-      && (words(p.name)[0] || '').startsWith(stem));
-    if (ok.length) { // the same size first; among those the cheaper (the standard one, not omega-3 eggs),
-      // and without a size to go by the plainest (fewest words), then the cheaper
-      const same = p => { const t = sizeTokens(p.name); let n = 0; sizes.forEach(x => { if (t.has(x)) n++; }); return n; };
-      ok.sort((a, b) => same(b) - same(a) || (same(a) > 0 ? a.price - b.price : words(a.name).length - words(b.name).length || a.price - b.price));
-      return { p: ok[0], how: 'name' };
-    }
+    // a wide pool: the right one may have a long name ("12 ביצי משק טריות L") and rank low on its own
+    rankProducts(items, q, 120).forEach(p => {
+      if ((it.weighted == null || !!p.weighted === !!it.weighted) && (words(p.name)[0] || '').startsWith(stem)) pool.set(String(p.code), p);
+    });
   }
-  return null;
+  if (!pool.size) return null;
+  // The same size first (numbers and size letters), then the most words in common, then the cheaper —
+  // the standard product rather than organic, cherry, omega-3 or a premium brand
+  const same = p => { const t = sizeTokens(p.name); let n = 0; sizes.forEach(x => { if (t.has(x)) n++; }); return n; };
+  // then more of the product's other words ("חזה עוף טרי" → fresh, not frozen)
+  const rest = pw.slice(1).filter(w => w.length > 1);
+  const shared = p => { const n = norm(p.name); return rest.filter(w => n.includes(w)).length; };
+  const best = [...pool.values()].sort((a, b) => same(b) - same(a) || shared(b) - shared(a) || a.price - b.price)[0];
+  return { p: best, how: 'name' };
 }
 
 module.exports = { sizeTokens, sameCity, notAShop, matchItem, CHAINS, CERBERUS, carrefourFiles, cerberusCsrf, CITY_NAMES, cityName, storeLabel, rankProducts, HATZI_HINAM, listingLinks, parseFilename, sameStore, toText, parseStores, parsePrices, findStore, searchProducts, norm };
