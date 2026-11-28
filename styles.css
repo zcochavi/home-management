@@ -2873,3 +2873,8 @@ html[dir="ltr"] .chore-fab-wrap { align-items: flex-end; }
 .gp-cmp-chip b { color: var(--primary-700); }
 .gp-cmp-chip button { border: none; background: var(--surface); color: var(--gray-500); width: 20px; height: 20px; border-radius: 50%; font-size: 11px; cursor: pointer; }
 .gp-store:disabled { opacity: .6; cursor: default; }
+/* Supermarket settings: prices */
+.gs-prices-rows > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 13.5px; color: var(--gray-600); }
+.gs-prices-rows b { color: var(--gray-800); text-align: left; }
+.gs-prices-btns { display: flex; gap: 8px; margin-top: 12px; }
+.gs-prices-btns button:disabled { opacity: .5; }
